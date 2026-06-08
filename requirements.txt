@@ -1,5 +1,6 @@
 # Core relational engine (required)
 pandas>=2.0
+openpyxl>=3.1   # read raw MEP schedule .xlsx workbooks (--schedule-xlsx)
 
 # Web bridge (web/index.html GUI <-> main_generator.py). Required only to run
 # the local server (python server.py); the CLI pipeline runs without it.

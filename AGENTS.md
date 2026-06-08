@@ -22,6 +22,10 @@ traceably, with zero hallucinated values.
 - `config.py` — env, units, `CATEGORY_STYLES`, the 11-column app schema.
 - `core/ingestion.py` — Azure DI layout + 8-pt polygon normalization + grid rebuild
   (reuses the upstream parser `grid=[['']*(maxc+1) ...]` reconstruction).
+- `core/schedule_adapter.py` — converts a raw MEP schedule workbook (SA#31-style
+  `.xlsx`: SCHEDULE STORE + CONTACTORS sheets) into canonical `assets.csv` +
+  `control_matrix.csv` by HEADER TEXT (not fixed columns). Empty Excel cells map to
+  blank, never the literal `nan`. Used by `main_generator --schedule-xlsx`.
 - `core/data_orchestrator.py` — pandas joins → `DiagramGraph` (Node/Edge) +
   `compute_layout`. The `Connected/Area Served/...` column is a parent edge ONLY
   when it names another node; otherwise it stays an attribute (never a phantom node).

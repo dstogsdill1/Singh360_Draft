@@ -102,7 +102,16 @@ class DiagramGraph:
 
 
 def _norm(s: object) -> str:
-    return str(s or "").strip()
+    """Normalize a value to clean text; pandas NaN / 'nan' -> '' (not 'nan')."""
+    if s is None:
+        return ""
+    if isinstance(s, float):
+        if s != s:  # NaN is the only value not equal to itself
+            return ""
+        if s.is_integer():
+            s = int(s)
+    text = str(s).strip()
+    return "" if text.lower() == "nan" else text
 
 
 # --------------------------------------------------------------------------

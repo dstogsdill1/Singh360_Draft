@@ -101,6 +101,26 @@ Outputs land in `output/`:
 The CLI prints a graph summary, a coordinate→shape flow legend, per‑target
 **validation** results, and any flags.
 
+### Raw schedule workbook (SA#31-style `.xlsx`)
+
+Skip hand-building CSVs — point the CLI at a raw MEP light-fixture/contactor
+workbook and `core/schedule_adapter.py` maps it to the canonical schema by
+**header text** (so layout shifts don't break it):
+
+```powershell
+python main_generator.py `
+    --schedule-xlsx "LIGHT FIXTURE SCHEDULE - SA #31.xlsx" `
+    --name "HEB SA31 Lighting" --out-dir output/SA31 --targets vson,vsdx
+```
+
+- `SCHEDULE STORE` sheet → Lighting fixture nodes (TYPE → Name; QTY/VOLTAGE/
+  WATTAGE/MANUFACTURER/DESCRIPTION carried as node data; Interior/Exterior
+  inferred from the description).
+- `CONTACTORS` sheet → `Relay → Contactor → Load` control chain
+  (`CONTROLLED CIRCUIT(S)` → Panel reference).
+- Empty Excel cells become **blank**, never the literal `nan`. Canonical CSVs
+  are written to `<out-dir>/_canonical/` (gitignored — they hold customer data).
+
 ### Spatial overlay (optional)
 
 ```powershell

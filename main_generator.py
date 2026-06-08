@@ -38,7 +38,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog="singh360-smartdraw",
         description="Render Singh360 assets into SmartDraw VSON + Visio VSDX.",
     )
-    p.add_argument("--assets", required=True, help="11-column app schedule CSV")
+    p.add_argument("--assets", help="11-column app schedule CSV")
+    p.add_argument(
+        "--schedule-xlsx",
+        dest="schedule_xlsx",
+        help="Raw MEP schedule workbook (SA#31-style .xlsx); converted to "
+        "canonical assets.csv + control_matrix.csv via core.schedule_adapter",
+    )
     p.add_argument("--control", help="Relay/Contactor/Load control matrix CSV")
     p.add_argument("--network", help="Device/Switch/Port network CSV")
     p.add_argument("--di-tables", dest="di_tables", help="Parser *_DI_tables.csv")
@@ -62,6 +68,37 @@ def run(args: argparse.Namespace) -> int:
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in args.name).strip("_")
     safe = safe or "diagram"
 
+    adapter_flags: list[str] = []
+    # 0) Optional: convert a raw MEP schedule workbook to canonical CSVs first.
+    if getattr(args, "schedule_xlsx", None):
+        from core import schedule_adapter
+
+        conv = schedule_adapter.convert(args.schedule_xlsx, out_dir / "_canonical")
+        adapter_flags = list(conv.flags)
+        if conv.assets_csv is None:
+            print(
+                "ERROR: schedule adapter produced no asset rows from "
+                f"{args.schedule_xlsx}.",
+                file=sys.stderr,
+            )
+            for fl in adapter_flags:
+                print(f"  ! {fl}", file=sys.stderr)
+            return 3
+        args.assets = str(conv.assets_csv)
+        if conv.control_csv and not args.control:
+            args.control = str(conv.control_csv)
+        adapter_flags.append(
+            f"Adapter: {conv.fixture_count} fixtures, "
+            f"{conv.contactor_count} contactors from {Path(args.schedule_xlsx).name}"
+        )
+
+    if not args.assets:
+        print(
+            "ERROR: provide --assets <csv> or --schedule-xlsx <workbook>.",
+            file=sys.stderr,
+        )
+        return 2
+
     # 1) Build the relational graph.
     orch = DataOrchestrator(name=args.name)
     orch.load_assets(args.assets)
@@ -69,6 +106,7 @@ def run(args: argparse.Namespace) -> int:
         orch.load_control_matrix(args.control)
     if args.network:
         orch.load_network(args.network)
+    orch.graph.flags.extend(adapter_flags)
 
     # 2) Optional spatial overlay.
     spatial = []
