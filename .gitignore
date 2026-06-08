@@ -11,6 +11,9 @@ output/
 *.vsdx
 *.vson.json
 
+# Web bridge job sandbox (uploads + per-run outputs)
+.jobs/
+
 # Customer / project source material (raw plans, stencils, exports)
 input_docs/
 WORK-FOLDER/

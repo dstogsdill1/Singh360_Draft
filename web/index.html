@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Singh360 SmartDraw Generator</title>
+  <meta name="description" content="Render Singh360 assets into SmartDraw VSON + Microsoft Visio VSDX diagrams" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%238ab4f8'/><text x='16' y='23' font-family='Arial,sans-serif' font-size='18' font-weight='700' text-anchor='middle' fill='%23202124'>SD</text></svg>" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #1f1f1f;
+      --surface:   #2a2a2a;
+      --surface-2: #303030;
+      --surface-3: #383838;
+      --border:    #3c3c3c;
+      --border-2:  #505050;
+      --text-1:    #e8eaed;
+      --text-2:    #9aa0a6;
+      --text-3:    #5f6368;
+      --g-blue:    #8ab4f8;
+      --g-blue-d:  #4285f4;
+      --g-green:   #81c995;
+      --g-red:     #f28b82;
+      --g-amber:   #fdd663;
+      --font: 'Google Sans', Roboto, 'Segoe UI', system-ui, sans-serif;
+      --mono: 'Cascadia Code', Consolas, 'Courier New', monospace;
+    }
+
+    html, body {
+      min-height: 100%;
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(138,180,248,0.08), transparent 60%),
+        radial-gradient(900px 500px at -10% 110%, rgba(129,201,149,0.06), transparent 55%),
+        var(--bg);
+      color: var(--text-1);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 24px 64px; }
+
+    /* ── Header ── */
+    .masthead { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+    .logo {
+      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+      background: linear-gradient(135deg, #8ab4f8, #4285f4);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 16px; color: #202124; letter-spacing: -0.02em;
+      box-shadow: 0 4px 16px rgba(66,133,244,0.35);
+    }
+    h1 { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
+    .masthead p { font-size: 13px; color: var(--text-2); margin-top: 1px; }
+    .masthead .home {
+      margin-left: auto; font-size: 12px; color: var(--text-2);
+      text-decoration: none; border: 1px solid var(--border); padding: 6px 12px;
+      border-radius: 20px; transition: border-color .12s, color .12s;
+    }
+    .masthead .home:hover { color: var(--text-1); border-color: var(--border-2); }
+
+    .lead {
+      color: var(--text-2); font-size: 13px; margin: 14px 0 24px;
+      border-left: 2px solid rgba(138,180,248,0.4); padding-left: 12px;
+    }
+    .lead code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; color: var(--g-blue); }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 22px; margin-bottom: 18px;
+    }
+    .panel h2 {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-3); margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .panel h2 .step {
+      width: 18px; height: 18px; border-radius: 50%; background: rgba(138,180,248,0.15);
+      color: var(--g-blue); font-size: 11px; display: inline-flex;
+      align-items: center; justify-content: center; font-weight: 700;
+    }
+
+    .field { margin-bottom: 18px; }
+    .field:last-child { margin-bottom: 0; }
+    .field > label {
+      display: block; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--text-3); margin-bottom: 7px;
+    }
+    .text-input {
+      width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 11px 13px; color: var(--text-1);
+      font-family: var(--font); font-size: 14px; outline: none; transition: border-color .12s;
+    }
+    .text-input:focus { border-color: var(--g-blue); }
+    .text-input::placeholder { color: var(--text-3); }
+
+    /* ── Dropzones ── */
+    .drop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 680px) { .drop-grid { grid-template-columns: 1fr; } }
+
+    .dz {
+      position: relative; border: 1.5px dashed var(--border-2); border-radius: 12px;
+      background: var(--surface-2); padding: 16px; cursor: pointer;
+      transition: border-color .15s, background .15s; min-height: 104px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .dz:hover { border-color: var(--g-blue); background: var(--surface-3); }
+    .dz.dragover { border-color: var(--g-blue); background: rgba(138,180,248,0.08); border-style: solid; }
+    .dz.has-file { border-style: solid; border-color: rgba(129,201,149,0.6); }
+    .dz.required-missing { border-color: rgba(242,139,130,0.55); }
+
+    .dz-head { display: flex; align-items: center; gap: 8px; }
+    .dz-icon { width: 30px; height: 30px; border-radius: 8px; background: var(--surface-3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .dz-icon svg { width: 16px; height: 16px; }
+    .dz-name { font-size: 13.5px; font-weight: 500; color: var(--text-1); }
+    .dz-req { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 10px; }
+    .dz-req.req { background: rgba(242,139,130,0.16); color: var(--g-red); }
+    .dz-req.opt { background: rgba(154,160,166,0.14); color: var(--text-2); }
+    .dz-hint { font-size: 11.5px; color: var(--text-3); }
+    .dz-file { display: none; align-items: center; gap: 8px; margin-top: auto; font-size: 12px; color: var(--g-green); }
+    .dz.has-file .dz-file { display: flex; }
+    .dz.has-file .dz-hint { display: none; }
+    .dz-file .fname { font-weight: 500; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+    .dz-file .fsize { color: var(--text-3); }
+    .dz-clear { margin-left: auto; background: none; border: none; color: var(--text-3); cursor: pointer; padding: 2px; border-radius: 4px; line-height: 0; }
+    .dz-clear:hover { color: var(--g-red); background: rgba(242,139,130,0.12); }
+    .dz input[type=file] { display: none; }
+
+    .pages-row { margin-top: 12px; display: none; }
+    .pages-row.show { display: block; }
+
+    /* ── Targets ── */
+    .chips { display: flex; gap: 10px; flex-wrap: wrap; }
+    .chip {
+      display: flex; align-items: center; gap: 9px; padding: 10px 15px;
+      border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2);
+      cursor: pointer; transition: border-color .12s, background .12s;
+      -webkit-user-select: none; user-select: none;
+    }
+    .chip:hover { border-color: var(--border-2); }
+    .chip.on { border-color: rgba(138,180,248,0.55); background: rgba(138,180,248,0.08); }
+    .chip .box {
+      width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--border-2);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: .12s;
+    }
+    .chip.on .box { background: var(--g-blue); border-color: var(--g-blue); }
+    .chip .box svg { width: 12px; height: 12px; color: #202124; opacity: 0; transition: opacity .12s; }
+    .chip.on .box svg { opacity: 1; }
+    .chip .label { font-size: 13.5px; font-weight: 500; }
+    .chip .ext { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+
+    /* ── Action ── */
+    .actions { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+    .generate {
+      display: inline-flex; align-items: center; gap: 10px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, #8ab4f8, #5a96f5); color: #202124;
+      font-family: var(--font); font-size: 14.5px; font-weight: 600;
+      padding: 13px 26px; border-radius: 26px; transition: transform .1s, box-shadow .15s, opacity .15s;
+      box-shadow: 0 4px 18px rgba(66,133,244,0.3);
+    }
+    .generate:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 7px 24px rgba(66,133,244,0.42); }
+    .generate:active:not(:disabled) { transform: translateY(0); }
+    .generate:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+    .generate .spinner { width: 16px; height: 16px; border: 2px solid rgba(32,33,36,0.35); border-top-color: #202124; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+    .generate.busy .spinner { display: inline-block; }
+    .generate.busy .gen-label::after { content: 'Generating…'; }
+    .generate .gen-label::after { content: 'Generate Diagrams'; }
+    .generate.busy .gen-icon { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hint-inline { font-size: 12px; color: var(--text-3); }
+
+    /* ── Results ── */
+    .results { display: none; }
+    .results.show { display: block; animation: fade .25s ease; }
+    @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .banner { display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-radius: 10px; font-size: 13px; margin-bottom: 16px; }
+    .banner.ok { background: rgba(129,201,149,0.12); border: 1px solid rgba(129,201,149,0.3); color: var(--g-green); }
+    .banner.warn { background: rgba(253,214,99,0.1); border: 1px solid rgba(253,214,99,0.3); color: var(--g-amber); }
+    .banner.err { background: rgba(242,139,130,0.1); border: 1px solid rgba(242,139,130,0.32); color: var(--g-red); }
+    .banner svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+    .file-list { display: grid; gap: 10px; margin-bottom: 16px; }
+    .file-row {
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    }
+    .file-row .fi { width: 34px; height: 34px; border-radius: 8px; background: var(--surface-3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .file-row .fi svg { width: 17px; height: 17px; }
+    .file-row .meta { min-width: 0; }
+    .file-row .meta .n { font-size: 13.5px; font-weight: 500; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-row .meta .s { font-size: 11.5px; color: var(--text-3); font-family: var(--mono); }
+    .dl {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+      font-size: 12.5px; font-weight: 600; color: var(--g-blue); border: 1px solid rgba(138,180,248,0.3);
+      padding: 7px 14px; border-radius: 20px; background: rgba(138,180,248,0.06); transition: background .12s; white-space: nowrap;
+    }
+    .dl:hover { background: rgba(138,180,248,0.14); }
+    .dl.zip { color: var(--text-1); border-color: var(--border-2); background: var(--surface-3); }
+    .dl.zip:hover { border-color: var(--g-blue); color: var(--g-blue); }
+
+    .report { background: #181818; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--text-2); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; }
+    .report-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); margin: 16px 0 8px; }
+    .flags { list-style: none; margin-top: 8px; display: grid; gap: 6px; }
+    .flags li { font-size: 12.5px; color: var(--g-amber); display: flex; gap: 8px; align-items: flex-start; }
+    .flags li::before { content: '!'; color: #202124; background: var(--g-amber); width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; flex-shrink: 0; }
+
+    .err-detail { margin-top: 10px; }
+    footer { text-align: center; color: var(--text-3); font-size: 11.5px; margin-top: 28px; }
+    footer code { font-family: var(--mono); color: var(--text-2); }
+
+    .is-hidden { display: none !important; }
+    .pages-label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin: 0 0 7px; }
+    .pages-input { max-width: 220px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="masthead">
+      <div class="logo">SD</div>
+      <div>
+        <h1>Singh360 SmartDraw Generator</h1>
+        <p>Assets &rarr; SmartDraw VSON &amp; Microsoft Visio VSDX</p>
+      </div>
+      <a class="home" href="../../Singh360 Dashboard/index.html" title="Back to App Central">&#x2190; App Central</a>
+    </div>
+
+    <p class="lead">
+      Upload the Singh360 data planes, name the project, pick your output formats, and the
+      Python pipeline (<code>main_generator.py</code>) renders deterministic, traceable diagrams you can
+      download and refine in SmartDraw or Visio. Only <code>assets.csv</code> is required.
+    </p>
+
+    <form id="gen-form">
+      <!-- STEP 1: project + files -->
+      <div class="panel">
+        <h2><span class="step">1</span> Project &amp; Source Data</h2>
+
+        <div class="field">
+          <label for="project-name">Project Name</label>
+          <input class="text-input" type="text" id="project-name" name="name"
+                 placeholder="e.g. HEB SA31 Demo" value="HEB SA31 Demo" autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label>Data Files</label>
+          <div class="drop-grid" id="drop-grid">
+            <!-- assets (required) -->
+            <div class="dz required-missing" data-key="assets" data-accept=".csv">
+              <div class="dz-head">
+                <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16M4 14h16M9 4v16"/></svg></div>
+                <span class="dz-name">assets.csv</span>
+                <span class="dz-req req">Required</span>
+              </div>
+              <div class="dz-hint">11-column Singh360 schedule. Click or drop CSV.</div>
+              <div class="dz-file"><span class="fname"></span><span class="fsize"></span>
+                <button type="button" class="dz-clear" title="Remove"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
+              <input type="file" accept=".csv" />
+            </div>
+
+            <!-- control (optional) -->
+            <div class="dz" data-key="control" data-accept=".csv">
+              <div class="dz-head">
+                <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fdd663" stroke-width="2"><path d="M4 7h6M14 7h6M4 17h10M18 17h2"/><circle cx="12" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></svg></div>
+                <span class="dz-name">control_matrix.csv</span>
+                <span class="dz-req opt">Optional</span>
+              </div>
+              <div class="dz-hint">Relay &rarr; Contactor &rarr; Load chain.</div>
+              <div class="dz-file"><span class="fname"></span><span class="fsize"></span>
+                <button type="button" class="dz-clear" title="Remove"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
+              <input type="file" accept=".csv" />
+            </div>
+
+            <!-- network (optional) -->
+            <div class="dz" data-key="network" data-accept=".csv">
+              <div class="dz-head">
+                <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#81c995" stroke-width="2"><rect x="9" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M12 9v3M12 12H6v3M12 12h6v3"/></svg></div>
+                <span class="dz-name">network.csv</span>
+                <span class="dz-req opt">Optional</span>
+              </div>
+              <div class="dz-hint">Device &rarr; Switch / Port / IP / VLAN.</div>
+              <div class="dz-file"><span class="fname"></span><span class="fsize"></span>
+                <button type="button" class="dz-clear" title="Remove"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
+              <input type="file" accept=".csv" />
+            </div>
+
+            <!-- pdf (optional) -->
+            <div class="dz" data-key="pdf" data-accept=".pdf">
+              <div class="dz-head">
+                <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#f28b82" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5M9 13h6M9 17h6"/></svg></div>
+                <span class="dz-name">Blueprint PDF</span>
+                <span class="dz-req opt">Optional</span>
+              </div>
+              <div class="dz-hint">Floor plan for Azure DI spatial overlay.</div>
+              <div class="dz-file"><span class="fname"></span><span class="fsize"></span>
+                <button type="button" class="dz-clear" title="Remove"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+              </div>
+              <input type="file" accept=".pdf" />
+            </div>
+          </div>
+
+          <div class="pages-row" id="pages-row">
+            <label class="pages-label" for="pdf-pages">PDF Pages (1-based, e.g. 3-4)</label>
+            <input class="text-input pages-input" type="text" id="pdf-pages" name="pages" placeholder="3-4" autocomplete="off" />
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: targets -->
+      <div class="panel">
+        <h2><span class="step">2</span> Target Outputs</h2>
+        <div class="chips" id="targets">
+          <div class="chip on" data-target="vson">
+            <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>
+            <span class="label">SmartDraw</span><span class="ext">.vson</span>
+          </div>
+          <div class="chip on" data-target="vsdx">
+            <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>
+            <span class="label">Microsoft Visio</span><span class="ext">.vsdx</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 3: generate -->
+      <div class="panel">
+        <h2><span class="step">3</span> Generate</h2>
+        <div class="actions">
+          <button type="submit" class="generate" id="generate-btn" aria-label="Generate Diagrams" title="Generate Diagrams" disabled>
+            <span class="spinner"></span>
+            <svg class="gen-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#202124" stroke-width="2"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+            <span class="gen-label"></span>
+          </button>
+          <span class="hint-inline" id="action-hint">Add <b>assets.csv</b> to enable generation.</span>
+        </div>
+      </div>
+    </form>
+
+    <!-- RESULTS -->
+    <div class="panel results" id="results">
+      <h2><span class="step">&#x2713;</span> Results</h2>
+      <div id="banner"></div>
+      <div class="file-list" id="file-list"></div>
+      <div id="flags-wrap"></div>
+      <div class="report-label is-hidden" id="report-label">Pipeline report</div>
+      <pre class="report is-hidden" id="report"></pre>
+    </div>
+
+    <footer>
+      Served by the Singh360_SmartDraw Flask bridge &middot; <code>python server.py</code> &middot; deterministic, traceable, code-only.
+    </footer>
+  </div>
+
+  <script>
+    'use strict';
+
+    // Held File objects per slot.
+    const files = { assets: null, control: null, network: null, pdf: null };
+
+    const genBtn = document.getElementById('generate-btn');
+    const actionHint = document.getElementById('action-hint');
+    const pagesRow = document.getElementById('pages-row');
+
+    function fmtSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function refreshState() {
+      const ready = !!files.assets;
+      genBtn.disabled = !ready;
+      const assetsDz = document.querySelector('.dz[data-key="assets"]');
+      assetsDz.classList.toggle('required-missing', !files.assets);
+      if (ready) {
+        const extra = ['control', 'network', 'pdf'].filter(k => files[k]).length;
+        actionHint.innerHTML = extra
+          ? `Ready &middot; assets + ${extra} optional file${extra > 1 ? 's' : ''}.`
+          : 'Ready &middot; assets.csv loaded.';
+      } else {
+        actionHint.innerHTML = 'Add <b>assets.csv</b> to enable generation.';
+      }
+      pagesRow.classList.toggle('show', !!files.pdf);
+    }
+
+    function setFile(key, file) {
+      const dz = document.querySelector(`.dz[data-key="${key}"]`);
+      const accept = dz.getAttribute('data-accept');
+      if (file && accept && !file.name.toLowerCase().endsWith(accept)) {
+        flashInvalid(dz);
+        return;
+      }
+      files[key] = file || null;
+      dz.classList.toggle('has-file', !!file);
+      if (file) {
+        dz.querySelector('.fname').textContent = file.name;
+        dz.querySelector('.fsize').textContent = '· ' + fmtSize(file.size);
+      }
+      refreshState();
+    }
+
+    function flashInvalid(dz) {
+      dz.style.borderColor = 'var(--g-red)';
+      setTimeout(() => { dz.style.borderColor = ''; }, 900);
+    }
+
+    // Wire each dropzone: click-to-browse, change, drag/drop, clear.
+    document.querySelectorAll('.dz').forEach(dz => {
+      const key = dz.getAttribute('data-key');
+      const input = dz.querySelector('input[type=file]');
+
+      dz.addEventListener('click', (e) => {
+        if (e.target.closest('.dz-clear')) return;
+        input.click();
+      });
+      input.addEventListener('change', () => {
+        if (input.files && input.files[0]) setFile(key, input.files[0]);
+      });
+      dz.querySelector('.dz-clear').addEventListener('click', (e) => {
+        e.stopPropagation();
+        input.value = '';
+        setFile(key, null);
+      });
+
+      ['dragenter', 'dragover'].forEach(ev =>
+        dz.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover'); }));
+      ['dragleave', 'dragend'].forEach(ev =>
+        dz.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover'); }));
+      dz.addEventListener('drop', (e) => {
+        e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) setFile(key, e.dataTransfer.files[0]);
+      });
+    });
+
+    // Target chips.
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const others = document.querySelectorAll('.chip.on');
+        if (chip.classList.contains('on') && others.length === 1) return; // keep >=1 on
+        chip.classList.toggle('on');
+      });
+    });
+
+    function selectedTargets() {
+      return Array.from(document.querySelectorAll('.chip.on')).map(c => c.getAttribute('data-target'));
+    }
+
+    // Icons for result banner.
+    const ICON_OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>';
+    const ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>';
+    const ICON_ERR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>';
+
+    function fileIcon(name) {
+      if (name.endsWith('.vsdx')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2"><path d="M6 2h12v20H6z"/><path d="M9 8l6 8M15 8l-6 8"/></svg>';
+      if (name.endsWith('.zip')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#fdd663" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M10 4v4M14 8v4M10 12v4M14 16v2"/></svg>';
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="#81c995" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/></svg>';
+    }
+
+    const results = document.getElementById('results');
+    const banner = document.getElementById('banner');
+    const fileList = document.getElementById('file-list');
+    const flagsWrap = document.getElementById('flags-wrap');
+    const reportEl = document.getElementById('report');
+    const reportLabel = document.getElementById('report-label');
+
+    function showError(message, detail) {
+      banner.className = 'banner err';
+      banner.innerHTML = ICON_ERR + '<span>' + message + '</span>';
+      fileList.innerHTML = '';
+      flagsWrap.innerHTML = '';
+      if (detail) {
+        reportLabel.classList.remove('is-hidden');
+        reportLabel.textContent = 'Error detail';
+        reportEl.classList.remove('is-hidden');
+        reportEl.textContent = detail;
+      } else {
+        reportLabel.classList.add('is-hidden');
+        reportEl.classList.add('is-hidden');
+      }
+      results.classList.add('show');
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function showSuccess(data) {
+      const warned = data.status === 'warning';
+      banner.className = 'banner ' + (warned ? 'warn' : 'ok');
+      banner.innerHTML = (warned ? ICON_WARN : ICON_OK) +
+        '<span>' + (warned
+          ? 'Generated with validation warnings — review flags below.'
+          : 'Diagrams generated successfully.') + '</span>';
+
+      // File rows + ZIP.
+      fileList.innerHTML = '';
+      (data.files || []).forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'file-row';
+        row.innerHTML =
+          '<div class="fi">' + fileIcon(f.name) + '</div>' +
+          '<div class="meta"><div class="n">' + f.name + '</div><div class="s">' + fmtSize(f.size) + '</div></div>' +
+          '<a class="dl" href="' + f.href + '" download>' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg> Download</a>';
+        fileList.appendChild(row);
+      });
+      if (data.zipHref && (data.files || []).length > 1) {
+        const zrow = document.createElement('div');
+        zrow.className = 'file-row';
+        zrow.innerHTML =
+          '<div class="fi">' + fileIcon('.zip') + '</div>' +
+          '<div class="meta"><div class="n">' + (data.name || 'diagrams') + '.zip</div><div class="s">All outputs</div></div>' +
+          '<a class="dl zip" href="' + data.zipHref + '" download>' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg> Download all (.zip)</a>';
+        fileList.appendChild(zrow);
+      }
+
+      // Flags.
+      flagsWrap.innerHTML = '';
+      if (data.flags && data.flags.length) {
+        const ul = document.createElement('ul');
+        ul.className = 'flags';
+        data.flags.forEach(fl => { const li = document.createElement('li'); li.textContent = fl; ul.appendChild(li); });
+        flagsWrap.appendChild(ul);
+      }
+
+      // Report.
+      if (data.report) {
+        reportLabel.classList.remove('is-hidden');
+        reportLabel.textContent = 'Pipeline report';
+        reportEl.classList.remove('is-hidden');
+        reportEl.textContent = data.report;
+      } else {
+        reportLabel.classList.add('is-hidden');
+        reportEl.classList.add('is-hidden');
+      }
+
+      results.classList.add('show');
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Submit → POST multipart to the bridge.
+    document.getElementById('gen-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!files.assets) return;
+      const targets = selectedTargets();
+      if (!targets.length) { showError('Select at least one target output (.vson or .vsdx).'); return; }
+
+      const fd = new FormData();
+      fd.append('name', document.getElementById('project-name').value.trim() || 'Singh360 Diagram');
+      fd.append('targets', targets.join(','));
+      fd.append('assets', files.assets, 'assets.csv');
+      if (files.control) fd.append('control', files.control, 'control_matrix.csv');
+      if (files.network) fd.append('network', files.network, 'network.csv');
+      if (files.pdf) {
+        fd.append('pdf', files.pdf, 'blueprint.pdf');
+        fd.append('pages', document.getElementById('pdf-pages').value.trim() || '1');
+      }
+
+      genBtn.classList.add('busy');
+      genBtn.disabled = true;
+      results.classList.remove('show');
+
+      try {
+        const resp = await fetch('/api/generate', { method: 'POST', body: fd });
+        const ctype = resp.headers.get('content-type') || '';
+        if (!ctype.includes('application/json')) {
+          const text = await resp.text();
+          showError('Unexpected server response (' + resp.status + ').', text.slice(0, 4000));
+          return;
+        }
+        const data = await resp.json();
+        if (!resp.ok || data.status === 'error') {
+          showError(data.error || ('Generation failed (' + resp.status + ').'), data.detail);
+        } else {
+          showSuccess(data);
+        }
+      } catch (err) {
+        showError('Could not reach the SmartDraw bridge. Is it running?',
+          'Start it with:  python server.py   (in the Singh360_SmartDraw folder)\n\n' + (err && err.message ? err.message : String(err)));
+      } finally {
+        genBtn.classList.remove('busy');
+        genBtn.disabled = !files.assets;
+      }
+    });
+
+    refreshState();
+  </script>
+</body>
+</html>

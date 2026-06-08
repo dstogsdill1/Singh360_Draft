@@ -67,6 +67,9 @@ Singh360_SmartDraw/
 │   ├── smartdraw_vson.py     # VS.Document/Shape/Connector/Container compiler
 │   └── visio_vsdx.py         # stdlib OPC/XML .vsdx writer (+ .vssx master hook)
 ├── main_generator.py         # CLI entry point + traceability report
+├── server.py                 # Flask bridge: web GUI <-> main_generator.py
+├── web/
+│   └── index.html            # live browser GUI (upload -> generate -> download)
 └── sample_data/              # synthetic demo inputs (NOT customer data)
     ├── assets.csv
     ├── control_matrix.csv
@@ -108,6 +111,54 @@ python main_generator.py --assets sample_data/assets.csv `
 # Live — call Azure DI on a floor plan (needs .env creds + azure/PyMuPDF):
 python main_generator.py --assets sample_data/assets.csv --pdf plan.pdf --pages 3-4
 ```
+
+---
+
+## 3b. Web GUI (App Central bridge)
+
+A browser front end ([web/index.html](web/index.html)) drives the same pipeline
+without the command line, and is the destination of the **SmartDraw** card in the
+Singh360 Dashboard "App Central" hub.
+
+```powershell
+# from the Singh360_SmartDraw folder (after pip install -r requirements.txt)
+python server.py
+# -> Singh360 SmartDraw bridge -> http://localhost:8765
+```
+
+Open `http://localhost:8765`, then:
+
+1. Enter a **Project Name**.
+2. Drop or browse `assets.csv` (required) plus optional `control_matrix.csv`,
+   `network.csv`, and a blueprint **PDF** (with a page range for Azure DI).
+3. Toggle the **target outputs** (`.vson`, `.vsdx`).
+4. Click **Generate Diagrams** — a spinner runs while the Flask bridge executes
+   `main_generator.py`, then the results panel lists each file with individual
+   downloads, a **Download all (.zip)**, the pipeline report, and any flags.
+
+### How the bridge works
+
+```text
+web/index.html  --FormData(POST /api/generate)-->  server.py (Flask)
+     ^                                                  |
+     |  JSON {files[], zipHref, report, flags}          | subprocess (exact CLI)
+     |                                                  v
+  download <--- /api/download/<job>/<file>  <---  main_generator.py -> .jobs/<id>/output
+```
+
+- Each request gets an isolated sandbox under `.jobs/<uuid>/` (gitignored).
+  Uploads are saved with fixed names (`assets.csv`, `control_matrix.csv`,
+  `network.csv`, `blueprint.pdf`) so the CLI arguments are deterministic.
+- The bridge reuses the **exact** `main_generator.py` CLI contract via
+  `subprocess`, so a generation crash can never take the server down, and the
+  captured report/flags are surfaced verbatim in the UI.
+- Downloads are path‑traversal safe: the job id must be a 32‑char hex and the
+  resolved file must stay inside that job's `output/` directory.
+- ZIP packaging uses the standard library (`zipfile`) — no extra dependency.
+
+> **Endpoints:** `GET /` (GUI) · `GET /health` · `POST /api/generate` ·
+> `GET /api/download/<job>/<file>` · `GET /api/download/<job>.zip`. The server
+> binds `127.0.0.1:8765` (local only).
 
 ---
 

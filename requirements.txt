@@ -1,6 +1,10 @@
 # Core relational engine (required)
 pandas>=2.0
 
+# Web bridge (web/index.html GUI <-> main_generator.py). Required only to run
+# the local server (python server.py); the CLI pipeline runs without it.
+flask>=3.0,<4
+
 # Optional — live Azure Document Intelligence spatial ingestion path only.
 # The deterministic CSV/VSON/VSDX pipeline runs without these.
 azure-ai-documentintelligence>=1.0.0
