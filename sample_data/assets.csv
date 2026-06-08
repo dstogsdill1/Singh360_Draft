@@ -1,0 +1,13 @@
+Category,Unit/Type,Name,Connected/Area Served/Refrigerant/Number Of Racks,Fixture Type/Rack Type/Suction Temp/Make,Control Type,Design Temperature Set Point (F),Issue-Desc,Issue-Reco,Issue-Assign to,Sub Form Category
+EMS,Emerson,EMS-RX-300,,,,,,,,
+Electrical,Panel Testing,Panel LP-1,,,,,,,,
+Electrical,Panel Testing,Panel LP-2,,,,,,,,
+Lighting,Interior,Interior Lights,Panel LP-1,,Contactor,,,,,
+Lighting,Interior,Back Room,Panel LP-2,,Contactor,,,,,
+Lighting,Exterior,Parking Lot,Panel LP-1,,Photocell,,,,,
+Refrigeration,Rack,Rack A,R404A,,,,,,,
+Refrigeration,Suction Group,Loop A1,Rack A,-16,,,,,,
+Refrigeration,Suction Circuit,A1,Loop A1,Walk In Freezer,Electronic Case Control,-12,,,,
+Refrigeration,Suction Circuit,A2,Loop A1,Reach In,Electronic Case Control,-10,,,,
+Refrigeration,Compressor,LT Comp 1,Loop A1,,,,,,,
+Refrigeration,Condenser,ACC1,Rack A,,,,,,,

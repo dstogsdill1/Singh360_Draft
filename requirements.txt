@@ -1,0 +1,9 @@
+# Core relational engine (required)
+pandas>=2.0
+
+# Optional — live Azure Document Intelligence spatial ingestion path only.
+# The deterministic CSV/VSON/VSDX pipeline runs without these.
+azure-ai-documentintelligence>=1.0.0
+azure-core>=1.30.0
+PyMuPDF>=1.24.0
+python-dotenv>=1.0.0

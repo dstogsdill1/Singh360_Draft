@@ -1,0 +1,33 @@
+# --- Singh360_SmartDraw ignore rules ---
+# Code-only repo. Never commit customer drawings, exports, or secrets.
+
+# Secrets / local env
+.env
+.env.local
+*.key
+
+# Generated diagram outputs
+output/
+*.vsdx
+*.vson.json
+
+# Customer / project source material (raw plans, stencils, exports)
+input_docs/
+WORK-FOLDER/
+*.pdf
+*.vsd
+*.vssx
+*.vss
+*DO-NOT-SHARE*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+
+# Allow the synthetic demo inputs (explicitly NOT customer data)
+!sample_data/
+!sample_data/**

@@ -1,0 +1,163 @@
+# Singh360_SmartDraw
+
+Deterministic MEP/R **diagram generator**. It ingests the structured
+engineering data produced upstream by **Singh360_Parser** (plus control and
+network matrices and optional Azure Document Intelligence floor‑plan polygons)
+and renders production diagrams for **SmartDraw** (VisualScript / VSON) and
+**Microsoft Visio** (native `.vsdx`).
+
+> Operating standard (shared with Singh360_Parser): deterministic first, no
+> hallucinated values, full traceability, code‑only repo. Unknowns are left
+> blank and **flagged** — never invented.
+
+---
+
+## 1. What it does
+
+```text
+ Singh360_Parser (upstream)            Singh360_SmartDraw (this tool)
+ ───────────────────────────          ──────────────────────────────────────────
+ Azure DI prebuilt-layout  ─┐
+   *_DI_tables.csv          │  spatial  ┌─ core/ingestion.py ──────────────┐
+ (8-pt bounding polygons) ──┼─ overlay ─┤  polygon → (cx,cy,w,h) normalize │
+                            │           └──────────────────────────────────┘
+ assets.csv (11-col app) ───┤  joins    ┌─ core/data_orchestrator.py ──────┐
+ control_matrix.csv  ───────┼──────────►│  pandas → DiagramGraph           │
+ network.csv  ──────────────┘           │  nodes + hierarchy/control/net   │
+                                        └──────────────┬───────────────────┘
+                                                       │
+                            ┌──────────────────────────┴───────────────────┐
+                            ▼                                               ▼
+                 engines/smartdraw_vson.py                      engines/visio_vsdx.py
+                 VS.Document / Shape / Connector                OPC ZIP + XML ShapeSheet
+                 auto-layout, TextGrow, data[]                  PinX/PinY, glued Connects
+                            │                                               │
+                            ▼                                               ▼
+                    <name>.vson.json                                  <name>.vsdx
+```
+
+### The relational model (grounded, not guessed)
+
+Every diagram node comes from a real upstream row, and **edges come from the
+data itself**:
+
+| Source | Becomes | Edge kind |
+| --- | --- | --- |
+| `assets.csv` row (`Name`) | a shape node | — |
+| `Connected/Area Served/...` column | edge **child → parent** when it names another `Name` (Circuit→Loop, Compressor→Loop, Condenser→Rack, Fixture→Panel) | `hierarchy` (solid) |
+| `control_matrix.csv` | `Relay → Contactor → Load`; the `Load` stitches into the asset graph when it matches an asset `Name` | `control` (dashed) |
+| `network.csv` | `Device → Switch` (`Port`/`IP`/`VLAN` carried as data); `Device` inherits asset location on name match | `network` (dotted) |
+
+A value in the `Connected/...` column that is **not** another node (e.g. a
+refrigerant code `R404A`, an area string, or a rack count) is kept as a shape
+attribute and counted — it is **never** turned into a phantom node.
+
+---
+
+## 2. Module map
+
+```text
+Singh360_SmartDraw/
+├── __init__.py
+├── config.py                 # env, units, category→style map, app schema
+├── core/
+│   ├── ingestion.py          # Azure DI layout + polygon normalization + grid rebuild
+│   └── data_orchestrator.py  # pandas joins → DiagramGraph + deterministic layout
+├── engines/
+│   ├── smartdraw_vson.py     # VS.Document/Shape/Connector/Container compiler
+│   └── visio_vsdx.py         # stdlib OPC/XML .vsdx writer (+ .vssx master hook)
+├── main_generator.py         # CLI entry point + traceability report
+└── sample_data/              # synthetic demo inputs (NOT customer data)
+    ├── assets.csv
+    ├── control_matrix.csv
+    └── network.csv
+```
+
+---
+
+## 3. Quick start
+
+```powershell
+# from the Singh360_SmartDraw folder
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt          # pandas is the only hard requirement
+
+python main_generator.py `
+    --assets sample_data/assets.csv `
+    --control sample_data/control_matrix.csv `
+    --network sample_data/network.csv `
+    --name "HEB SA31 Demo" --out-dir output --targets vson,vsdx
+```
+
+Outputs land in `output/`:
+
+- `HEB_SA31_Demo.vson.json` — import into SmartDraw (VisualScript).
+- `HEB_SA31_Demo.vsdx` — open in Microsoft Visio.
+
+The CLI prints a graph summary, a coordinate→shape flow legend, per‑target
+**validation** results, and any flags.
+
+### Spatial overlay (optional)
+
+```powershell
+# Deterministic, offline — reuse a parser-produced DI tables CSV:
+python main_generator.py --assets sample_data/assets.csv `
+    --di-tables ..\Singh360_Parser\output_data\Waldorf904\R2-1_..._DI_tables.csv
+
+# Live — call Azure DI on a floor plan (needs .env creds + azure/PyMuPDF):
+python main_generator.py --assets sample_data/assets.csv --pdf plan.pdf --pages 3-4
+```
+
+---
+
+## 4. Output formats
+
+### SmartDraw VSON (`engines/smartdraw_vson.py`)
+
+Mirrors the SmartDraw VisualScript SDK object model named in the spec —
+`VS.Document()`, `VS.Shape()`, `VS.ShapeConnector()`, `VS.ShapeContainer()` —
+and relies on SmartDraw **auto‑layout + `TextGrow`** so shapes size themselves
+to their text instead of absolute coordinate math. Computed `(cx,cy)` are
+attached only as `hint`. Each shape embeds its Singh360 metadata in a `data[]`
+array for round‑trip tracking, and `meta.traceability` maps every shape id back
+to its source `file:row`.
+
+> **Flag:** SmartDraw's public VisualScript JSON page was unreachable at build
+> time, so the exact wire field names are the **integration contract to
+> confirm** against the live SmartDraw import endpoint, not a vendor‑published
+> guarantee. `smartdraw_vson.validate()` proves internal consistency (valid
+> JSON, unique ids, resolvable connectors).
+
+### Visio VSDX (`engines/visio_vsdx.py`)
+
+A real Open Packaging Conventions container built with the standard library
+only, following the Microsoft `.vsdx` schema: `[Content_Types].xml`,
+`_rels/.rels`, `docProps/*`, `visio/document.xml`, `visio/pages/pages.xml`,
+`visio/pages/page1.xml` and their `.rels`. Nodes carry real ShapeSheet cells
+(`PinX`/`PinY`/`Width`/`Height` + rectangle `Geometry`); connectors are 1‑D
+line shapes **glued** with `<Connect>` rows (`FromPart` 9=begin / 12=end →
+`ToPart` 3=whole shape). Exact colors are written as `RGB()` formulas so they
+survive independent of the document color table.
+
+`visio_vsdx.validate_vsdx()` is a deterministic structural proof: it re‑opens
+the zip, confirms every required part exists, parses **every** XML part, and
+resolves **every** relationship target inside the package.
+
+> **Flag:** Fidelity is proven at the package/OPC level here. Final visual
+> fidelity should be confirmed by opening once in a Visio client (this
+> environment has no Visio runtime). `.vssx` corporate stencils can be
+> enumerated via `MasterLibrary`; with none supplied the writer uses inline
+> rectangle geometry (flagged in the run report).
+
+---
+
+## 5. Data contracts
+
+- **assets.csv** — exact 11‑column Singh360 bulk‑upload header (see
+  `config.APP_COLUMNS`).
+- **control_matrix.csv** — `Relay, Contactor, Load, Panel, Voltage, Area`.
+- **network.csv** — `Device, Switch, Port, IP, VLAN`.
+
+`sample_data/` contains synthetic values only. Real customer plans/exports stay
+out of the repo (`.gitignore`).
