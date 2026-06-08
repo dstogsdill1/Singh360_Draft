@@ -33,7 +33,7 @@ and renders production diagrams for **SmartDraw** (VisualScript / VSON) and
                  auto-layout, TextGrow, data[]                  PinX/PinY, glued Connects
                             │                                               │
                             ▼                                               ▼
-                    <name>.vson.json                                  <name>.vsdx
+                    <name>.vson                                       <name>.vsdx
 ```
 
 ### The relational model (grounded, not guessed)
@@ -95,7 +95,9 @@ python main_generator.py `
 
 Outputs land in `output/`:
 
-- `HEB_SA31_Demo.vson.json` — import into SmartDraw (VisualScript).
+- `HEB_SA31_Demo.vson` — import into SmartDraw (VisualScript). The extension
+  **must** be `.vson` (SmartDraw also accepts `.sdon`/`.sdr`); it follows the
+  official VSON Markup Language Reference (root `Shape` tree + `Returns`).
 - `HEB_SA31_Demo.vsdx` — open in Microsoft Visio.
 
 The CLI prints a graph summary, a coordinate→shape flow legend, per‑target
@@ -186,19 +188,23 @@ web/index.html  --FormData(POST /api/generate)-->  server.py (Flask)
 
 ### SmartDraw VSON (`engines/smartdraw_vson.py`)
 
-Mirrors the SmartDraw VisualScript SDK object model named in the spec —
-`VS.Document()`, `VS.Shape()`, `VS.ShapeConnector()`, `VS.ShapeContainer()` —
-and relies on SmartDraw **auto‑layout + `TextGrow`** so shapes size themselves
-to their text instead of absolute coordinate math. Computed `(cx,cy)` are
-attached only as `hint`. Each shape embeds its Singh360 metadata in a `data[]`
-array for round‑trip tracking, and `meta.traceability` maps every shape id back
-to its source `file:row`.
+Emits the **official VSON document** from SmartDraw's
+[VisualScript Markup Language Reference](https://www.smartdraw.com/developers/visualscript-markup-language-reference.htm):
+a single root object `{ "Version", "Template", "Title", "Shape", "Returns" }`.
+The diagram is a **tree** — one root `Shape` whose children hang off
+`ShapeConnector` arrays, recursively — so SmartDraw's intelligent‑formatting
+engine lays everything out with **no coordinates**. Fields follow the published
+reference exactly (`Label`, `ShapeType`, `FillColor`, `LineColor`,
+`LinePattern`, `TextGrow:"Proportional"`). Relationships that don't fit the
+spanning tree become `Returns` (lines by `StartID`/`EndID`); per‑node specs go
+in `Note`. The file is written with the **`.vson`** extension that SmartDraw's
+importer requires.
 
-> **Flag:** SmartDraw's public VisualScript JSON page was unreachable at build
-> time, so the exact wire field names are the **integration contract to
-> confirm** against the live SmartDraw import endpoint, not a vendor‑published
-> guarantee. `smartdraw_vson.validate()` proves internal consistency (valid
-> JSON, unique ids, resolvable connectors).
+> **Confirmed against the spec (June 2026):** the structure follows the
+> official VSON reference. `smartdraw_vson.validate()` proves the `Shape` tree
+> has unique positive IDs and that every `Return` resolves. Final visual
+> rendering should still be confirmed by importing once into your SmartDraw
+> account (Import → SmartDraw → choose the `.vson`).
 
 ### Visio VSDX (`engines/visio_vsdx.py`)
 

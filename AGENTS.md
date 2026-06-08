@@ -54,7 +54,7 @@ traceably, with zero hallucinated values.
 
 - `python main_generator.py --assets sample_data/assets.csv --control
   sample_data/control_matrix.csv --network sample_data/network.csv --name "Demo"`
-  must exit 0 and write a valid `.vson.json` + `.vsdx`.
+  must exit 0 and write a valid `.vson` + `.vsdx`.
 - `smartdraw_vson.validate()` and `visio_vsdx.validate_vsdx()` must both pass.
 - If you touch the bridge, smoke-test `python server.py` + a `POST /api/generate`
   with the sample data and confirm a ZIP downloads.
@@ -72,4 +72,4 @@ traceably, with zero hallucinated values.
 - Stage only code/config/docs: `*.py`, `web/`, `sample_data/`, `requirements.txt`,
   `.gitignore`, `README.md`, `AGENTS.md`.
 - Never stage `output/`, `.jobs/`, `.env`, customer PDFs/stencils, or generated
-  `*.vsdx` / `*.vson.json`.
+  `*.vsdx` / `*.vson`.

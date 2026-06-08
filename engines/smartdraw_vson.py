@@ -1,235 +1,297 @@
 """engines/smartdraw_vson.py — SmartDraw VisualScript (VSON) compiler.
 
-Builds a hierarchical VisualScript document that mirrors the SmartDraw SDK
-object model referenced in the project brief:
+Emits the OFFICIAL VSON document structure documented in SmartDraw's
+VisualScript Markup Language Reference:
+  https://www.smartdraw.com/developers/visualscript-markup-language-reference.htm
 
-    VS.Document()  ->  VSDocument
-    VS.Shape()     ->  VSShape          (auto-sizes to text via TextGrow)
-    VS.ShapeConnector() -> VSConnector   (data-driven, auto-routed)
-    VS.ShapeContainer() -> VSContainer   (groups a category / sub-system)
+A VSON document is a single root object:
 
-Layout strategy: we DO NOT hand-place shapes with absolute math. We emit an
-`autoLayout` directive plus per-shape `TextGrow` so SmartDraw's router sizes
-and arranges the diagram. Computed (cx,cy) hints from core.compute_layout are
-attached as `hint` only — SmartDraw may honor or override them.
+    { "Version", "Template", "Title", "Shape" (root), "Returns", "Colors" }
 
-NOTE / FLAG (no hallucination): SmartDraw's public VisualScript JSON page was
-not reachable at build time, so the exact wire field names should be validated
-against the live SmartDraw VisualScript SDK / import endpoint for the target
-account. The structure here is internally consistent, fully documented, and
-round-trips through `validate()`; treat key names as the integration contract
-to confirm, not as a vendor-published guarantee.
+The diagram is a TREE. The single root `Shape` holds children through
+`ShapeConnector` arrays; each child `Shape` may hold its own `ShapeConnector`,
+recursively. Relationships that don't fit the spanning tree (a node with a
+second parent, or a cross-link) are emitted as `Returns` — arbitrary lines
+drawn by `StartID`/`EndID`. SmartDraw's intelligent-formatting engine lays the
+diagram out, so NO coordinates are written.
+
+The output file MUST use the `.vson` extension (SmartDraw also accepts `.sdon`
+/ `.sdr`) — SmartDraw's importer checks the extension before the content.
+
+Field names follow the published reference (capitalized: `Label`, `ShapeType`,
+`FillColor`, `LineColor`, `LinePattern`, `TextGrow`, `ShapeConnector`,
+`Returns`, ...). Enum values used:
+  TextGrow   = Proportional | Vertical | Horizontal
+  LinePattern= Solid | Dotted | Dashed
+  ShapeType  = RRect | Oval | Circle | Square | Diamond  ("" = default rect)
+  Template   = Flowchart | Mindmap | Orgchart | Decisiontree | Hierarchy
 """
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import config
-from core.data_orchestrator import DiagramGraph, compute_layout
+from core.data_orchestrator import DiagramGraph
 
-VSON_SCHEMA_VERSION = "1.0"
+# Document version string (VSON `Version` field).
+VSON_VERSION = "1"
 
+# our CategoryStyle.shape_kind -> SmartDraw ShapeTypes enum ("" == default rect)
+_SHAPE_TYPE = {"rounded": "RRect", "rectangle": "", "hexagon": "", "cylinder": ""}
 
-@dataclass
-class VSShape:
-    """A VisualScript shape. Auto-sizes to its text via `text_grow`."""
+# our edge kind -> SmartDraw LinePatterns enum
+_EDGE_PATTERN = {"hierarchy": "Solid", "control": "Dashed", "network": "Dotted"}
 
-    id: str
-    text: str
-    category: str = ""
-    fill: str = "#D0D7DE"
-    line: str = "#57606A"
-    text_color: str = "#1A1A1A"
-    shape_kind: str = "rectangle"
-    text_grow: str = "GrowBoth"  # GrowVertical | GrowHorizontal | GrowBoth
-    # Custom tracking data embedded directly on the shape (Singh360 asset meta).
-    data: list[dict[str, str]] = field(default_factory=list)
-    hint: dict[str, float] | None = None  # optional {x,y,w,h} layout hint
-    source: str = ""
-
-    def to_dict(self) -> dict:
-        d: dict = {
-            "id": self.id,
-            "text": self.text,
-            "category": self.category,
-            "style": {
-                "fillColor": self.fill,
-                "lineColor": self.line,
-                "textColor": self.text_color,
-                "shape": self.shape_kind,
-            },
-            "textGrow": self.text_grow,
-            "data": self.data,
-        }
-        if self.hint:
-            d["hint"] = self.hint
-        if self.source:
-            d["meta"] = {"source": self.source}
-        return d
+# our layout hint -> VSON Template (VSTemplates enum)
+_TEMPLATES = {
+    "hierarchy": "Hierarchy",
+    "flowchart": "Flowchart",
+    "orgchart": "Orgchart",
+    "mindmap": "Mindmap",
+    "decisiontree": "Decisiontree",
+}
 
 
-@dataclass
-class VSConnector:
-    """A VisualScript connector (auto-routed by SmartDraw)."""
+def _parent_child(edge) -> tuple[str, str]:
+    """Normalize an edge to (parent_id, child_id).
 
-    id: str
-    source: str
-    target: str
-    label: str = ""
-    kind: str = "hierarchy"
-    line: str = "#57606A"
-    pattern: str = "solid"  # solid | dash | dot
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "from": self.source,
-            "to": self.target,
-            "text": self.label,
-            "kind": self.kind,
-            "style": {"lineColor": self.line, "linePattern": self.pattern},
-            "routing": "auto",
-        }
+    Hierarchy edges are stored child->parent (source=child); control/network
+    edges are stored parent->child (source=parent).
+    """
+    if edge.kind == "hierarchy":
+        return edge.target, edge.source
+    return edge.source, edge.target
 
 
-@dataclass
-class VSContainer:
-    """A VisualScript container grouping member shape ids."""
-
-    id: str
-    title: str
-    members: list[str] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {"id": self.id, "title": self.title, "members": list(self.members)}
+def _shape_label(node) -> str:
+    return node.label or node.id
 
 
-@dataclass
-class VSDocument:
-    title: str
-    layout: str = "hierarchy"  # SmartDraw auto-layout family
-    shapes: list[VSShape] = field(default_factory=list)
-    connectors: list[VSConnector] = field(default_factory=list)
-    containers: list[VSContainer] = field(default_factory=list)
-    flags: list[str] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            "visualScript": {
-                "version": VSON_SCHEMA_VERSION,
-                "generator": "Singh360_SmartDraw",
-                "document": {
-                    "title": self.title,
-                    "autoLayout": {"type": self.layout, "direction": "down"},
-                    "shapes": [s.to_dict() for s in self.shapes],
-                    "connectors": [c.to_dict() for c in self.connectors],
-                    "containers": [c.to_dict() for c in self.containers],
-                },
-                "meta": {
-                    "traceability": {s.id: s.source for s in self.shapes if s.source},
-                    "flags": self.flags,
-                },
-            }
-        }
+def _shape_note(node) -> str:
+    """Readable, deterministic note from the node's non-empty attributes."""
+    skip = {"spatial_source"}
+    pretty = {
+        "connected_raw": "Connected",
+        "control_type": "Control",
+        "set_point_f": "Set point (F)",
+        "fixture": "Make/Model",
+        "sub_form": "Description",
+        "panel": "Panel",
+        "voltage": "Voltage",
+        "area": "Area",
+        "ip": "IP",
+        "switch": "Switch",
+        "port": "Port",
+        "vlan": "VLAN",
+    }
+    lines: list[str] = []
+    if node.unit_type:
+        lines.append(f"Type: {node.unit_type}")
+    for k, v in node.attrs.items():
+        if v and k not in skip:
+            lines.append(f"{pretty.get(k, k)}: {v}")
+    return "\n".join(lines)
 
 
 class VsonGenerator:
-    """Compiles a DiagramGraph into a VSDocument."""
+    """Compiles a DiagramGraph into an official VSON document (dict + file)."""
 
     def __init__(self, layout: str = "hierarchy") -> None:
-        self.layout = layout
+        self.template = _TEMPLATES.get((layout or "").lower(), "Hierarchy")
 
-    def from_graph(self, graph: DiagramGraph) -> VSDocument:
-        doc = VSDocument(title=graph.name, layout=self.layout, flags=list(graph.flags))
-        hints = compute_layout(graph)
+    # ---- spanning-tree construction -------------------------------------
+    def _build_tree(self, graph: DiagramGraph):
+        """Return (children, child_kind, roots, extra_edges).
 
-        for nid, node in graph.nodes.items():
+        children[parent] -> [child, ...]    (the spanning tree)
+        child_kind[child] -> the edge kind linking it to its tree parent
+        roots               -> nodes with no tree parent
+        extra_edges         -> (parent, child, edge) that became cross-links
+        """
+        nodes = graph.nodes
+        tree_parent: dict[str, str] = {}
+        children: dict[str, list[str]] = {}
+        child_kind: dict[str, str] = {}
+        extra: list = []
+
+        def makes_cycle(parent: str, child: str) -> bool:
+            cur, hops = parent, 0
+            while cur in tree_parent:
+                if cur == child:
+                    return True
+                cur = tree_parent[cur]
+                hops += 1
+                if hops > 100000:
+                    return True
+            return cur == child
+
+        for e in graph.edges:
+            p, c = _parent_child(e)
+            if p not in nodes or c not in nodes or p == c:
+                continue
+            if c not in tree_parent and not makes_cycle(p, c):
+                tree_parent[c] = p
+                children.setdefault(p, []).append(c)
+                child_kind[c] = e.kind
+            else:
+                extra.append((p, c, e))
+
+        roots = [n for n in nodes if n not in tree_parent]
+        return children, child_kind, roots, extra
+
+    # ---- document assembly ----------------------------------------------
+    def build_document(self, graph: DiagramGraph) -> dict:
+        children, child_kind, roots, extra = self._build_tree(graph)
+        id_map: dict[str, int] = {}
+        counter = {"n": 1}  # ID 1 is reserved for the document root shape
+
+        def new_id() -> int:
+            counter["n"] += 1
+            return counter["n"]
+
+        def make_shape(node_id: str) -> dict:
+            node = graph.nodes[node_id]
             style = config.style_for(node.category)
-            # Embed the asset's non-empty attributes as tracking data rows.
-            data_rows = [
-                {"label": k, "value": v} for k, v in node.attrs.items() if v
+            sid = new_id()
+            id_map[node_id] = sid
+            shape: dict = {
+                "ID": sid,
+                "Label": _shape_label(node),
+                "FillColor": style.fill,
+                "LineColor": style.line,
+                "TextColor": style.text,
+                "TextGrow": "Proportional",
+            }
+            stype = _SHAPE_TYPE.get(style.shape_kind, "")
+            if stype:
+                shape["ShapeType"] = stype
+            if node_id in child_kind:
+                shape["LinePattern"] = _EDGE_PATTERN.get(child_kind[node_id], "Solid")
+            note = _shape_note(node)
+            if note:
+                shape["Note"] = note
+            kids = children.get(node_id, [])
+            if kids:
+                shape["ShapeConnector"] = [
+                    {
+                        "ShapeConnectorType": self.template,
+                        "Shapes": [make_shape(k) for k in kids],
+                    }
+                ]
+            return shape
+
+        # Group roots by their container group so large flat sets (e.g. a
+        # fixture catalog) stay organized under a labeled header shape.
+        grouped: dict[str, list[str]] = {}
+        for nid in roots:
+            node = graph.nodes[nid]
+            gname = node.group or node.category or "Items"
+            grouped.setdefault(gname, []).append(nid)
+
+        group_shapes: list[dict] = []
+        for gname in sorted(grouped):
+            members = grouped[gname]
+            group_shapes.append(
+                {
+                    "ID": new_id(),
+                    "Label": f"{gname}  ({len(members)})",
+                    "FillColor": "#24292F",
+                    "TextColor": "#FFFFFF",
+                    "LineColor": "#57606A",
+                    "TextGrow": "Proportional",
+                    "TextBold": True,
+                    "ShapeConnector": [
+                        {
+                            "ShapeConnectorType": self.template,
+                            "Shapes": [make_shape(m) for m in members],
+                        }
+                    ],
+                }
+            )
+
+        root_shape: dict = {
+            "ID": 1,
+            "Label": graph.name,
+            "FillColor": "#1F6FEB",
+            "TextColor": "#FFFFFF",
+            "LineColor": "#0B3D91",
+            "TextGrow": "Proportional",
+            "TextBold": True,
+        }
+        if group_shapes:
+            root_shape["ShapeConnector"] = [
+                {"ShapeConnectorType": self.template, "Shapes": group_shapes}
             ]
-            if node.unit_type:
-                data_rows.insert(0, {"label": "Unit/Type", "value": node.unit_type})
-            data_rows.insert(0, {"label": "Category", "value": node.category})
 
-            hint = None
-            if nid in hints:
-                cx, cy, w, h = hints[nid]
-                hint = {"x": round(cx, 3), "y": round(cy, 3), "w": round(w, 3), "h": round(h, 3)}
-
-            doc.shapes.append(
-                VSShape(
-                    id=nid,
-                    text=node.label,
-                    category=node.category,
-                    fill=style.fill,
-                    line=style.line,
-                    text_color=style.text,
-                    shape_kind=style.shape_kind,
-                    text_grow="GrowBoth",
-                    data=data_rows,
-                    hint=hint,
-                    source=node.source,
+        # Cross-links: relationships that didn't fit the spanning tree.
+        returns: list[dict] = []
+        for p, c, e in extra:
+            if p in id_map and c in id_map:
+                returns.append(
+                    {
+                        "StartID": id_map[p],
+                        "EndID": id_map[c],
+                        "Label": e.label or "",
+                        "LinePattern": _EDGE_PATTERN.get(e.kind, "Solid"),
+                        "EndArrow": 1,
+                    }
                 )
-            )
 
-        for i, e in enumerate(graph.edges):
-            est = config.EDGE_STYLES.get(e.kind, config.EDGE_STYLES["hierarchy"])
-            doc.connectors.append(
-                VSConnector(
-                    id=f"c{i + 1}",
-                    source=e.source,
-                    target=e.target,
-                    label=e.label,
-                    kind=e.kind,
-                    line=est["line"],
-                    pattern=est["pattern"],
-                )
-            )
-
-        for title, members in graph.groups().items():
-            doc.containers.append(
-                VSContainer(
-                    id=f"grp::{title}",
-                    title=title,
-                    members=[m.id for m in members],
-                )
-            )
-        return doc
+        document: dict = {
+            "Version": VSON_VERSION,
+            "Template": self.template,
+            "Title": {"Label": graph.name},
+            "Shape": root_shape,
+        }
+        if returns:
+            document["Returns"] = returns
+        return document
 
     def render(self, graph: DiagramGraph, out_path: str | Path) -> Path:
-        doc = self.from_graph(graph)
+        document = self.build_document(graph)
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(
-            json.dumps(doc.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+            json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8"
         )
         return out_path
 
 
 def validate(vson_path: str | Path) -> tuple[bool, list[str]]:
-    """Internal-consistency check: valid JSON, unique ids, resolvable edges.
-
-    This validates the document is well-formed and self-referential, NOT that
-    field names match the live SmartDraw endpoint (see module flag).
+    """Structural check against the official VSON shape: a root document with a
+    `Shape` tree of unique positive IDs and `Returns` that reference real IDs.
     """
     problems: list[str] = []
-    data = json.loads(Path(vson_path).read_text(encoding="utf-8"))
     try:
-        doc = data["visualScript"]["document"]
-    except (KeyError, TypeError):
-        return False, ["missing visualScript.document root"]
+        doc = json.loads(Path(vson_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"unreadable/invalid JSON: {exc}"]
 
-    ids = [s.get("id") for s in doc.get("shapes", [])]
-    if len(ids) != len(set(ids)):
-        problems.append("duplicate shape ids present")
+    if not isinstance(doc, dict) or "Shape" not in doc:
+        return False, ["missing root 'Shape' (not a VSON document)"]
+
+    ids: list[int] = []
+
+    def walk(shape: dict) -> None:
+        sid = shape.get("ID")
+        if not isinstance(sid, int) or sid <= 0:
+            problems.append(f"shape '{shape.get('Label')}' has invalid ID: {sid!r}")
+        else:
+            ids.append(sid)
+        for conn in shape.get("ShapeConnector", []) or []:
+            for child in conn.get("Shapes", []) or []:
+                walk(child)
+
+    walk(doc["Shape"])
     idset = set(ids)
-    for c in doc.get("connectors", []):
-        if c.get("from") not in idset:
-            problems.append(f"connector {c.get('id')} from-id not found: {c.get('from')}")
-        if c.get("to") not in idset:
-            problems.append(f"connector {c.get('id')} to-id not found: {c.get('to')}")
+    if len(ids) != len(idset):
+        problems.append("duplicate shape IDs present")
+    for r in doc.get("Returns", []) or []:
+        if r.get("StartID") not in idset:
+            problems.append(f"Return StartID not found: {r.get('StartID')}")
+        if r.get("EndID") not in idset:
+            problems.append(f"Return EndID not found: {r.get('EndID')}")
+    if doc.get("Template") not in (None, *_TEMPLATES.values()):
+        problems.append(f"unknown Template: {doc.get('Template')}")
     return (len(problems) == 0), problems

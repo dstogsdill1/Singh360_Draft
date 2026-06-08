@@ -141,7 +141,7 @@ def generate():
     stderr = (proc.stderr or "").strip()
 
     produced = sorted(
-        p for p in out_dir.iterdir() if p.is_file() and p.suffix.lower() in {".json", ".vsdx"}
+        p for p in out_dir.iterdir() if p.is_file() and p.suffix.lower() in {".vson", ".vsdx"}
     )
 
     # main_generator exit codes: 0 = all valid, 2 = produced but a validator

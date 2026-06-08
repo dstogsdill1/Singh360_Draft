@@ -9,6 +9,7 @@
 # Generated diagram outputs
 output/
 *.vsdx
+*.vson
 *.vson.json
 
 # Web bridge job sandbox (uploads + per-run outputs)

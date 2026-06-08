@@ -135,7 +135,7 @@ def run(args: argparse.Namespace) -> int:
 
     if "vson" in targets:
         gen = smartdraw_vson.VsonGenerator(layout=args.layout)
-        vson_path = gen.render(graph, out_dir / f"{safe}.vson.json")
+        vson_path = gen.render(graph, out_dir / f"{safe}.vson")
         ok, problems = smartdraw_vson.validate(vson_path)
         written.append(vson_path)
         reports.append(f"VSON  {'OK ' if ok else 'FAIL'} {vson_path.name}")
