@@ -241,6 +241,32 @@
     .note code { background:var(--surface-2); padding:2px 6px; border-radius:4px; font-family:var(--mono); font-size:12px; color:var(--g-blue-d); font-weight:500; }
     .mono-inline { font-family:var(--mono); font-size:12px; color:var(--g-blue-d); font-weight:500; padding:2px 4px; background:var(--surface-2); border-radius:4px; }
     .mt4 { margin-top:6px; }
+    .lib-wrap { display:flex; flex-direction:column; gap:12px; }
+    .lib-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .lib-btn {
+      appearance:none; border:1px solid var(--border-2); background:#fff; color:var(--text-2);
+      border-radius:8px; padding:7px 11px; font-size:12px; font-weight:600; cursor:pointer;
+      transition:all .15s;
+    }
+    .lib-btn:hover { border-color:var(--g-blue); color:var(--g-blue); background:#f0f9ff; }
+    .lib-frame {
+      width:100%; height:720px; border:1px solid var(--border); border-radius:10px;
+      background:#fff;
+    }
+    .lib-fallback {
+      font-size:12px; color:var(--text-2); margin-top:8px;
+    }
+    .lib-fallback a { color:var(--g-blue-d); font-weight:600; text-decoration:none; }
+    .lib-fallback a:hover { text-decoration:underline; }
+    .path-box {
+      margin-top:8px; background:#f8fafc; border:1px solid var(--border); border-radius:8px;
+      padding:10px 12px; font-family:var(--mono); font-size:12px; color:var(--text-2); line-height:1.7;
+    }
+    .path-box b { color:var(--g-blue-d); }
+    .lib-grid { margin-top:4px; }
+    .lib-head { font-size:14px; font-weight:600; color:var(--text-1); }
+    .lib-sub { font-size:13px; color:var(--text-2); margin-top:4px; line-height:1.55; }
+    .mt8 { margin-top:8px; }
     footer { text-align:center; color:var(--text-3); font-size:12px; margin-top:32px; }
     footer code { font-family:var(--mono); color:var(--text-2); background:var(--surface-2); padding:2px 6px; border-radius:4px;}
   </style>
@@ -392,6 +418,56 @@
       </div>
     </div>
 
+    <div class="panel" id="widget-library-panel">
+      <h2><span class="n">4</span> EMS Widget Library (illustrated)</h2>
+      <div class="lib-wrap">
+        <div class="lib-toolbar">
+          <button type="button" class="lib-btn" id="lib-reload">Reload Library</button>
+          <button type="button" class="lib-btn" id="lib-open">Open in New Tab</button>
+          <button type="button" class="lib-btn" id="lib-hub">Open Library Hub</button>
+          <button type="button" class="lib-btn" id="lib-open-folder">Open Library Folder Path</button>
+        </div>
+
+        <iframe
+          id="widget-library-frame"
+          class="lib-frame"
+          src="ems/widget-library.html"
+          title="Singh360 EMS Widget Library"
+          loading="lazy"></iframe>
+
+        <p class="lib-fallback">
+          If the embed is blocked by your browser, open the library directly:
+          <a href="ems/widget-library.html" target="_blank" rel="noopener">ems/widget-library.html</a>
+        </p>
+
+        <div class="grid2 lib-grid">
+          <div>
+            <div class="lib-head">Persistent hard library (created)</div>
+            <div class="lib-sub">
+              Yes &mdash; we need a durable library location. It now exists under <code>ems/library/</code> with a manifest and widget catalog so future tech uploads can be versioned and merged safely.
+            </div>
+            <div class="path-box">
+              <b>ems/library/widgets/</b> &nbsp; raw widget assets/catalog<br>
+              <b>ems/library/masters/</b> &nbsp; Visio master/stencil sources (.vssx)<br>
+              <b>ems/library/samples/</b> &nbsp; example sheets per site/rack<br>
+              <b>ems/library/exports/</b> &nbsp; generated .vsdx/.vson outputs<br>
+              <b>ems/library/manifests/</b> &nbsp; version + field contracts
+            </div>
+          </div>
+          <div>
+            <div class="lib-head">When a tech sends Visio assets</div>
+            <div class="path-box mt8">
+              1) Drop stencil/library files in <b>ems/library/masters/</b><br>
+              2) Add or update entries in <b>widgets/catalog.json</b><br>
+              3) Bump <b>manifests/widget-library.manifest.json</b> version/date<br>
+              4) Re-open this page and press <b>Reload Library</b><br>
+              5) Generate test sheet and compare with field photos
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <footer>
       Singh360 SmartDraw &middot; deterministic, traceable, code-only &middot; start the bridge with <code>python server.py</code>
     </footer>
@@ -408,6 +484,11 @@
     var subEl    = document.getElementById('status-sub');
     var launchEl = document.getElementById('launch');
     var recheckEl = document.getElementById('recheck');
+    var libFrame = document.getElementById('widget-library-frame');
+    var libReload = document.getElementById('lib-reload');
+    var libOpen = document.getElementById('lib-open');
+    var libHub = document.getElementById('lib-hub');
+    var libOpenFolder = document.getElementById('lib-open-folder');
 
     function setState(state, title, sub) {
       statusEl.className = 'status ' + state;
@@ -439,6 +520,28 @@
     }
 
     recheckEl.addEventListener('click', checkBridge);
+
+    if (libReload && libFrame) {
+      libReload.addEventListener('click', function () {
+        var src = libFrame.getAttribute('src') || 'ems/widget-library.html';
+        libFrame.setAttribute('src', src.split('?')[0] + '?t=' + Date.now());
+      });
+    }
+    if (libOpen) {
+      libOpen.addEventListener('click', function () {
+        window.open('ems/widget-library.html', '_blank', 'noopener');
+      });
+    }
+    if (libHub) {
+      libHub.addEventListener('click', function () {
+        window.open('ems/library/index.html', '_blank', 'noopener');
+      });
+    }
+    if (libOpenFolder) {
+      libOpenFolder.addEventListener('click', function () {
+        alert('Library root: ems/library/\n\nUse these folders:\n- widgets/\n- masters/\n- samples/\n- exports/\n- manifests/');
+      });
+    }
 
     // Copy-to-clipboard for command snippets.
     document.querySelectorAll('.copy').forEach(function (btn) {

@@ -1,0 +1,25 @@
+{
+  "libraryId": "singh360-ems-widget-library",
+  "version": "2026-06-08",
+  "project": "HEB Fair Oaks #793",
+  "source": {
+    "controllerDump": "AI engine/12-13-2023/_12-13-23__20-33_dump/dump.xml",
+    "surveyPhotos": "Field photos (Rack RA I/O lists, CANBUS, board layouts)",
+    "notes": "Visual spec built from observed Hillphoenix / Emerson EMS sheets"
+  },
+  "outputTargets": [
+    "Visio .vsdx (primary)",
+    "SmartDraw .vson (secondary)"
+  ],
+  "storage": {
+    "widgets": "ems/library/widgets",
+    "masters": "ems/library/masters",
+    "samples": "ems/library/samples",
+    "exports": "ems/library/exports"
+  },
+  "governance": {
+    "namingConvention": "ems_<category>_<widget>.svg",
+    "changeControl": "append-only versions in manifests, keep old widgets",
+    "noCustomerDataInRepo": true
+  }
+}

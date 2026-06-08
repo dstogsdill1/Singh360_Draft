@@ -1,0 +1,65 @@
+{
+  "count": 10,
+  "widgets": [
+    {
+      "id": "canbus_connector",
+      "name": "CANBUS Connector",
+      "category": "network",
+      "bindFields": ["board_id", "terminated", "cap_off_note", "cable"]
+    },
+    {
+      "id": "controller_board",
+      "name": "Controller Board",
+      "category": "network",
+      "bindFields": ["model", "board_no", "nw", "slv", "mac"]
+    },
+    {
+      "id": "output_relay_row",
+      "name": "Output Relay Row",
+      "category": "io-output",
+      "bindFields": ["relay_no", "contact", "load", "cable"]
+    },
+    {
+      "id": "probe_input_row",
+      "name": "Probe Input Row",
+      "category": "io-input",
+      "bindFields": ["point_no", "label", "loc_type", "cable"]
+    },
+    {
+      "id": "status_input_row",
+      "name": "Status Input Row",
+      "category": "io-input",
+      "bindFields": ["point_no", "label", "type", "cable"]
+    },
+    {
+      "id": "universal_signal_row",
+      "name": "Universal Signal Row",
+      "category": "io-analog",
+      "bindFields": ["point_no", "label", "signal_type", "cable"]
+    },
+    {
+      "id": "stepper_valve_block",
+      "name": "Stepper Valve Block",
+      "category": "valve",
+      "bindFields": ["valve_no", "served", "valve_type", "terminal_map"]
+    },
+    {
+      "id": "universal_io_legend",
+      "name": "Universal IO Legend",
+      "category": "frame",
+      "bindFields": ["static"]
+    },
+    {
+      "id": "title_revision_block",
+      "name": "Title / Revision Block",
+      "category": "frame",
+      "bindFields": ["project_id", "store", "sheet_title", "revisions"]
+    },
+    {
+      "id": "rack_suction_schedule",
+      "name": "Rack / Suction Group Schedule",
+      "category": "table",
+      "bindFields": ["rack", "suction_group", "circuits", "summary"]
+    }
+  ]
+}
