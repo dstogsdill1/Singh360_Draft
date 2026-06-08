@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Singh360 SmartDraw — Start Here</title>
+  <meta name="description" content="How the Singh360 SmartDraw diagram generator works and how to start the live tool" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%238ab4f8'/><text x='16' y='23' font-family='Arial,sans-serif' font-size='18' font-weight='700' text-anchor='middle' fill='%23202124'>SD</text></svg>" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#1f1f1f; --surface:#2a2a2a; --surface-2:#303030; --surface-3:#383838;
+      --border:#3c3c3c; --border-2:#505050; --text-1:#e8eaed; --text-2:#9aa0a6;
+      --text-3:#5f6368; --g-blue:#8ab4f8; --g-blue-d:#4285f4; --g-green:#81c995;
+      --g-amber:#fdd663; --g-red:#f28b82;
+      --font:'Google Sans',Roboto,'Segoe UI',system-ui,sans-serif;
+      --mono:'Cascadia Code',Consolas,'Courier New',monospace;
+    }
+    html, body {
+      min-height:100%;
+      background:
+        radial-gradient(1100px 540px at 82% -12%, rgba(138,180,248,0.09), transparent 60%),
+        radial-gradient(820px 460px at -8% 112%, rgba(129,201,149,0.06), transparent 55%),
+        var(--bg);
+      color:var(--text-1); font-family:var(--font); font-size:14px; line-height:1.5;
+      -webkit-font-smoothing:antialiased;
+    }
+    .wrap { max-width:960px; margin:0 auto; padding:30px 24px 60px; }
+
+    .masthead { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
+    .logo {
+      width:46px; height:46px; border-radius:12px; flex-shrink:0;
+      background:linear-gradient(135deg,#8ab4f8,#4285f4);
+      display:flex; align-items:center; justify-content:center;
+      font-weight:700; font-size:16px; color:#202124; letter-spacing:-0.02em;
+      box-shadow:0 4px 16px rgba(66,133,244,0.35);
+    }
+    h1 { font-size:23px; font-weight:500; letter-spacing:-0.01em; }
+    .masthead p { font-size:13px; color:var(--text-2); margin-top:1px; }
+    .masthead .home {
+      margin-left:auto; font-size:12px; color:var(--text-2); text-decoration:none;
+      border:1px solid var(--border); padding:6px 12px; border-radius:20px;
+      transition:border-color .12s,color .12s;
+    }
+    .masthead .home:hover { color:var(--text-1); border-color:var(--border-2); }
+
+    /* ── Status banner ── */
+    .status {
+      display:flex; align-items:center; gap:13px; padding:16px 18px; border-radius:14px;
+      border:1px solid var(--border); background:var(--surface); margin-bottom:18px;
+    }
+    .status .dot { width:11px; height:11px; border-radius:50%; flex-shrink:0; background:var(--text-3); }
+    .status.checking .dot { background:var(--g-amber); animation:pulse 1s ease-in-out infinite; }
+    .status.online .dot  { background:var(--g-green); box-shadow:0 0 0 4px rgba(129,201,149,0.18); }
+    .status.offline .dot { background:var(--g-red); }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+    .status-main { min-width:0; flex:1; }
+    .status-title { font-size:14px; font-weight:600; color:var(--text-1); }
+    .status-sub { font-size:12.5px; color:var(--text-2); margin-top:1px; }
+    .status .recheck {
+      font-size:12px; color:var(--text-2); background:var(--surface-2);
+      border:1px solid var(--border); border-radius:18px; padding:7px 13px; cursor:pointer;
+      transition:border-color .12s,color .12s; white-space:nowrap;
+    }
+    .status .recheck:hover { color:var(--text-1); border-color:var(--border-2); }
+
+    .launch {
+      display:inline-flex; align-items:center; gap:9px; text-decoration:none;
+      background:linear-gradient(135deg,#8ab4f8,#5a96f5); color:#202124;
+      font-weight:600; font-size:14px; padding:11px 20px; border-radius:24px;
+      box-shadow:0 4px 16px rgba(66,133,244,0.3); transition:transform .1s,box-shadow .15s;
+      white-space:nowrap;
+    }
+    .launch:hover { transform:translateY(-1px); box-shadow:0 7px 22px rgba(66,133,244,0.42); }
+    .launch svg { width:16px; height:16px; }
+
+    /* ── Panels ── */
+    .grid2 { display:grid; grid-template-columns:1.05fr 1fr; gap:16px; }
+    @media (max-width:760px){ .grid2 { grid-template-columns:1fr; } }
+    .panel { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:16px; }
+    .panel h2 {
+      font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em;
+      color:var(--text-3); margin-bottom:15px; display:flex; align-items:center; gap:8px;
+    }
+    .panel h2 .n {
+      width:18px; height:18px; border-radius:50%; background:rgba(138,180,248,0.15);
+      color:var(--g-blue); font-size:11px; display:inline-flex; align-items:center;
+      justify-content:center; font-weight:700;
+    }
+
+    .steps { counter-reset:step; display:flex; flex-direction:column; gap:14px; }
+    .step { display:flex; gap:13px; }
+    .step-num {
+      width:25px; height:25px; flex-shrink:0; border-radius:50%; background:rgba(138,180,248,0.14);
+      color:var(--g-blue); font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    }
+    .step-body { flex:1; min-width:0; }
+    .step-body .t { font-size:13.5px; font-weight:600; color:var(--text-1); margin-bottom:5px; }
+    .step-body .d { font-size:12.5px; color:var(--text-2); line-height:1.55; margin-bottom:7px; }
+
+    .cmd {
+      display:flex; align-items:center; gap:10px; background:#181818; border:1px solid var(--border);
+      border-radius:9px; padding:9px 11px; font-family:var(--mono); font-size:12.5px; color:var(--g-blue);
+    }
+    .cmd code { flex:1; min-width:0; overflow-x:auto; white-space:nowrap; scrollbar-width:none; }
+    .cmd code::-webkit-scrollbar { display:none; }
+    .cmd .copy {
+      flex-shrink:0; background:var(--surface-2); border:1px solid var(--border); color:var(--text-2);
+      border-radius:6px; padding:4px 9px; font-size:11px; font-family:var(--font); cursor:pointer; transition:.12s;
+    }
+    .cmd .copy:hover { color:var(--text-1); border-color:var(--border-2); }
+    .cmd .copy.done { color:var(--g-green); border-color:rgba(129,201,149,0.4); }
+
+    .io-row { display:flex; gap:11px; margin-bottom:11px; }
+    .io-ic {
+      width:34px; height:34px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+      background:var(--surface-2);
+    }
+    .io-ic svg { width:17px; height:17px; }
+    .io-row .it { font-size:13px; font-weight:600; color:var(--text-1); }
+    .io-row .id { font-size:12px; color:var(--text-2); line-height:1.5; }
+    .io-row code { font-family:var(--mono); font-size:11.5px; background:var(--surface-2); padding:1px 5px; border-radius:4px; color:var(--g-blue); }
+    .req { color:var(--g-red); font-weight:700; }
+    .opt { color:var(--text-3); }
+
+    .arch {
+      background:#181818; border:1px solid var(--border); border-radius:12px; padding:15px 17px;
+      font-family:var(--mono); font-size:11.5px; line-height:1.5; color:var(--text-2);
+      white-space:pre; overflow-x:auto; margin-top:4px;
+    }
+    .note { font-size:12px; color:var(--text-3); margin-top:12px; line-height:1.65; }
+    .note code { background:var(--surface-2); padding:1px 6px; border-radius:4px; font-family:var(--mono); font-size:11px; color:var(--g-blue); }
+    .mono-inline { font-family:var(--mono); font-size:11.5px; }
+    .mt4 { margin-top:4px; }
+    footer { text-align:center; color:var(--text-3); font-size:11.5px; margin-top:26px; }
+    footer code { font-family:var(--mono); color:var(--text-2); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="masthead">
+      <div class="logo">SD</div>
+      <div>
+        <h1>SmartDraw Generator</h1>
+        <p>Assets &rarr; SmartDraw VSON &amp; Microsoft Visio VSDX &mdash; start here</p>
+      </div>
+      <a class="home" href="../Singh360 Dashboard/index.html" title="Back to App Central">&#x2190; App Central</a>
+    </div>
+
+    <!-- Live bridge status -->
+    <div class="status checking" id="status">
+      <span class="dot"></span>
+      <div class="status-main">
+        <div class="status-title" id="status-title">Checking the local bridge&hellip;</div>
+        <div class="status-sub" id="status-sub">Looking for the generator at http://localhost:8765</div>
+      </div>
+      <a class="launch" id="launch" href="http://localhost:8765/">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#202124" stroke-width="2"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+        Launch the Generator
+      </a>
+      <button type="button" class="recheck" id="recheck">Re-check</button>
+    </div>
+
+    <!-- How to start -->
+    <div class="panel">
+      <h2><span class="n">1</span> Start the live tool</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="t">Open a terminal in the SmartDraw folder</div>
+            <div class="d">In VS Code, open a terminal and change into the tool's folder.</div>
+            <div class="cmd"><code id="cmd-cd">cd "Singh360_SmartDraw"</code><button class="copy" data-copy="cmd-cd">Copy</button></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="t">Install dependencies <span class="opt">(first time only)</span></div>
+            <div class="d">Installs pandas + Flask. Skip this if you've run it before.</div>
+            <div class="cmd"><code id="cmd-pip">pip install -r requirements.txt</code><button class="copy" data-copy="cmd-pip">Copy</button></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="t">Start the bridge</div>
+            <div class="d">Runs a local server at <b>http://localhost:8765</b>. Leave it running while you work.</div>
+            <div class="cmd"><code id="cmd-run">python server.py</code><button class="copy" data-copy="cmd-run">Copy</button></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="t">Launch the generator</div>
+            <div class="d">Click <b>Launch the Generator</b> above (it turns green when the bridge is online), or open <code class="mono-inline">http://localhost:8765</code> in your browser.</div>
+          </div>
+        </div>
+      </div>
+      <p class="note">Nothing here phones home. The bridge runs entirely on your machine and only serves <code>127.0.0.1</code>. Stop it anytime with <code>Ctrl+C</code>.</p>
+    </div>
+
+    <div class="grid2">
+      <!-- What you give / get -->
+      <div class="panel">
+        <h2><span class="n">2</span> What you upload &amp; get back</h2>
+        <div class="io-row">
+          <div class="io-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16M4 14h16M9 4v16"/></svg></div>
+          <div><div class="it">assets.csv <span class="req">· required</span></div><div class="id">The 11-column Singh360 schedule (one row per asset).</div></div>
+        </div>
+        <div class="io-row">
+          <div class="io-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fdd663" stroke-width="2"><path d="M4 7h6M14 7h6M4 17h10M18 17h2"/><circle cx="12" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></svg></div>
+          <div><div class="it">control_matrix.csv <span class="opt">· optional</span></div><div class="id">Relay &rarr; Contactor &rarr; Load control chains.</div></div>
+        </div>
+        <div class="io-row">
+          <div class="io-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#81c995" stroke-width="2"><rect x="9" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M12 9v3M12 12H6v3M12 12h6v3"/></svg></div>
+          <div><div class="it">network.csv <span class="opt">· optional</span></div><div class="id">Device &rarr; Switch / Port / IP / VLAN.</div></div>
+        </div>
+        <div class="io-row">
+          <div class="io-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#f28b82" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5M9 13h6M9 17h6"/></svg></div>
+          <div><div class="it">Blueprint PDF <span class="opt">· optional</span></div><div class="id">Floor plan for Azure DI spatial overlay.</div></div>
+        </div>
+        <div class="io-row mt4">
+          <div class="io-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg></div>
+          <div><div class="it">You download</div><div class="id"><code>.vson</code> (SmartDraw) + <code>.vsdx</code> (Visio), or all as a ZIP.</div></div>
+        </div>
+      </div>
+
+      <!-- How it works -->
+      <div class="panel">
+        <h2><span class="n">3</span> How it works</h2>
+        <div class="arch"> Browser  (this page / the web GUI)
+     │  upload CSVs, click Generate
+     ▼
+ Flask bridge   ·   localhost:8765
+     │  runs the exact CLI as a subprocess
+     ▼
+ main_generator.py
+     │  deterministic · traceable
+     ▼
+ .vson  +  .vsdx   →   download</div>
+        <p class="note">The browser GUI just drives <code>main_generator.py</code> &mdash; the same command-line tool, with no logic duplicated. Every shape traces back to a source <code>file:row</code>.</p>
+      </div>
+    </div>
+
+    <footer>
+      Singh360 SmartDraw &middot; deterministic, traceable, code-only &middot; start the bridge with <code>python server.py</code>
+    </footer>
+  </div>
+
+  <script>
+    'use strict';
+    var BRIDGE = 'http://localhost:8765';
+
+    var statusEl = document.getElementById('status');
+    var titleEl  = document.getElementById('status-title');
+    var subEl    = document.getElementById('status-sub');
+    var launchEl = document.getElementById('launch');
+    var recheckEl = document.getElementById('recheck');
+
+    function setState(state, title, sub) {
+      statusEl.className = 'status ' + state;
+      titleEl.textContent = title;
+      subEl.innerHTML = sub;
+    }
+
+    function checkBridge() {
+      setState('checking', 'Checking the local bridge\u2026', 'Looking for the generator at ' + BRIDGE);
+      var done = false;
+      var ctrl = new AbortController();
+      var timer = setTimeout(function () { ctrl.abort(); }, 2500);
+      // no-cors: we can't read the response, but a resolved promise means the
+      // server answered (online); a rejection means it's not reachable (offline).
+      fetch(BRIDGE + '/health', { mode: 'no-cors', signal: ctrl.signal, cache: 'no-store' })
+        .then(function () {
+          if (done) return; done = true; clearTimeout(timer);
+          setState('online', 'Bridge is online \u2014 ready to generate',
+            'Connected to ' + BRIDGE + '. Click \u201cLaunch the Generator\u201d.');
+          launchEl.style.display = '';
+        })
+        .catch(function () {
+          if (done) return; done = true; clearTimeout(timer);
+          setState('offline', 'Bridge is offline',
+            'Start it with <b>python server.py</b> (steps below), then press <b>Re-check</b>.');
+          // Keep the launch button visible as a manual fallback.
+          launchEl.style.display = '';
+        });
+    }
+
+    recheckEl.addEventListener('click', checkBridge);
+
+    // Copy-to-clipboard for command snippets.
+    document.querySelectorAll('.copy').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var code = document.getElementById(btn.getAttribute('data-copy'));
+        var text = code ? code.textContent : '';
+        var mark = function () {
+          btn.textContent = 'Copied'; btn.classList.add('done');
+          setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(mark, function () {});
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); mark(); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+      });
+    });
+
+    checkBridge();
+  </script>
+</body>
+</html>
