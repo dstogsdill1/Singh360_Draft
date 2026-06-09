@@ -97,8 +97,10 @@ def _shape_note(node) -> str:
 class VsonGenerator:
     """Compiles a DiagramGraph into an official VSON document (dict + file)."""
 
-    def __init__(self, layout: str = "hierarchy") -> None:
+    def __init__(self, layout: str = "hierarchy", title_block=None) -> None:
         self.template = _TEMPLATES.get((layout or "").lower(), "Hierarchy")
+        # Optional engines.title_block.TitleBlockInfo -> editable VSON Table.
+        self.title_block = title_block
 
     # ---- spanning-tree construction -------------------------------------
     def _build_tree(self, graph: DiagramGraph):
@@ -139,6 +141,71 @@ class VsonGenerator:
 
         roots = [n for n in nodes if n not in tree_parent]
         return children, child_kind, roots, extra
+
+    # ---- HEB title block as an editable VSON Table ----------------------
+    def _title_block_shape(self, new_id) -> dict:
+        """Build the HEB title block as a real, EDITABLE 2-column table.
+
+        VSON has no absolute X/Y (it auto-lays-out), but a shape can hold a
+        `Table` whose every cell is editable text in SmartDraw — exactly how a
+        drawing title block works. The operator edits any field in place,
+        replaces values, and the block stays a true table, never an image.
+        """
+        tb = self.title_block
+        navy = "#0B3D63"
+        # (label, value) rows. Blank values render blank (never invented).
+        rows: list[tuple[str, str]] = [
+            ("SHEET NUMBER", tb.sheet_number),
+            ("SHEET TITLE", tb.sheet_title),
+            ("PROJECT", tb.project_name),
+            ("ADDRESS", tb.project_address),
+            ("SCALE", tb.scale),
+            ("PROJECT NO.", tb.project_no),
+            ("DATE", tb.date),
+            ("FIRM", tb.firm),
+            ("CONSULTANT", " · ".join(tb.firm_lines)),
+            ("ENGINEER", tb.engineer),
+            ("STATUS", tb.status),
+            ("REVISIONS", tb.revision),
+            ("CONFIDENTIAL",
+             "This document may contain sensitive and/or proprietary "
+             "information and must be treated as confidential. It shall not be "
+             "reproduced, released, or distributed without express written "
+             "permission."),
+        ]
+        cells: list[dict] = []
+        for i, (label, value) in enumerate(rows, start=1):
+            cells.append({
+                "Column": 1, "Row": i, "Label": label,
+                "TextBold": True, "TextColor": "#FFFFFF", "FillColor": navy,
+                "TextAlignH": "left", "TextAlignV": "middle",
+            })
+            cells.append({
+                "Column": 2, "Row": i, "Label": value or "",
+                "TextColor": "#1A1A1A", "FillColor": "#FFFFFF",
+                "TextAlignH": "left", "TextAlignV": "middle",
+            })
+        table = {
+            "Rows": len(rows),
+            "Columns": 2,
+            "ColumnWidth": 180,
+            "RowHeight": 34,
+            "Cell": cells,
+            "ColumnProperties": [
+                {"Index": 1, "Width": 150, "FixedWidth": True},
+                {"Index": 2, "Width": 330},
+            ],
+        }
+        return {
+            "ID": new_id(),
+            "Label": "TITLE BLOCK",
+            "FillColor": "#FFFFFF",
+            "LineColor": navy,
+            "TextColor": navy,
+            "TextBold": True,
+            "TextGrow": "Proportional",
+            "Table": table,
+        }
 
     # ---- document assembly ----------------------------------------------
     def build_document(self, graph: DiagramGraph) -> dict:
@@ -219,9 +286,16 @@ class VsonGenerator:
             "TextGrow": "Proportional",
             "TextBold": True,
         }
-        if group_shapes:
+
+        # Title block as a real EDITABLE table (not an image) — first branch.
+        branch_shapes: list[dict] = []
+        if self.title_block is not None and not self.title_block.is_empty():
+            branch_shapes.append(self._title_block_shape(new_id))
+        branch_shapes.extend(group_shapes)
+
+        if branch_shapes:
             root_shape["ShapeConnector"] = [
-                {"ShapeConnectorType": self.template, "Shapes": group_shapes}
+                {"ShapeConnectorType": self.template, "Shapes": branch_shapes}
             ]
 
         # Cross-links: relationships that didn't fit the spanning tree.

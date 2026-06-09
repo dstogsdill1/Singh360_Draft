@@ -180,8 +180,24 @@ def run(args: argparse.Namespace) -> int:
     written: list[Path] = []
     reports: list[str] = []
 
+    # HEB title block (templated) — shared by VSON (editable Table) + VSDX
+    # (positioned right-edge strip). Built once so both stay in sync.
+    tb = None
+    if getattr(args, "title_block", False):
+        import datetime
+        from engines.title_block import TitleBlockInfo
+
+        tb = TitleBlockInfo(
+            project_name=args.project_name or args.name,
+            project_address=args.project_address,
+            sheet_number=args.sheet_number,
+            sheet_title=args.sheet_title,
+            project_no=args.project_no,
+            date=args.sheet_date or datetime.date.today().strftime("%m/%d/%y"),
+        )
+
     if "vson" in targets:
-        gen = smartdraw_vson.VsonGenerator(layout=args.layout)
+        gen = smartdraw_vson.VsonGenerator(layout=args.layout, title_block=tb)
         vson_path = gen.render(graph, out_dir / f"{safe}.vson")
         ok, problems = smartdraw_vson.validate(vson_path)
         written.append(vson_path)
@@ -191,26 +207,14 @@ def run(args: argparse.Namespace) -> int:
     if "vsdx" in targets:
         masters = visio_vsdx.MasterLibrary(args.vssx) if args.vssx else None
 
-        # HEB title block (templated). Forces Arch D (42x30) — HEB sheet size.
-        tb = None
+        # Title block forces Arch D (42x30) + grouped 2D layout so content fills.
         page_w, page_h = config.PAGE_WIDTH_IN, config.PAGE_HEIGHT_IN
         layout_fn = None
-        if getattr(args, "title_block", False):
-            import datetime
-            from engines.title_block import TitleBlockInfo
+        if tb is not None:
             from engines.spatial_layout import compute_spatial_layout
 
             page_w, page_h = config.page_size("archd")
-            # Grouped 2D layout fills the Arch D canvas (vs. thin org-chart strip).
             layout_fn = compute_spatial_layout
-            tb = TitleBlockInfo(
-                project_name=args.project_name or args.name,
-                project_address=args.project_address,
-                sheet_number=args.sheet_number,
-                sheet_title=args.sheet_title,
-                project_no=args.project_no,
-                date=args.sheet_date or datetime.date.today().strftime("%m/%d/%y"),
-            )
         writer = visio_vsdx.VsdxWriter(
             page_w=page_w, page_h=page_h, master_library=masters,
             layout_fn=layout_fn, title_block=tb,
