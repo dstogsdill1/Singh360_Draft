@@ -46,17 +46,24 @@ def build(model: ProjectModel) -> DiagramGraph:
 
     skip = {"drawing", "survey_photo"}
     placed = 0
+    anchored = 0
     for nid, node in model.nodes.items():
         if node.attrs.get("kind") in skip:
             continue
         zone = _ZONE.get(node.kind, "Devices")
+        # Pull any real floor-plan anchor (inches, bottom-left origin) the
+        # lighting_plan / spatial extractors stamped into attrs. Absolute X/Y
+        # always wins over zone-clustering — true to the gold sheet placement.
+        ax = _as_float(node.attrs.get("x"))
+        ay = _as_float(node.attrs.get("y"))
+        if ax is not None and ay is not None:
+            anchored += 1
         g.add_node(Node(
             id=nid, label=node.name,
             category=_CATEGORY.get(node.kind, "Energy Monitoring"),
             unit_type=node.kind.value, group=zone,
-            attrs={k: v for k, v in node.attrs.items() if k in ("nw", "slv", "ip", "make", "control_type")},
-            # carry any real floor-plan anchor straight through
-            x=None, y=None,
+            attrs={k: v for k, v in node.attrs.items() if k in ("nw", "slv", "ip", "make", "control_type", "lcp", "zones", "fixture_type")},
+            x=ax, y=ay,
             source=node.source,
         ))
         placed += 1
@@ -67,5 +74,18 @@ def build(model: ProjectModel) -> DiagramGraph:
             g.add_edge(Edge(source=nid, target=node.parent, kind="hierarchy",
                             source_ref=node.source))
 
-    g.flags.append(f"Equipment layout: {placed} items placed on the 2D canvas.")
+    if anchored:
+        g.flags.append(
+            f"Equipment layout: {placed} items placed; {anchored} at ABSOLUTE "
+            f"floor-plan X/Y (true coordinates), rest packed into zones."
+        )
+    else:
+        g.flags.append(f"Equipment layout: {placed} items placed on the 2D canvas.")
     return g
+
+
+def _as_float(v: object) -> float | None:
+    try:
+        return float(v)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None

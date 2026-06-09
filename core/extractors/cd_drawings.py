@@ -34,11 +34,14 @@ def extract(path: str | Path, model: ProjectModel) -> None:
     text_chars = 0
     pages_with_text = 0
     snippet = ""
+    lcp_signal = 0
     for i in range(doc.page_count):
         t = doc[i].get_text("text").strip()
         if t:
             pages_with_text += 1
             text_chars += len(t)
+            up = t.upper()
+            lcp_signal += up.count("LCP") + up.count("CONTACTOR")
             if not snippet:
                 snippet = t[:600]
     doc.close()
@@ -59,3 +62,12 @@ def extract(path: str | Path, model: ProjectModel) -> None:
         )
     else:
         model.flag("info", f"CD drawing {path.name}: {text_chars} text chars across {pages_with_text} pages", path.name)
+
+    # A discipline drawing carrying LCP/contactor content holds spatial lighting
+    # control data — point the operator at the lighting_plan extractor.
+    if lcp_signal >= 2:
+        model.flag(
+            "review",
+            f"{path.name}: {lcp_signal} LCP/contactor mentions — re-run via lighting_plan for X/Y overlay",
+            path.name,
+        )

@@ -23,6 +23,7 @@ SOURCE_TYPES = (
     "ems_worksheet",    # EMS I/O worksheet .xlsx
     "rdm_tdb",          # RDM TDB layout .xlsx
     "panel_config",     # panel configuration .pptx / .pdf
+    "lighting_plan",    # vector lighting/EMS controls plan PDF (fixture + LCP X/Y)
     "cd_drawings",      # construction drawing PDFs by discipline
     "kwh360_assets",    # kWh360 input .csv
     "survey_photos",    # field photos
@@ -121,6 +122,13 @@ def classify(path: Path, root: Path) -> FileEntry:
         src = "rdm_tdb"; note = "RDM TDB layout"
     elif ("SUPPK" in up or ("RACK" in rel_up and "HUSSMANN" in rel_up)) and ext == ".xml":
         src = "emerson_dump"; note = "Hussmann/Emerson rack controller export (XML)"
+    elif ext == ".pdf" and "LIGHTING" in up and (
+        "EMS CONTROL" in up or "LIGHTING CONTROL" in up or "CONTROLS PLAN" in up
+        or ("CONTROL" in up and "PLAN" in up) or "LCP" in up
+    ):
+        src = "lighting_plan"; note = "Vector lighting/EMS controls plan (fixture + LCP coordinates)"
+    elif ext == ".pdf" and ("LCP" in up or ("LIGHTING" in up and "CONTROL" in up)):
+        src = "lighting_plan"; note = "Lighting control panel / controls plan PDF"
     elif ("PANEL" in up and ("CONFIG" in up or "CONFIGURATION" in up)) and ext in {".pptx", ".pdf", ".ppt"}:
         src = "panel_config"; note = "Control panel configuration"
     elif ("EMS LAYOUT" in up or "EMS-LAYOUT" in up or "SUB-METERING" in up or "PANEL" in up) and ext in {".pptx", ".ppt"}:

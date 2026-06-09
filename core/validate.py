@@ -26,13 +26,22 @@ def validate(model: ProjectModel) -> dict:
             model.flag("review", f"node '{node.name}' has no source provenance", node.id)
 
         cables: dict[str, int] = defaultdict(int)
+        # If a board's points carry NO cable numbers at all, the source is an
+        # I/O matrix / layout (not the wire schedule) — note it once instead of
+        # flagging every point. Only a MISSING cable among cabled siblings is a
+        # real gap worth a per-point flag.
+        n_pts = len(node.points)
+        n_cabled = sum(1 for p in node.points if p.cable)
+        cables_expected = n_cabled > 0
         for p in node.points:
             if p.cable:
                 cables[p.cable] += 1
-            else:
+            elif cables_expected:
                 model.flag("review", f"{node.name}: point '{p.label}' has no cable number", node.id)
             if p.kind == PointKind.RELAY and not p.load:
                 model.flag("review", f"{node.name}: relay '{p.label}' has no load named", node.id)
+        if n_pts and not cables_expected:
+            model.flag("info", f"{node.name}: {n_pts} points from an I/O matrix — cable numbers come from the wire schedule", node.id)
         for cable, c in cables.items():
             if c > 1:
                 model.flag("review", f"{node.name}: cable #{cable} used {c} times", node.id)

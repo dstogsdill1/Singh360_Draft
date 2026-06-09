@@ -134,6 +134,24 @@ python main_generator.py --assets sample_data/assets.csv `
 python main_generator.py --assets sample_data/assets.csv --pdf plan.pdf --pages 3-4
 ```
 
+#### Lighting plan → true X/Y (vector PDFs)
+
+`core/extractors/lighting_plan.py` reads a vector **lighting / EMS controls
+plan** PDF (e.g. `109 E-1.0 ELEC LIGHTING EMS CONTROLS PLAN.pdf`, drawn 1:1 to
+Arch D), pulls every **LCP** zone marker (`LCP-1…LCP-n`) and fixture-type tag
+(`B1`, `T10`, `UL924`…) with its coordinate, and fits that true bounding box onto
+the 42×30 canvas (Y-flipped to a bottom-left origin). It emits one PANEL per LCP
+at the centroid of its markers, one LIGHTING zone per marker at its real X/Y, and
+one LIGHTING node per fixture type — each stamped with `attrs["x"]/["y"]` so
+`floorplan_layout` → `spatial_layout` place them at **absolute PinX/PinY** on the
+sheet (the SA-31 spatial overlay). The `pipeline_cli.py` floorplan sheet picks
+these anchors up automatically:
+
+```powershell
+python pipeline_cli.py "<raw HEB project folder>" --name "HEB 109 Bunker Hills" `
+    --out output/bh109 --sheets io_schedule,floorplan_layout --canvas archd
+```
+
 ---
 
 ## 3b. Web GUI (App Central bridge)

@@ -197,6 +197,8 @@ def extract_contactors(xlsx_path: Path, sheet: str) -> tuple[list[list[str]], li
     c_cont = _col_index(header, "CONTACTOR")
     c_circ = _col_index(header, "CONTROLLED CIRCUIT", "CIRCUIT")
     c_desc = _col_index(header, "DESCRIPTION", "LOAD", "SERVICE")
+    c_pole = _col_index(header, "POLE", "# OF POLES", "POLES")
+    c_panel = _col_index(header, "LCP", "PANEL")
 
     def cell(row: list[str], ci: int) -> str:
         return row[ci] if 0 <= ci < len(row) else ""
@@ -211,10 +213,15 @@ def extract_contactors(xlsx_path: Path, sheet: str) -> tuple[list[list[str]], li
             continue
         circuit = cell(r, c_circ)
         desc = cell(r, c_desc)
+        poles = cell(r, c_pole)
         load = desc or (f"{contactor or relay} load")
-        # Panel = the panel name if the circuit reads PANEL "XX", else the ref.
-        m = re.search(r'PANEL\s*["\']?([A-Z0-9\-]+)', circuit.upper())
-        panel = m.group(1) if m else circuit
+        if poles:
+            load = f"{load} ({poles}P)"
+        # Panel = an explicit LCP/PANEL column, else parse PANEL "XX" from circuit.
+        panel = cell(r, c_panel)
+        if not panel:
+            m = re.search(r'(?:LCP|PANEL)[\s#\-]*["\']?([A-Z0-9\-]+)', circuit.upper())
+            panel = m.group(1) if m else circuit
         rows.append([relay, contactor, load, panel, "", ""])
     if not rows:
         flags.append(f"{sheet}: no contactor rows extracted below header")
