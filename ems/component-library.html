@@ -147,7 +147,6 @@
       <button class="btn" id="drawer-toggle">Toggle Categories</button>
       <span class="count" id="count"></span>
       <button class="btn primary" id="add-btn">+ Add Component</button>
-      <button class="btn warn" id="reset-btn">Reset Library</button>
     </div>
 
     <div class="library-shell" id="library-shell">
@@ -471,13 +470,6 @@
     document.getElementById('m-cancel').addEventListener('click', closeModal);
     document.getElementById('m-save').addEventListener('click', saveModal);
     modalBg.addEventListener('click', function(e){ if(e.target===modalBg) closeModal(); });
-    document.getElementById('reset-btn').addEventListener('click', function(){
-      if(confirm('Reset the library to the original components? This clears your renames, deletes, and added components.')){
-        localStorage.removeItem(STORE_KEY);
-        state = {renamed:{},descs:{},deleted:[],custom:[]};
-        activeTab='all'; render();
-      }
-    });
     document.getElementById('search').addEventListener('input', function(e){ query=e.target.value.trim().toLowerCase(); render(); });
     document.getElementById('sort').addEventListener('change', function(e){ sortMode = e.target.value; render(); });
     document.getElementById('drawer-toggle').addEventListener('click', function(){ drawerCollapsed = !drawerCollapsed; render(); });
