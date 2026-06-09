@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Singh360 EMS Component Library — HEB Refrigeration / EMS</title>
+  <meta name="description" content="Editable, plain-English library of the building-block components used to assemble HEB EMS and refrigeration commissioning documents." />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      /* Light, clean theme — no black backgrounds */
+      --bg:#eef2f7;--surface:#ffffff;--surface-2:#f5f8fc;--border:#dbe3ec;--border-2:#c2cedd;
+      --text-1:#1f2a37;--text-2:#516072;--text-3:#7d8aa0;
+      --blue:#0e8fd0;--blue-d:#04679b;--navy:#0b3d63;--green:#1f9d6b;--amber:#cf8a00;--red:#d3503f;--purple:#7a59c2;
+      --font:'Segoe UI',Roboto,system-ui,sans-serif;--mono:Consolas,'Cascadia Code',monospace;
+      --paper:#ffffff;--ink:#1f2a37;--paper-line:#25425f;--paper-accent:#0e8fd0;
+    }
+    html,body{min-height:100%;background:var(--bg);color:var(--text-1);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+    .wrap{max-width:1240px;margin:0 auto;padding:24px 22px 80px}
+
+    .masthead{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+    .logo{width:46px;height:46px;border-radius:11px;flex-shrink:0;background:linear-gradient(135deg,#0e8fd0,#04679b);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(14,143,208,.3)}
+    h1{font-size:22px;font-weight:700;color:var(--navy)}
+    .masthead p{font-size:13px;color:var(--text-2)}
+    .lead{color:var(--text-2);font-size:13.5px;margin:12px 0 18px;border-left:3px solid var(--blue);padding-left:13px;line-height:1.65;max-width:940px}
+    .lead b{color:var(--text-1)}
+
+    .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(16,42,67,.05)}
+    .search{flex:1;min-width:190px;display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:8px 11px}
+    .search svg{width:15px;height:15px;flex-shrink:0;stroke:var(--text-3)}
+    .search input{border:none;background:none;outline:none;width:100%;font-size:13.5px;color:var(--text-1);font-family:var(--font)}
+    .btn{border:1px solid var(--border-2);background:#fff;color:var(--text-1);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+    .btn:hover{border-color:var(--blue);color:var(--blue);background:#f0f9ff}
+    .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+    .btn.primary:hover{background:var(--blue-d);border-color:var(--blue-d);color:#fff}
+    .btn.warn:hover{border-color:var(--red);color:var(--red);background:#fff3f1}
+    .count{font-size:12.5px;color:var(--text-3);font-weight:600}
+
+    .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+    .tab{border:1px solid var(--border-2);background:#fff;color:var(--text-2);border-radius:20px;padding:7px 15px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+    .tab:hover{border-color:var(--blue);color:var(--blue)}
+    .tab.active{background:var(--navy);border-color:var(--navy);color:#fff}
+    .tab .n{opacity:.6;margin-left:5px}
+    .tab.active .n{opacity:.85}
+
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(345px,1fr));gap:16px;align-items:start}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(16,42,67,.06)}
+    .card.span2{grid-column:span 2}
+    @media(max-width:800px){.card.span2{grid-column:span 1}}
+    .card-top{display:flex;align-items:center;gap:8px;padding:13px 15px 0}
+    .wname{font-size:15px;font-weight:700;color:var(--navy);flex:1;line-height:1.3}
+    .tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:3px 8px;border-radius:11px;white-space:nowrap}
+    .tag.controllers{background:#e4f2fb;color:var(--blue-d)}
+    .tag.refrigeration{background:#e3f6ee;color:var(--green)}
+    .tag.panels{background:#fbeee0;color:var(--amber)}
+    .tag.hvac{background:#efeafb;color:var(--purple)}
+    .tag.frames{background:#eef1f5;color:var(--text-2)}
+    .card .stage{background:#fbfdff;border:1px solid var(--border);border-radius:10px;margin:12px 15px 0;padding:12px;display:flex;align-items:center;justify-content:center;min-height:180px}
+    .card .body{padding:12px 15px 4px}
+    .wdesc{font-size:13px;color:var(--text-2);line-height:1.5}
+    .fills{margin-top:9px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:9px 11px}
+    .fills .h{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--blue-d);margin-bottom:3px}
+    .fills .t{font-size:12.5px;color:var(--text-1);line-height:1.55}
+    .actions{display:flex;gap:8px;padding:12px 15px 15px;margin-top:auto}
+    .mini{flex:1;border:1px solid var(--border-2);background:#fff;color:var(--text-2);border-radius:8px;padding:7px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px}
+    .mini:hover{border-color:var(--blue);color:var(--blue);background:#f0f9ff}
+    .mini.del:hover{border-color:var(--red);color:var(--red);background:#fff3f1}
+    .mini svg{width:14px;height:14px}
+
+    .empty{grid-column:1/-1;text-align:center;color:var(--text-3);font-size:14px;padding:50px 20px;border:1.5px dashed var(--border-2);border-radius:14px;background:#fff}
+
+    svg{display:block}
+    .e-fill{fill:#fff}.e-soft{fill:#eef5fb}
+    .e-line{stroke:var(--paper-line);stroke-width:1.4;fill:none}
+    .e-line-2{stroke:var(--paper-line);stroke-width:2.2;fill:none}
+    .e-accent{stroke:var(--paper-accent);stroke-width:1.8;fill:none}
+    .e-hdr{fill:var(--navy)}.e-hdr-2{fill:#0e8fd0}
+    text{font-family:Consolas,'Courier New',monospace;fill:var(--ink)}
+    .t-hdr{fill:#fff;font-weight:700}.t-sm{font-size:9px}.t-xs{font-size:7.5px}.t-md{font-size:11px;font-weight:700}.t-b{font-weight:700}
+    .wire-red{stroke:#d3503f;stroke-width:2.4}.wire-blk{stroke:#374151;stroke-width:2.4}.wire-wht{stroke:#9aa7b5;stroke-width:2.4}
+    .wire-grn{stroke:#1f9d6b;stroke-width:2.4}.wire-blu{stroke:#0e8fd0;stroke-width:2.4}.wire-yel{stroke:#d8a400;stroke-width:2.4}
+
+    footer{margin-top:34px;text-align:center;color:var(--text-3);font-size:12px;line-height:1.7}
+    footer b{color:var(--text-2)}
+
+    .modal-bg{position:fixed;inset:0;background:rgba(11,61,99,.35);display:none;align-items:center;justify-content:center;padding:20px;z-index:100}
+    .modal-bg.show{display:flex}
+    .modal{background:#fff;border-radius:14px;width:100%;max-width:440px;box-shadow:0 20px 50px rgba(11,61,99,.25);overflow:hidden}
+    .modal h3{font-size:16px;font-weight:700;color:var(--navy);padding:18px 20px 0}
+    .modal .mbody{padding:6px 20px 4px}
+    .modal label{display:block;font-size:12px;font-weight:600;color:var(--text-2);margin:12px 0 5px}
+    .modal input,.modal textarea,.modal select{width:100%;border:1px solid var(--border-2);border-radius:9px;padding:10px 12px;font-size:14px;font-family:var(--font);color:var(--text-1);outline:none}
+    .modal input:focus,.modal textarea:focus,.modal select:focus{border-color:var(--blue)}
+    .modal textarea{min-height:64px;resize:vertical}
+    .modal .mfoot{display:flex;justify-content:flex-end;gap:9px;padding:16px 20px 18px;border-top:1px solid var(--border);margin-top:10px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="masthead">
+      <div class="logo">EMS</div>
+      <div>
+        <h1>EMS Component Library</h1>
+        <p>The building blocks for HEB refrigeration &amp; EMS commissioning documents &mdash; rename, delete, or add your own.</p>
+      </div>
+    </div>
+
+    <p class="lead">
+      Every part you see on the field sheets is a <b>component</b> here. Each card shows a clean picture of the part,
+      explains in plain words what it is, and tells you exactly what information it pulls from your project data.
+      Use the tabs to jump between sections, the search box to find a part, and the buttons on each card to
+      <b>Rename</b> or <b>Delete</b> it. Click <b>Add Component</b> to create your own. Everything you change is saved in this browser.
+    </p>
+
+    <div class="toolbar">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="search" type="text" placeholder="Search components (e.g. compressor, relay, valve, sensor)…" autocomplete="off" />
+      </div>
+      <span class="count" id="count"></span>
+      <button class="btn primary" id="add-btn">+ Add Component</button>
+      <button class="btn warn" id="reset-btn">Reset Library</button>
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+    <div class="grid" id="grid"></div>
+
+    <footer>
+      Singh360 EMS Component Library &middot; grounded in <b>HEB Seguin #716</b> &amp; <b>Fair Oaks #793</b> field surveys.<br>
+      Each component becomes a reusable Visio master &amp; diagram symbol in the generator.
+    </footer>
+  </div>
+
+  <!-- Add / Rename modal -->
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal">
+      <h3 id="modal-title">Add Component</h3>
+      <div class="mbody">
+        <label for="m-name">Component name</label>
+        <input id="m-name" type="text" placeholder="e.g. Walk-In Cooler Controller" />
+        <label for="m-section">Section</label>
+        <select id="m-section">
+          <option value="controllers">Controllers &amp; Network</option>
+          <option value="refrigeration">Refrigeration</option>
+          <option value="panels">Control Panels &amp; I/O</option>
+          <option value="hvac">HVAC &amp; Lighting</option>
+          <option value="frames">Sheet Frames</option>
+        </select>
+        <label for="m-desc">What it is (plain English)</label>
+        <textarea id="m-desc" placeholder="Describe the part in everyday words…"></textarea>
+        <label for="m-fills">What it fills in from your data</label>
+        <textarea id="m-fills" placeholder="e.g. The controller name, the cases it controls, and its network address."></textarea>
+      </div>
+      <div class="mfoot">
+        <button class="btn" id="m-cancel">Cancel</button>
+        <button class="btn primary" id="m-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+    var STORE_KEY = 'singh360_ems_component_library_v1';
+
+    // ---- SVG illustrations (navy ink on white — readable, no black blocks) ----
+    var SVG = {
+      rdm: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-hdr" x="55" y="20" width="160" height="22" rx="3"/><text class="t-hdr t-sm" x="135" y="35" text-anchor="middle">RDM DATA MANAGER</text><rect class="e-fill e-line" x="55" y="42" width="160" height="92" rx="3"/><circle class="e-accent" cx="80" cy="66" r="7"/><text class="t-xs" x="95" y="69">site brain</text><line class="e-line" x1="65" y1="86" x2="205" y2="86"/><text class="t-xs" x="65" y="102">network: BACnet / IP</text><text class="t-xs" x="65" y="118">talks to every controller</text><line class="wire-blu" x1="135" y1="134" x2="135" y2="150"/></svg>',
+      pr360: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-hdr-2" x="50" y="24" width="170" height="20" rx="3"/><text class="t-hdr t-sm" x="135" y="38" text-anchor="middle">CAREL pR360 RACK CTRL</text><rect class="e-fill e-line" x="50" y="44" width="170" height="74"/><rect class="e-soft e-line" x="62" y="56" width="60" height="26" rx="2"/><text class="t-xs" x="70" y="73">display</text><circle class="e-line" cx="150" cy="62" r="4"/><circle class="e-line" cx="170" cy="62" r="4"/><circle class="e-line" cx="190" cy="62" r="4"/><text class="t-xs" x="138" y="96">controls a refrigeration rack</text><g><line class="wire-red" x1="70" y1="118" x2="70" y2="136"/><line class="wire-blu" x1="100" y1="118" x2="100" y2="136"/><line class="wire-grn" x1="130" y1="118" x2="130" y2="136"/><line class="wire-yel" x1="160" y1="118" x2="160" y2="136"/><line class="wire-blk" x1="190" y1="118" x2="190" y2="136"/></g></svg>',
+      casectrl: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-soft e-line" x="55" y="30" width="160" height="62" rx="3"/><rect class="e-hdr-2" x="55" y="30" width="160" height="16" rx="3"/><text class="t-hdr t-xs" x="135" y="42" text-anchor="middle">CAREL CASE CONTROLLER</text><rect class="e-fill e-line" x="118" y="54" width="40" height="20" rx="2"/><text class="t-md" x="138" y="69" text-anchor="middle">39.1</text><text class="t-xs" x="63" y="68">temp</text><text class="t-xs" x="138" y="106" text-anchor="middle">one per case / circuit</text><g><line class="wire-blu" x1="80" y1="92" x2="80" y2="120"/><line class="wire-wht" x1="110" y1="92" x2="110" y2="120"/><line class="wire-red" x1="160" y1="92" x2="160" y2="120"/><line class="wire-grn" x1="190" y1="92" x2="190" y2="120"/></g></svg>',
+      rdm751: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-hdr" x="70" y="26" width="130" height="84" rx="4"/><text class="t-hdr t-sm" x="135" y="44" text-anchor="middle">RDM751</text><text class="t-hdr t-xs" x="135" y="58" text-anchor="middle">EEV CASE CTRL</text><rect class="e-soft e-line" x="92" y="66" width="20" height="14"/><rect class="e-soft e-line" x="124" y="66" width="20" height="14"/><rect class="e-soft e-line" x="156" y="66" width="20" height="14"/><text class="t-xs" x="135" y="98" text-anchor="middle" fill="#fff">drives expansion valves</text><text class="t-xs" x="135" y="128" text-anchor="middle">e.g. 6 cooler / freezer cases</text></svg>',
+      bluetooth: '<svg width="270" height="160" viewBox="0 0 270 160"><circle class="e-fill e-line-2" cx="135" cy="80" r="52"/><path class="e-accent" d="M135 50 L150 65 L120 90 L135 105 L150 90 L120 65" stroke-width="2.4"/><rect class="e-soft e-line" x="40" y="70" width="34" height="20" rx="2"/><text class="t-xs" x="44" y="84">MAC</text><line class="wire-blu" x1="74" y1="80" x2="90" y2="80"/><text class="t-xs" x="135" y="150" text-anchor="middle">Bluetooth Ethernet Access Point</text></svg>',
+      switch: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-hdr" x="35" y="58" width="200" height="34" rx="4"/><text class="t-hdr t-sm" x="45" y="79">NETWORK SWITCH</text><g>'+[0,1,2,3,4,5,6,7].map(function(i){return '<rect class="e-soft" x="'+(150+i*10)+'" y="68" width="7" height="14"/>';}).join('')+'</g><line class="wire-blu" x1="60" y1="92" x2="60" y2="120"/><line class="wire-grn" x1="90" y1="92" x2="90" y2="120"/><line class="wire-yel" x1="120" y1="92" x2="120" y2="120"/><text class="t-xs" x="135" y="140" text-anchor="middle">ties the controllers to the network</text></svg>',
+      canbus: '<svg width="270" height="160" viewBox="0 0 270 160"><line class="wire-red" x1="70" y1="26" x2="70" y2="60"/><line class="wire-grn" x1="105" y1="26" x2="105" y2="60"/><line class="wire-wht" x1="140" y1="26" x2="140" y2="60"/><line class="wire-blk" x1="175" y1="26" x2="195" y2="30"/><text class="t-xs" x="60" y="20">RED</text><text class="t-xs" x="86" y="20">SHLD</text><text class="t-xs" x="128" y="20">WHT</text><text class="t-xs" x="180" y="20">BLK</text><rect class="e-fill e-line" x="50" y="60" width="150" height="24"/><circle class="e-line" cx="70" cy="72" r="6"/><circle class="e-line" cx="105" cy="72" r="6"/><circle class="e-line" cx="140" cy="72" r="6"/><circle class="e-line" cx="175" cy="72" r="6"/><text class="t-md" x="125" y="104" text-anchor="middle">COMM TRUNK (CANBUS)</text><text class="t-xs" x="125" y="124" text-anchor="middle">daisy-chains controllers · cap off black</text></svg>',
+      rack: '<svg width="540" height="170" viewBox="0 0 540 170"><rect class="e-hdr" x="14" y="12" width="512" height="20" rx="3"/><text class="t-hdr t-sm" x="22" y="26">Hillphoenix Rack A — Suction Group +22 (BTUH check)</text><rect class="e-fill e-line" x="14" y="32" width="512" height="126"/><line class="e-line" x1="60" y1="32" x2="60" y2="158"/><line class="e-line" x1="250" y1="32" x2="250" y2="158"/><line class="e-line" x1="320" y1="32" x2="320" y2="158"/><line class="e-line" x1="400" y1="32" x2="400" y2="158"/><text class="t-xs" x="24" y="46">ID</text><text class="t-xs" x="110" y="46">Case / load description</text><text class="t-xs" x="262" y="46">Model</text><text class="t-xs" x="332" y="46">Design °F</text><text class="t-xs" x="430" y="46">Control valve</text><line class="e-line" x1="14" y1="52" x2="526" y2="52"/><text class="t-xs" x="22" y="68">02A</text><text class="t-xs" x="68" y="68">DUAL TEMP MEAT END CAP</text><text class="t-xs" x="258" y="68">OW2ZV</text><text class="t-xs" x="345" y="68">+22</text><text class="t-xs" x="410" y="68">Ball valve</text><line class="e-line" x1="14" y1="74" x2="526" y2="74"/><text class="t-xs" x="22" y="90">03A</text><text class="t-xs" x="68" y="90">WIDE 3-WAY DOOR FREEZER</text><text class="t-xs" x="258" y="90">OW2ZV</text><text class="t-xs" x="345" y="90">+22</text><text class="t-xs" x="410" y="90">EPR</text><line class="e-line" x1="14" y1="96" x2="526" y2="96"/><text class="t-xs t-b" x="22" y="112">Compressors</text><text class="t-xs" x="110" y="112">4 × ZF18 / ZF34 · 156 LRA · 6 HP</text><line class="e-line" x1="14" y1="118" x2="526" y2="118"/><text class="t-xs t-b" x="22" y="134">Summary</text><text class="t-xs" x="110" y="134">Required 87.2K BTUH · Capacity 88.9K · Loading 113.4%</text><line class="e-line" x1="14" y1="140" x2="526" y2="140"/><text class="t-xs" x="110" y="153">This group = 100% of system · subcooled liquid 50°F</text></svg>',
+      compctrl: '<svg width="540" height="180" viewBox="0 0 540 180"><rect class="e-fill e-line" x="14" y="14" width="512" height="152"/><rect class="e-soft e-line" x="40" y="30" width="80" height="22"/><text class="t-xs" x="80" y="44" text-anchor="middle">COMPRESSOR 1</text><line class="wire-blk" x1="40" y1="70" x2="120" y2="70"/><circle class="e-line" cx="70" cy="70" r="4"/><circle class="e-line" cx="100" cy="70" r="4"/><text class="t-xs" x="40" y="64">start relay</text><text class="t-xs" x="128" y="64">low / high pressure</text><line class="wire-blk" x1="120" y1="70" x2="210" y2="70"/><rect class="e-soft e-line" x="210" y="52" width="74" height="40"/><text class="t-xs" x="247" y="68" text-anchor="middle">DEMAND</text><text class="t-xs" x="247" y="80" text-anchor="middle">COOLING</text><rect class="e-hdr-2" x="300" y="52" width="70" height="20"/><text class="t-hdr t-xs" x="335" y="65" text-anchor="middle">DCM MODULE</text><line class="wire-red" x1="370" y1="62" x2="430" y2="62"/><text class="t-xs" x="380" y="56">to alarm</text><rect class="e-soft e-line" x="430" y="44" width="74" height="22"/><text class="t-xs" x="467" y="58" text-anchor="middle">CONTACTOR</text><line class="e-line" x1="14" y1="104" x2="526" y2="104"/><text class="t-xs" x="40" y="122">disc temp thermistor → shielded cable</text><line class="wire-grn" x1="40" y1="132" x2="200" y2="132"/><text class="t-xs" x="240" y="122">injection solenoid · oil control · run proof</text><circle class="e-line" cx="300" cy="146" r="5"/><circle class="e-line" cx="330" cy="146" r="5"/><text class="t-xs" x="40" y="156">208V / 60 / 1Ø control power</text></svg>',
+      selfcontained: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-soft e-line-2" x="55" y="30" width="160" height="60" rx="3"/><text class="t-xs" x="135" y="50" text-anchor="middle">SELF-CONTAINED CASE</text><text class="t-xs" x="135" y="64" text-anchor="middle">(Krack / Solo Chill)</text><rect class="e-fill e-line" x="80" y="92" width="110" height="40" rx="3"/><circle class="e-line" cx="105" cy="112" r="9"/><text class="t-xs" x="120" y="115">compressor</text><text class="t-xs" x="135" y="150" text-anchor="middle">case + cooling built into one unit</text></svg>',
+      circuit: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-fill e-line" x="40" y="34" width="190" height="92"/><line class="e-line" x1="40" y1="58" x2="230" y2="58"/><text class="t-xs t-b" x="50" y="50">Suction circuit</text><text class="t-xs" x="50" y="74">name: SI04a</text><text class="t-xs" x="50" y="90">serves: curbside freezer</text><text class="t-xs" x="50" y="106">make: Krack</text><text class="t-xs" x="50" y="120">design temp: -10 °F</text><text class="t-xs" x="135" y="148" text-anchor="middle">one refrigerated circuit / case</text></svg>',
+      wicp: '<svg width="270" height="180" viewBox="0 0 270 180"><rect class="e-fill e-line-2" x="45" y="14" width="180" height="150" rx="3"/><rect class="e-hdr" x="45" y="14" width="180" height="18"/><text class="t-hdr t-xs" x="135" y="27" text-anchor="middle">WALK-IN CONTROL PANEL (WICP)</text><g>'+[0,1,2,3,4,5,6,7].map(function(i){return '<rect class="e-soft e-line" x="'+(58+i*20)+'" y="42" width="14" height="22"/>';}).join('')+'</g><text class="t-xs" x="58" y="78">breakers</text><g>'+[0,1,2,3].map(function(i){return '<rect class="e-soft e-line" x="'+(64+i*40)+'" y="92" width="30" height="20"/>';}).join('')+'</g><text class="t-xs" x="64" y="126">contactors / controllers</text><line class="wire-blu" x1="70" y1="148" x2="70" y2="162"/><line class="wire-red" x1="120" y1="148" x2="120" y2="162"/><line class="wire-grn" x1="170" y1="148" x2="170" y2="162"/></svg>',
+      terminal: '<svg width="270" height="160" viewBox="0 0 270 160"><text class="t-xs t-b" x="40" y="34">Rack terminal block</text><rect class="e-fill e-line" x="40" y="40" width="190" height="30"/><g>'+[0,1,2,3,4,5,6,7,8,9].map(function(i){return '<line class="e-line" x1="'+(52+i*18)+'" y1="40" x2="'+(52+i*18)+'" y2="70"/><circle class="e-line" cx="'+(52+i*18)+'" cy="55" r="4"/>';}).join('')+'</g><g>'+[0,1,2,3,4].map(function(i){return '<line class="wire-red" x1="'+(52+i*36)+'" y1="40" x2="'+(52+i*36)+'" y2="22"/><line class="wire-yel" x1="'+(70+i*36)+'" y1="40" x2="'+(70+i*36)+'" y2="22"/>';}).join('')+'</g><text class="t-xs" x="48" y="92">split cond valve · sensor power · rack alarm · comp #1…#4</text><text class="t-xs" x="135" y="128" text-anchor="middle">where every field wire lands</text></svg>',
+      relay: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-hdr" x="30" y="20" width="210" height="18"/><text class="t-hdr t-sm" x="40" y="33">OUTPUT RELAY</text><rect class="e-fill e-line" x="30" y="38" width="60" height="100"/><text class="t-xs" x="38" y="62">RELAY 1</text><rect class="e-fill e-line" x="90" y="52" width="44" height="60"/><text class="t-xs" x="98" y="66">NC</text><circle class="e-line" cx="124" cy="63" r="3"/><text class="t-xs" x="98" y="84">NO</text><circle class="e-accent" cx="124" cy="81" r="3"/><text class="t-xs" x="98" y="102">C</text><circle class="e-line" cx="124" cy="99" r="3"/><line class="e-accent" x1="127" y1="81" x2="200" y2="81"/><text class="t-sm" x="140" y="74">CONDENSER FAN 1</text><text class="t-xs" x="135" y="150" text-anchor="middle">switches a piece of equipment on/off</text></svg>',
+      probe: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-hdr" x="25" y="18" width="220" height="18"/><text class="t-hdr t-sm" x="35" y="31">SENSOR (PROBE) INPUT</text><rect class="e-fill e-line" x="25" y="36" width="220" height="104"/><line class="e-line" x1="150" y1="36" x2="150" y2="140"/><line class="e-line" x1="205" y1="36" x2="205" y2="140"/><text class="t-xs" x="50" y="52">what it reads</text><text class="t-xs" x="158" y="52">where</text><text class="t-xs" x="212" y="52">cable</text><line class="e-line" x1="25" y1="58" x2="245" y2="58"/><text class="t-xs" x="33" y="76">Suction temp</text><ellipse class="e-line" cx="177" cy="71" rx="14" ry="8"/><text class="t-xs" x="170" y="74">LT1</text><text class="t-xs" x="214" y="76">601</text><line class="e-line" x1="25" y1="84" x2="245" y2="84"/><text class="t-xs" x="33" y="102">Discharge temp</text><text class="t-xs" x="170" y="102">TB4</text><text class="t-xs" x="214" y="102">602</text><line class="e-line" x1="25" y1="110" x2="245" y2="110"/><text class="t-xs" x="33" y="128">Drop-leg temp</text><text class="t-xs" x="170" y="128">LT3</text><text class="t-xs" x="214" y="128">603</text></svg>',
+      status: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-hdr" x="25" y="18" width="220" height="18"/><text class="t-hdr t-sm" x="35" y="31">ALARM / STATUS INPUT</text><rect class="e-fill e-line" x="25" y="36" width="220" height="104"/><line class="e-line" x1="195" y1="36" x2="195" y2="140"/><text class="t-xs" x="55" y="52">on/off alarm signal</text><text class="t-xs" x="206" y="52">cable</text><line class="e-line" x1="25" y1="58" x2="245" y2="58"/><text class="t-xs" x="33" y="76">Oil failure</text><text class="t-xs" x="210" y="76">617</text><line class="e-line" x1="25" y1="84" x2="245" y2="84"/><text class="t-xs" x="33" y="102">Run proof</text><text class="t-xs" x="210" y="102">618</text><line class="e-line" x1="25" y1="110" x2="245" y2="110"/><text class="t-xs" x="33" y="128">Inverter fault</text><text class="t-xs" x="210" y="128">619</text></svg>',
+      analog: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-hdr" x="25" y="18" width="220" height="18"/><text class="t-hdr t-sm" x="35" y="31">PRESSURE / ANALOG SIGNAL</text><rect class="e-fill e-line" x="25" y="36" width="220" height="104"/><line class="e-line" x1="160" y1="36" x2="160" y2="140"/><line class="e-line" x1="208" y1="36" x2="208" y2="140"/><text class="t-xs" x="50" y="52">measured value</text><text class="t-xs" x="166" y="52">range</text><text class="t-xs" x="214" y="52">cbl</text><line class="e-line" x1="25" y1="58" x2="245" y2="58"/><text class="t-xs" x="33" y="76">Suction pressure</text><text class="t-xs" x="166" y="76">4-20mA</text><text class="t-xs" x="214" y="76">609</text><line class="e-line" x1="25" y1="84" x2="245" y2="84"/><text class="t-xs" x="33" y="102">Receiver pressure</text><text class="t-xs" x="166" y="102">0-5V</text><text class="t-xs" x="214" y="102">610</text><line class="e-line" x1="25" y1="110" x2="245" y2="110"/><text class="t-xs" x="33" y="128">Fan / VFD speed</text><text class="t-xs" x="166" y="128">0-10V</text><text class="t-xs" x="214" y="128">611</text></svg>',
+      valve: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-hdr" x="55" y="22" width="160" height="18"/><text class="t-hdr t-sm" x="135" y="35" text-anchor="middle">EXPANSION (EEV) VALVE</text><rect class="e-fill e-line" x="60" y="40" width="56" height="90"/><text class="t-xs" x="88" y="60" text-anchor="middle">VALVE</text><text class="t-md" x="88" y="80" text-anchor="middle">1</text><rect class="e-fill e-line" x="116" y="40" width="44" height="90"/><text class="t-xs" x="124" y="58">2A</text><circle class="e-line" cx="150" cy="54" r="3"/><text class="t-xs" x="124" y="78">2B</text><circle class="e-line" cx="150" cy="74" r="3"/><text class="t-xs" x="124" y="98">1A</text><circle class="e-line" cx="150" cy="94" r="3"/><text class="t-xs" x="124" y="118">1B</text><circle class="e-line" cx="150" cy="114" r="3"/><line class="e-accent" x1="153" y1="74" x2="210" y2="74"/><text class="t-xs" x="165" y="68">subcooler #1</text><text class="t-xs" x="135" y="148" text-anchor="middle">meters refrigerant into a case</text></svg>',
+      rtu: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-fill e-line-2" x="45" y="40" width="180" height="80" rx="4"/><rect class="e-hdr" x="45" y="40" width="180" height="18"/><text class="t-hdr t-xs" x="135" y="53" text-anchor="middle">ROOFTOP UNIT (RTU / PACU)</text><circle class="e-line" cx="90" cy="88" r="18"/><path class="e-accent" d="M90 70 v36 M72 88 h36 M78 76 l24 24 M102 76 l-24 24"/><rect class="e-soft e-line" x="135" y="74" width="70" height="30"/><text class="t-xs" x="170" y="93" text-anchor="middle">supply fan</text><text class="t-xs" x="135" y="142" text-anchor="middle">heats / cools an area of the store</text></svg>',
+      aircurtain: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-fill e-line-2" x="40" y="44" width="190" height="26" rx="3"/><text class="t-xs" x="135" y="61" text-anchor="middle">AIR CURTAIN</text><g>'+[0,1,2,3,4,5,6,7,8].map(function(i){return '<line class="wire-blu" x1="'+(55+i*20)+'" y1="72" x2="'+(55+i*20)+'" y2="112"/>';}).join('')+'</g><text class="t-xs" x="135" y="134" text-anchor="middle">air barrier over a doorway</text><text class="t-xs" x="135" y="150" text-anchor="middle">keeps conditioned air in</text></svg>',
+      tower: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-fill e-line-2" x="60" y="30" width="150" height="80" rx="3"/><rect class="e-hdr-2" x="60" y="30" width="150" height="18"/><text class="t-hdr t-xs" x="135" y="43" text-anchor="middle">COOLING TOWER CTRL (BAC)</text><path class="e-accent" d="M80 64 q15 -14 30 0 q15 14 30 0 q15 -14 30 0"/><text class="t-xs" x="135" y="92" text-anchor="middle">fan + water pump control</text><text class="t-xs" x="135" y="134" text-anchor="middle">rejects heat from the condenser water</text></svg>',
+      lighting: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-fill e-line" x="40" y="34" width="60" height="92"/><text class="t-xs" x="48" y="52">RELAY</text><circle class="e-accent" cx="70" cy="78" r="10"/><line class="e-accent" x1="100" y1="78" x2="160" y2="78"/><rect class="e-soft e-line" x="160" y="60" width="70" height="36" rx="3"/><text class="t-xs" x="195" y="76" text-anchor="middle">parking lot</text><text class="t-xs" x="195" y="89" text-anchor="middle">lights</text><text class="t-xs" x="135" y="148" text-anchor="middle">a lighting contactor + the zone it controls</text></svg>',
+      title: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-fill e-line-2" x="30" y="36" width="210" height="88"/><line class="e-line" x1="30" y1="58" x2="240" y2="58"/><line class="e-line" x1="150" y1="36" x2="150" y2="124"/><text class="t-xs" x="40" y="51">REVISION RECORD</text><text class="t-sm t-b" x="160" y="51">HEB SEGUIN #716</text><text class="t-xs" x="40" y="74">Rev Date By Description</text><text class="t-xs" x="160" y="74">Seguin, TX</text><text class="t-xs t-i" x="160" y="92">Hillphoenix Systems</text><text class="t-xs" x="160" y="110">RACK A I/O LIST</text><line class="e-line" x1="30" y1="84" x2="150" y2="84"/><line class="e-line" x1="30" y1="100" x2="150" y2="100"/><text class="t-xs" x="135" y="146" text-anchor="middle">the sheet&#39;s title &amp; revision box</text></svg>',
+      legend: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-fill e-line" x="30" y="24" width="210" height="112"/><line class="e-line" x1="135" y1="24" x2="135" y2="136"/><text class="t-xs" x="40" y="40">Signal type</text><text class="t-xs" x="145" y="40">Wiring</text><line class="e-line" x1="30" y1="46" x2="240" y2="46"/><text class="t-xs" x="38" y="64">4-20mA in</text><text class="t-xs" x="145" y="64">Sig + 12V dc</text><line class="e-line" x1="30" y1="72" x2="240" y2="72"/><text class="t-xs" x="38" y="90">0-10V in</text><text class="t-xs" x="145" y="90">Ground + Sig</text><line class="e-line" x1="30" y1="98" x2="240" y2="98"/><text class="t-xs" x="38" y="116">4-20mA out</text><text class="t-xs" x="145" y="116">Ground + Sig</text></svg>',
+      custom: '<svg width="270" height="160" viewBox="0 0 270 160"><rect class="e-soft e-line-2" x="55" y="34" width="160" height="92" rx="6" stroke-dasharray="6 5"/><text class="t-md" x="135" y="80" text-anchor="middle">NEW</text><text class="t-xs" x="135" y="100" text-anchor="middle">your custom component</text></svg>'
+    };
+
+    // ---- Default components (plain-English, grounded in Seguin 716 + 793) ----
+    var DEFAULTS = [
+      {id:'rdm',section:'controllers',name:'RDM Data Manager',svg:'rdm',desc:'The site "brain." It collects from every controller in the store and talks to the network/cloud.',fills:'The site/controller name and its network address.'},
+      {id:'pr360',section:'controllers',name:'Carel pR360 Rack Controller',svg:'pr360',desc:'The controller that runs one refrigeration rack (compressors, condenser, suction pressure).',fills:'The rack it controls and the points wired to it.'},
+      {id:'casectrl',section:'controllers',name:'Carel Case Controller',svg:'casectrl',desc:'A small controller mounted at a case or circuit that holds its temperature.',fills:'The case it serves and its current temperature setpoint.'},
+      {id:'rdm751',section:'controllers',name:'RDM751 Valve Controller',svg:'rdm751',desc:'Drives the electronic expansion valves for a group of cooler/freezer cases.',fills:'The cases it drives and the valves connected.'},
+      {id:'bluetooth',section:'controllers',name:'Bluetooth Access Point',svg:'bluetooth',desc:'A wireless access point techs connect to on-site to read the controllers.',fills:'Its model and MAC address.'},
+      {id:'switch',section:'controllers',name:'Network Switch',svg:'switch',desc:'Connects all the controllers together on the store network.',fills:'How many ports are used and what plugs into each.'},
+      {id:'canbus',section:'controllers',name:'Comm Trunk (CANBUS)',svg:'canbus',desc:'The communication cable that daisy-chains controllers together (red/shield/white/black).',fills:'Which boards are on the trunk and where it ends.'},
+
+      {id:'rack',section:'refrigeration',name:'Rack Schedule',svg:'rack',span2:true,desc:'The master list for a refrigeration rack: every case/circuit it feeds, the compressors, and the capacity check.',fills:'Each circuit&#39;s ID, the case it serves, the model, design temperature, and control valve — plus the compressor and condenser list.'},
+      {id:'compctrl',section:'refrigeration',name:'Compressor Control Diagram',svg:'compctrl',span2:true,desc:'The wiring for one compressor: start relay, pressure controls, demand-cooling module, contactor, and alarms.',fills:'The compressor number, its relays/contactor, and the alarm wiring (oil fail, run proof).'},
+      {id:'selfcontained',section:'refrigeration',name:'Self-Contained Case',svg:'selfcontained',desc:'A case with its own built-in cooling (e.g. Krack / Solo Chill) — no remote rack needed.',fills:'The case name, the area it serves, and the make.'},
+      {id:'circuit',section:'refrigeration',name:'Refrigerated Circuit',svg:'circuit',desc:'A single refrigerated circuit or case, with the temperature it&#39;s designed to hold.',fills:'The circuit name, what it serves, the make, and the design temperature.'},
+
+      {id:'wicp',section:'panels',name:'Walk-In Control Panel',svg:'wicp',desc:'The panel that powers and controls the walk-in coolers/freezers (breakers, contactors, controllers).',fills:'The panel name and the cases/loads it controls.'},
+      {id:'terminal',section:'panels',name:'Terminal Block Strip',svg:'terminal',desc:'The row of terminals where every field wire lands and is labeled.',fills:'Each terminal&#39;s label and the wire that lands on it.'},
+      {id:'relay',section:'panels',name:'Output Relay',svg:'relay',desc:'An on/off switch the controller uses to run a piece of equipment.',fills:'The relay number, which contact wire is used (Normally Closed / Normally Open / Common), the equipment it switches, and the cable number.'},
+      {id:'probe',section:'panels',name:'Sensor (Probe) Input',svg:'probe',desc:'A temperature or sensor reading wired into the controller.',fills:'What it measures, the sensor label, where it&#39;s mounted, and the cable number.'},
+      {id:'status',section:'panels',name:'Alarm / Status Input',svg:'status',desc:'An on/off alarm signal — like oil failure, run proof, or inverter fault.',fills:'The alarm name and the cable number.'},
+      {id:'analog',section:'panels',name:'Pressure / Analog Signal',svg:'analog',desc:'A varying signal such as a pressure reading or a fan/VFD speed (4-20mA, 0-10V, 0-5V).',fills:'What it measures, the signal range, and the cable number.'},
+      {id:'valve',section:'panels',name:'Expansion (EEV) Valve',svg:'valve',desc:'A motorized valve that meters refrigerant into a case; wired with four motor terminals.',fills:'The valve number, the circuit it serves, and the valve type.'},
+
+      {id:'rtu',section:'hvac',name:'Rooftop Unit (RTU)',svg:'rtu',desc:'A packaged heating/cooling unit on the roof that conditions an area of the store.',fills:'The unit name, the area it serves, and the make.'},
+      {id:'aircurtain',section:'hvac',name:'Air Curtain',svg:'aircurtain',desc:'A fan unit over a doorway that blows an air barrier to keep conditioned air in.',fills:'The unit name, the doorway/area it serves, and the make.'},
+      {id:'tower',section:'hvac',name:'Cooling Tower Controller',svg:'tower',desc:'Controls the cooling-tower fan and pump that reject heat from the condenser water loop.',fills:'The tower/loop it controls and its setpoints.'},
+      {id:'lighting',section:'hvac',name:'Lighting Contactor',svg:'lighting',desc:'A relay that switches a lighting zone (e.g. parking lot, signage) on and off.',fills:'The relay/contactor name and the lighting zone it controls.'},
+
+      {id:'title',section:'frames',name:'Title / Revision Block',svg:'title',desc:'The box on every sheet with the project name, store, sheet title, and revision history.',fills:'The project ID, store, sheet title, and the list of revisions.'},
+      {id:'legend',section:'frames',name:'Wiring Legend',svg:'legend',desc:'The reference key that explains how each signal type is wired on the sheet.',fills:'Nothing — it&#39;s the same reference key on every sheet.'}
+    ];
+
+    var SECTIONS = [
+      {key:'all',label:'All Components'},
+      {key:'controllers',label:'Controllers & Network'},
+      {key:'refrigeration',label:'Refrigeration'},
+      {key:'panels',label:'Control Panels & I/O'},
+      {key:'hvac',label:'HVAC & Lighting'},
+      {key:'frames',label:'Sheet Frames'}
+    ];
+    var SECTION_LABEL = {controllers:'Controllers',refrigeration:'Refrigeration',panels:'Panels & I/O',hvac:'HVAC & Lighting',frames:'Sheet Frames'};
+
+    function loadState(){
+      try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }catch(e){ return {}; }
+    }
+    function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+    var state = loadState();
+    state.renamed = state.renamed || {};
+    state.descs   = state.descs   || {};
+    state.deleted = state.deleted || [];
+    state.custom  = state.custom  || [];
+
+    var activeTab = 'all';
+    var query = '';
+
+    function allComponents(){
+      var list = DEFAULTS.concat(state.custom);
+      return list
+        .filter(function(c){ return state.deleted.indexOf(c.id) === -1; })
+        .map(function(c){
+          var o = Object.assign({}, c);
+          if(state.renamed[c.id]) o.name = state.renamed[c.id];
+          if(state.descs[c.id]){ o.desc = state.descs[c.id].desc; o.fills = state.descs[c.id].fills; }
+          return o;
+        });
+    }
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function render(){
+      var comps = allComponents();
+      var tabsEl = document.getElementById('tabs');
+      tabsEl.innerHTML = SECTIONS.map(function(s){
+        var c = s.key==='all' ? comps.length : comps.filter(function(x){return x.section===s.key;}).length;
+        return '<button class="tab'+(activeTab===s.key?' active':'')+'" data-tab="'+s.key+'">'+esc(s.label)+'<span class="n">'+c+'</span></button>';
+      }).join('');
+      Array.prototype.forEach.call(tabsEl.querySelectorAll('.tab'), function(b){
+        b.addEventListener('click', function(){ activeTab=b.getAttribute('data-tab'); render(); });
+      });
+
+      var shown = comps.filter(function(c){
+        if(activeTab!=='all' && c.section!==activeTab) return false;
+        if(query){
+          var hay = (c.name+' '+c.desc+' '+c.fills+' '+c.section).toLowerCase();
+          if(hay.indexOf(query)===-1) return false;
+        }
+        return true;
+      });
+
+      document.getElementById('count').textContent = shown.length + ' of ' + comps.length + ' shown';
+
+      var grid = document.getElementById('grid');
+      if(!shown.length){
+        grid.innerHTML = '<div class="empty">No components match. Try a different search, or click <b>+ Add Component</b>.</div>';
+        return;
+      }
+      grid.innerHTML = shown.map(function(c){
+        var svg = SVG[c.svg] || SVG.custom;
+        return '<div class="card'+(c.span2?' span2':'')+'">'+
+          '<div class="card-top"><div class="wname">'+esc(c.name)+'</div>'+
+          '<span class="tag '+c.section+'">'+esc(SECTION_LABEL[c.section]||c.section)+'</span></div>'+
+          '<div class="stage">'+svg+'</div>'+
+          '<div class="body"><div class="wdesc">'+c.desc+'</div>'+
+          '<div class="fills"><div class="h">Fills in from your data</div><div class="t">'+c.fills+'</div></div></div>'+
+          '<div class="actions">'+
+          '<button class="mini" data-edit="'+c.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Rename / Edit</button>'+
+          '<button class="mini del" data-del="'+c.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>Delete</button>'+
+          '</div></div>';
+      }).join('');
+
+      Array.prototype.forEach.call(grid.querySelectorAll('[data-del]'), function(b){
+        b.addEventListener('click', function(){ deleteComp(b.getAttribute('data-del')); });
+      });
+      Array.prototype.forEach.call(grid.querySelectorAll('[data-edit]'), function(b){
+        b.addEventListener('click', function(){ openEdit(b.getAttribute('data-edit')); });
+      });
+    }
+
+    function deleteComp(id){
+      var c = allComponents().filter(function(x){return x.id===id;})[0];
+      if(!c) return;
+      if(!confirm('Delete "'+c.name+'"? You can bring it back with Reset Library.')) return;
+      if(state.custom.some(function(x){return x.id===id;})){
+        state.custom = state.custom.filter(function(x){return x.id!==id;});
+      } else if(state.deleted.indexOf(id)===-1){
+        state.deleted.push(id);
+      }
+      delete state.renamed[id]; delete state.descs[id];
+      saveState(state); render();
+    }
+
+    var editingId = null;
+    var modalBg = document.getElementById('modal-bg');
+    function openAdd(){
+      editingId = null;
+      document.getElementById('modal-title').textContent = 'Add Component';
+      document.getElementById('m-name').value = '';
+      document.getElementById('m-section').value = 'controllers';
+      document.getElementById('m-desc').value = '';
+      document.getElementById('m-fills').value = '';
+      modalBg.classList.add('show');
+      document.getElementById('m-name').focus();
+    }
+    function openEdit(id){
+      var c = allComponents().filter(function(x){return x.id===id;})[0];
+      if(!c) return;
+      editingId = id;
+      document.getElementById('modal-title').textContent = 'Edit Component';
+      document.getElementById('m-name').value = c.name;
+      document.getElementById('m-section').value = c.section;
+      document.getElementById('m-desc').value = c.desc.replace(/&#39;/g,"'").replace(/&amp;/g,'&');
+      document.getElementById('m-fills').value = c.fills.replace(/&#39;/g,"'").replace(/&amp;/g,'&');
+      modalBg.classList.add('show');
+      document.getElementById('m-name').focus();
+    }
+    function closeModal(){ modalBg.classList.remove('show'); }
+    function saveModal(){
+      var name = document.getElementById('m-name').value.trim();
+      var section = document.getElementById('m-section').value;
+      var desc = document.getElementById('m-desc').value.trim();
+      var fills = document.getElementById('m-fills').value.trim();
+      if(!name){ alert('Please enter a component name.'); return; }
+      if(editingId){
+        var isCustom = state.custom.some(function(x){return x.id===editingId;});
+        if(isCustom){
+          state.custom = state.custom.map(function(x){
+            if(x.id===editingId){ x.name=name; x.section=section; x.desc=desc||x.desc; x.fills=fills||x.fills; }
+            return x;
+          });
+        } else {
+          state.renamed[editingId] = name;
+          state.descs[editingId] = {desc:desc, fills:fills};
+        }
+      } else {
+        var id = 'custom_'+Date.now();
+        state.custom.push({id:id,section:section,name:name,svg:'custom',desc:desc||'Custom component.',fills:fills||'(describe what data this fills in)'});
+      }
+      saveState(state); closeModal(); render();
+    }
+
+    document.getElementById('add-btn').addEventListener('click', openAdd);
+    document.getElementById('m-cancel').addEventListener('click', closeModal);
+    document.getElementById('m-save').addEventListener('click', saveModal);
+    modalBg.addEventListener('click', function(e){ if(e.target===modalBg) closeModal(); });
+    document.getElementById('reset-btn').addEventListener('click', function(){
+      if(confirm('Reset the library to the original components? This clears your renames, deletes, and added components.')){
+        localStorage.removeItem(STORE_KEY);
+        state = {renamed:{},descs:{},deleted:[],custom:[]};
+        activeTab='all'; render();
+      }
+    });
+    document.getElementById('search').addEventListener('input', function(e){ query=e.target.value.trim().toLowerCase(); render(); });
+
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Singh360 EMS Pipeline — Raw Folder to Finished Submittal</title>
+  <meta name="description" content="The end-to-end pipeline: how a raw HEB project folder becomes a finished, illustrated EMS commissioning submittal." />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#eef2f7;--surface:#ffffff;--surface-2:#f5f8fc;--border:#dbe3ec;--border-2:#c2cedd;
+      --text-1:#1f2a37;--text-2:#516072;--text-3:#7d8aa0;
+      --blue:#0e8fd0;--blue-d:#04679b;--navy:#0b3d63;--green:#1f9d6b;--amber:#cf8a00;--red:#d3503f;--purple:#7a59c2;
+      --font:'Segoe UI',Roboto,system-ui,sans-serif;--mono:Consolas,'Cascadia Code',monospace;
+    }
+    html,body{min-height:100%;background:var(--bg);color:var(--text-1);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+    .wrap{max-width:1240px;margin:0 auto;padding:24px 22px 80px}
+    .masthead{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+    .logo{width:46px;height:46px;border-radius:11px;flex-shrink:0;background:linear-gradient(135deg,#0e8fd0,#04679b);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:13px;box-shadow:0 4px 12px rgba(14,143,208,.3)}
+    h1{font-size:22px;font-weight:700;color:var(--navy)}
+    .masthead p{font-size:13px;color:var(--text-2)}
+    .lead{color:var(--text-2);font-size:13.5px;margin:12px 0 22px;border-left:3px solid var(--blue);padding-left:13px;line-height:1.65;max-width:960px}
+    .lead b{color:var(--text-1)}
+
+    /* The 7-stage rail */
+    h2.sec{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--navy);margin:26px 0 14px;display:flex;align-items:center;gap:9px}
+    h2.sec .dot{width:9px;height:9px;border-radius:50%;background:var(--blue)}
+    .rail{display:grid;grid-template-columns:repeat(7,1fr);gap:0;margin-bottom:8px}
+    @media(max-width:980px){.rail{grid-template-columns:repeat(2,1fr);gap:10px}}
+    .stage{position:relative;background:var(--surface);border:1px solid var(--border);padding:14px 12px;text-align:center;box-shadow:0 1px 3px rgba(16,42,67,.05)}
+    .rail .stage:first-child{border-radius:12px 0 0 12px}
+    .rail .stage:last-child{border-radius:0 12px 12px 0}
+    @media(max-width:980px){.stage{border-radius:12px!important}}
+    .stage .num{width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px}
+    .stage.active .num{background:var(--blue)}
+    .stage .nm{font-size:12.5px;font-weight:700;color:var(--text-1);line-height:1.3}
+    .stage .sub{font-size:11px;color:var(--text-3);margin-top:3px;line-height:1.3}
+    .stage .arrow{position:absolute;right:-9px;top:50%;transform:translateY(-50%);z-index:2;width:18px;height:18px;color:var(--blue)}
+    @media(max-width:980px){.stage .arrow{display:none}}
+
+    .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(16,42,67,.05)}
+
+    /* Extractors grid */
+    .ex-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+    .ex{background:var(--surface);border:1px solid var(--border);border-radius:13px;overflow:hidden;box-shadow:0 1px 3px rgba(16,42,67,.06);display:flex;flex-direction:column}
+    .ex-top{display:flex;align-items:center;gap:10px;padding:14px 15px 0}
+    .ex-ic{width:38px;height:38px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+    .ex-ic svg{width:19px;height:19px}
+    .c1{background:#e4f2fb;color:var(--blue-d)} .c2{background:#e3f6ee;color:var(--green)}
+    .c3{background:#fbeee0;color:var(--amber)} .c4{background:#efeafb;color:var(--purple)}
+    .c5{background:#fde9e6;color:var(--red)} .c6{background:#e6f7f3;color:#0b8a8a} .c7{background:#eef1f5;color:var(--text-2)}
+    .ex-nm{font-size:14.5px;font-weight:700;color:var(--navy)}
+    .ex-src{font-family:var(--mono);font-size:11px;color:var(--text-3)}
+    .ex-body{padding:9px 15px 4px}
+    .ex-body .d{font-size:12.5px;color:var(--text-2);line-height:1.5}
+    .ex-yield{margin-top:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--text-1);line-height:1.5}
+    .ex-yield b{color:var(--blue-d);font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.03em}
+    .ex-foot{display:flex;align-items:center;gap:7px;padding:11px 15px 14px;margin-top:auto}
+    .badge{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:3px 8px;border-radius:10px}
+    .badge.built{background:#e3f6ee;color:var(--green)} .badge.draft{background:#fbeee0;color:var(--amber)} .badge.plan{background:#eef1f5;color:var(--text-3)}
+
+    /* Model + deliverables */
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media(max-width:860px){.two{grid-template-columns:1fr}}
+    .tree{font-family:var(--mono);font-size:12px;color:var(--text-2);line-height:1.85;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;white-space:pre;overflow-x:auto}
+    .tree b{color:var(--navy)}
+    .dl{display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)}
+    .dl:last-child{border-bottom:none}
+    .dl .di{width:30px;height:30px;border-radius:8px;background:#e4f2fb;color:var(--blue-d);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:12px}
+    .dl .dn{font-size:13.5px;font-weight:700;color:var(--text-1)}
+    .dl .dd{font-size:12px;color:var(--text-2);line-height:1.4}
+
+    footer{margin-top:30px;text-align:center;color:var(--text-3);font-size:12px;line-height:1.7}
+    footer b{color:var(--text-2)}
+    .links{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
+    .links a{font-size:13px;font-weight:600;color:var(--blue-d);text-decoration:none}
+    .links a:hover{text-decoration:underline}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="masthead">
+      <div class="logo">FLOW</div>
+      <div>
+        <h1>EMS Document Pipeline</h1>
+        <p>How a raw HEB project folder becomes a finished, illustrated commissioning submittal &mdash; end to end.</p>
+      </div>
+    </div>
+
+    <p class="lead">
+      This is the whole system. We take a <b>data dump of drawings and scope of work</b>, identify what's inside,
+      pull the facts out of each source with a dedicated <b>extractor</b>, fuse everything into one project model,
+      check it for gaps, then draw the finished sheets from your <b>component library</b>.
+      It's an <b>expandable knowledge base</b> &mdash; every new project we feed it makes it smarter.
+    </p>
+
+    <h2 class="sec"><span class="dot"></span>The 7 stages, start to finish</h2>
+    <div class="rail">
+      <div class="stage active"><div class="num">1</div><div class="nm">Intake</div><div class="sub">inventory &amp; classify the raw folder</div><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="stage"><div class="num">2</div><div class="nm">Extract</div><div class="sub">one extractor per source type</div><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="stage"><div class="num">3</div><div class="nm">Normalize</div><div class="sub">one project model</div><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="stage"><div class="num">4</div><div class="nm">Validate</div><div class="sub">cross-check, flag gaps</div><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="stage"><div class="num">5</div><div class="nm">Document</div><div class="sub">model + library &rarr; sheets</div><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="stage"><div class="num">6</div><div class="nm">Review</div><div class="sub">edit, revisions</div><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="stage"><div class="num">7</div><div class="nm">Package</div><div class="sub">VSDX + PDF submittal</div></div>
+    </div>
+
+    <h2 class="sec"><span class="dot"></span>Stage 2 &mdash; The 7 extractors (one per source type)</h2>
+    <div class="ex-grid">
+      <div class="ex">
+        <div class="ex-top"><div class="ex-ic c1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2M4 7h16M4 7v12a2 2 0 002 2h12a2 2 0 002-2V7M9 12h6"/></svg></div><div><div class="ex-nm">Emerson Controller Dump</div><div class="ex-src">dump.xml + export.zip CSVs</div></div></div>
+        <div class="ex-body"><div class="d">The richest source: the live controller database (Fair Oaks had 405 controllers / 21,068 settings).</div>
+        <div class="ex-yield"><b>Yields</b><br>Controllers, racks, packs, condensers, cases, valve types, defrost schedules, setpoints, live point values.</div></div>
+        <div class="ex-foot"><span class="badge plan">to build</span></div>
+      </div>
+
+      <div class="ex">
+        <div class="ex-top"><div class="ex-ic c2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg></div><div><div class="ex-nm">EMS Worksheet</div><div class="ex-src">*EMS Worksheet*.xlsx</div></div></div>
+        <div class="ex-body"><div class="d">The engineer's point-to-point I/O list &mdash; the master plan for what wires where.</div>
+        <div class="ex-yield"><b>Yields</b><br>Board &rarr; relay / sensor / status / analog &rarr; cable number, for every controller.</div></div>
+        <div class="ex-foot"><span class="badge plan">to build</span></div>
+      </div>
+
+      <div class="ex">
+        <div class="ex-top"><div class="ex-ic c3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg></div><div><div class="ex-nm">RDM TDB Layout</div><div class="ex-src">*RDM TDB Layout*.xlsx</div></div></div>
+        <div class="ex-body"><div class="d">How the RDM controllers are laid out and which case controllers they own.</div>
+        <div class="ex-yield"><b>Yields</b><br>RDM layout, case-controller assignments, address map.</div></div>
+        <div class="ex-foot"><span class="badge plan">to build</span></div>
+      </div>
+
+      <div class="ex">
+        <div class="ex-top"><div class="ex-ic c4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 18l4-4 3 3 5-5 6 6"/></svg></div><div><div class="ex-nm">Panel Configurations</div><div class="ex-src">*Panel Config*.pptx / .pdf</div></div></div>
+        <div class="ex-body"><div class="d">The pictures of each control panel &mdash; what breakers, contactors and controllers are inside.</div>
+        <div class="ex-yield"><b>Yields</b><br>WICP panel contents: breakers, contactors, controllers, layout.</div></div>
+        <div class="ex-foot"><span class="badge plan">to build</span></div>
+      </div>
+
+      <div class="ex">
+        <div class="ex-top"><div class="ex-ic c5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5M9 13h6M9 17h6"/></svg></div><div><div class="ex-nm">CD Drawings</div><div class="ex-src">discipline PDFs (R / E / EMS / M…)</div></div></div>
+        <div class="ex-body"><div class="d">The construction drawings &mdash; rack schedules, panel schedules, control notes &amp; symbols.</div>
+        <div class="ex-yield"><b>Yields</b><br>Rack schedules, panel schedules, control symbols/notes (deterministic text first, then OCR).</div></div>
+        <div class="ex-foot"><span class="badge draft">engine ready</span></div>
+      </div>
+
+      <div class="ex">
+        <div class="ex-top"><div class="ex-ic c6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16v12H4z"/><path d="M4 10h16M9 6v12"/></svg></div><div><div class="ex-nm">kWh360 Assets</div><div class="ex-src">*kWh360 input*.csv</div></div></div>
+        <div class="ex-body"><div class="d">The clean asset inventory &mdash; the official list of everything in the store.</div>
+        <div class="ex-yield"><b>Yields</b><br>The 11-column asset list (EMS, HVAC, refrigeration, lighting, electrical).</div></div>
+        <div class="ex-foot"><span class="badge draft">adapter ready</span></div>
+      </div>
+
+      <div class="ex">
+        <div class="ex-top"><div class="ex-ic c7"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M3 17l5-4 4 3 3-2 6 5"/></svg></div><div><div class="ex-nm">Survey Photos</div><div class="ex-src">kWh360-tagged field photos</div></div></div>
+        <div class="ex-body"><div class="d">The field reality &mdash; model numbers, MAC addresses, and captions from the tech's visit.</div>
+        <div class="ex-yield"><b>Yields</b><br>As-built evidence: model #s, addresses, "Rack A", panel contents (OCR + captions).</div></div>
+        <div class="ex-foot"><span class="badge plan">to build</span></div>
+      </div>
+    </div>
+
+    <h2 class="sec"><span class="dot"></span>Stage 3 &mdash; Everything normalizes into one project model</h2>
+    <div class="panel">
+      <div class="tree"><b>Site</b> (HEB Seguin #716)
+ ├─ <b>RDM Data Manager</b>  ──  network: switch + CANBUS trunk
+ ├─ <b>Refrigeration Rack</b> (Rack A)
+ │   ├─ Suction Group (+22 / -16)
+ │   │   └─ Circuit / Case  (SI04a → curbside freezer)
+ │   ├─ Compressor (+ DCM module)
+ │   └─ Condenser
+ ├─ <b>Controller Board</b>
+ │   ├─ Output Relay → load            (+ cable #)
+ │   ├─ Sensor input                   (+ cable #)
+ │   ├─ Alarm / status input           (+ cable #)
+ │   ├─ Pressure / analog signal
+ │   └─ Expansion (EEV) valve
+ └─ <b>Walk-In Control Panel</b> (WICP) → breakers, contactors, controllers
+
+ every item carries:  name · type · parent · attributes · cable # · <b>source</b></div>
+    </div>
+
+    <h2 class="sec"><span class="dot"></span>Stage 5 &mdash; The deliverable sheets (model + library &rarr; documents)</h2>
+    <div class="two">
+      <div class="panel">
+        <div class="dl"><div class="di">I/O</div><div><div class="dn">Point-to-Point I/O Schedule</div><div class="dd">Every board's relays, sensors, alarms and signals with cable numbers.</div></div></div>
+        <div class="dl"><div class="di">RK</div><div><div class="dn">Rack Control Wiring Diagram</div><div class="dd">Each compressor's start relay, pressure controls, DCM module, contactor, alarms.</div></div></div>
+        <div class="dl"><div class="di">PN</div><div><div class="dn">Panel Layout (WICP)</div><div class="dd">The walk-in panel's breakers, contactors and controllers.</div></div></div>
+      </div>
+      <div class="panel">
+        <div class="dl"><div class="di">NW</div><div><div class="dn">Network / Comm Layout</div><div class="dd">RDM + switch + CANBUS trunk tying every controller together.</div></div></div>
+        <div class="dl"><div class="di">SC</div><div><div class="dn">Rack Schedule</div><div class="dd">Hillphoenix suction-group schedule with the capacity check.</div></div></div>
+        <div class="dl"><div class="di">TB</div><div><div class="dn">Title Block + Legend</div><div class="dd">On every sheet: project, store, sheet name, revisions, wiring key.</div></div></div>
+      </div>
+    </div>
+
+    <footer>
+      One project model &middot; many renders: <b>Visio .vsdx</b> (primary) &middot; <b>SmartDraw .vson</b> &middot; <b>PDF / HTML</b> for review.<br>
+      An expandable knowledge base &mdash; grounded in HEB <b>Seguin #716</b> &amp; <b>Fair Oaks #793</b>.
+      <div class="links">
+        <a href="component-library.html">&rarr; Open the Component Library</a>
+        <a href="library/index.html">&rarr; Open the Library Hub</a>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

@@ -418,8 +418,29 @@
       </div>
     </div>
 
+    <div class="panel" id="pipeline-panel">
+      <h2><span class="n">4</span> How it all works (raw folder &rarr; finished submittal)</h2>
+      <div class="lib-wrap">
+        <div class="lib-toolbar">
+          <button type="button" class="lib-btn" id="pipe-open">Open Pipeline in New Tab</button>
+        </div>
+        <iframe
+          id="pipeline-frame"
+          class="lib-frame"
+          src="ems/pipeline.html"
+          title="Singh360 EMS Document Pipeline"
+          loading="lazy"></iframe>
+        <p class="lib-fallback">
+          Direct link:
+          <a href="ems/pipeline.html" target="_blank" rel="noopener">ems/pipeline.html</a>
+          &middot; shows the 7 stages and the 7 extractors that turn a data dump of
+          drawings &amp; scope of work into illustrated sheets.
+        </p>
+      </div>
+    </div>
+
     <div class="panel" id="widget-library-panel">
-      <h2><span class="n">4</span> EMS Widget Library (illustrated)</h2>
+      <h2><span class="n">5</span> EMS Component Library (illustrated &amp; editable)</h2>
       <div class="lib-wrap">
         <div class="lib-toolbar">
           <button type="button" class="lib-btn" id="lib-reload">Reload Library</button>
@@ -431,13 +452,13 @@
         <iframe
           id="widget-library-frame"
           class="lib-frame"
-          src="ems/widget-library.html"
-          title="Singh360 EMS Widget Library"
+          src="ems/component-library.html"
+          title="Singh360 EMS Component Library"
           loading="lazy"></iframe>
 
         <p class="lib-fallback">
           If the embed is blocked by your browser, open the library directly:
-          <a href="ems/widget-library.html" target="_blank" rel="noopener">ems/widget-library.html</a>
+          <a href="ems/component-library.html" target="_blank" rel="noopener">ems/component-library.html</a>
         </p>
 
         <div class="grid2 lib-grid">
@@ -521,15 +542,22 @@
 
     recheckEl.addEventListener('click', checkBridge);
 
+    var pipeOpen = document.getElementById('pipe-open');
+    if (pipeOpen) {
+      pipeOpen.addEventListener('click', function () {
+        window.open('ems/pipeline.html', '_blank', 'noopener');
+      });
+    }
+
     if (libReload && libFrame) {
       libReload.addEventListener('click', function () {
-        var src = libFrame.getAttribute('src') || 'ems/widget-library.html';
+        var src = libFrame.getAttribute('src') || 'ems/component-library.html';
         libFrame.setAttribute('src', src.split('?')[0] + '?t=' + Date.now());
       });
     }
     if (libOpen) {
       libOpen.addEventListener('click', function () {
-        window.open('ems/widget-library.html', '_blank', 'noopener');
+        window.open('ems/component-library.html', '_blank', 'noopener');
       });
     }
     if (libHub) {
