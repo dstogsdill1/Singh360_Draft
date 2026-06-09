@@ -40,7 +40,7 @@ import config
 
 # Canonical 11-column app header (mirrors config.APP_COLUMNS).
 ASSET_HEADER = list(config.APP_COLUMNS)
-CONTROL_HEADER = ["Relay", "Contactor", "Load", "Panel", "Voltage", "Area"]
+CONTROL_HEADER = ["Relay", "Contactor", "Load", "Panel", "Control", "Area"]
 
 # Keyword sets for Interior vs Exterior classification of a fixture.
 _EXTERIOR_HINTS = (
@@ -181,10 +181,55 @@ def extract_fixtures(xlsx_path: Path, sheet: str) -> tuple[list[list[str]], list
         flags.append(f"{sheet}: no fixture rows extracted below header")
     return rows, flags
 
-
 # --------------------------------------------------------------------------
 # Contactor schedule -> canonical control matrix
 # --------------------------------------------------------------------------
+_CTRL_EVENTS = (
+    "STORE OPENING", "STORE CLOSE", "PHARMACY OPENING", "PHARMACY CLOSE",
+    "DUSK", "DAWN", "SUNRISE", "SUNSET",
+)
+_OFFSET_RE = re.compile(r"^[+\-]?\d{1,2}:\d{2}$")
+
+
+def _control_summary(row_cells: list[str], next_cells: list[str]) -> str:
+    """Build a 109-style control summary: 'TC: ON <event> / OFF <event +off>'.
+
+    HEB lighting contactors are driven by a Time Clock (TC) or Photocell (PC)
+    with dusk/dawn/store-open/store-close events and signed time offsets. We
+    read those tokens straight from the schedule row (and the OFF row beneath
+    it) — never inventing timing.
+    """
+    blob = [_norm(c) for c in row_cells + next_cells if _norm(c)]
+    if not blob:
+        return ""
+    up = [b.upper() for b in blob]
+    ctrl = "TC" if any("TC" in b for b in up) else ("PC" if any("PC" in b for b in up) else "")
+    # Pair each event with the offset token that follows it.
+    parts: list[str] = []
+    for i, tok in enumerate(up):
+        for ev in _CTRL_EVENTS:
+            if tok == ev or tok.startswith(ev):
+                off = ""
+                for j in range(i + 1, min(i + 3, len(blob))):
+                    if _OFFSET_RE.match(blob[j].strip()):
+                        off = blob[j].strip()
+                        break
+                label = ev.title()
+                parts.append(f"{label} {off}".strip())
+                break
+    summary = ""
+    if ctrl:
+        summary = ctrl
+    if parts:
+        # de-dup preserving order
+        seen: list[str] = []
+        for p in parts:
+            if p not in seen:
+                seen.append(p)
+        summary = (summary + ": " if summary else "") + " / ".join(seen)
+    return summary
+
+
 def extract_contactors(xlsx_path: Path, sheet: str) -> tuple[list[list[str]], list[str]]:
     grid = _read_grid(xlsx_path, sheet)
     flags: list[str] = []
@@ -203,8 +248,9 @@ def extract_contactors(xlsx_path: Path, sheet: str) -> tuple[list[list[str]], li
     def cell(row: list[str], ci: int) -> str:
         return row[ci] if 0 <= ci < len(row) else ""
 
+    body = grid[hdr_i + 1:]
     rows: list[list[str]] = []
-    for r in grid[hdr_i + 1:]:
+    for idx, r in enumerate(body):
         relay = cell(r, c_relay)
         contactor = cell(r, c_cont)
         if not relay and not contactor:
@@ -222,10 +268,18 @@ def extract_contactors(xlsx_path: Path, sheet: str) -> tuple[list[list[str]], li
         if not panel:
             m = re.search(r'(?:LCP|PANEL)[\s#\-]*["\']?([A-Z0-9\-]+)', circuit.upper())
             panel = m.group(1) if m else circuit
-        rows.append([relay, contactor, load, panel, "", ""])
+        # Control schedule (TC/PC + dusk/dawn/store timing) — read this row plus
+        # the OFF row immediately below it.
+        nxt = body[idx + 1] if idx + 1 < len(body) else []
+        ctrl = _control_summary(r, nxt)
+        # Circuit reference belongs in the "Area" column the orchestrator reads;
+        # the control summary rides in Voltage so it surfaces on the node.
+        area = circuit if circuit and circuit != panel else ""
+        rows.append([relay, contactor, load, panel, ctrl, area])
     if not rows:
         flags.append(f"{sheet}: no contactor rows extracted below header")
     return rows, flags
+
 
 
 # --------------------------------------------------------------------------

@@ -72,14 +72,15 @@ def _shape_note(node) -> str:
     """Readable, deterministic note from the node's non-empty attributes."""
     skip = {"spatial_source"}
     pretty = {
-        "connected_raw": "Connected",
+        "connected_raw": "Qty / Volt / Watt",
         "control_type": "Control",
+        "control": "Control schedule",
         "set_point_f": "Set point (F)",
-        "fixture": "Make/Model",
+        "fixture": "Catalog / Make",
         "sub_form": "Description",
-        "panel": "Panel",
+        "panel": "Panel / circuit",
         "voltage": "Voltage",
-        "area": "Area",
+        "area": "Controlled circuit",
         "ip": "IP",
         "switch": "Switch",
         "port": "Port",

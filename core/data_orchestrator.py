@@ -203,6 +203,7 @@ class DataOrchestrator:
             load = _norm(r.get("Load"))
             ref = f"{path.name}:row{i + 2}"
             voltage = _norm(r.get("Voltage"))
+            control = _norm(r.get("Control"))
             panel = _norm(r.get("Panel"))
             area = _norm(r.get("Area"))
 
@@ -229,7 +230,8 @@ class DataOrchestrator:
                         category="Contactor",
                         unit_type="Contactor",
                         group="EMS Control",
-                        attrs={"panel": panel, "voltage": voltage, "area": area},
+                        attrs={"panel": panel, "voltage": voltage,
+                               "area": area, "control": control},
                         source=ref,
                     )
                 )
@@ -243,7 +245,8 @@ class DataOrchestrator:
                         category=_norm(r.get("_load_category")) or "Lighting",
                         unit_type="Load",
                         group="EMS Control",
-                        attrs={"area": area, "voltage": voltage},
+                        attrs={"area": area, "voltage": voltage,
+                               "control": control, "panel": panel},
                         source=ref,
                     )
                 )
