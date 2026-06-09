@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Singh360 SmartDraw Generator</title>
-  <meta name="description" content="Render Singh360 assets into SmartDraw VSON + Microsoft Visio VSDX diagrams" />
+  <meta name="description" content="Render Singh360 assets into SmartDraw VSON, Microsoft Visio VSDX, and RDM Layout XML diagrams" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%238ab4f8'/><text x='16' y='23' font-family='Arial,sans-serif' font-size='18' font-weight='700' text-anchor='middle' fill='%23202124'>SD</text></svg>" />
     <!-- Singh360 Shared Shell CSS -->
     <link rel="stylesheet" href="../../Singh360 Dashboard/src/shared_ui/singh360-theme.css" onerror="this.onerror=null;this.href='';console.warn('Shared theme CSS not found, using fallback root variables.')">
@@ -357,7 +357,7 @@
       <div class="logo">SD</div>
       <div>
         <h1>Singh360 SmartDraw Generator</h1>
-        <p>Assets &rarr; SmartDraw VSON &amp; Microsoft Visio VSDX</p>
+        <p>Assets &rarr; SmartDraw VSON, Microsoft Visio VSDX, and RDM XML</p>
       </div>
       <a class="home" href="../../Singh360 Dashboard/index.html" title="Back to App Central">&#x2190; App Central</a>
     </div>
@@ -365,7 +365,7 @@
     <p class="lead">
       Upload the Singh360 data planes, name the project, pick your output formats, and the
       Python pipeline (<code>main_generator.py</code>) renders deterministic, traceable diagrams you can
-      download and refine in SmartDraw or Visio. Only <code>assets.csv</code> is required.
+      download and refine in SmartDraw, Visio, or RDM workflows. Only <code>assets.csv</code> is required.
     </p>
 
     <form id="gen-form">
@@ -457,6 +457,10 @@
           <div class="chip on" data-target="vsdx">
             <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>
             <span class="label">Microsoft Visio</span><span class="ext">.vsdx</span>
+          </div>
+          <div class="chip on" data-target="rdmxml">
+            <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>
+            <span class="label">RDM Layout XML</span><span class="ext">.rdm.xml</span>
           </div>
         </div>
       </div>
@@ -683,7 +687,7 @@
       e.preventDefault();
       if (!files.assets) return;
       const targets = selectedTargets();
-      if (!targets.length) { showError('Select at least one target output (.vson or .vsdx).'); return; }
+      if (!targets.length) { showError('Select at least one target output (.vson, .vsdx, or .rdm.xml).'); return; }
 
       const fd = new FormData();
       fd.append('name', document.getElementById('project-name').value.trim() || 'Singh360 Diagram');

@@ -3,7 +3,8 @@
 Pipeline:
   (optional) Azure DI / DI-tables CSV  ->  core.ingestion (spatial anchors)
   assets.csv + control_matrix.csv + network.csv  ->  core.data_orchestrator
-  DiagramGraph  ->  engines.smartdraw_vson (.vson)  +  engines.visio_vsdx (.vsdx)
+    DiagramGraph  ->  engines.smartdraw_vson (.vson)  +  engines.visio_vsdx (.vsdx)
+                                 +  engines.rdm_layout_xml (.rdm.xml)
 
 Run from the Singh360_SmartDraw folder, e.g.:
 
@@ -31,7 +32,7 @@ if str(HERE) not in sys.path:
 import config  # noqa: E402
 from core import ingestion  # noqa: E402
 from core.data_orchestrator import DataOrchestrator  # noqa: E402
-from engines import smartdraw_vson, visio_vsdx  # noqa: E402
+from engines import rdm_layout_xml, smartdraw_vson, visio_vsdx  # noqa: E402
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -76,7 +77,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--targets",
         default="vson,vsdx",
-        help="Comma list: vson,vsdx",
+        help="Comma list: vson,vsdx,rdmxml",
     )
     p.add_argument("--layout", default="hierarchy", help="VSON auto-layout family")
     p.add_argument("--vssx", help="Optional .vssx stencil for Visio masters")
@@ -232,6 +233,14 @@ def run(args: argparse.Namespace) -> int:
                 f"· {tb.project_name} (Arch D 42x30)."
             )
 
+    if "rdmxml" in targets:
+        rdm_writer = rdm_layout_xml.RdmLayoutXmlGenerator()
+        rdm_path = rdm_writer.render(graph, out_dir / f"{safe}.rdm.xml")
+        ok, problems = rdm_layout_xml.validate(rdm_path)
+        written.append(rdm_path)
+        reports.append(f"RDMXML {'OK ' if ok else 'FAIL'} {rdm_path.name}")
+        reports.extend(f"        - {p}" for p in problems)
+
     _print_report(graph, written, reports)
     # Exit non-zero if any validator reported a problem.
     return 0 if all("FAIL" not in r for r in reports) else 2
@@ -254,6 +263,7 @@ def _print_report(graph, written, reports) -> None:
     print("   Connected/Area Served col ->  hierarchy connector (auto-route)")
     print("   Relay->Contactor->Load    ->  control connectors (dashed)")
     print("   Device->Switch/Port       ->  network connectors (dotted)")
+    print("   DiagramGraph serialization ->  neutral RDM XML package")
     print("-" * 64)
     for r in reports:
         print("  " + r)

@@ -5,8 +5,9 @@ This file defines how any coding agent should operate in this repository.
 ## Mission
 
 Render Singh360 MEP/R assets into production diagrams for **SmartDraw**
-(VisualScript / VSON) and **Microsoft Visio** (native `.vsdx`) — deterministically,
-traceably, with zero hallucinated values.
+(VisualScript / VSON), **Microsoft Visio** (native `.vsdx`), and a neutral
+**RDM Layout XML** package (`.rdm.xml`) — deterministically, traceably, with
+zero hallucinated values.
 
 ## Non-negotiables
 
@@ -33,6 +34,9 @@ traceably, with zero hallucinated values.
   embedded `data[]`, `meta.traceability`.
 - `engines/visio_vsdx.py` — stdlib `zipfile` + `ElementTree` OPC writer; real
   ShapeSheet cells (`PinX/PinY`), glued `<Connect>` rows, `RGB()` color formulas.
+- `engines/rdm_layout_xml.py` — deterministic neutral RDM-oriented XML package
+  writer from `DiagramGraph` + `compute_layout`; includes source traceability and
+  structural validator.
 - `main_generator.py` — the CLI control surface + traceability report. This is the
   **public contract** the web bridge depends on; do not break its flags/exit codes.
 - `server.py` — Flask bridge for `web/index.html`. Runs `main_generator.py` via
@@ -54,10 +58,12 @@ traceably, with zero hallucinated values.
 
 - `python main_generator.py --assets sample_data/assets.csv --control
   sample_data/control_matrix.csv --network sample_data/network.csv --name "Demo"`
-  must exit 0 and write a valid `.vson` + `.vsdx`.
-- `smartdraw_vson.validate()` and `visio_vsdx.validate_vsdx()` must both pass.
+  must exit 0 and write valid `.vson` + `.vsdx` + `.rdm.xml` when requested.
+- `smartdraw_vson.validate()`, `visio_vsdx.validate_vsdx()`, and
+  `rdm_layout_xml.validate()` must pass for their respective targets.
 - If you touch the bridge, smoke-test `python server.py` + a `POST /api/generate`
-  with the sample data and confirm a ZIP downloads.
+  with the sample data and confirm a ZIP downloads (including `.rdm.xml` when
+  selected).
 
 ## Honest flags (carry these forward)
 
@@ -66,10 +72,13 @@ traceably, with zero hallucinated values.
   SmartDraw import endpoint, not a vendor-published guarantee.
 - VSDX fidelity is proven at the OPC/package level only (no Visio runtime in CI).
   Open once in a Visio client to confirm visual rendering.
+- RDM target currently emits a neutral XML contract for deterministic interchange.
+  Exact vendor import dialect must be confirmed against official docs or a native
+  Layout Editor project sample before production lock-in.
 
 ## Commit policy
 
 - Stage only code/config/docs: `*.py`, `web/`, `sample_data/`, `requirements.txt`,
   `.gitignore`, `README.md`, `AGENTS.md`.
 - Never stage `output/`, `.jobs/`, `.env`, customer PDFs/stencils, or generated
-  `*.vsdx` / `*.vson`.
+  `*.vsdx` / `*.vson` / `*.rdm.xml`.

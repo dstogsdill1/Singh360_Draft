@@ -45,7 +45,7 @@ JOBS_DIR.mkdir(exist_ok=True)
 # Bounds: keep a single-user local tool predictable.
 MAX_CONTENT_LENGTH = 64 * 1024 * 1024  # 64 MB total upload ceiling
 RUN_TIMEOUT_SEC = 300
-VALID_TARGETS = {"vson", "vsdx"}
+VALID_TARGETS = {"vson", "vsdx", "rdmxml"}
 JOB_RE = re.compile(r"^[0-9a-f]{32}$")
 NAME_SAFE_RE = re.compile(r"[^A-Za-z0-9 _.\-]")
 
@@ -78,7 +78,7 @@ def generate():
     raw_targets = (request.form.get("targets") or "vson,vsdx").split(",")
     targets = [t.strip().lower() for t in raw_targets if t.strip().lower() in VALID_TARGETS]
     if not targets:
-        return jsonify(status="error", error="Select at least one target (.vson or .vsdx)."), 400
+        return jsonify(status="error", error="Select at least one target (.vson, .vsdx, or .rdm.xml)."), 400
 
     project_name = (request.form.get("name") or "Singh360 Diagram").strip()
     project_name = NAME_SAFE_RE.sub("", project_name)[:80] or "Singh360 Diagram"
@@ -141,7 +141,9 @@ def generate():
     stderr = (proc.stderr or "").strip()
 
     produced = sorted(
-        p for p in out_dir.iterdir() if p.is_file() and p.suffix.lower() in {".vson", ".vsdx"}
+        p
+        for p in out_dir.iterdir()
+        if p.is_file() and p.name.lower().endswith((".vson", ".vsdx", ".rdm.xml"))
     )
 
     # main_generator exit codes: 0 = all valid, 2 = produced but a validator

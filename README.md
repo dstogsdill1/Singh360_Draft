@@ -3,8 +3,9 @@
 Deterministic MEP/R **diagram generator**. It ingests the structured
 engineering data produced upstream by **Singh360_Parser** (plus control and
 network matrices and optional Azure Document Intelligence floor‑plan polygons)
-and renders production diagrams for **SmartDraw** (VisualScript / VSON) and
-**Microsoft Visio** (native `.vsdx`).
+and renders production diagrams for **SmartDraw** (VisualScript / VSON),
+**Microsoft Visio** (native `.vsdx`), and a neutral **RDM Layout XML** package
+(`.rdm.xml`).
 
 > Operating standard (shared with Singh360_Parser): deterministic first, no
 > hallucinated values, full traceability, code‑only repo. Unknowns are left
@@ -32,8 +33,16 @@ and renders production diagrams for **SmartDraw** (VisualScript / VSON) and
                  VS.Document / Shape / Connector                OPC ZIP + XML ShapeSheet
                  auto-layout, TextGrow, data[]                  PinX/PinY, glued Connects
                             │                                               │
-                            ▼                                               ▼
+                            └───────────────────────┬───────────────────────┘
+                                        ▼
+                                  engines/rdm_layout_xml.py
+                                  neutral XML package + provenance
+                                        │
+                           ┌──────────────────────────┴──────────────────────────┐
+                           ▼                                                     ▼
                     <name>.vson                                       <name>.vsdx
+                           +
+                         <name>.rdm.xml
 ```
 
 ### The relational model (grounded, not guessed)
@@ -66,6 +75,7 @@ Singh360_SmartDraw/
 ├── engines/
 │   ├── smartdraw_vson.py     # VS.Document/Shape/Connector/Container compiler
 │   └── visio_vsdx.py         # stdlib OPC/XML .vsdx writer (+ .vssx master hook)
+│   └── rdm_layout_xml.py     # deterministic neutral RDM-style XML package writer
 ├── main_generator.py         # CLI entry point + traceability report
 ├── server.py                 # Flask bridge: web GUI <-> main_generator.py
 ├── web/
@@ -90,7 +100,7 @@ python main_generator.py `
     --assets sample_data/assets.csv `
     --control sample_data/control_matrix.csv `
     --network sample_data/network.csv `
-    --name "HEB SA31 Demo" --out-dir output --targets vson,vsdx
+  --name "HEB SA31 Demo" --out-dir output --targets vson,vsdx,rdmxml
 ```
 
 Outputs land in `output/`:
@@ -99,6 +109,8 @@ Outputs land in `output/`:
   **must** be `.vson` (SmartDraw also accepts `.sdon`/`.sdr`); it follows the
   official VSON Markup Language Reference (root `Shape` tree + `Returns`).
 - `HEB_SA31_Demo.vsdx` — open in Microsoft Visio.
+- `HEB_SA31_Demo.rdm.xml` — neutral RDM-oriented XML package with deterministic
+  node/edge ordering, coordinates, provenance, and symbol-library hints.
 
 The CLI prints a graph summary, a coordinate→shape flow legend, per‑target
 **validation** results, and any flags.
@@ -171,7 +183,7 @@ Open `http://localhost:8765`, then:
 1. Enter a **Project Name**.
 2. Drop or browse `assets.csv` (required) plus optional `control_matrix.csv`,
    `network.csv`, and a blueprint **PDF** (with a page range for Azure DI).
-3. Toggle the **target outputs** (`.vson`, `.vsdx`).
+3. Toggle the **target outputs** (`.vson`, `.vsdx`, `.rdm.xml`).
 4. Click **Generate Diagrams** — a spinner runs while the Flask bridge executes
    `main_generator.py`, then the results panel lists each file with individual
    downloads, a **Download all (.zip)**, the pipeline report, and any flags.
@@ -244,6 +256,26 @@ resolves **every** relationship target inside the package.
 > environment has no Visio runtime). `.vssx` corporate stencils can be
 > enumerated via `MasterLibrary`; with none supplied the writer uses inline
 > rectangle geometry (flagged in the run report).
+
+### RDM Layout XML (`engines/rdm_layout_xml.py`)
+
+Emits a deterministic, neutral XML package from `DiagramGraph` suitable for
+Layout-Editor-oriented interchange when an official vendor schema is not
+available in the installed binaries. The file contains:
+
+- `Metadata` (document name, UTC generation time, page size, coordinate units)
+- `LibraryHints` (paths discovered from the local RDM image libraries)
+- `Nodes` (id/label/category/unit/group/source + `x/y/w/h` in inches)
+- `Attributes` (all node data key/value pairs)
+- `Edges` (source/target/kind/label/source_ref)
+- `Flags` (run-time notes carried forward)
+
+`rdm_layout_xml.validate()` checks parseability, root tag, node ID uniqueness,
+and edge endpoint integrity.
+
+> **Flag:** This is a neutral deterministic contract, not a vendor-certified
+> final import dialect. Lock exact tag/attribute names against official RDM
+> docs or a native Layout Editor project sample before production rollout.
 
 ---
 
