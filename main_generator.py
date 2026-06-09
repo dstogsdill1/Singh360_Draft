@@ -20,6 +20,7 @@ Spatial overlay (optional):
 from __future__ import annotations
 
 import argparse
+import tempfile
 import sys
 from pathlib import Path
 
@@ -93,7 +94,8 @@ def run(args: argparse.Namespace) -> int:
     if getattr(args, "schedule_xlsx", None):
         from core import schedule_adapter
 
-        conv = schedule_adapter.convert(args.schedule_xlsx, out_dir / "_canonical")
+        canonical_dir = Path(tempfile.mkdtemp(prefix=f"{safe}_canonical_"))
+        conv = schedule_adapter.convert(args.schedule_xlsx, canonical_dir)
         adapter_flags = list(conv.flags)
         if conv.assets_csv is None:
             print(
