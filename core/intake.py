@@ -19,6 +19,7 @@ from pathlib import Path
 # Source types map 1:1 to extractors (see core/extractors/).
 SOURCE_TYPES = (
     "emerson_dump",     # controller dump.xml / export.zip
+    "cad_worksheet",    # HEB CAD/CDC worksheet .xlsx (point-to-point I/O matrix)
     "ems_worksheet",    # EMS I/O worksheet .xlsx
     "rdm_tdb",          # RDM TDB layout .xlsx
     "panel_config",     # panel configuration .pptx / .pdf
@@ -110,8 +111,12 @@ def classify(path: Path, root: Path) -> FileEntry:
         src = "emerson_dump"; note = "Emerson controller database dump"
     elif "EXPORT" in up and ext == ".zip":
         src = "emerson_dump"; note = "Emerson per-controller CSV export bundle"
-    elif ("WORKSHEET" in up or "WKSHT" in up) and ("EMS" in up or "EM " in up or "CAD" in up or "EM-" in up) and ext in {".xlsx", ".xls"}:
-        src = "ems_worksheet"; note = "EMS point-to-point I/O worksheet (CAD/EM worksheet)"
+    elif ("CAD WORKSHEET" in up or "CDC WORKSHEET" in up or "CAD WKSHT" in up
+          or ("CAD" in up and "WORKSHEET" in up) or ("CDC" in up and "WORKSHEET" in up)) \
+            and ext in {".xlsx", ".xls", ".xlsb"}:
+        src = "cad_worksheet"; note = "HEB CAD/CDC worksheet (point-to-point I/O matrix)"
+    elif ("WORKSHEET" in up or "WKSHT" in up) and ("EMS" in up or "EM " in up or "EM-" in up) and ext in {".xlsx", ".xls"}:
+        src = "ems_worksheet"; note = "EMS worksheet (procurement/inventory tracker)"
     elif "RDM" in up and "TDB" in up and ext in {".xlsx", ".xls"}:
         src = "rdm_tdb"; note = "RDM TDB layout"
     elif ("SUPPK" in up or ("RACK" in rel_up and "HUSSMANN" in rel_up)) and ext == ".xml":

@@ -9,11 +9,12 @@ Registry maps a source_type (from core/intake) -> extractor callable.
 """
 from __future__ import annotations
 
-from . import emerson_dump, kwh360_assets, ems_worksheet
+from . import emerson_dump, kwh360_assets, ems_worksheet, cad_worksheet
 from . import rdm_tdb, panel_config, cd_drawings, survey_photos
 
 REGISTRY = {
     "emerson_dump": emerson_dump.extract,
+    "cad_worksheet": cad_worksheet.extract,
     "kwh360_assets": kwh360_assets.extract,
     "ems_worksheet": ems_worksheet.extract,
     "rdm_tdb": rdm_tdb.extract,
