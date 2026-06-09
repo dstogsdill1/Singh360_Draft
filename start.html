@@ -141,6 +141,21 @@
 
     .wrap { max-width: 960px; margin: 0 auto; padding: 30px 24px 60px; width: 100%; }
 
+    .workspace-tabs {
+      display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px;
+      padding: 10px; border:1px solid var(--border); border-radius:12px;
+      background: var(--surface);
+    }
+    .ws-tab {
+      appearance:none; border:1px solid var(--border-2); background:#fff; color:var(--text-2);
+      border-radius:20px; padding:8px 14px; font-size:12.5px; font-weight:600; cursor:pointer;
+      transition:all .15s;
+    }
+    .ws-tab:hover { border-color:var(--g-blue); color:var(--g-blue); background:#f0f9ff; }
+    .ws-tab.active { background:#004c70; color:#fff; border-color:#004c70; }
+    .pane { display:none; }
+    .pane.active { display:block; }
+
     .masthead { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
     .logo {
       width:46px; height:46px; border-radius:8px; flex-shrink:0;
@@ -322,6 +337,15 @@
       <a class="home" href="../Singh360 Dashboard/index.html" title="Back to App Central">&#x2190; App Central</a>
     </div>
 
+    <div class="workspace-tabs" id="workspace-tabs">
+      <button class="ws-tab active" data-pane="setup">SmartDraw Setup</button>
+      <button class="ws-tab" data-pane="pipeline">How It Works</button>
+      <button class="ws-tab" data-pane="components">EMS Components</button>
+      <button class="ws-tab" data-pane="library">Library Hub</button>
+    </div>
+
+    <div class="pane active" id="pane-setup">
+
     <!-- Live bridge status -->
     <div class="status checking" id="status">
       <span class="dot"></span>
@@ -418,11 +442,14 @@
       </div>
     </div>
 
+    </div>
+
+    <div class="pane" id="pane-pipeline">
     <div class="panel" id="pipeline-panel">
       <h2><span class="n">4</span> How it all works (raw folder &rarr; finished submittal)</h2>
       <div class="lib-wrap">
         <div class="lib-toolbar">
-          <button type="button" class="lib-btn" id="pipe-open">Open Pipeline in New Tab</button>
+          <button type="button" class="lib-btn" id="pipe-reload">Reload Pipeline</button>
         </div>
         <iframe
           id="pipeline-frame"
@@ -438,14 +465,15 @@
         </p>
       </div>
     </div>
+    </div>
 
+    <div class="pane" id="pane-components">
     <div class="panel" id="widget-library-panel">
       <h2><span class="n">5</span> EMS Component Library (illustrated &amp; editable)</h2>
       <div class="lib-wrap">
         <div class="lib-toolbar">
           <button type="button" class="lib-btn" id="lib-reload">Reload Library</button>
-          <button type="button" class="lib-btn" id="lib-open">Open in New Tab</button>
-          <button type="button" class="lib-btn" id="lib-hub">Open Library Hub</button>
+          <button type="button" class="lib-btn" id="lib-to-hub">Go to Library Hub Tab</button>
           <button type="button" class="lib-btn" id="lib-open-folder">Open Library Folder Path</button>
         </div>
 
@@ -488,6 +516,27 @@
         </div>
       </div>
     </div>
+    </div>
+
+    <div class="pane" id="pane-library">
+      <div class="panel" id="library-hub-panel">
+        <h2><span class="n">6</span> Library Hub (in-page)</h2>
+        <div class="lib-wrap">
+          <div class="lib-toolbar">
+            <button type="button" class="lib-btn" id="hub-reload">Reload Hub</button>
+          </div>
+          <iframe
+            id="library-hub-frame"
+            class="lib-frame"
+            src="ems/library/index.html"
+            title="Singh360 EMS Library Hub"
+            loading="lazy"></iframe>
+          <p class="lib-fallback">
+            This is the same library hub, now embedded as an in-page tab for desktop workflow.
+          </p>
+        </div>
+      </div>
+    </div>
 
     <footer>
       Singh360 SmartDraw &middot; deterministic, traceable, code-only &middot; start the bridge with <code>python server.py</code>
@@ -505,11 +554,26 @@
     var subEl    = document.getElementById('status-sub');
     var launchEl = document.getElementById('launch');
     var recheckEl = document.getElementById('recheck');
+    var wsTabs = document.getElementById('workspace-tabs');
     var libFrame = document.getElementById('widget-library-frame');
+    var pipeFrame = document.getElementById('pipeline-frame');
+    var hubFrame = document.getElementById('library-hub-frame');
+    var pipeReload = document.getElementById('pipe-reload');
     var libReload = document.getElementById('lib-reload');
-    var libOpen = document.getElementById('lib-open');
-    var libHub = document.getElementById('lib-hub');
+    var libToHub = document.getElementById('lib-to-hub');
+    var hubReload = document.getElementById('hub-reload');
     var libOpenFolder = document.getElementById('lib-open-folder');
+
+    function showPane(name) {
+      document.querySelectorAll('.pane').forEach(function (p) {
+        p.classList.toggle('active', p.id === 'pane-' + name);
+      });
+      if (wsTabs) {
+        wsTabs.querySelectorAll('.ws-tab').forEach(function (b) {
+          b.classList.toggle('active', b.getAttribute('data-pane') === name);
+        });
+      }
+    }
 
     function setState(state, title, sub) {
       statusEl.className = 'status ' + state;
@@ -542,10 +606,18 @@
 
     recheckEl.addEventListener('click', checkBridge);
 
-    var pipeOpen = document.getElementById('pipe-open');
-    if (pipeOpen) {
-      pipeOpen.addEventListener('click', function () {
-        window.open('ems/pipeline.html', '_blank', 'noopener');
+    if (wsTabs) {
+      wsTabs.querySelectorAll('.ws-tab').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          showPane(btn.getAttribute('data-pane'));
+        });
+      });
+    }
+
+    if (pipeReload && pipeFrame) {
+      pipeReload.addEventListener('click', function () {
+        var src = pipeFrame.getAttribute('src') || 'ems/pipeline.html';
+        pipeFrame.setAttribute('src', src.split('?')[0] + '?t=' + Date.now());
       });
     }
 
@@ -555,14 +627,15 @@
         libFrame.setAttribute('src', src.split('?')[0] + '?t=' + Date.now());
       });
     }
-    if (libOpen) {
-      libOpen.addEventListener('click', function () {
-        window.open('ems/component-library.html', '_blank', 'noopener');
+    if (libToHub) {
+      libToHub.addEventListener('click', function () {
+        showPane('library');
       });
     }
-    if (libHub) {
-      libHub.addEventListener('click', function () {
-        window.open('ems/library/index.html', '_blank', 'noopener');
+    if (hubReload && hubFrame) {
+      hubReload.addEventListener('click', function () {
+        var src = hubFrame.getAttribute('src') || 'ems/library/index.html';
+        hubFrame.setAttribute('src', src.split('?')[0] + '?t=' + Date.now());
       });
     }
     if (libOpenFolder) {
