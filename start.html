@@ -139,7 +139,12 @@
       flex-direction: column;
     }
 
-    .wrap { max-width: 960px; margin: 0 auto; padding: 30px 24px 60px; width: 100%; }
+    .wrap {
+      max-width: none;
+      width: 100%;
+      margin: 0;
+      padding: 18px 22px 28px;
+    }
 
     .workspace-tabs {
       display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px;
@@ -201,7 +206,7 @@
     /* ── Panels ── */
     .grid2 { display:grid; grid-template-columns:1.05fr 1fr; gap:20px; }
     @media (max-width:760px){ .grid2 { grid-template-columns:1fr; } }
-    .panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px; margin-bottom:20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     .panel h2 {
       font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;
       color:#004c70; margin-bottom:18px; display:flex; align-items:center; gap:10px;
@@ -226,7 +231,7 @@
       display:flex; align-items:center; gap:10px; background:#f8fafc; border:1px solid var(--border);
       border-radius:8px; padding:10px 14px; font-family:var(--mono); font-size:13px; color:var(--g-blue-d); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
     }
-    .cmd code { flex:1; min-width:0; overflow-x:auto; white-space:nowrap; scrollbar-width:none; }
+    .cmd code { flex:1; min-width:0; overflow-x:auto; white-space:nowrap; }
     .cmd code::-webkit-scrollbar { display:none; }
     .cmd .copy {
       flex-shrink:0; background:#ffffff; border:1px solid var(--border-2); color:var(--text-2);
@@ -265,7 +270,11 @@
     }
     .lib-btn:hover { border-color:var(--g-blue); color:var(--g-blue); background:#f0f9ff; }
     .lib-frame {
-      width:100%; height:720px; border:1px solid var(--border); border-radius:10px;
+      width:100%;
+      height: min(84vh, 1120px);
+      min-height: 820px;
+      border:1px solid var(--border);
+      border-radius:10px;
       background:#fff;
     }
     .lib-fallback {
@@ -677,6 +686,9 @@
         alert('Library root: ems/library/\n\nUse these folders:\n- widgets/\n- masters/\n- samples/\n- exports/\n- manifests/');
       });
     }
+
+    // Open on the widest content workspace by default.
+    showPane('components');
 
     // Copy-to-clipboard for command snippets.
     document.querySelectorAll('.copy').forEach(function (btn) {
