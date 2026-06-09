@@ -57,6 +57,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--pages", default="1", help="1-based page spec for --pdf")
     p.add_argument("--name", default="Singh360 Diagram", help="Document title")
     p.add_argument("--out-dir", dest="out_dir", default="output", help="Output dir")
+    # --- HEB title block (templated for every project) -------------------
+    p.add_argument("--title-block", dest="title_block", action="store_true",
+                   help="Stamp the HEB-standard title block on the VSDX sheet.")
+    p.add_argument("--project-name", dest="project_name", default="",
+                   help='Title block project, e.g. "H.E.B. HOUSTON 54 #109"')
+    p.add_argument("--project-address", dest="project_address", default="",
+                   help="Title block project address line")
+    p.add_argument("--sheet-number", dest="sheet_number", default="EMS-1.1",
+                   help="Title block sheet number (default EMS-1.1)")
+    p.add_argument("--sheet-title", dest="sheet_title", default="EMS PARTIAL PLAN",
+                   help="Title block sheet title (default EMS PARTIAL PLAN)")
+    p.add_argument("--project-no", dest="project_no", default="",
+                   help="Title block project number")
+    p.add_argument("--sheet-date", dest="sheet_date", default="",
+                   help="Title block date (default: today)")
     p.add_argument(
         "--targets",
         default="vson,vsdx",
@@ -173,7 +188,31 @@ def run(args: argparse.Namespace) -> int:
 
     if "vsdx" in targets:
         masters = visio_vsdx.MasterLibrary(args.vssx) if args.vssx else None
-        writer = visio_vsdx.VsdxWriter(master_library=masters)
+
+        # HEB title block (templated). Forces Arch D (42x30) — HEB sheet size.
+        tb = None
+        page_w, page_h = config.PAGE_WIDTH_IN, config.PAGE_HEIGHT_IN
+        layout_fn = None
+        if getattr(args, "title_block", False):
+            import datetime
+            from engines.title_block import TitleBlockInfo
+            from engines.spatial_layout import compute_spatial_layout
+
+            page_w, page_h = config.page_size("archd")
+            # Grouped 2D layout fills the Arch D canvas (vs. thin org-chart strip).
+            layout_fn = compute_spatial_layout
+            tb = TitleBlockInfo(
+                project_name=args.project_name or args.name,
+                project_address=args.project_address,
+                sheet_number=args.sheet_number,
+                sheet_title=args.sheet_title,
+                project_no=args.project_no,
+                date=args.sheet_date or datetime.date.today().strftime("%m/%d/%y"),
+            )
+        writer = visio_vsdx.VsdxWriter(
+            page_w=page_w, page_h=page_h, master_library=masters,
+            layout_fn=layout_fn, title_block=tb,
+        )
         vsdx_path = writer.write(graph, out_dir / f"{safe}.vsdx")
         ok, problems = visio_vsdx.validate_vsdx(vsdx_path)
         written.append(vsdx_path)
@@ -181,6 +220,11 @@ def run(args: argparse.Namespace) -> int:
         reports.extend(f"        - {p}" for p in problems)
         for fl in writer.flags:
             graph.flags.append(fl)
+        if tb is not None:
+            graph.flags.append(
+                f"HEB title block stamped: {tb.sheet_number} · {tb.sheet_title} "
+                f"· {tb.project_name} (Arch D 42x30)."
+            )
 
     _print_report(graph, written, reports)
     # Exit non-zero if any validator reported a problem.

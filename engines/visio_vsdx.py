@@ -94,6 +94,7 @@ class VsdxWriter:
         page_h: float = config.PAGE_HEIGHT_IN,
         master_library: MasterLibrary | None = None,
         layout_fn=None,
+        title_block=None,
     ) -> None:
         self.page_w = page_w
         self.page_h = page_h
@@ -101,6 +102,8 @@ class VsdxWriter:
         # Pluggable placement: default = org-chart layout (compute_layout);
         # pass engines.spatial_layout.compute_spatial_layout for a 2D canvas.
         self.layout_fn = layout_fn or compute_layout
+        # Optional HEB title block (engines.title_block.TitleBlockInfo).
+        self.title_block = title_block
         self.flags: list[str] = []
 
     # ---- public API -----------------------------------------------------
@@ -108,7 +111,13 @@ class VsdxWriter:
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        coords = self.layout_fn(graph, self.page_w, self.page_h)
+        # Reserve the right-edge strip for the HEB title block so diagram
+        # content never collides with it.
+        from engines import title_block as _tb
+        reserve = _tb.TB_WIDTH_IN if (self.title_block and not self.title_block.is_empty()) else 0.0
+        content_w = self.page_w - reserve
+
+        coords = self.layout_fn(graph, content_w, self.page_h)
         # Assign stable integer sheet IDs (nodes first, then connectors).
         node_ids = list(graph.nodes.keys())
         id_map: dict[str, int] = {nid: i + 1 for i, nid in enumerate(node_ids)}
@@ -217,6 +226,16 @@ class VsdxWriter:
             )
 
         connects_xml = f"<Connects>{''.join(connects)}</Connects>" if connects else ""
+
+        # HEB title block on the right-edge strip (after all content IDs).
+        if self.title_block is not None and not self.title_block.is_empty():
+            from engines import title_block as _tb
+            tb_start = next_id + 1
+            tb_xml, _ = _tb.render_shapes(
+                tb_start, self.page_w, self.page_h, self.title_block
+            )
+            shapes.append(tb_xml)
+
         return (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
             f'<PageContents xmlns="{MAIN_NS}" xmlns:r="{REL_NS}" xml:space="preserve">'
