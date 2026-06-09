@@ -61,6 +61,22 @@ PAGE_WIDTH_IN = 17.0
 PAGE_HEIGHT_IN = 11.0
 PAGE_MARGIN_IN = 0.75
 
+# Page-size presets (inches, landscape). Learned from the HEB gold EMS .vsdx,
+# which uses Arch D (42x30) at 1:1 scale with a bottom-left origin.
+PAGE_PRESETS = {
+    "letter": (11.0, 8.5),
+    "tabloid": (17.0, 11.0),
+    "ledger": (17.0, 11.0),
+    "archc": (24.0, 18.0),
+    "archd": (42.0, 30.0),   # HEB EMS sheet size
+    "arche": (48.0, 36.0),
+}
+
+
+def page_size(name: str) -> tuple[float, float]:
+    """Return (width, height) in inches for a preset name (default tabloid)."""
+    return PAGE_PRESETS.get((name or "").strip().lower(), (PAGE_WIDTH_IN, PAGE_HEIGHT_IN))
+
 # Default auto-grid shape geometry (inches).
 SHAPE_W_IN = 1.9
 SHAPE_H_IN = 0.6

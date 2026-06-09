@@ -110,12 +110,16 @@ def classify(path: Path, root: Path) -> FileEntry:
         src = "emerson_dump"; note = "Emerson controller database dump"
     elif "EXPORT" in up and ext == ".zip":
         src = "emerson_dump"; note = "Emerson per-controller CSV export bundle"
-    elif "EMS" in up and "WORKSHEET" in up and ext in {".xlsx", ".xls"}:
-        src = "ems_worksheet"; note = "EMS point-to-point I/O worksheet"
+    elif ("WORKSHEET" in up or "WKSHT" in up) and ("EMS" in up or "EM " in up or "CAD" in up or "EM-" in up) and ext in {".xlsx", ".xls"}:
+        src = "ems_worksheet"; note = "EMS point-to-point I/O worksheet (CAD/EM worksheet)"
     elif "RDM" in up and "TDB" in up and ext in {".xlsx", ".xls"}:
         src = "rdm_tdb"; note = "RDM TDB layout"
-    elif "PANEL" in up and ("CONFIG" in up or "CONFIGURATION" in up) and ext in {".pptx", ".pdf", ".ppt"}:
+    elif ("SUPPK" in up or ("RACK" in rel_up and "HUSSMANN" in rel_up)) and ext == ".xml":
+        src = "emerson_dump"; note = "Hussmann/Emerson rack controller export (XML)"
+    elif ("PANEL" in up and ("CONFIG" in up or "CONFIGURATION" in up)) and ext in {".pptx", ".pdf", ".ppt"}:
         src = "panel_config"; note = "Control panel configuration"
+    elif ("EMS LAYOUT" in up or "EMS-LAYOUT" in up or "SUB-METERING" in up or "PANEL" in up) and ext in {".pptx", ".ppt"}:
+        src = "panel_config"; note = "EMS / panel layout deck"
     elif ("KWH360" in up or "KWH 360" in up) and ext == ".csv":
         src = "kwh360_assets"; note = "kWh360 asset inventory (11-column)"
     elif ("SCOPE" in up or "TASK ORDER" in up or "TASKORDER" in up) and ext in {".pdf", ".docx", ".doc"}:

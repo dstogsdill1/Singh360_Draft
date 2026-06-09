@@ -8,11 +8,12 @@ Registry maps a deliverable key -> builder(model) -> DiagramGraph.
 """
 from __future__ import annotations
 
-from . import io_schedule, network_layout
+from . import io_schedule, network_layout, floorplan_layout
 
 REGISTRY = {
     "io_schedule": io_schedule.build,
     "network_layout": network_layout.build,
+    "floorplan_layout": floorplan_layout.build,
 }
 
 __all__ = ["REGISTRY"]

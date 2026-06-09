@@ -93,10 +93,14 @@ class VsdxWriter:
         page_w: float = config.PAGE_WIDTH_IN,
         page_h: float = config.PAGE_HEIGHT_IN,
         master_library: MasterLibrary | None = None,
+        layout_fn=None,
     ) -> None:
         self.page_w = page_w
         self.page_h = page_h
         self.masters = master_library
+        # Pluggable placement: default = org-chart layout (compute_layout);
+        # pass engines.spatial_layout.compute_spatial_layout for a 2D canvas.
+        self.layout_fn = layout_fn or compute_layout
         self.flags: list[str] = []
 
     # ---- public API -----------------------------------------------------
@@ -104,7 +108,7 @@ class VsdxWriter:
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        coords = compute_layout(graph, self.page_w, self.page_h)
+        coords = self.layout_fn(graph, self.page_w, self.page_h)
         # Assign stable integer sheet IDs (nodes first, then connectors).
         node_ids = list(graph.nodes.keys())
         id_map: dict[str, int] = {nid: i + 1 for i, nid in enumerate(node_ids)}

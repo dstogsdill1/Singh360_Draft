@@ -20,7 +20,12 @@ from core.intake import inventory  # noqa: E402
 from core.merge import build_model  # noqa: E402
 from core.validate import validate, report  # noqa: E402
 from engines import smartdraw_vson, visio_vsdx  # noqa: E402
+from engines.spatial_layout import compute_spatial_layout  # noqa: E402
 from engines.doc_templates import REGISTRY as SHEETS  # noqa: E402
+import config  # noqa: E402
+
+# sheets that should use the 2D floor-plan canvas + absolute placement
+_SPATIAL_SHEETS = {"floorplan_layout"}
 
 
 def _args(argv=None):
@@ -32,6 +37,8 @@ def _args(argv=None):
     p.add_argument("--sheets", default="io_schedule,network_layout",
                    help="comma list of deliverables: " + ",".join(SHEETS))
     p.add_argument("--targets", default="vsdx,vson", help="render targets")
+    p.add_argument("--canvas", default="archd",
+                   help="page preset for spatial sheets: letter|tabloid|archc|archd|arche")
     p.add_argument("--cap", type=int, default=200, help="max files per source type")
     return p.parse_args(argv)
 
@@ -68,12 +75,19 @@ def run(a) -> int:
     for key in sheets:
         graph = SHEETS[key](model)
         base = f"{safe}_{key}"
+        spatial = key in _SPATIAL_SHEETS
         if "vson" in targets:
             path = smartdraw_vson.VsonGenerator().render(graph, out / f"{base}.vson")
             ok, probs = smartdraw_vson.validate(path)
             written.append((path, "OK" if ok else f"FAIL {probs}"))
         if "vsdx" in targets:
-            path = visio_vsdx.VsdxWriter().write(graph, out / f"{base}.vsdx")
+            if spatial:
+                pw, ph = config.page_size(a.canvas)
+                writer = visio_vsdx.VsdxWriter(page_w=pw, page_h=ph,
+                                               layout_fn=compute_spatial_layout)
+            else:
+                writer = visio_vsdx.VsdxWriter()
+            path = writer.write(graph, out / f"{base}.vsdx")
             ok, probs = visio_vsdx.validate_vsdx(path)
             written.append((path, "OK" if ok else f"FAIL {probs}"))
 
