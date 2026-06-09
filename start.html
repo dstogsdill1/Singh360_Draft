@@ -442,6 +442,40 @@
       </div>
     </div>
 
+    <div class="panel">
+      <h2><span class="n">4</span> Exact deliverables (stage 5 output)</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">A</div>
+          <div class="step-body">
+            <div class="t">SmartDraw upload file</div>
+            <div class="d">Upload the <b><code>.vson</code></b> file into SmartDraw. The <code>.vsdx</code> file is the Visio deliverable.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">B</div>
+          <div class="step-body">
+            <div class="t">Web bridge run (Generator UI)</div>
+            <div class="d">Generated files are written per job to:</div>
+            <div class="path-box"><b>.jobs/&lt;job-id&gt;/output/</b><br>
+              contains: <code>*.vson</code> + <code>*.vsdx</code><br>
+              zip download: <code>/api/download/&lt;job-id&gt;.zip</code>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">C</div>
+          <div class="step-body">
+            <div class="t">CLI run (<code>main_generator.py</code> / <code>pipeline_cli.py</code>)</div>
+            <div class="d">Output goes to your out dir (default <code>output/</code>):</div>
+            <div class="path-box"><b>output/&lt;safe-name&gt;.vson</b> &larr; SmartDraw upload file<br>
+              <b>output/&lt;safe-name&gt;.vsdx</b> &larr; Visio output
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     </div>
 
     <div class="pane" id="pane-pipeline">
