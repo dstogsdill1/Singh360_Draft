@@ -24,6 +24,9 @@ CSV path runs with the standard library alone.
 from __future__ import annotations
 
 import csv
+import re
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -293,11 +296,19 @@ class VectorPdfIngestor:
         *,
         anchor_w: float = config.SHAPE_W_IN,
         anchor_h: float = config.SHAPE_H_IN,
+        endpoint: str = "",
+        key: str = "",
     ) -> None:
         self.dst_w = page_w_in
         self.dst_h = page_h_in
         self.anchor_w = anchor_w
         self.anchor_h = anchor_h
+        self.endpoint = (endpoint or config.AZURE_DI_ENDPOINT).strip()
+        self.key = (key or config.AZURE_DI_KEY).strip()
+
+    def available(self) -> bool:
+        """True when Azure OCR is configured and can be used as fallback."""
+        return bool(self.endpoint and self.key)
 
     def scan(
         self,
@@ -376,6 +387,23 @@ class VectorPdfIngestor:
 
         matched = len(seen)
         keys_total = len(set(norm_keys.values()))
+
+        # OCR fallback: if the vector text layer doesn't carry the tags, try a
+        # raster OCR pass (local Tesseract first, then Azure prebuilt-read if
+        # configured). This is only used when the blueprint actually needs it.
+        if matched < keys_total:
+            ocr_nodes, ocr_flags = self._scan_ocr_fallback(
+                pdf_path=pdf_path,
+                wanted=wanted,
+                norm_keys=norm_keys,
+                seen=seen,
+            )
+            for nid, sp in ocr_nodes.items():
+                if nid not in seen:
+                    seen[nid] = sp
+            out.flags.extend(ocr_flags)
+            matched = len(seen)
+
         if total_tokens == 0:
             out.flags.append(
                 f"{pdf_path.name}: no selectable text — bitmap/vector-only "
@@ -395,6 +423,156 @@ class VectorPdfIngestor:
                 f"X/Y from {total_tokens} text tokens."
             )
         return out
+
+    def _scan_ocr_fallback(
+        self,
+        *,
+        pdf_path: Path,
+        wanted: list[int],
+        norm_keys: dict[str, str],
+        seen: dict[str, SpatialNode],
+    ) -> tuple[dict[str, SpatialNode], list[str]]:
+        """Try OCR when the text layer didn't yield enough matches."""
+        nodes: dict[str, SpatialNode] = {}
+        flags: list[str] = []
+        pdf_path = Path(pdf_path)
+
+        # 1) Local Tesseract OCR if the binary exists.
+        tesseract_path = shutil.which("tesseract")
+        if tesseract_path:
+            try:
+                import pytesseract
+                from pytesseract import Output
+                import fitz  # PyMuPDF
+            except ImportError:
+                flags.append(
+                    "OCR fallback: pytesseract is not installed, so local OCR "
+                    "could not run."
+                )
+            else:
+                try:
+                    doc = fitz.open(pdf_path)
+                    for pno in wanted:
+                        page = doc[pno]
+                        dpi = 220
+                        zoom = dpi / 72.0
+                        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+                        tmp = Path(tempfile.gettempdir()) / f"{pdf_path.stem}_ocr_{pno+1}.png"
+                        pix.save(tmp)
+                        try:
+                            data = pytesseract.image_to_data(
+                                str(tmp),
+                                output_type=Output.DICT,
+                                config="--psm 11",
+                            )
+                        finally:
+                            tmp.unlink(missing_ok=True)
+
+                        page_w_in = (page.rect.width or 1.0) / 72.0
+                        page_h_in = (page.rect.height or 1.0) / 72.0
+                        sx = self.dst_w / page_w_in if page_w_in else 1.0
+                        sy = self.dst_h / page_h_in if page_h_in else 1.0
+                        for i, raw in enumerate(data.get("text", []) or []):
+                            tok = _norm_token(str(raw))
+                            if not tok:
+                                continue
+                            node_key = norm_keys.get(tok)
+                            if node_key is None or node_key in seen or node_key in nodes:
+                                continue
+                            try:
+                                conf = float(data.get("conf", ["-1"])[i])
+                            except (TypeError, ValueError, IndexError):
+                                conf = -1.0
+                            if conf < 25:
+                                continue
+                            try:
+                                left = float(data.get("left", [0])[i])
+                                top = float(data.get("top", [0])[i])
+                                width = float(data.get("width", [0])[i])
+                                height = float(data.get("height", [0])[i])
+                            except (TypeError, ValueError, IndexError):
+                                continue
+                            cx_pt = (left + width / 2.0) / dpi * 72.0
+                            cy_pt = (top + height / 2.0) / dpi * 72.0
+                            cx_in = min(max((cx_pt / 72.0) * sx, 0.0), self.dst_w)
+                            cy_in = min(max(self.dst_h - (cy_pt / 72.0) * sy, 0.0), self.dst_h)
+                            nodes[node_key] = SpatialNode(
+                                key=node_key,
+                                cx=round(cx_in, 3),
+                                cy=round(cy_in, 3),
+                                w=self.anchor_w,
+                                h=self.anchor_h,
+                                page=pno + 1,
+                                source=f"{pdf_path.name} p{pno + 1} (OCR:tesseract)",
+                            )
+                    doc.close()
+                except Exception as exc:  # noqa: BLE001
+                    flags.append(f"OCR fallback via Tesseract failed: {exc}")
+
+        # 2) Azure Document Intelligence prebuilt-read as a second OCR option.
+        if not nodes and self.available():
+            try:
+                import fitz  # PyMuPDF
+                from azure.ai.documentintelligence import DocumentIntelligenceClient
+                from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
+                from azure.core.credentials import AzureKeyCredential
+            except ImportError:
+                flags.append("Azure OCR fallback unavailable: install azure-ai-documentintelligence.")
+            else:
+                try:
+                    doc = fitz.open(pdf_path)
+                    sub = fitz.open()
+                    for p in wanted:
+                        sub.insert_pdf(doc, from_page=p, to_page=p)
+                    data = sub.tobytes()
+                    doc.close()
+                    sub.close()
+
+                    client = DocumentIntelligenceClient(self.endpoint, AzureKeyCredential(self.key))
+                    poller = client.begin_analyze_document(
+                        "prebuilt-read", AnalyzeDocumentRequest(bytes_source=data)
+                    )
+                    result = poller.result()
+
+                    for p_index, page in enumerate(getattr(result, "pages", []) or []):
+                        page_w_in = float(getattr(page, "width", self.dst_w) or self.dst_w)
+                        page_h_in = float(getattr(page, "height", self.dst_h) or self.dst_h)
+                        sx = self.dst_w / page_w_in if page_w_in else 1.0
+                        sy = self.dst_h / page_h_in if page_h_in else 1.0
+                        for word in getattr(page, "words", []) or []:
+                            tok = _norm_token(str(getattr(word, "content", "")))
+                            node_key = norm_keys.get(tok)
+                            if node_key is None or node_key in seen or node_key in nodes:
+                                continue
+                            poly = list(getattr(word, "polygon", []) or [])
+                            if len(poly) < 8:
+                                continue
+                            cx_pt = sum(poly[0::2]) / (len(poly) // 2)
+                            cy_pt = sum(poly[1::2]) / (len(poly) // 2)
+                            cx_in = min(max(cx_pt * sx, 0.0), self.dst_w)
+                            cy_in = min(max(self.dst_h - cy_pt * sy, 0.0), self.dst_h)
+                            nodes[node_key] = SpatialNode(
+                                key=node_key,
+                                cx=round(cx_in, 3),
+                                cy=round(cy_in, 3),
+                                w=self.anchor_w,
+                                h=self.anchor_h,
+                                page=p_index + 1,
+                                source=f"{pdf_path.name} p{p_index + 1} (OCR:AzureRead)",
+                            )
+                    flags.append(
+                        f"{pdf_path.name}: OCR fallback via Azure prebuilt-read matched "
+                        f"{len(nodes)} key(s)."
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    flags.append(f"Azure OCR fallback failed: {exc}")
+
+        if not nodes and not flags:
+            flags.append(
+                "OCR fallback unavailable: no Tesseract binary found and Azure OCR "
+                "is not configured."
+            )
+        return nodes, flags
 
     def render_background_png(
         self,
