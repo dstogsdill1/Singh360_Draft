@@ -173,38 +173,40 @@ class VsonGenerator:
              "reproduced, released, or distributed without express written "
              "permission."),
         ]
-        cells: list[dict] = []
-        for i, (label, value) in enumerate(rows, start=1):
-            cells.append({
-                "Column": 1, "Row": i, "Label": label,
-                "TextBold": True, "TextColor": "#FFFFFF", "FillColor": navy,
-                "TextAlignH": "left", "TextAlignV": "middle",
-            })
-            cells.append({
-                "Column": 2, "Row": i, "Label": value or "",
-                "TextColor": "#1A1A1A", "FillColor": "#FFFFFF",
-                "TextAlignH": "left", "TextAlignV": "middle",
-            })
-        table = {
-            "Rows": len(rows),
-            "Columns": 2,
-            "ColumnWidth": 180,
-            "RowHeight": 34,
-            "Cell": cells,
-            "ColumnProperties": [
-                {"Index": 1, "Width": 150, "FixedWidth": True},
-                {"Index": 2, "Width": 330},
-            ],
-        }
+        # NOTE: SmartDraw's table support can be inconsistent across template
+        # modes/import paths. To guarantee reliable imports we emit the title
+        # block as plain editable shapes (one row per child shape), never as an
+        # image and without depending on Table-specific parsing.
+        row_shapes: list[dict] = []
+        for label, value in rows:
+            row_shapes.append(
+                {
+                    "ID": new_id(),
+                    "Label": f"{label}: {value or ''}",
+                    "FillColor": "#FFFFFF",
+                    "LineColor": navy,
+                    "TextColor": "#1A1A1A",
+                    "TextGrow": "Proportional",
+                    "TextAlignH": "left",
+                    "TextSize": 9,
+                }
+            )
         return {
             "ID": new_id(),
             "Label": "TITLE BLOCK",
-            "FillColor": "#FFFFFF",
+            "FillColor": navy,
             "LineColor": navy,
-            "TextColor": navy,
+            "TextColor": "#FFFFFF",
             "TextBold": True,
             "TextGrow": "Proportional",
-            "Table": table,
+            "ShapeType": "RRect",
+            "ShapeConnector": [
+                {
+                    "ShapeConnectorType": self.template,
+                    "Arrangement": "Column",
+                    "Shapes": row_shapes,
+                }
+            ],
         }
 
     # ---- document assembly ----------------------------------------------
