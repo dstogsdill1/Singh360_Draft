@@ -90,27 +90,39 @@ def _txt(el, tag: str) -> str:
 def _parse_dump_root(root, model: ProjectModel, ref: str) -> None:
     controllers = list(root.iter("controller"))
     if not controllers:
-        # Some dumps wrap controllers differently; index any element with params.
-        controllers = [el for el in root.iter() if el.find("param") is not None]
+        # Some dumps wrap controllers differently; only take elements that have
+        # a network address (nw/slv) AND own params — avoids grabbing the deep
+        # numeric sub-address nodes (e.g. "001-3-02") as phantom controllers.
+        controllers = [
+            el for el in root.iter()
+            if el.find("param") is not None and (el.get("nw") or el.get("slv"))
+        ]
 
     n_ctrl = 0
     n_param = 0
     for ci, ctrl in enumerate(controllers):
         nw = ctrl.get("nw", "")
         slv = ctrl.get("slv", "")
-        # Try to find a human name among child <name>/<index>/<id> elements.
-        cname = _txt(ctrl, "name") or _txt(ctrl, "index") or _txt(ctrl, "id") or f"Controller {ci + 1}"
-        nid = slug("board", cname, nw, slv) or slug("board", str(ci))
+        addr = _txt(ctrl, "name") or _txt(ctrl, "index") or _txt(ctrl, "id") or f"Controller {ci + 1}"
+        alias = _txt(ctrl, "alias")
+        # The alias is the human label (e.g. "FTYPE_PCC", "Udev 1", "Section 3");
+        # the name is a board:cell:point address (e.g. "001-3-02"). Prefer alias
+        # for display, keep the address as an attribute for traceability.
+        cname = alias or addr
+        nid = slug("ctrl", addr, nw, slv) or slug("ctrl", str(ci))
 
-        attrs: dict[str, str] = {}
+        attrs: dict[str, str] = {"address": addr}
         if nw:
             attrs["nw"] = nw
         if slv:
             attrs["slv"] = slv
+        ctype = _txt(ctrl, "type")
+        if ctype:
+            attrs["type_code"] = ctype
 
-        # Collect a bounded set of params as attributes (full set can be huge).
-        params = ctrl.findall("param")
-        for p in params[:60]:
+        # Collect params (including nested <params><param/>) as attributes.
+        params = list(ctrl.iter("param"))
+        for p in params[:80]:
             pn = p.get("name", "").strip()
             pv = p.get("value", "").strip()
             pu = p.get("units", "").strip()
@@ -118,10 +130,13 @@ def _parse_dump_root(root, model: ProjectModel, ref: str) -> None:
                 attrs[pn] = (pv + (" " + pu if pu else "")).strip()
         n_param += len(params)
 
-        # Pack / cond / case hints -> classify as RACK if it owns a pack.
-        kind = NodeKind.BOARD
-        if ctrl.find("pack") is not None or ctrl.find("cond") is not None:
-            kind = NodeKind.RACK
+        # Classify by ADDRESS structure (the dump's <pack> is just a number, so
+        # it is NOT a rack signal): a top-level address (no dash, e.g. "001") is
+        # a controller BOARD; a sub-address ("001-3-02") is a point/sub-device.
+        # Racks come from the schedule/worksheet, not from this dump.
+        kind = NodeKind.BOARD if "-" not in addr else NodeKind.DEVICE
+        if alias.upper().startswith("FTYPE_PCC"):
+            kind = NodeKind.BOARD
 
         model.add_node(Node(
             id=nid, kind=kind, name=cname, attrs=attrs, source=ref,
