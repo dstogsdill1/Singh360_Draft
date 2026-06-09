@@ -252,6 +252,181 @@ class AzureLayoutIngestor:
         return out_path
 
 
+# --------------------------------------------------------------------------
+# Local vector-PDF blueprint ingestion (deterministic, PyMuPDF — no Azure)
+# --------------------------------------------------------------------------
+#
+# WHY THIS EXISTS
+#   Azure DI `prebuilt-layout` hunts for TABLES, not CAD symbols. Point it at a
+#   vector floor-plan blueprint and it returns 0 spatial anchors, so the render
+#   falls back to an auto-grid. A blueprint's true positions live in its OWN
+#   text layer: PyMuPDF reads every printed token with its exact (x, y) on the
+#   page canvas. We match those tokens against the project's known keys (asset
+#   Names, relay/contactor refs) and pin each match to its true coordinate.
+#
+# HONESTY CONTRACT (no hallucination)
+#   Only text ACTUALLY PRINTED on the sheet becomes an anchor. If a luminaire
+#   is drawn as vector linework with no selectable type tag, it yields NO
+#   anchor here (it is not silently invented). The scan reports exactly how
+#   many keys matched so the operator can see coverage at a glance.
+
+def _norm_token(tok: str) -> str:
+    """Strip surrounding quotes/parens/punctuation; upper-case for matching."""
+    return tok.strip().strip("\"'()[]{}.,:;").upper()
+
+
+class VectorPdfIngestor:
+    """Read a vector PDF blueprint and pin known keys to their true X/Y.
+
+    Deterministic and local: needs only PyMuPDF (``fitz``), no network, no
+    Azure. Page space (PDF points, top-left origin) is mapped onto the target
+    canvas in inches with Visio's bottom-left origin (Y flipped), so anchors
+    land the right way up. The PDF is assumed drawn to the canvas aspect (HEB
+    blueprints are Arch D 42x30 at 72 dpi == 1:1); a proportional page->canvas
+    scale keeps every match on the sheet even if the page differs slightly.
+    """
+
+    def __init__(
+        self,
+        page_w_in: float = config.PAGE_WIDTH_IN,
+        page_h_in: float = config.PAGE_HEIGHT_IN,
+        *,
+        anchor_w: float = config.SHAPE_W_IN,
+        anchor_h: float = config.SHAPE_H_IN,
+    ) -> None:
+        self.dst_w = page_w_in
+        self.dst_h = page_h_in
+        self.anchor_w = anchor_w
+        self.anchor_h = anchor_h
+
+    def scan(
+        self,
+        pdf_path: str | Path,
+        keymap: dict[str, str],
+        pages: str = "1",
+    ) -> LayoutResult:
+        """Match ``keymap`` tokens against PDF text and return SpatialNodes.
+
+        ``keymap`` maps an UPPER-CASE token (as it appears on the sheet) to the
+        node key it should bind to (the id ``attach_spatial`` matches). Returns
+        a LayoutResult whose ``spatial`` list carries one SpatialNode per match
+        (first occurrence wins) plus coverage flags.
+        """
+        out = LayoutResult()
+        pdf_path = Path(pdf_path)
+        try:
+            import fitz  # PyMuPDF
+        except ImportError:
+            out.flags.append(
+                "PyMuPDF (fitz) not installed — run `pip install pymupdf` to "
+                "scan vector PDF blueprints locally."
+            )
+            return out
+
+        try:
+            doc = fitz.open(pdf_path)
+        except Exception as exc:  # noqa: BLE001
+            out.flags.append(f"could not open {pdf_path.name}: {exc}")
+            return out
+
+        wanted = _parse_pages(pages, doc.page_count) or [0]
+        # normalize keymap once
+        norm_keys = {_norm_token(k): v for k, v in keymap.items() if k}
+        seen: dict[str, SpatialNode] = {}
+        total_tokens = 0
+
+        for pno in wanted:
+            page = doc[pno]
+            pw_in = (page.rect.width or 1.0) / 72.0
+            ph_in = (page.rect.height or 1.0) / 72.0
+            sx = self.dst_w / pw_in if pw_in else 1.0
+            sy = self.dst_h / ph_in if ph_in else 1.0
+            try:
+                words = page.get_text("words")
+            except Exception:  # noqa: BLE001
+                continue
+            total_tokens += len(words)
+            for w in words:
+                x0, y0, x1, y1, raw = w[0], w[1], w[2], w[3], w[4]
+                tok = _norm_token(raw)
+                node_key = norm_keys.get(tok)
+                if node_key is None or node_key in seen:
+                    continue
+                cx_pt = (x0 + x1) / 2.0
+                cy_pt = (y0 + y1) / 2.0
+                cx_in = (cx_pt / 72.0) * sx
+                cy_in = self.dst_h - (cy_pt / 72.0) * sy  # flip Y -> bottom-left
+                # clamp onto the sheet
+                cx_in = min(max(cx_in, 0.0), self.dst_w)
+                cy_in = min(max(cy_in, 0.0), self.dst_h)
+                seen[node_key] = SpatialNode(
+                    key=node_key,
+                    cx=round(cx_in, 3),
+                    cy=round(cy_in, 3),
+                    w=self.anchor_w,
+                    h=self.anchor_h,
+                    page=pno + 1,
+                    source=f"{pdf_path.name} p{pno + 1}",
+                )
+
+        out.page_width_in = self.dst_w
+        out.page_height_in = self.dst_h
+        out.spatial = list(seen.values())
+        doc.close()
+
+        matched = len(seen)
+        keys_total = len(set(norm_keys.values()))
+        if total_tokens == 0:
+            out.flags.append(
+                f"{pdf_path.name}: no selectable text — bitmap/vector-only "
+                f"blueprint. No coordinates extractable here (route to OCR / "
+                f"a tagged source); shapes are NOT pinned (would be an auto-grid)."
+            )
+        elif matched == 0:
+            out.flags.append(
+                f"{pdf_path.name}: {total_tokens} text tokens read, but NONE "
+                f"matched the {keys_total} project keys. The fixture/panel tags "
+                f"are drawn as vector linework, not text — nothing pinned "
+                f"(no coordinates invented)."
+            )
+        else:
+            out.flags.append(
+                f"{pdf_path.name}: pinned {matched}/{keys_total} keys to true "
+                f"X/Y from {total_tokens} text tokens."
+            )
+        return out
+
+    def render_background_png(
+        self,
+        pdf_path: str | Path,
+        out_png: str | Path,
+        page: int = 0,
+        dpi: int = 110,
+    ) -> Path | None:
+        """Rasterize a PDF page to PNG (the floor-plan background layer).
+
+        Returns the written path, or None if PyMuPDF is unavailable. The image
+        is a verifiable artifact the operator can SEE and overlay — we never
+        claim a background is present without producing the pixels.
+        """
+        out_png = Path(out_png)
+        try:
+            import fitz  # PyMuPDF
+        except ImportError:
+            return None
+        try:
+            doc = fitz.open(pdf_path)
+            pg = doc[page]
+            zoom = dpi / 72.0
+            pix = pg.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+            out_png.parent.mkdir(parents=True, exist_ok=True)
+            pix.save(out_png)
+            doc.close()
+        except Exception:  # noqa: BLE001
+            return None
+        return out_png
+
+
 def _parse_pages(spec: str, total: int) -> list[int]:
     """1-based page spec -> sorted 0-based indices (upstream-compatible)."""
     out: set[int] = set()

@@ -49,6 +49,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--network", help="Device/Switch/Port network CSV")
     p.add_argument("--di-tables", dest="di_tables", help="Parser *_DI_tables.csv")
     p.add_argument("--pdf", help="PDF for live Azure DI layout (needs creds)")
+    p.add_argument(
+        "--floorplan",
+        help="Vector PDF blueprint scanned LOCALLY (PyMuPDF) to pin shapes to "
+        "their true X/Y by matching asset/relay/contactor keys — no Azure.",
+    )
     p.add_argument("--pages", default="1", help="1-based page spec for --pdf")
     p.add_argument("--name", default="Singh360 Diagram", help="Document title")
     p.add_argument("--out-dir", dest="out_dir", default="output", help="Output dir")
@@ -126,8 +131,33 @@ def run(args: argparse.Namespace) -> int:
     if spatial:
         orch.attach_spatial(spatial)
 
-    graph = orch.build()
+    # 2b) Local vector-PDF blueprint: pin shapes to their TRUE X/Y by matching
+    #     the project's keys against the blueprint's own text layer (no Azure).
+    floorplan_png = None
+    if getattr(args, "floorplan", None):
+        from core.ingestion import VectorPdfIngestor
 
+        ing = VectorPdfIngestor()
+        keymap: dict[str, str] = {}
+        for nid, node in orch.graph.nodes.items():
+            for tok in (nid, getattr(node, "label", "") or nid):
+                if tok:
+                    keymap[str(tok)] = nid
+            if ":" in nid:  # "Relay:R1" / "Contactor:C1" -> bare "R1" / "C1"
+                keymap[nid.split(":", 1)[1]] = nid
+        fp_result = ing.scan(args.floorplan, keymap, args.pages)
+        orch.attach_spatial(fp_result.spatial)
+        orch.graph.flags.extend(fp_result.flags)
+        floorplan_png = ing.render_background_png(
+            args.floorplan, out_dir / f"{safe}_floorplan.png"
+        )
+        if floorplan_png:
+            orch.graph.flags.append(
+                f"Floor-plan background rasterized -> {floorplan_png.name} "
+                f"(overlay/background layer; embed in the sheet to underlay shapes)."
+            )
+
+    graph = orch.build()
     # 3) Render targets.
     targets = {t.strip().lower() for t in args.targets.split(",") if t.strip()}
     written: list[Path] = []
