@@ -156,6 +156,7 @@ class VsdxWriter:
             '<Cell N="DrawingScale" V="1" U="IN"/>'
             '<Cell N="DrawingScaleType" V="0"/>'
             '<Cell N="InhibitSnap" V="0"/>'
+            f'{_layer_section()}'
             '</PageSheet>'
             '<Rel r:id="rId1"/>'
             '</Page></Pages>'
@@ -184,7 +185,8 @@ class VsdxWriter:
                 continue
             est = config.EDGE_STYLES.get(e.kind, config.EDGE_STYLES["hierarchy"])
             pattern = _LINE_PATTERN.get(est["pattern"], "1")
-            shapes.append(_connector_shape(cid, bx, by, ex, ey, est["line"], pattern, e.label))
+            wire_ix = config.HEB_LAYER_INDEX["EMS-WIRE-X"]
+            shapes.append(_connector_shape(cid, bx, by, ex, ey, est["line"], pattern, e.label, wire_ix))
             connects.append(
                 f'<Connect FromSheet="{cid}" FromCell="BeginX" FromPart="9" '
                 f'ToSheet="{s.sid}" ToCell="PinX" ToPart="3"/>'
@@ -198,6 +200,7 @@ class VsdxWriter:
         for nid, p in placed.items():
             node = graph.nodes[nid]
             style = config.style_for(node.category)
+            layer_ix = config.heb_layer_index(node.category)
             shapes.append(
                 _node_shape(
                     p.sid,
@@ -209,6 +212,7 @@ class VsdxWriter:
                     style.fill,
                     style.line,
                     style.text,
+                    layer_ix,
                 )
             )
 
@@ -220,6 +224,33 @@ class VsdxWriter:
             f"{connects_xml}"
             '</PageContents>'
         )
+
+
+def _layer_section() -> str:
+    """Visio Layer section using HEB's CAD layer convention.
+
+    Each row is a named layer (EMS-EQPM-X, EMS-SNSR-X, ...). Shapes reference a
+    layer by its row index via a LayerMember cell, so when the .vsdx is opened
+    in Visio/AutoCAD the geometry already sits on HEB-standard named layers.
+    """
+    rows = []
+    for ix, name in enumerate(config.HEB_LAYERS):
+        rows.append(
+            f'<Row IX="{ix}">'
+            f'<Cell N="Name" V="{escape(name)}"/>'
+            f'<Cell N="NameUniv" V="{escape(name)}"/>'
+            '<Cell N="Color" V="255"/>'
+            '<Cell N="Status" V="0"/>'
+            '<Cell N="Visible" V="1"/>'
+            '<Cell N="Print" V="1"/>'
+            '<Cell N="Active" V="0"/>'
+            '<Cell N="Lock" V="0"/>'
+            '<Cell N="Snap" V="1"/>'
+            '<Cell N="Glue" V="1"/>'
+            '<Cell N="Color2" V="-1"/>'
+            '</Row>'
+        )
+    return f'<Section N="Layer">{"".join(rows)}</Section>'
 
 
 def _attach_points(s: _Placed, t: _Placed) -> tuple[float, float, float, float]:
@@ -245,6 +276,7 @@ def _node_shape(
     fill: str,
     line: str,
     text: str,
+    layer_ix: int = 0,
 ) -> str:
     return (
         f'<Shape ID="{sid}" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'
@@ -255,6 +287,7 @@ def _node_shape(
         f'<Cell N="LocPinX" V="{w / 2:.4f}" F="Width*0.5"/>'
         f'<Cell N="LocPinY" V="{h / 2:.4f}" F="Height*0.5"/>'
         '<Cell N="Angle" V="0"/>'
+        f'<Cell N="LayerMember" V="{layer_ix}"/>'
         f'{_color_cell("FillForegnd", fill)}'
         '<Cell N="FillPattern" V="1"/>'
         f'{_color_cell("LineColor", line)}'
@@ -285,6 +318,7 @@ def _connector_shape(
     line: str,
     pattern: str,
     label: str,
+    layer_ix: int = 0,
 ) -> str:
     w = ex - bx
     h = ey - by
@@ -299,6 +333,7 @@ def _connector_shape(
         f'<Cell N="Width" V="{w:.4f}"/><Cell N="Height" V="{h:.4f}"/>'
         f'<Cell N="LocPinX" V="{w / 2:.4f}" F="Width*0.5"/>'
         f'<Cell N="LocPinY" V="{h / 2:.4f}" F="Height*0.5"/>'
+        f'<Cell N="LayerMember" V="{layer_ix}"/>'
         f'{_color_cell("LineColor", line)}'
         f'<Cell N="LinePattern" V="{pattern}"/>'
         '<Cell N="LineWeight" V="0.0138"/>'

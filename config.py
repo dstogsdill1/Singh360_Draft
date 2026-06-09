@@ -135,6 +135,53 @@ def style_for(category: str) -> CategoryStyle:
     return CATEGORY_STYLES.get((category or "").strip(), DEFAULT_STYLE)
 
 
+# --- HEB CAD layer convention --------------------------------------------
+# Reverse-engineered from the HEB gold bid set (109 EMS-1.1 EMS PARTIAL PLAN /
+# EMS-4.1 EMS DETAILS): every sheet is built from named AutoCAD layers exposed
+# as PDF OCGs. Matching these names lets our .vsdx drop into HEB's ProjectMates
+# / AutoCAD workflow with the shapes already on the right layers.
+#   suffix -X = existing, -D = demo, -N = new  (HEB standard)
+HEB_LAYERS: list[str] = [
+    "EMS-EQPM-X",     # 0 EMS equipment / controllers / RDM / data managers
+    "EMS-PANEL",      # 1 panels, relays, contactors, LCPs
+    "EMS-SNSR-X",     # 2 sensors / probes
+    "EMS-WIRE-X",     # 3 wiring / connectors / comm trunks
+    "EMS-VALV-X",     # 4 valves
+    "EMS-ANNO",       # 5 annotations / labels / lighting fixtures
+    "R-CASE-X",       # 6 refrigeration cases / circuits / racks
+    "M-EQPM",         # 7 mechanical / HVAC / RTU
+    "TB-ANNO",        # 8 title block / frame
+]
+HEB_LAYER_INDEX: dict[str, int] = {name: i for i, name in enumerate(HEB_LAYERS)}
+
+# Map our category vocabulary -> HEB layer name.
+_CATEGORY_TO_HEB_LAYER: dict[str, str] = {
+    "EMS": "EMS-EQPM-X",
+    "Energy Monitoring": "EMS-EQPM-X",
+    "Electrical": "EMS-PANEL",
+    "Relay": "EMS-PANEL",
+    "Contactor": "EMS-PANEL",
+    "Network": "EMS-WIRE-X",
+    "Refrigeration": "R-CASE-X",
+    "Boilers/DHW": "R-CASE-X",
+    "HVAC": "M-EQPM",
+    "Lighting": "EMS-ANNO",
+    "Plumbing": "M-EQPM",
+    "Hydroponics SAT": "EMS-EQPM-X",
+    "Hydroponics Cx": "EMS-EQPM-X",
+}
+
+
+def heb_layer_for(category: str) -> str:
+    """Map a node category to its HEB CAD layer name (default EMS-ANNO)."""
+    return _CATEGORY_TO_HEB_LAYER.get((category or "").strip(), "EMS-ANNO")
+
+
+def heb_layer_index(category: str) -> int:
+    """Map a node category to its HEB layer row index in HEB_LAYERS."""
+    return HEB_LAYER_INDEX.get(heb_layer_for(category), HEB_LAYER_INDEX["EMS-ANNO"])
+
+
 def have_azure() -> bool:
     """True when both Azure DI endpoint and key are configured."""
     return bool(AZURE_DI_ENDPOINT and AZURE_DI_KEY)
