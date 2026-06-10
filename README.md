@@ -282,6 +282,21 @@ Deterministic and no-hallucination: it renders only what the schedules provide;
 blank cells mean a value was not supplied. `drawing_package.validate()` confirms
 the HTML structure. Accepts `--targets package` (aliases `html`, `drawingpkg`).
 
+### Getting the EMS symbol library into SmartDraw / Visio
+
+SmartDraw has no bulk "upload a library file" format — a custom library
+(**Symbol Libraries → Add New**) starts empty and you add symbols to it. So the
+EMS component library (`ems/component-library.html`) now **exports its symbols as
+self-contained `.svg` files**:
+
+- **Export for SmartDraw / Visio** (toolbar) downloads every symbol at once.
+- The **SVG** button on each card exports just that one.
+
+Each file is rendered with its styles **baked in** (CSS variables resolved to
+real hex, a white background added), so it imports cleanly without this page's
+stylesheet. Then in SmartDraw: **Symbol Libraries → Add New → name it
+"Singh360 EMS" → import each SVG**. In Visio, drag the SVGs onto a new stencil.
+
 ### SmartDraw VSON (`engines/smartdraw_vson.py`)
 
 Emits the **official VSON document** from SmartDraw's
