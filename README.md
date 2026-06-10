@@ -71,6 +71,7 @@ Singh360_SmartDraw/
 ├── config.py                 # env, units, category→style map, app schema
 ├── core/
 │   ├── ingestion.py          # Azure DI layout + polygon normalization + grid rebuild
+│   ├── idf_builder.py        # deterministic IDF rules: rack drops, case naming, WICP groups
 │   └── data_orchestrator.py  # pandas joins → DiagramGraph + deterministic layout
 ├── engines/
 │   ├── smartdraw_vson.py     # VS.Document/Shape/Connector/Container compiler
@@ -163,6 +164,37 @@ these anchors up automatically:
 python pipeline_cli.py "<raw HEB project folder>" --name "HEB 109 Bunker Hills" `
     --out output/bh109 --sheets io_schedule,floorplan_layout --canvas archd
 ```
+
+### IDF setup rules (`core/idf_builder.py`)
+
+Step one of IDF (network frame) setup — gather + normalize the equipment
+schedule, circuit schedule, and refrigeration controls notes into structured,
+correctly-named records before assigning them to an IDF. The rules come
+verbatim from the draftsman email in
+`sample_data/Singh360 Inc Mail - Visual studios IDF information.pdf` and are
+verified by a self-test (`python core/idf_builder.py`):
+
+- **Racks (equipment schedule).** Each rack gets **2 drops** — one for the
+  SuperPAC and one for the **loop** or **cascade** controller. CO2 cascade
+  racks → cascade controller; everything else → loop controller
+  (`rack_drops(...)`).
+- **Cases (circuit schedule).** The IDF case name strips the 2-letter product
+  designator from the full circuit name: `RADA01 → RA01`, `RABK02a → RA02`,
+  sorted alphanumerically by rack + circuit (`parse_circuit_name`,
+  `circuit_sort_key`). Multiple cases on one lineup get `a/b/c`
+  (`RA01a/RA01b/RA01c`); `Q3-SP` / `Q3-MV` cases carry two coils named with two
+  trailing letters (`RA01aa`, `RA01ab`) — all from `build_lineup_cases(...)`.
+- **Case description** = full circuit name + case type + temperature + product,
+  e.g. `RADA01a MD Fresh Dairy` (`MD`=Multideck, `WI`=Wide-Island,
+  `RI`=Reach-in; `Service`/`2-deck`/`3-deck` stay as written; temp = Fresh or
+  Frozen; product expands the designator — `DA`=Dairy, `BK`=Bakery).
+- **WICP (controls general notes).** Walk-In Control Panels are grouped one
+  group per panel (`group_wicps_by_panel(...)`).
+
+Unknown product designators expand to blank and are flagged for confirmation —
+never guessed (no-hallucination rule). The module is the deterministic data
+layer only; wiring a live equipment/circuit workbook through it needs the real
+schedule column map (a follow-up once the source `.xlsx` is supplied).
 
 ---
 
