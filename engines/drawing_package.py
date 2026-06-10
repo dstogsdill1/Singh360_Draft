@@ -237,7 +237,8 @@ class DrawingPackageGenerator:
             "<h3 style='font-size:16px'>This is your drawing — the actual picture, built from your data</h3>"
             "<div class='btns'>"
             "<button class='btn' onclick='downloadDrawingSvg()'>Download drawing (SVG)</button>"
-            "<button class='btn ghost' onclick='window.print()'>Print / Save as PDF</button>"
+            "<button class='btn ghost' onclick='printDrawingLandscape()'>Print drawing (Landscape PDF)</button>"
+            "<button class='btn ghost' onclick='window.print()'>Print full package</button>"
             "</div></div>"
             "<p class='muted' style='margin:0 0 12px'>This is a real, finished diagram — not a table. "
             "Open it, print it, or drop the downloaded <b>.svg</b> straight onto a SmartDraw / Visio "
@@ -245,6 +246,15 @@ class DrawingPackageGenerator:
             "is a real relationship (control = gold dashed, network = blue dotted, serves = grey).</p>"
             f"<div id='drawingWrap' style='overflow:auto; border:1px solid #d7dee6; border-radius:10px; "
             f"background:#fff; padding:8px'>{svg}</div>"
+            "<div class='card' style='margin-top:12px'><h3>Final deliverable workflow (match your 109 process)</h3>"
+            "<ol class='steps'>"
+            "<li>Use <b>Download drawing (SVG)</b> and insert that SVG into SmartDraw on a blank sheet.</li>"
+            "<li>Set page orientation to <b>Landscape</b> in SmartDraw, then resize/fit the drawing to page.</li>"
+            "<li>Make any final manual edits/notes to match your issued layout style.</li>"
+            "<li>Export from SmartDraw as <b>PDF</b> (this is your final issued product).</li>"
+            "</ol>"
+            "<p class='muted'>If you just need a quick one-page draft PDF directly from this package, click "
+            "<b>Print drawing (Landscape PDF)</b>.</p></div>"
             "</section>"
         )
 
@@ -258,7 +268,7 @@ class DrawingPackageGenerator:
             "<div class='waybox'><div class='waynum'>1</div><b>Just want the picture?</b>"
             "<p class='muted'>Open the <b>\u2b50 The Drawing</b> tab. Click <b>Download drawing (SVG)</b> "
             "and drag that file onto a blank SmartDraw or Visio canvas \u2014 the whole layout drops in "
-            "as editable shapes. Or click <b>Print / Save as PDF</b>.</p></div>"
+            "as editable shapes. For a one-click draft, use <b>Print drawing (Landscape PDF)</b>.</p></div>"
             "<div class='waybox'><div class='waynum'>2</div><b>Want to build it with library symbols?</b>"
             "<p class='muted'>Follow the <b>Get the symbols into SmartDraw</b> steps below, then place "
             "each symbol on your floor plan using the <b>Components</b> tab as the checklist.</p></div>"
@@ -305,6 +315,8 @@ class DrawingPackageGenerator:
             f"<p class='lead'>This HTML is the complete drawing document for <b>{_e(title)}</b>: the "
             "rendered picture, the component checklist, the connections, and the build list \u2014 all in "
             "one file.</p>"
+            "<p class='muted'><b>Final product expectation:</b> the issued deliverable is the PDF you "
+            "export from SmartDraw after final manual layout/annotation. This package is your source kit.</p>"
             f"<p class='muted'><b>Source data behind it:</b> {_e(input_files or 'none recorded')}</p>"
             "</div>"
             "</section>"
@@ -619,7 +631,9 @@ _PAGE = """<!doctype html>
   .symgrid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
               gap:12px; }}
   figure.sym {{ margin:0; text-align:center; }}
-  figure.sym figcaption {{ font-size:12px; color:var(--navy); font-weight:600; margin-top:4px; }}  @media print {{ .tabs,.btns,header .stamp {{ display:none; }}
+    figure.sym figcaption {{ font-size:12px; color:var(--navy); font-weight:600; margin-top:4px; }}
+    @page {{ size: landscape; margin: 0.35in; }}
+    @media print {{ .tabs,.btns,header .stamp {{ display:none; }}
                   .tabpane {{ display:block !important; }} .scroll {{ max-height:none; }} }}
 </style>
 </head>
@@ -688,6 +702,24 @@ _PAGE = """<!doctype html>
     setTimeout(function(){{ URL.revokeObjectURL(a.href); }}, 1500);
     toast('Downloaded drawing.svg — drop it onto a SmartDraw / Visio canvas');
   }}
+    function printDrawingLandscape() {{
+        var wrap = document.getElementById('drawingWrap');
+        var svg = wrap ? wrap.querySelector('svg') : null;
+        if (!svg) {{ toast('No drawing to print'); return; }}
+        var w = window.open('', '_blank');
+        if (!w) {{ toast('Popup blocked — allow popups to print'); return; }}
+        var doc = [
+            '<!doctype html><html><head><meta charset="utf-8"><title>Drawing PDF</title>',
+            '<style>@page{{size:landscape;margin:0.25in;}}html,body{{margin:0;background:#fff;}}',
+            'body{{display:flex;align-items:flex-start;justify-content:center;padding:0.1in;}}',
+            'svg{{width:100%;height:auto;max-height:95vh;}}</style></head><body>',
+            svg.outerHTML,
+            '<script>window.onload=function(){{window.print();}};<\\/script></body></html>'
+        ].join('');
+        w.document.open();
+        w.document.write(doc);
+        w.document.close();
+    }}
 </script>
 </body>
 </html>

@@ -116,12 +116,21 @@ Outputs land in `output/`:
 - `HEB_SA31_Lighting_package.html` — copy-paste-ready **drawing package** (see §4):
   every component in clean tables to assemble the drawing yourself. The first tab
   (**⭐ The Drawing**) embeds the rendered picture with **Download drawing (SVG)** and
-  **Print / Save as PDF** buttons, plus picture-based **Start Here** instructions.
+  **Print drawing (Landscape PDF)** buttons, plus picture-based **Start Here**
+  instructions and explicit final-export guidance.
 - `HEB_SA31_Lighting_drawing.svg` — the **rendered visual drawing** itself (target
   `diagram` / `svg` / `drawing`): each component as a colour-coded card wired with
   connectors (control = gold dashed, network = blue dotted, serves = grey) and a
   legend. Open it in a browser, print it, or drop it onto a SmartDraw / Visio canvas
   as the starting drawing. Built by `engines/svg_diagram.py` from the same graph.
+
+For live project issuance (matching the 109 workflow):
+
+1. Open `HEB_SA31_Lighting_package.html` → **⭐ The Drawing**.
+2. Click **Download drawing (SVG)** and place that SVG into SmartDraw.
+3. Set SmartDraw page orientation to **Landscape**, fit/scale the drawing, then apply
+   any manual final notes/formatting.
+4. Export from SmartDraw to **PDF** — that exported PDF is the final issued product.
 
 The CLI prints a graph summary, a coordinate→shape flow legend, per‑target
 **validation** results, and any flags.

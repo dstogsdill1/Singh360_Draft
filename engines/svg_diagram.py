@@ -33,6 +33,8 @@ PAD = 48
 HEADER_H = 92            # top title strip
 HDR_BAR = 24            # coloured header bar inside each card
 LEGEND_H = 132          # reserved band at the bottom for the legend
+MAX_ROW_NODES = 6       # wrap long node rows to keep a landscape-friendly aspect
+DEPTH_GAP = 18          # extra vertical separation between hierarchy depths
 
 
 def _e(text: object) -> str:
@@ -87,7 +89,12 @@ def _depth(nid: str, parent: dict[str, str], nodes) -> int:
 
 
 def _layout(graph) -> tuple[dict[str, tuple[int, int]], int, int]:
-    """Rank nodes by hierarchy depth -> {id:(x_left,y_top)} + canvas size."""
+    """Landscape-friendly rank layout with row wrapping.
+
+    The original pure-rank layout can become extremely wide/short when many nodes
+    share one depth. This wrapped layout keeps the drawing printable and visually
+    readable in landscape by chunking each depth into multiple centered rows.
+    """
     parent = _hierarchy_parent(graph)
     ranks: dict[int, list[str]] = {}
     for nid in graph.nodes:
@@ -102,19 +109,46 @@ def _layout(graph) -> tuple[dict[str, tuple[int, int]], int, int]:
             )
         )
 
-    max_row = max((len(v) for v in ranks.values()), default=1)
-    canvas_w = PAD * 2 + max(max_row, 1) * (CARD_W + H_GAP) - H_GAP
-    n_ranks = (max(ranks) + 1) if ranks else 1
-    canvas_h = HEADER_H + PAD + n_ranks * (CARD_H + V_GAP) - V_GAP + PAD + LEGEND_H
-
-    pos: dict[str, tuple[int, int]] = {}
+    wrapped_rows: list[tuple[int, list[str]]] = []
     for d in sorted(ranks):
         ids = ranks[d]
+        for i in range(0, len(ids), MAX_ROW_NODES):
+            wrapped_rows.append((d, ids[i:i + MAX_ROW_NODES]))
+
+    max_row = max((len(ids) for _, ids in wrapped_rows), default=1)
+    canvas_w = PAD * 2 + max(max_row, 1) * (CARD_W + H_GAP) - H_GAP
+
+    # Height is based on wrapped rows, with extra spacing when moving to a
+    # deeper hierarchy rank.
+    row_blocks = len(wrapped_rows)
+    depth_jumps = 0
+    prev_depth = None
+    for d, _ in wrapped_rows:
+        if prev_depth is not None and d != prev_depth:
+            depth_jumps += 1
+        prev_depth = d
+    canvas_h = (
+        HEADER_H
+        + PAD
+        + row_blocks * (CARD_H + V_GAP)
+        - (V_GAP if row_blocks else 0)
+        + depth_jumps * DEPTH_GAP
+        + PAD
+        + LEGEND_H
+    )
+
+    pos: dict[str, tuple[int, int]] = {}
+    y = HEADER_H + PAD
+    prev_depth = None
+    for d, ids in wrapped_rows:
+        if prev_depth is not None and d != prev_depth:
+            y += DEPTH_GAP
         row_w = len(ids) * (CARD_W + H_GAP) - H_GAP
         x0 = (canvas_w - row_w) // 2  # centre each rank
-        y = HEADER_H + PAD + d * (CARD_H + V_GAP)
         for i, nid in enumerate(ids):
             pos[nid] = (x0 + i * (CARD_W + H_GAP), y)
+        y += CARD_H + V_GAP
+        prev_depth = d
     return pos, canvas_w, canvas_h
 
 
