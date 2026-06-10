@@ -32,7 +32,13 @@ if str(HERE) not in sys.path:
 import config  # noqa: E402
 from core import ingestion  # noqa: E402
 from core.data_orchestrator import DataOrchestrator  # noqa: E402
-from engines import drawing_package, rdm_layout_xml, smartdraw_vson, visio_vsdx  # noqa: E402
+from engines import (  # noqa: E402
+    drawing_package,
+    rdm_layout_xml,
+    smartdraw_vson,
+    svg_diagram,
+    visio_vsdx,
+)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -77,7 +83,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--targets",
         default="vson,vsdx",
-        help="Comma list: vson,vsdx,rdmxml,package",
+        help="Comma list: vson,vsdx,rdmxml,package,diagram",
     )
     p.add_argument("--layout", default="hierarchy", help="VSON auto-layout family")
     p.add_argument("--vssx", help="Optional .vssx stencil for Visio masters")
@@ -257,6 +263,25 @@ def run(args: argparse.Namespace) -> int:
         ok, problems = drawing_package.validate(pkg_path)
         written.append(pkg_path)
         reports.append(f"PKG   {'OK ' if ok else 'FAIL'} {pkg_path.name}")
+        reports.extend(f"        - {p}" for p in problems)
+
+    # Rendered visual drawing (SVG): the actual picture — open in a browser,
+    # print to PDF, or drop onto a SmartDraw / Visio canvas. 'diagram'/'svg'/'drawing'.
+    if targets & {"diagram", "svg", "drawing"}:
+        sub = (
+            args.sheet_title
+            if getattr(args, "title_block", False)
+            else "Rendered drawing"
+        )
+        svg_path = svg_diagram.render(
+            graph,
+            out_dir / f"{safe}_drawing.svg",
+            title=args.project_name or args.name,
+            subtitle=sub,
+        )
+        ok, problems = svg_diagram.validate(svg_path)
+        written.append(svg_path)
+        reports.append(f"SVG   {'OK ' if ok else 'FAIL'} {svg_path.name}")
         reports.extend(f"        - {p}" for p in problems)
 
     _print_report(graph, written, reports)

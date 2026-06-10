@@ -102,7 +102,7 @@ python main_generator.py `
     --assets sample_data/assets.csv `
     --control sample_data/control_matrix.csv `
     --network sample_data/network.csv `
-  --name "HEB SA31 Lighting" --out-dir output --targets vson,vsdx,rdmxml,package
+  --name "HEB SA31 Lighting" --out-dir output --targets vson,vsdx,rdmxml,package,diagram
 ```
 
 Outputs land in `output/`:
@@ -114,7 +114,14 @@ Outputs land in `output/`:
 - `HEB_SA31_Lighting.rdm.xml` — neutral RDM-oriented XML package with deterministic
   node/edge ordering, coordinates, provenance, and symbol-library hints.
 - `HEB_SA31_Lighting_package.html` — copy-paste-ready **drawing package** (see §4):
-  every component in clean tables to assemble the drawing yourself.
+  every component in clean tables to assemble the drawing yourself. The first tab
+  (**⭐ The Drawing**) embeds the rendered picture with **Download drawing (SVG)** and
+  **Print / Save as PDF** buttons, plus picture-based **Start Here** instructions.
+- `HEB_SA31_Lighting_drawing.svg` — the **rendered visual drawing** itself (target
+  `diagram` / `svg` / `drawing`): each component as a colour-coded card wired with
+  connectors (control = gold dashed, network = blue dotted, serves = grey) and a
+  legend. Open it in a browser, print it, or drop it onto a SmartDraw / Visio canvas
+  as the starting drawing. Built by `engines/svg_diagram.py` from the same graph.
 
 The CLI prints a graph summary, a coordinate→shape flow legend, per‑target
 **validation** results, and any flags.
