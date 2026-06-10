@@ -32,7 +32,7 @@ if str(HERE) not in sys.path:
 import config  # noqa: E402
 from core import ingestion  # noqa: E402
 from core.data_orchestrator import DataOrchestrator  # noqa: E402
-from engines import rdm_layout_xml, smartdraw_vson, visio_vsdx  # noqa: E402
+from engines import drawing_package, rdm_layout_xml, smartdraw_vson, visio_vsdx  # noqa: E402
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -77,7 +77,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--targets",
         default="vson,vsdx",
-        help="Comma list: vson,vsdx,rdmxml",
+        help="Comma list: vson,vsdx,rdmxml,package",
     )
     p.add_argument("--layout", default="hierarchy", help="VSON auto-layout family")
     p.add_argument("--vssx", help="Optional .vssx stencil for Visio masters")
@@ -239,6 +239,24 @@ def run(args: argparse.Namespace) -> int:
         ok, problems = rdm_layout_xml.validate(rdm_path)
         written.append(rdm_path)
         reports.append(f"RDMXML {'OK ' if ok else 'FAIL'} {rdm_path.name}")
+        reports.extend(f"        - {p}" for p in problems)
+
+    # Copy-paste-ready drawing package: every component consolidated into HTML
+    # tables (TSV copy + CSV download) to build the drawing by hand in
+    # SmartDraw / Visio. Accepts 'package', 'html', or 'drawingpkg'.
+    if targets & {"package", "html", "drawingpkg"}:
+        subtitle = (
+            f"{args.sheet_title} — Drawing Package"
+            if getattr(args, "title_block", False)
+            else "Project Drawing Package"
+        )
+        pkg = drawing_package.DrawingPackageGenerator(
+            project_name=args.project_name or args.name, subtitle=subtitle
+        )
+        pkg_path = pkg.render(graph, out_dir / f"{safe}_package.html")
+        ok, problems = drawing_package.validate(pkg_path)
+        written.append(pkg_path)
+        reports.append(f"PKG   {'OK ' if ok else 'FAIL'} {pkg_path.name}")
         reports.extend(f"        - {p}" for p in problems)
 
     _print_report(graph, written, reports)

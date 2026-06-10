@@ -75,8 +75,9 @@ Singh360_SmartDraw/
 │   └── data_orchestrator.py  # pandas joins → DiagramGraph + deterministic layout
 ├── engines/
 │   ├── smartdraw_vson.py     # VS.Document/Shape/Connector/Container compiler
-│   └── visio_vsdx.py         # stdlib OPC/XML .vsdx writer (+ .vssx master hook)
-│   └── rdm_layout_xml.py     # deterministic neutral RDM-style XML package writer
+│   ├── visio_vsdx.py         # stdlib OPC/XML .vsdx writer (+ .vssx master hook)
+│   ├── rdm_layout_xml.py     # deterministic neutral RDM-style XML package writer
+│   └── drawing_package.py    # copy-paste-ready HTML component package (build by hand)
 ├── main_generator.py         # CLI entry point + traceability report
 ├── server.py                 # Flask bridge: web GUI <-> main_generator.py
 ├── web/
@@ -101,7 +102,7 @@ python main_generator.py `
     --assets sample_data/assets.csv `
     --control sample_data/control_matrix.csv `
     --network sample_data/network.csv `
-  --name "HEB SA31 Demo" --out-dir output --targets vson,vsdx,rdmxml
+  --name "HEB SA31 Demo" --out-dir output --targets vson,vsdx,rdmxml,package
 ```
 
 Outputs land in `output/`:
@@ -112,6 +113,8 @@ Outputs land in `output/`:
 - `HEB_SA31_Demo.vsdx` — open in Microsoft Visio.
 - `HEB_SA31_Demo.rdm.xml` — neutral RDM-oriented XML package with deterministic
   node/edge ordering, coordinates, provenance, and symbol-library hints.
+- `HEB_SA31_Demo_package.html` — copy-paste-ready **drawing package** (see §4):
+  every component in clean tables to assemble the drawing yourself.
 
 The CLI prints a graph summary, a coordinate→shape flow legend, per‑target
 **validation** results, and any flags.
@@ -247,6 +250,37 @@ web/index.html  --FormData(POST /api/generate)-->  server.py (Flask)
 ---
 
 ## 4. Output formats
+
+### Drawing package — copy-paste HTML (`engines/drawing_package.py`)
+
+The **build-it-yourself** target. Rather than emit a finished diagram, it
+consolidates *every* component of a project into one self-contained HTML
+**drawing package** you open in a browser and copy from — straight into
+**SmartDraw** or **Microsoft Visio** — then lay out the drawing by hand with all
+the data already gathered, named, and grouped.
+
+```powershell
+python main_generator.py --assets sample_data/assets.csv `
+    --control sample_data/control_matrix.csv --network sample_data/network.csv `
+    --name "HEB SA31 Demo" --out-dir output --targets package
+```
+
+Tabs in the package:
+
+- **Overview** — component counts by category/group + connection counts.
+- **Components** — one table per group (Refrigeration, EMS Control, Lighting,
+  Network…) listing every node with its attributes (fixture/make, control,
+  panel/circuit, voltage, set point, area, IP/switch/port…) and source row.
+- **Connections** — the full relationship list (hierarchy / control / network).
+- **Build List** — a flat, printable bill of materials with tick boxes.
+- **Flags & Sources** — validation flags + source-file provenance.
+
+Every table is a real `<table>` (drag-select straight into Visio/Excel) **and**
+wired to **Copy (TSV)** (clipboard, tab-separated for instant paste) and
+**Download CSV** (for Visio *Data → Link Data to Shapes* / SmartDraw import).
+Deterministic and no-hallucination: it renders only what the schedules provide;
+blank cells mean a value was not supplied. `drawing_package.validate()` confirms
+the HTML structure. Accepts `--targets package` (aliases `html`, `drawingpkg`).
 
 ### SmartDraw VSON (`engines/smartdraw_vson.py`)
 
