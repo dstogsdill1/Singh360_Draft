@@ -91,16 +91,21 @@ class DrawingPackageGenerator:
         nodes = list(graph.nodes.values())
         id_to_label = {n.id: n.label for n in nodes}
         groups = self._grouped(nodes)
+        source_summary = self._source_summary(graph, nodes)
 
         body = []
+        body.append(self._start_here_section(title, source_summary))
         body.append(self._overview_section(graph, nodes, groups, stamp))
+        body.append(self._source_map_section(source_summary))
         body.append(self._components_section(groups))
         body.append(self._connections_section(graph, id_to_label))
         body.append(self._buildlist_section(nodes))
         body.append(self._flags_section(graph))
 
         tabs = [
+            ("start", "Start Here"),
             ("overview", "Overview"),
+            ("source", "How It Was Derived"),
             ("components", "Components"),
             ("connections", "Connections"),
             ("buildlist", "Build List"),
@@ -139,6 +144,93 @@ class DrawingPackageGenerator:
         ordered = [k for k in _PREFERRED_ATTR_ORDER if k in present]
         ordered += sorted(k for k in present if k not in _PREFERRED_ATTR_ORDER)
         return ordered
+
+    def _source_summary(self, graph, nodes) -> dict:
+        """Summarize the source files behind the graph for the guide tabs."""
+        node_counts: dict[str, int] = {}
+        edge_counts: dict[str, int] = {}
+        for n in nodes:
+            src = (n.source or "").split(":", 1)[0] or "(unknown)"
+            node_counts[src] = node_counts.get(src, 0) + 1
+        for ed in graph.edges:
+            src = (ed.source_ref or "").split(":", 1)[0] or "(unknown)"
+            edge_counts[src] = edge_counts.get(src, 0) + 1
+        return {"nodes": node_counts, "edges": edge_counts}
+
+    def _start_here_section(self, title, source_summary) -> str:
+        input_files = ", ".join(sorted(k for k in source_summary["nodes"].keys() if k != "(unknown)"))
+        return (
+            "<section id='start' class='tabpane active'>"
+            "<div class='grid2'>"
+            "<div class='card'><h3>Start here</h3>"
+            "<ol class='steps'>"
+            "<li>Open this HTML package. Treat the <b>Components</b> tab as your master checklist.</li>"
+            "<li>Use <b>Export for SmartDraw / Visio</b> in the EMS component library to download the SVG symbols.</li>"
+            "<li>In SmartDraw, create or select your custom library (for example <b>Singh360 EMS Hardware</b>) and import the SVGs.</li>"
+            "<li>Build the drawing on the floor plan: place the panel, controller, zones, cases, network items, then connect them.</li>"
+            "<li>Use <b>Copy (TSV)</b> or <b>Download CSV</b> to paste shape data into SmartDraw / Visio / Excel.</li>"
+            "<li>When done, save the finished drawing and keep this HTML as the human-readable reference.</li>"
+            "</ol>"
+            "</div>"
+            "<div class='card'><h3>What this package is</h3>"
+            f"<p class='lead'>This HTML is the project memory for <b>{_e(title)}</b>. It is not the finished drawing; it is the set of tables and instructions you use to build the drawing by hand in SmartDraw or Microsoft Visio.</p>"
+            "<p class='muted'>Use it like a recipe card: look at the counts, open the component tables, copy the rows you need, and place the matching symbols on your sheet.</p>"
+            f"<p class='muted'><b>Source files shown in the graph:</b> {_e(input_files or 'none recorded')}</p>"
+            "</div>"
+            "</div>"
+            "</section>"
+        )
+
+    def _source_map_section(self, source_summary) -> str:
+        src_rows = []
+        for src, count in sorted(source_summary["nodes"].items(), key=lambda kv: (-kv[1], kv[0])):
+            edge_count = source_summary["edges"].get(src, 0)
+            src_rows.append(
+                f"<tr><td>{_e(src)}</td><td class='num'>{count}</td><td class='num'>{edge_count}</td><td>feeds the component tables / connections tab</td></tr>"
+            )
+        if not src_rows:
+            src_rows.append("<tr><td colspan='4' class='muted'>No source files recorded.</td></tr>")
+
+        derivation_rows = []
+        for src in sorted(source_summary["nodes"].keys()):
+            if src == "(unknown)":
+                continue
+            derivation_rows.append(
+                f"<tr><td>{_e(src)}</td><td>{_e(self._source_description(src))}</td></tr>"
+            )
+
+        return (
+            "<section id='source' class='tabpane'>"
+            "<div class='grid2'>"
+            "<div class='card'><h3>How this was derived</h3>"
+            "<table class='data'><thead><tr><th>Source file</th><th>Nodes</th><th>Edges</th><th>What it feeds</th></tr></thead>"
+            f"<tbody>{''.join(src_rows)}</tbody></table>"
+            "</div>"
+            "<div class='card'><h3>Plain-English derivation</h3>"
+            "<table class='data'><thead><tr><th>File</th><th>Meaning</th></tr></thead>"
+            f"<tbody>{''.join(derivation_rows) if derivation_rows else '<tr><td colspan=\"2\" class=\"muted\">No derivation notes.</td></tr>'}</tbody></table>"
+            "</div>"
+            "</div>"
+            "<div class='card'><h3>Build order</h3>"
+            "<ol class='steps'>"
+            "<li><b>assets.csv</b> gives you the base components (panel, controller, sensors, zones).</li>"
+            "<li><b>control_matrix.csv</b> gives you the control chain (relay → contactor → load).</li>"
+            "<li><b>network.csv</b> gives you the comms path (device → switch → port).</li>"
+            "<li>The package HTML turns those rows into copyable tables and a checklist.</li>"
+            "</ol>"
+            "</div>"
+            "</section>"
+        )
+
+    def _source_description(self, src: str) -> str:
+        src_low = (src or "").lower()
+        if "assets" in src_low:
+            return "Base schedule rows: panels, controllers, zones, and component names."
+        if "control" in src_low:
+            return "Relay / contactor / load rows: the control chain for lighting and loads."
+        if "network" in src_low:
+            return "Network rows: device, switch, and port assignments."
+        return "Project data source used to populate the package tables."
 
     def _overview_section(self, graph, nodes, groups, stamp) -> str:
         by_cat: dict[str, int] = {}
@@ -381,6 +473,8 @@ _PAGE = """<!doctype html>
   table.data td.num, table.data th:last-child {{ }}
   .num {{ text-align:right; font-variant-numeric:tabular-nums; }}
   .muted {{ color:var(--muted); }}
+    .steps {{ margin:0; padding-left:18px; }}
+    .steps li {{ margin:6px 0; }}
   ul.list {{ margin:0; padding-left:18px; }}
   ul.list li {{ margin:3px 0; }}
   .toast {{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%);

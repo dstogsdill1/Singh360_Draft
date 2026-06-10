@@ -282,6 +282,10 @@ Deterministic and no-hallucination: it renders only what the schedules provide;
 blank cells mean a value was not supplied. `drawing_package.validate()` confirms
 the HTML structure. Accepts `--targets package` (aliases `html`, `drawingpkg`).
 
+The package also now carries a plain-English **Start Here** tab and a **How It Was
+Derived** tab, so the HTML itself doubles as the walkthrough when the 109 folder
+is cleaned down to just the package file.
+
 ### Getting the EMS symbol library into SmartDraw / Visio
 
 SmartDraw has no bulk "upload a library file" format — a custom library
