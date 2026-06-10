@@ -102,18 +102,18 @@ python main_generator.py `
     --assets sample_data/assets.csv `
     --control sample_data/control_matrix.csv `
     --network sample_data/network.csv `
-  --name "HEB SA31 Demo" --out-dir output --targets vson,vsdx,rdmxml,package
+  --name "HEB SA31 Lighting" --out-dir output --targets vson,vsdx,rdmxml,package
 ```
 
 Outputs land in `output/`:
 
-- `HEB_SA31_Demo.vson` — import into SmartDraw (VisualScript). The extension
+- `HEB_SA31_Lighting.vson` — import into SmartDraw (VisualScript). The extension
   **must** be `.vson` (SmartDraw also accepts `.sdon`/`.sdr`); it follows the
   official VSON Markup Language Reference (root `Shape` tree + `Returns`).
-- `HEB_SA31_Demo.vsdx` — open in Microsoft Visio.
-- `HEB_SA31_Demo.rdm.xml` — neutral RDM-oriented XML package with deterministic
+- `HEB_SA31_Lighting.vsdx` — open in Microsoft Visio.
+- `HEB_SA31_Lighting.rdm.xml` — neutral RDM-oriented XML package with deterministic
   node/edge ordering, coordinates, provenance, and symbol-library hints.
-- `HEB_SA31_Demo_package.html` — copy-paste-ready **drawing package** (see §4):
+- `HEB_SA31_Lighting_package.html` — copy-paste-ready **drawing package** (see §4):
   every component in clean tables to assemble the drawing yourself.
 
 The CLI prints a graph summary, a coordinate→shape flow legend, per‑target
@@ -164,8 +164,8 @@ sheet (the SA-31 spatial overlay). The `pipeline_cli.py` floorplan sheet picks
 these anchors up automatically:
 
 ```powershell
-python pipeline_cli.py "<raw HEB project folder>" --name "HEB 109 Bunker Hills" `
-    --out output/bh109 --sheets io_schedule,floorplan_layout --canvas archd
+python pipeline_cli.py "<raw HEB project folder>" --name "HEB SA31 Lighting" `
+  --out output/sa31 --sheets io_schedule,floorplan_layout --canvas archd
 ```
 
 ### IDF setup rules (`core/idf_builder.py`)
@@ -262,7 +262,7 @@ the data already gathered, named, and grouped.
 ```powershell
 python main_generator.py --assets sample_data/assets.csv `
     --control sample_data/control_matrix.csv --network sample_data/network.csv `
-    --name "HEB SA31 Demo" --out-dir output --targets package
+    --name "HEB SA31 Lighting" --out-dir output --targets package
 ```
 
 Tabs in the package:
