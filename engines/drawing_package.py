@@ -32,7 +32,7 @@ from pathlib import Path
 _PREFERRED_ATTR_ORDER = [
     "fixture", "make", "control_type", "control", "panel", "voltage",
     "set_point_f", "area", "connected_raw", "ip", "switch", "port", "vlan",
-    "sub_form", "spatial_source",
+    "sub_form", "issue_desc", "issue_reco", "issue_assign", "spatial_source",
 ]
 
 # Friendly column headers for known attribute keys.
@@ -51,6 +51,9 @@ _ATTR_LABELS = {
     "port": "Port",
     "vlan": "VLAN",
     "sub_form": "Description",
+    "issue_desc": "Scope / Issue",
+    "issue_reco": "Recommendation",
+    "issue_assign": "Assigned To",
     "spatial_source": "Spatial Source",
 }
 

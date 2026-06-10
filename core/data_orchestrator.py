@@ -155,6 +155,9 @@ class DataOrchestrator:
                             r.get("Fixture Type/Rack Type/Suction Temp/Make")
                         ),
                         "sub_form": _norm(r.get("Sub Form Category")),
+                        "issue_desc": _norm(r.get("Issue-Desc")),
+                        "issue_reco": _norm(r.get("Issue-Reco")),
+                        "issue_assign": _norm(r.get("Issue-Assign to")),
                     },
                     source=f"{path.name}:row{i + 2}",
                 )
