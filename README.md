@@ -13,6 +13,15 @@ and renders production diagrams for **SmartDraw** (VisualScript / VSON),
 
 ---
 
+## 🎨 Quick Start: Library Hub
+
+**All your component libraries are in one place:** Open **`start.html`** in your browser, go to the **Library Hub** tab. You'll find:
+
+- **EMS Components** — editable design symbols for controls, sensors, relays, timers
+- **RDM HVAC Widgets** — real equipment pictures (56 PNG/JPG + 176 total) for tanks, pipes, AHU, refrigeration
+
+This is your canonical reference for everything you can put on a drawing. **No hunting in multiple folders.**
+
 ## 1. What it does
 
 ```text
