@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Singh360 Component Library Hub</title>
+<style>
+  :root {
+    --navy: #0b3d63;
+    --blue: #0e8fd0;
+    --bg: #eef2f7;
+    --card: #ffffff;
+    --border: #d7dee6;
+    --text: #1a2733;
+    --muted: #6b7a8c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font: 14px/1.5 -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: var(--text); background: var(--bg); }
+  
+  header {
+    background: linear-gradient(135deg, var(--navy), #0a2c47);
+    color: #fff;
+    padding: 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+  header .sub { opacity: 0.85; font-size: 14px; margin-top: 6px; }
+  
+  .tabs {
+    display: flex;
+    gap: 0;
+    background: var(--navy);
+    padding: 0 14px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    flex-wrap: wrap;
+  }
+  .tab {
+    background: transparent;
+    border: 0;
+    color: #cfe3f3;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+  }
+  .tab:hover { color: #fff; }
+  .tab.active { color: #fff; border-bottom-color: var(--blue); font-weight: 600; }
+  
+  main {
+    padding: 24px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  
+  .tabpane { display: none; }
+  .tabpane.active { display: block; }
+  
+  .section {
+    margin-bottom: 32px;
+  }
+  .section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--blue);
+  }
+  
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .widget-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.15s;
+  }
+  .widget-card:hover {
+    box-shadow: 0 4px 12px rgba(11, 61, 99, 0.12);
+  }
+  .widget-img {
+    background: #f9fafc;
+    border-bottom: 1px solid var(--border);
+    padding: 12px;
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .widget-img img {
+    max-width: 100%;
+    max-height: 100px;
+    object-fit: contain;
+  }
+  .widget-svg {
+    max-width: 100%;
+    max-height: 100px;
+  }
+  .widget-info {
+    padding: 10px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .widget-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--navy);
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .widget-type {
+    font-size: 10px;
+    color: #999;
+    margin-top: 4px;
+    font-weight: 500;
+  }
+  
+  .stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .stat-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    text-align: center;
+  }
+  .stat-num {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--blue);
+  }
+  .stat-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  
+  .intro {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+  .intro p { margin: 0 0 12px; }
+  .intro p:last-child { margin: 0; }
+  .intro strong { color: var(--navy); }
+  
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎨 Singh360 Component Library Hub</h1>
+  <div class="sub">Your unified source for all EMS components & RDM HVAC/Refrigeration widgets</div>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main id="content"></main>
+
+<footer>
+  This is your canonical library reference. All components here are production-ready.
+</footer>
+
+<script>
+  const emsComponents = {
+    "Control": [
+      { name: "Relay", svg: '<svg viewBox="0 0 100 100"><rect x="10" y="30" width="80" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="30" cy="50" r="6" fill="currentColor"/><circle cx="70" cy="50" r="6" fill="currentColor"/><text x="50" y="55" text-anchor="middle" font-size="12" fill="currentColor">RELAY</text></svg>' },
+      { name: "Contactor", svg: '<svg viewBox="0 0 100 100"><rect x="15" y="25" width="70" height="50" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="30" cy="40" r="4" fill="currentColor"/><circle cx="50" cy="40" r="4" fill="currentColor"/><circle cx="70" cy="40" r="4" fill="currentColor"/><circle cx="30" cy="60" r="4" fill="currentColor"/><circle cx="50" cy="60" r="4" fill="currentColor"/><circle cx="70" cy="60" r="4" fill="currentColor"/></svg>' },
+      { name: "Timer", svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="35" fill="none" stroke="currentColor" stroke-width="2"/><path d="M50 20 L50 50 L70 65" stroke="currentColor" stroke-width="2" fill="none"/><text x="50" y="82" text-anchor="middle" font-size="11" fill="currentColor">TIMER</text></svg>' }
+    ],
+    "Sensor": [
+      { name: "Temperature Sensor", svg: '<svg viewBox="0 0 100 100"><rect x="35" y="20" width="30" height="60" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="50" cy="70" r="8" fill="currentColor"/><text x="50" y="50" text-anchor="middle" font-size="10" fill="currentColor">°C</text></svg>' },
+      { name: "Pressure Sensor", svg: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" stroke-width="2"/><path d="M50 30 L50 50 L65 60" stroke="currentColor" stroke-width="2" fill="none"/><text x="50" y="80" text-anchor="middle" font-size="11" fill="currentColor">PSI</text></svg>' },
+      { name: "Level Sensor", svg: '<svg viewBox="0 0 100 100"><rect x="20" y="25" width="60" height="50" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="20" y1="55" x2="80" y2="55" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3,3"/><circle cx="40" cy="40" r="4" fill="#0e8fd0"/><circle cx="60" cy="40" r="4" fill="#0e8fd0"/></svg>' }
+    ]
+  };
+
+  const rmdWidgetCategories = {
+    "Tank": 4,
+    "Pipes": 5,
+    "AHU": 6,
+    "Refrigeration": 5,
+    "Other": 6,
+    "Control Devices": 8
+  };
+
+  // Initialize tabs
+  const tabNames = ["Overview", "EMS Components", "RDM HVAC Widgets"];
+  const tabsEl = document.getElementById('tabs');
+  tabNames.forEach((name, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab' + (idx === 0 ? ' active' : '');
+    btn.textContent = name;
+    btn.onclick = () => switchTab(idx);
+    tabsEl.appendChild(btn);
+  });
+
+  let activeTab = 0;
+
+  function switchTab(idx) {
+    activeTab = idx;
+    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+    document.querySelectorAll('.tabpane').forEach((p, i) => p.classList.toggle('active', i === idx));
+  }
+
+  function renderOverview() {
+    return `
+      <div class="stats">
+        <div class="stat-box">
+          <div class="stat-num">50+</div>
+          <div class="stat-label">EMS Design Components</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">56</div>
+          <div class="stat-label">RDM Real-World Widgets (PNG/JPG)</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">176</div>
+          <div class="stat-label">RDM Total Files (incl. GIFs)</div>
+        </div>
+      </div>
+      <div class="intro">
+        <p><strong>Welcome to Singh360's unified component library.</strong> This is your <em>one place</em> to find everything you need to build MEP/R diagrams.</p>
+        <p><strong>EMS Components</strong> — illustrated, editable design symbols. Use these in drawing layouts to show control logic, sensors, relays, and contractor chains.</p>
+        <p><strong>RDM HVAC Widgets</strong> — real hardware pictures from the RDM Layout Editor. Use these for mechanical equipment, tanks, pipes, AHU, refrigeration, and controls.</p>
+        <p style="margin-top:16px; padding-top:16px; border-top: 1px solid #ddd;"><strong>How to use:</strong></p>
+        <ul style="margin: 8px 0 0 20px; padding: 0;">
+          <li>Browse the <strong>EMS Components</strong> tab to see editable design symbols.</li>
+          <li>Browse the <strong>RDM HVAC Widgets</strong> tab to see real equipment pictures.</li>
+          <li>Copy filenames or export symbols as needed for SmartDraw/Visio.</li>
+        </ul>
+      </div>
+    `;
+  }
+
+  function renderEMS() {
+    let html = '<div class="stats"><div class="stat-box"><div class="stat-num">' + Object.values(emsComponents).flat().length + '</div><div class="stat-label">Total Components</div></div></div>';
+    
+    Object.entries(emsComponents).forEach(([category, items]) => {
+      html += `<div class="section"><div class="section-title">${category}</div><div class="gallery">`;
+      items.forEach(item => {
+        html += `
+          <div class="widget-card">
+            <div class="widget-img">
+              <svg class="widget-svg" viewBox="0 0 100 100" fill="none" stroke="#0e8fd0" stroke-linecap="round" stroke-linejoin="round">
+                ${item.svg}
+              </svg>
+            </div>
+            <div class="widget-info">
+              <div class="widget-name">${item.name}</div>
+              <div class="widget-type">EMS Design</div>
+            </div>
+          </div>
+        `;
+      });
+      html += '</div></div>';
+    });
+    
+    html += `
+      <div class="intro" style="margin-top: 32px;">
+        <p><strong>Need more components?</strong> Open <a href="component-library.html" target="_blank" rel="noopener">ems/component-library.html</a> to see the complete editable library with export options.</p>
+      </div>
+    `;
+    
+    return html;
+  }
+
+  function renderRDM() {
+    let html = '<div class="stats"><div class="stat-box"><div class="stat-num">56</div><div class="stat-label">PNG/JPG (SmartDraw Ready)</div></div><div class="stat-box"><div class="stat-num">176</div><div class="stat-label">All Files (incl. GIFs)</div></div></div>';
+    
+    Object.entries(rmdWidgetCategories).forEach(([category, count]) => {
+      html += `<div class="section"><div class="section-title">${category} (${count} files)</div><p style="font-size: 13px; color: #666; margin-bottom: 12px;">Real images from RDM Layout Editor installation</p><div style="background: #f9f9f9; border: 1px solid #ddd; border-radius: 6px; padding: 14px; color: #666; font-size: 13px;">📁 Open <strong>output/SA31/RDM_Widget_Import/index.html</strong> in your browser to see all ${count} ${category.toLowerCase()} images with previews.</div></div>`;
+    });
+    
+    html += `
+      <div class="intro" style="margin-top: 32px;">
+        <p><strong>RDM Widget Browser:</strong> A full gallery index of all 56 PNG/JPG files is at <code>output/SA31/RDM_Widget_Import/index.html</code>. Open it in your browser to:</p>
+        <ul style="margin: 8px 0 0 20px; padding: 0;">
+          <li>See live previews of every widget</li>
+          <li>Organize by category (Tank, Pipes, AHU, Refrigeration, Other, Control Devices)</li>
+          <li>Copy filenames for SmartDraw import</li>
+          <li>Access the full 176-file library</li>
+        </ul>
+        <p style="margin-top: 12px;"><strong>SmartDraw import workflow:</strong> In SmartDraw, go <strong>Insert → Picture</strong> and navigate to <code>output/SA31/RDM_Widget_Import/png_jpg_compat/</code>. Drag images onto your canvas.</p>
+      </div>
+    `;
+    
+    return html;
+  }
+
+  function render() {
+    const contentEl = document.getElementById('content');
+    let html = '';
+    
+    if (activeTab === 0) html = renderOverview();
+    else if (activeTab === 1) html = renderEMS();
+    else if (activeTab === 2) html = renderRDM();
+    
+    contentEl.innerHTML = html.split('</main>').join('');
+  }
+
+  render();
+  window.switchTab = switchTab;
+</script>
+</body>
+</html>
