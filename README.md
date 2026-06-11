@@ -317,6 +317,22 @@ real hex, a white background added), so it imports cleanly without this page's
 stylesheet. Then in SmartDraw: **Symbol Libraries → Add New → name it
 "Singh360 EMS" → import each SVG**. In Visio, drag the SVGs onto a new stencil.
 
+### RDM Layout Editor widget library (real hardware pictures)
+
+The **real** HVAC/Refrigeration widget pictures from the RDM Layout Editor installation are staged at:
+
+- **`output/SA31/RDM_Widget_Import/index.html`** — Live gallery showing **56 PNG/JPG-compatible images** (start here for SmartDraw) + all 176 files (GIFs included).
+
+**To add RDM widgets to your SmartDraw drawing:**
+
+1. Open the **`index.html`** in your browser (PNG/JPG tab is the recommended set for SmartDraw).
+2. Note the filename of each widget you want (e.g., `Images_Tank_horizontal tank.png`).
+3. In SmartDraw: **Insert → Picture**, then navigate to `Singh360_SmartDraw/output/SA31/RDM_Widget_Import/png_jpg_compat/`.
+4. Drag each image onto your drawing canvas.
+5. (Optional) Create a **Symbol Library**: right-click the image → **Create Symbol** (it will appear in your library for reuse).
+
+> These are the **exact images from the RDM Layout Editor** (installed at `c:\Program Files (x86)\RDM Layout Editor 3\Images/` and `Library\Pictures\GPDevices/`). No approximations — they're production-ready MEP widget art.
+
 ### SmartDraw VSON (`engines/smartdraw_vson.py`)
 
 Emits the **official VSON document** from SmartDraw's
