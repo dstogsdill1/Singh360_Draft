@@ -15,6 +15,9 @@ output/
 # Web bridge job sandbox (uploads + per-run outputs)
 .jobs/
 
+# Live document editor — JSON docs + exported PDFs (never commit customer docs)
+.docs/
+
 # Local probes / scratch (never customer data in the repo)
 _inspect_*.py
 _probe_*.py

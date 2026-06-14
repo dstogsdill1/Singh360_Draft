@@ -6,6 +6,10 @@ openpyxl>=3.1   # read raw MEP schedule .xlsx workbooks (--schedule-xlsx)
 # the local server (python server.py); the CLI pipeline runs without it.
 flask>=3.0,<4
 
+# Live Document Editor — headless PDF export via server.py /api/export/pdf/<id>
+# After installing: playwright install chromium
+playwright>=1.40
+
 # Optional — live Azure Document Intelligence spatial ingestion path only.
 # The deterministic CSV/VSON/VSDX pipeline runs without these.
 azure-ai-documentintelligence>=1.0.0
