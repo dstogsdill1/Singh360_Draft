@@ -303,6 +303,14 @@
 
     .source-ref-panel { display: grid; gap: 8px; }
 
+    .quick-help {
+      margin-top: 12px; font-size: 12px; line-height: 1.55;
+      color: #334155; background: #fff; border: 1px solid #d6dbe3;
+      border-radius: 10px; padding: 10px 12px;
+    }
+    .quick-help b { color: #0b3d63; }
+    .quick-help ul { margin: 6px 0 0 18px; }
+
     .sb-page-list { display: grid; gap: 8px; margin-bottom: 8px; }
     .sb-page-btn {
       width: 100%; text-align: left; border: 1px solid #d6dbe3; background: #fff;
@@ -557,6 +565,15 @@
         <div class="sb-meta-label mt-10">Source References</div>
         <div id="source-ref-list" class="source-ref-list source-ref-panel">
           <span class="source-ref-empty">No linked source files.</span>
+        </div>
+        <div class="quick-help">
+          <b>How this works</b>
+          <ul>
+            <li>Click <b>My Docs</b> to open/load a document.</li>
+            <li>Use page tabs to edit Scope, Materials, Drawing, and Notes.</li>
+            <li>On Drawing, use the tools to annotate over the preview.</li>
+            <li>Click <b>Save</b>, then <b>Export PDF</b>.</li>
+          </ul>
         </div>
       </div>
     </aside>
@@ -1238,6 +1255,10 @@ function populateDoc(data) {
     fabricCanvas.clear();
     fabricCanvas.backgroundColor = '#ffffff';
     fabricCanvas.renderAll();
+
+    if (data.previewImageHref) {
+      loadPreviewToCanvas(data.previewImageHref);
+    }
   }
 
   setSaveStatus('saved', data.modified);
@@ -1247,7 +1268,7 @@ function populateDoc(data) {
 //  DOC LIST OVERLAY
 // ══════════════════════════════════════════════════════════════════
 async function openDocList() {
-  qs('#doc-list-overlay').style.display = 'flex';
+  qs('#doc-list-overlay').classList.remove('is-hidden');
   const listEl = qs('#dlc-list');
   listEl.innerHTML = '<div class="dlc-empty">Loading…</div>';
   try {
@@ -1287,7 +1308,7 @@ async function openDocList() {
 }
 
 function closeDocList() {
-  qs('#doc-list-overlay').style.display = 'none';
+  qs('#doc-list-overlay').classList.add('is-hidden');
 }
 
 // Close overlay when clicking the backdrop
@@ -1320,6 +1341,28 @@ function renderSourceRefs(refs) {
       <span class="source-ref-path">${esc(r.path || '')}</span>
     </a>
   `).join('');
+}
+
+function loadPreviewToCanvas(href) {
+  if (!fabricCanvas || !href) return;
+  fabric.Image.fromURL(href, img => {
+    if (!img) return;
+    const maxW = Math.max(400, fabricCanvas.getWidth() - 40);
+    const maxH = Math.max(240, fabricCanvas.getHeight() - 40);
+    const scale = Math.min(maxW / img.width, maxH / img.height);
+    img.set({
+      left: 20,
+      top: 20,
+      scaleX: scale,
+      scaleY: scale,
+      selectable: true,
+      evented: true,
+    });
+    fabricCanvas.add(img);
+    fabricCanvas.sendToBack(img);
+    fabricCanvas.renderAll();
+    setActivePage('sec-canvas');
+  }, { crossOrigin: 'anonymous' });
 }
 
 // ══════════════════════════════════════════════════════════════════

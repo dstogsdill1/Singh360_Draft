@@ -471,6 +471,24 @@ def _build_sa31_template_doc(doc_id: str = "sa31_template", as_working_copy: boo
             {"label": "SA31 network.csv", "path": str(SA31_SOURCE_DIR / "network.csv"), "href": "/api/source/sa31/source/network.csv"},
         ])
 
+    preview_path = _pick_sa31_preview_image()
+    if preview_path is not None:
+        rel = preview_path.relative_to(SA31_DIR).as_posix()
+        refs.append({
+            "label": "SA31 drawing preview image",
+            "path": str(preview_path),
+            "href": f"/api/source/sa31/{rel}",
+        })
+        doc["previewImageHref"] = f"/api/source/sa31/{rel}"
+
+    editable_pdf = SA31_DIR / "HEB_SA31_Lighting_Editable (2).pdf"
+    if editable_pdf.exists():
+        refs.append({
+            "label": "SA31 reference PDF",
+            "path": str(editable_pdf),
+            "href": "/api/source/sa31/HEB_SA31_Lighting_Editable%20(2).pdf",
+        })
+
     bom_rows: list[dict[str, str]] = []
     assets_csv = SA31_SOURCE_DIR / "assets.csv"
     if assets_csv.exists():
@@ -505,8 +523,29 @@ def _build_sa31_template_doc(doc_id: str = "sa31_template", as_working_copy: boo
         "<p><b>Template lineage:</b> This document points back to the current SA31 source files, "
         "so your live document can be edited and re-exported without moving those files.</p>"
         "<p>Use <i>All Docs</i> to duplicate this pattern for future stores.</p>"
+        "<p><b>How to start quickly:</b> Open the <i>Drawing</i> page tab to see the seeded SA31 preview, "
+        "then trace/annotate directly and export PDF.</p>"
     )
     return doc
+
+
+def _pick_sa31_preview_image() -> Path | None:
+    if not SA31_DIR.exists():
+        return None
+    preferred_names = [
+        "RDM Lighting Control.png",
+        "Lighting Control Ecosystem-1-5.png",
+        "Lighting Control Ecosystem-6-10.png",
+    ]
+    for name in preferred_names:
+        p = SA31_DIR / name
+        if p.exists():
+            return p
+    for ext in ("*.png", "*.jpg", "*.jpeg", "*.webp"):
+        found = sorted(SA31_DIR.glob(ext))
+        if found:
+            return found[0]
+    return None
 
 
 # Playwright snippet executed in a subprocess for PDF export.
