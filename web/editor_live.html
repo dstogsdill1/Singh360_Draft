@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Singh360 Live Document Editor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy: #0b3d63;
+      --blue: #0e8fd0;
+      --teal: #1a7c9b;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --slide-bg: linear-gradient(160deg, #d6eefa 0%, #b3d8f0 45%, #8abedd 100%);
+      --font: 'Segoe UI', 'Inter', system-ui, sans-serif;
+    }
+    html, body { height: 100%; font-family: var(--font); background: #3a3a3a; color: #1f2937; -webkit-font-smoothing: antialiased; }
+    #app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* ── TOP BAR ── */
+    #topbar {
+      height: 50px; flex-shrink: 0;
+      background: linear-gradient(90deg, #061f33 0%, var(--navy) 45%, var(--blue) 100%);
+      display: flex; align-items: center; gap: 10px; padding: 0 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35); z-index: 100;
+    }
+    .tb-logo { height: 26px; object-fit: contain; flex-shrink: 0; }
+    .tb-div  { width: 1px; height: 24px; background: rgba(255,255,255,0.18); flex-shrink: 0; }
+    .tb-crumb { font-size: 11px; color: rgba(255,255,255,0.5); white-space: nowrap; }
+    .tb-crumb a { color: rgba(255,255,255,0.6); text-decoration: none; }
+    .tb-crumb a:hover { text-decoration: underline; }
+    #doc-title-input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: #fff; font-family: var(--font); font-size: 14px; font-weight: 600;
+      border-bottom: 1px solid transparent; padding: 2px 4px; transition: border-color .15s;
+    }
+    #doc-title-input:focus { border-bottom-color: rgba(255,255,255,0.35); }
+    #save-status { font-size: 11px; color: rgba(255,255,255,0.55); white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+    .save-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.2); transition: background .2s; }
+    .save-dot.saving { background: var(--amber); animation: pulse .8s infinite; }
+    .save-dot.saved  { background: var(--green); }
+    .save-dot.error  { background: var(--red); }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+    .tb-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: 1px solid rgba(255,255,255,0.22); border-radius: 6px;
+      background: rgba(255,255,255,0.09); color: #fff; cursor: pointer;
+      font-family: var(--font); font-size: 11.5px; font-weight: 500;
+      padding: 5px 11px; white-space: nowrap; transition: background .13s;
+    }
+    .tb-btn:hover { background: rgba(255,255,255,0.17); }
+    .tb-btn.accent { background: rgba(14,143,208,0.35); border-color: rgba(14,143,208,0.5); }
+    .tb-btn.accent:hover { background: rgba(14,143,208,0.5); }
+    .tb-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+    /* ── WORKSPACE ── */
+    #workspace { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── LEFT EDIT PANEL ── */
+    #edit-panel {
+      width: 272px; min-width: 272px; flex-shrink: 0;
+      background: #eef1f6; border-right: 1px solid #c5d0de;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    #edit-scroll { flex: 1; overflow-y: auto; padding: 12px 12px 28px; }
+
+    .ep-sec { background: #fff; border: 1px solid #d4dce8; border-radius: 9px; margin-bottom: 10px; overflow: hidden; }
+    .ep-sec-hd {
+      background: linear-gradient(90deg, var(--navy) 0%, var(--blue) 100%);
+      color: #fff; padding: 7px 11px;
+      font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+      cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;
+    }
+    .chev { transition: transform .18s; }
+    .ep-sec.closed .chev { transform: rotate(-90deg); }
+    .ep-sec.closed .ep-bd { display: none; }
+    .ep-bd { padding: 10px 11px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+    .ep-fld { display: flex; flex-direction: column; gap: 3px; }
+    .ep-fld label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+    .ep-fld input, .ep-fld select, .ep-fld textarea {
+      border: 1px solid #cdd6e2; border-radius: 5px; padding: 5px 7px;
+      font-family: var(--font); font-size: 11.5px; color: #1f2937;
+      background: #fff; outline: none; width: 100%; transition: border-color .13s;
+    }
+    .ep-fld input:focus, .ep-fld select:focus, .ep-fld textarea:focus { border-color: var(--blue); }
+    .ep-fld textarea { resize: vertical; min-height: 100px; line-height: 1.55; font-size: 11px; }
+
+    /* BOM table */
+    .bom-tbl { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    .bom-tbl thead th {
+      background: #e6eef5; color: #334155; padding: 4px 5px;
+      text-align: left; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+      border-bottom: 1px solid #c5d0de;
+    }
+    .bom-tbl td { padding: 0; border-bottom: 1px solid #edf2f7; }
+    .bom-tbl td [contenteditable] {
+      display: block; padding: 4px 5px; outline: none; min-height: 24px;
+      font-family: var(--font); font-size: 10.5px; color: #1f2937; word-break: break-word;
+    }
+    .bom-tbl td [contenteditable]:focus { background: #fffef0; }
+    .bom-tbl tr:hover { background: #f2f8fe; }
+    .bom-tbl td:first-child { width: 24px; }
+    .bom-tbl td:nth-child(3) { width: 32px; }
+    .btn-add-row {
+      display: flex; align-items: center; gap: 4px; padding: 5px 0 0;
+      font-size: 10.5px; color: #64748b; cursor: pointer; border: none; background: none; font-family: var(--font);
+    }
+    .btn-add-row:hover { color: var(--navy); }
+
+    /* Image thumbnails */
+    .img-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .img-thumb {
+      aspect-ratio: 4/3; border-radius: 5px; overflow: hidden;
+      border: 2px solid #d0dae6; background: #e5eaf0; cursor: pointer; transition: border-color .12s;
+    }
+    .img-thumb:hover { border-color: var(--blue); }
+    .img-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .img-thumb-empty { display: flex; align-items: center; justify-content: center; font-size: 9px; color: #94a3b8; padding: 8px; text-align: center; }
+    .upload-lbl {
+      display: flex; align-items: center; gap: 4px; padding: 5px 0 0;
+      font-size: 10.5px; color: #64748b; cursor: pointer; border: none; background: none; font-family: var(--font);
+    }
+    .upload-lbl:hover { color: var(--navy); }
+
+    /* ── RIGHT PREVIEW AREA ── */
+    #preview-area {
+      flex: 1; background: #3c3c3c;
+      overflow-y: auto; padding: 22px 22px 40px;
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+    }
+
+    /* ── SLIDE ── (renders like Singh360 branded A3 landscape slide) */
+    .slide {
+      width: min(calc(100%), 1100px);
+      aspect-ratio: 420 / 297;  /* A3 landscape */
+      background: var(--slide-bg);
+      border-radius: 8px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+      position: relative;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    /* Singh360 footer bar on every slide */
+    .slide-foot {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 14px 5px;
+      background: rgba(255,255,255,0.6);
+      border-top: 1px solid rgba(11,61,99,0.18);
+      font-size: clamp(6px, 0.75vw, 8.5px); font-weight: 700; color: #1a3a52; letter-spacing: .03em;
+    }
+    .slide-foot-logo { height: 20px; object-fit: contain; opacity: 0.85; }
+
+    /* White card floating over the slide background */
+    .slide-card {
+      position: absolute;
+      top: 6%; left: 3.5%; right: 3.5%; bottom: 9.5%;
+      background: #fff;
+      border-radius: 5px;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      box-shadow: 0 3px 16px rgba(0,0,0,0.13);
+    }
+    .card-hd {
+      background: linear-gradient(90deg, #0b3d63 0%, #0e8fd0 100%);
+      color: #fff;
+      padding: clamp(5px, 1.2%, 16px) clamp(8px, 2%, 22px);
+      font-size: clamp(8px, 1.2vw, 16px); font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+      flex-shrink: 0;
+    }
+    .card-body {
+      flex: 1; overflow: hidden;
+      padding: clamp(5px, 1.2%, 16px) clamp(8px, 2%, 22px);
+      font-size: clamp(7px, 0.88vw, 12px); line-height: 1.55;
+    }
+
+    /* ── COVER SLIDE ── */
+    .slide.cover .slide-card {
+      align-items: center; justify-content: center; text-align: center; gap: clamp(4px, 1%, 12px);
+    }
+    .cover-main-title {
+      font-size: clamp(11px, 2vw, 26px); font-weight: 800; color: #0b3d63;
+      line-height: 1.2; max-width: 85%;
+    }
+    .cover-bullets {
+      list-style: disc; text-align: left; padding-left: 20px;
+      font-size: clamp(7px, 0.9vw, 12px); color: #334155; line-height: 2;
+      max-width: 85%;
+    }
+
+    /* ── SCOPE SLIDE ── */
+    .scope-outer { width: 100%; border-collapse: collapse; }
+    .scope-outer .s-header-row td {
+      background: #0b3d63; color: #fff; padding: clamp(4px,0.9%,12px) clamp(6px,1.5%,18px);
+      font-weight: 700; font-size: clamp(6px, 0.8vw, 11px); text-align: center;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .scope-outer td { border: 1px solid #cfd8e4; padding: clamp(3px,0.7%,9px) clamp(5px,1.2%,14px); vertical-align: top; }
+    .scope-outer .s-section-hd td { font-weight: 700; background: #eaf2f9; font-size: clamp(6px,0.8vw,11px); }
+    .scope-outer .s-body-row td { font-size: clamp(6px,0.78vw,10.5px); }
+
+    /* ── BOM SLIDE ── */
+    .bom-preview-tbl { width: 100%; border-collapse: collapse; }
+    .bom-preview-tbl thead th {
+      background: linear-gradient(90deg, #0b3d63 0%, #0e8fd0 100%);
+      color: #fff; padding: clamp(3px,0.9%,10px) clamp(5px,1.2%,13px);
+      text-align: left; font-size: clamp(6px,0.78vw,10px); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .bom-preview-tbl tbody tr:nth-child(even) { background: #f3f8fc; }
+    .bom-preview-tbl tbody td { padding: clamp(2px,0.6%,8px) clamp(5px,1.2%,13px); border-bottom: 1px solid #d8e5ed; font-size: clamp(6px,0.78vw,10px); color: #1f2937; }
+
+    /* ── DRAWING SLIDE ── */
+    .slide.drawing .slide-card { overflow: hidden; }
+    .slide.drawing .card-body { padding: clamp(4px,1%,12px); display: flex; align-items: center; justify-content: center; }
+    .slide.drawing .card-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .no-img-hint { color: #94a3b8; font-size: clamp(7px, 0.85vw, 12px); text-align: center; }
+
+    /* ── NOTES SLIDE ── */
+    #slide-notes .card-body { font-size: clamp(7px, 0.88vw, 12px); line-height: 1.65; overflow-y: auto; }
+
+    /* ── DOC LIST OVERLAY ── */
+    #doc-list-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(6,31,51,0.88); display: flex; align-items: center; justify-content: center;
+    }
+    .dlc { background: #fff; border-radius: 12px; width: 540px; max-width: 95vw; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 20px 70px rgba(0,0,0,0.45); }
+    .dlc-hd { display: flex; align-items: center; gap: 10px; padding: 18px 20px; border-bottom: 1px solid #e2e8f0; }
+    .dlc-hd h2 { font-size: 16px; font-weight: 700; color: var(--navy); flex: 1; }
+    .dlc-hd-logo { height: 28px; }
+    .dlc-btn { display: inline-flex; align-items: center; gap: 5px; background: var(--blue); color: #fff; border: none; border-radius: 6px; padding: 7px 14px; font-family: var(--font); font-size: 11.5px; font-weight: 600; cursor: pointer; }
+    .dlc-btn:hover { background: #0d82bd; }
+    .dlc-btn.alt { background: var(--navy); }
+    .dlc-btn.alt:hover { background: #0a3357; }
+    .dlc-list { overflow-y: auto; flex: 1; }
+    .dlc-empty { padding: 36px; text-align: center; color: #94a3b8; font-size: 13px; }
+    .dlc-item { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid #edf2f8; cursor: pointer; transition: background .1s; }
+    .dlc-item:hover { background: #f0f8fd; }
+    .dlc-icon { width: 34px; height: 34px; border-radius: 7px; background: #e0f2fe; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .dlc-meta { flex: 1; min-width: 0; }
+    .dlc-title { font-size: 13px; font-weight: 600; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dlc-sub { font-size: 10.5px; color: #94a3b8; margin-top: 1px; }
+    .dlc-badge { font-size: 8.5px; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 8px; }
+    .dlc-badge.preliminary { background: #dbeafe; color: #1e40af; }
+    .dlc-badge.final { background: #dcfce7; color: #166534; }
+    .dlc-badge.draft { background: #fef9c3; color: #854d0e; }
+    .dlc-badge.for-construction { background: #ffe4e6; color: #9f1239; }
+    .dlc-del { background: none; border: none; cursor: pointer; color: #cbd5e1; padding: 3px; border-radius: 4px; line-height: 0; }
+    .dlc-del:hover { color: var(--red); }
+    .dlc-footer { padding: 12px 20px; border-top: 1px solid #e2e8f0; text-align: center; }
+    .dlc-footer a { font-size: 12px; color: var(--blue); text-decoration: none; }
+    .dlc-footer a:hover { text-decoration: underline; }
+
+    .is-hidden { display: none !important; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #b0bec5; border-radius: 3px; }
+
+    /* ── PRINT STYLES ── */
+    @media print {
+      @page { size: A3 landscape; margin: 0; }
+      html, body { height: auto; background: white; }
+      #app { height: auto; overflow: visible; }
+      #topbar, #edit-panel, #doc-list-overlay { display: none !important; }
+      #workspace { display: block; overflow: visible; }
+      #preview-area { background: white; padding: 0; gap: 0; display: block; overflow: visible; }
+      .slide {
+        width: 100% !important; border-radius: 0; box-shadow: none;
+        break-after: page; page-break-after: always; break-inside: avoid;
+      }
+      .slide:last-child { break-after: auto; page-break-after: auto; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── TOP BAR ── -->
+  <header id="topbar">
+    <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="tb-logo" onerror="this.style.display='none'" />
+    <div class="tb-div"></div>
+    <span class="tb-crumb"><a href="/">SmartDraw</a> / Live Editor</span>
+    <input id="doc-title-input" type="text" placeholder="Document Title" autocomplete="off" />
+    <div id="save-status">
+      <span class="save-dot" id="save-dot"></span>
+      <span id="save-text">—</span>
+    </div>
+    <div class="tb-div"></div>
+    <button class="tb-btn" id="btn-my-docs">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+      My Docs
+    </button>
+    <button class="tb-btn" id="btn-save">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5h11l3 3v11H5zM7 5v6h8V5M9 18h6"/></svg>
+      Save
+    </button>
+    <button class="tb-btn accent" id="btn-print">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+      Export PDF
+    </button>
+  </header>
+
+  <!-- ── WORKSPACE ── -->
+  <div id="workspace">
+
+    <!-- LEFT: EDIT PANEL -->
+    <aside id="edit-panel">
+      <div id="edit-scroll">
+
+        <!-- Project Header -->
+        <div class="ep-sec" id="eps-hdr">
+          <div class="ep-sec-hd" onclick="toggleSec('eps-hdr')">Project Header <span class="chev">▾</span></div>
+          <div class="ep-bd">
+            <div class="ep-fld"><label>Project Name / Title</label><input type="text" id="f-project-name" placeholder="H-E-B SA #31 — HEB 102" /></div>
+            <div class="ep-fld"><label>Project Number</label><input type="text" id="f-project-no" placeholder="SA-31" /></div>
+            <div class="ep-fld"><label>Site Address</label><input type="text" id="f-site-address" placeholder="8503 NW Military Hwy, San Antonio, TX" /></div>
+            <div class="ep-fld"><label>Date</label><input type="text" id="f-date" placeholder="06/11/2026" /></div>
+            <div class="ep-fld"><label>Sheet Title</label><input type="text" id="f-sheet-title" placeholder="LIGHT DIMMING &amp; EMS INTEGRATION" /></div>
+            <div class="ep-fld"><label>Prepared By</label><input type="text" id="f-prepared-by" placeholder="Singh360 Engineer Team" /></div>
+            <div class="ep-fld">
+              <label>Status</label>
+              <select id="f-status">
+                <option>Preliminary</option>
+                <option>For Review</option>
+                <option>For Construction</option>
+                <option>Final</option>
+                <option>Draft</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scope of Work -->
+        <div class="ep-sec" id="eps-scope">
+          <div class="ep-sec-hd" onclick="toggleSec('eps-scope')">Scope of Work <span class="chev">▾</span></div>
+          <div class="ep-bd">
+            <div class="ep-fld"><textarea id="f-scope" style="min-height:180px" placeholder="Enter scope of work...&#10;&#10;Use lines starting with a number (1., 2.) for section headers."></textarea></div>
+          </div>
+        </div>
+
+        <!-- Bill of Materials -->
+        <div class="ep-sec" id="eps-bom">
+          <div class="ep-sec-hd" onclick="toggleSec('eps-bom')">Bill of Materials <span class="chev">▾</span></div>
+          <div class="ep-bd">
+            <table class="bom-tbl">
+              <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Make/Model</th></tr></thead>
+              <tbody id="bom-edit-body"></tbody>
+            </table>
+            <button class="btn-add-row" id="btn-add-bom">
+              <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+              Add Row
+            </button>
+          </div>
+        </div>
+
+        <!-- Drawing Images -->
+        <div class="ep-sec" id="eps-drawings">
+          <div class="ep-sec-hd" onclick="toggleSec('eps-drawings')">Drawing Images <span class="chev">▾</span></div>
+          <div class="ep-bd">
+            <div id="img-grid" class="img-grid"></div>
+            <label class="upload-lbl" style="margin-top:6px">
+              <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+              Add Drawing Image
+              <input type="file" id="img-upload" accept="image/*" class="is-hidden" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="ep-sec" id="eps-notes">
+          <div class="ep-sec-hd" onclick="toggleSec('eps-notes')">General Notes <span class="chev">▾</span></div>
+          <div class="ep-bd">
+            <div class="ep-fld"><textarea id="f-notes" style="min-height:90px" placeholder="General notes and remarks..."></textarea></div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- RIGHT: LIVE PREVIEW -->
+    <div id="preview-area">
+
+      <!-- SLIDE 1: COVER -->
+      <div class="slide cover" id="slide-cover">
+        <div class="slide-card">
+          <p class="cover-main-title" id="prev-main-title">PROJECT TITLE</p>
+          <ul class="cover-bullets">
+            <li id="prev-cover-addr">Site Address</li>
+            <li><strong>EMS CONTROLS DOCUMENTATION</strong> · Singh360</li>
+            <li id="prev-cover-date-li">Date</li>
+            <li><strong>Prepared by:</strong> <span id="prev-cover-prepby">Singh360 Engineer Team</span></li>
+            <li><strong>Status:</strong> <span id="prev-cover-status">Preliminary</span></li>
+          </ul>
+        </div>
+        <div class="slide-foot">
+          <span>PROJECT: <span class="ft-proj"></span></span>
+          <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="slide-foot-logo" onerror="this.style.display='none'" />
+          <span><span class="ft-date"></span> · PAGE: 1</span>
+        </div>
+      </div>
+
+      <!-- SLIDE 2: SCOPE OF WORK -->
+      <div class="slide" id="slide-scope">
+        <div class="slide-card">
+          <div class="card-hd" id="prev-scope-title">SINGH360 EMS Project Scope</div>
+          <div class="card-body" style="overflow-y:auto">
+            <table class="scope-outer">
+              <thead><tr class="s-header-row"><td id="prev-scope-header">PROJECT SCOPE</td></tr></thead>
+              <tbody id="prev-scope-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>PROJECT: <span class="ft-proj"></span></span>
+          <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="slide-foot-logo" onerror="this.style.display='none'" />
+          <span><span class="ft-date"></span> · PAGE: 2</span>
+        </div>
+      </div>
+
+      <!-- SLIDE 3: BILL OF MATERIALS -->
+      <div class="slide" id="slide-bom">
+        <div class="slide-card">
+          <div class="card-hd">SINGH360 Bill of Materials</div>
+          <div class="card-body" style="overflow-y:auto">
+            <table class="bom-preview-tbl">
+              <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Make / Model</th><th>Notes</th></tr></thead>
+              <tbody id="prev-bom-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>PROJECT: <span class="ft-proj"></span></span>
+          <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="slide-foot-logo" onerror="this.style.display='none'" />
+          <span><span class="ft-date"></span> · PAGE: 3</span>
+        </div>
+      </div>
+
+      <!-- DRAWING SLIDES (dynamic) -->
+      <div id="drawing-slides"></div>
+
+      <!-- LAST SLIDE: NOTES -->
+      <div class="slide" id="slide-notes">
+        <div class="slide-card">
+          <div class="card-hd">General Notes</div>
+          <div class="card-body" id="prev-notes-body" style="overflow-y:auto">
+            <em style="color:#94a3b8">No notes entered.</em>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>PROJECT: <span class="ft-proj"></span></span>
+          <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="slide-foot-logo" onerror="this.style.display='none'" />
+          <span><span class="ft-date"></span></span>
+        </div>
+      </div>
+
+    </div><!-- /#preview-area -->
+  </div><!-- /#workspace -->
+</div><!-- /#app -->
+
+<!-- DOC LIST OVERLAY -->
+<div id="doc-list-overlay" class="is-hidden">
+  <div class="dlc">
+    <div class="dlc-hd">
+      <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="dlc-hd-logo" onerror="this.style.display='none'" />
+      <h2>Engineering Documents</h2>
+      <button class="dlc-btn" id="dlc-new">
+        <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+        New Blank
+      </button>
+      <button class="dlc-btn alt" id="dlc-sa31">+ SA31 Copy</button>
+    </div>
+    <div class="dlc-list" id="dlc-list"><div class="dlc-empty">Loading…</div></div>
+    <div class="dlc-footer"><a href="/">← SmartDraw Generator</a></div>
+  </div>
+</div>
+
+<script>
+// ─────────────────── STATE ───────────────────
+let docId = null;
+let docImages = [];   // [{label, href}]
+let saveTimer = null;
+const params = new URLSearchParams(location.search);
+
+// ─────────────────── INIT ───────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  qs('#btn-my-docs').onclick = openDocList;
+  qs('#btn-save').onclick = () => { clearTimeout(saveTimer); saveDoc(); };
+  qs('#btn-print').onclick = () => window.print();
+  qs('#dlc-new').onclick   = () => createDoc('blank');
+  qs('#dlc-sa31').onclick  = () => createDoc('sa31');
+  qs('#doc-title-input').oninput = scheduleSave;
+  qs('#doc-list-overlay').onclick = e => { if (e.target === qs('#doc-list-overlay') && docId) closeDocList(); };
+  qs('#btn-add-bom').onclick = () => { addBomRow({}); updateBomPreview(); scheduleSave(); };
+  qs('#img-upload').onchange = handleImgUpload;
+  bindEdits();
+  initKeyboard();
+
+  const id = params.get('doc');
+  if (id) await loadDoc(id);
+  else await openDocList();
+});
+
+// ─────────────────── LIVE BINDINGS ───────────────────
+function bindEdits() {
+  const ids = ['#f-project-name','#f-project-no','#f-site-address','#f-date','#f-sheet-title','#f-prepared-by','#f-status','#f-scope','#f-notes'];
+  ids.forEach(sel => {
+    const el = qs(sel);
+    if (!el) return;
+    const ev = (el.tagName === 'SELECT') ? 'change' : 'input';
+    el.addEventListener(ev, () => { updatePreview(); scheduleSave(); });
+  });
+}
+
+function updatePreview() {
+  const name   = val('#f-project-name');
+  const no     = val('#f-project-no');
+  const addr   = val('#f-site-address');
+  const date   = val('#f-date');
+  const prepby = val('#f-prepared-by') || 'Singh360 Engineer Team';
+  const status = val('#f-status');
+  const title  = val('#doc-title-input') || name || 'PROJECT TITLE';
+  const projLabel = name || (no ? 'Project ' + no : '—');
+
+  // Cover
+  setTxt('prev-main-title', title.toUpperCase());
+  setTxt('prev-cover-addr', addr || '—');
+  setTxt('prev-cover-date-li', date || '—');
+  setTxt('prev-cover-prepby', prepby);
+  setTxt('prev-cover-status', status);
+
+  // All footer spans
+  document.querySelectorAll('.ft-proj').forEach(el => el.textContent = projLabel);
+  document.querySelectorAll('.ft-date').forEach(el => el.textContent = date || '—');
+
+  // Scope slide sub-header
+  const scopeHdr = qs('#prev-scope-header');
+  if (scopeHdr) scopeHdr.textContent = (name || 'PROJECT') + ' — SCOPE OF WORK';
+
+  // Scope body
+  renderScopePreview(val('#f-scope'));
+
+  // Notes
+  const notes = val('#f-notes');
+  qs('#prev-notes-body').innerHTML = notes
+    ? notes.replace(/\n/g, '<br>')
+    : '<em style="color:#94a3b8">No notes entered.</em>';
+
+  syncDrawingFooters();
+}
+
+function renderScopePreview(raw) {
+  const tbody = qs('#prev-scope-body');
+  if (!raw || !raw.trim()) {
+    tbody.innerHTML = '<tr class="s-body-row"><td><em style="color:#94a3b8">Scope not entered.</em></td></tr>';
+    return;
+  }
+  const lines = raw.split('\n');
+  const rows = lines.map(l => {
+    const t = l.trim();
+    if (!t) return '<tr><td style="padding:2px 0">&nbsp;</td></tr>';
+    // Numbered section headers: "1.", "2. something" or ALL CAPS headers
+    const isHdr = /^\d+[\.\)]/.test(t) || /^[A-Z][A-Z &:\/]{8,}$/.test(t);
+    if (isHdr) return `<tr class="s-section-hd"><td style="font-weight:700;background:#eaf2f9;padding:clamp(3px,0.7%,8px) clamp(5px,1.2%,14px)">${esc(t)}</td></tr>`;
+    return `<tr class="s-body-row"><td style="padding:clamp(2px,0.5%,6px) clamp(5px,1.2%,14px)">${esc(t)}</td></tr>`;
+  }).join('');
+  tbody.innerHTML = rows;
+}
+
+// ─────────────────── BOM EDITOR ───────────────────
+function addBomRow(row) {
+  const tbody = qs('#bom-edit-body');
+  const idx = tbody.querySelectorAll('tr').length + 1;
+  const tr = document.createElement('tr');
+  ['item','desc','qty','make'].forEach(k => {
+    const td = document.createElement('td');
+    const ce = document.createElement('div');
+    ce.contentEditable = 'true';
+    ce.dataset.k = k;
+    ce.textContent = k === 'item' ? (row[k] || String(idx)) : (row[k] || '');
+    ce.oninput = () => { updateBomPreview(); scheduleSave(); };
+    td.appendChild(ce);
+    tr.appendChild(td);
+  });
+  tbody.appendChild(tr);
+}
+
+function collectBomRows() {
+  const rows = [];
+  qs('#bom-edit-body').querySelectorAll('tr').forEach(tr => {
+    const o = {};
+    tr.querySelectorAll('[data-k]').forEach(ce => { o[ce.dataset.k] = ce.textContent.trim(); });
+    rows.push(o);
+  });
+  return rows;
+}
+
+function loadBomRows(rows) {
+  qs('#bom-edit-body').innerHTML = '';
+  (rows || []).forEach(r => addBomRow(r));
+  updateBomPreview();
+}
+
+function updateBomPreview() {
+  const tbody = qs('#prev-bom-body');
+  tbody.innerHTML = '';
+  qs('#bom-edit-body').querySelectorAll('tr').forEach(tr => {
+    const o = {};
+    tr.querySelectorAll('[data-k]').forEach(ce => { o[ce.dataset.k] = ce.textContent.trim(); });
+    const tr2 = document.createElement('tr');
+    tr2.innerHTML = `<td>${esc(o.item||'')}</td><td>${esc(o.desc||'')}</td><td>${esc(o.qty||'')}</td><td>${esc(o.make||'')}</td><td>${esc(o.notes||'')}</td>`;
+    tbody.appendChild(tr2);
+  });
+}
+
+// ─────────────────── DRAWING SLIDES ───────────────────
+function renderDrawingSlides(images) {
+  docImages = images || [];
+  const container = qs('#drawing-slides');
+  container.innerHTML = '';
+  const imgGrid = qs('#img-grid');
+  imgGrid.innerHTML = '';
+
+  if (!docImages.length) {
+    imgGrid.innerHTML = '<div class="img-thumb-empty" style="grid-column:span 2;color:#94a3b8;font-size:10px">No drawing images linked.<br>Upload or add from source.</div>';
+    return;
+  }
+
+  docImages.forEach((img, i) => {
+    // Sidebar thumb
+    const thumb = document.createElement('div');
+    thumb.className = 'img-thumb';
+    thumb.title = img.label;
+    const tImg = document.createElement('img');
+    tImg.src = img.href;
+    tImg.alt = img.label;
+    tImg.onerror = () => { thumb.innerHTML = `<div class="img-thumb-empty">${esc(img.label)}</div>`; };
+    thumb.appendChild(tImg);
+    imgGrid.appendChild(thumb);
+
+    // Drawing slide in preview
+    const slide = document.createElement('div');
+    slide.className = 'slide drawing';
+    slide.innerHTML = `
+      <div class="slide-card">
+        <div class="card-hd">${esc(img.label)}</div>
+        <div class="card-body">
+          <img src="${esc(img.href)}" alt="${esc(img.label)}" onerror="this.outerHTML='<span class=no-img-hint>Image unavailable: ${esc(img.label)}</span>'" />
+        </div>
+      </div>
+      <div class="slide-foot">
+        <span>PROJECT: <span class="ft-proj"></span></span>
+        <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="slide-foot-logo" onerror="this.style.display='none'" />
+        <span><span class="ft-date"></span> · PAGE: ${4 + i}</span>
+      </div>`;
+    container.appendChild(slide);
+  });
+  syncDrawingFooters();
+}
+
+function syncDrawingFooters() {
+  const proj = val('#f-project-name') || (val('#f-project-no') ? 'Project ' + val('#f-project-no') : '—');
+  const date = val('#f-date') || '—';
+  document.querySelectorAll('.ft-proj').forEach(el => el.textContent = proj);
+  document.querySelectorAll('.ft-date').forEach(el => el.textContent = date);
+}
+
+function handleImgUpload() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = { label: file.name.replace(/\.[^.]+$/, ''), href: e.target.result };
+    docImages.push(img);
+    renderDrawingSlides(docImages);
+    scheduleSave();
+  };
+  reader.readAsDataURL(file);
+  this.value = '';
+}
+
+// ─────────────────── SECTION TOGGLE ───────────────────
+function toggleSec(id) { qs('#' + id).classList.toggle('closed'); }
+
+// ─────────────────── LOAD / SAVE ───────────────────
+async function loadDoc(id) {
+  try {
+    const res = await fetch('/api/doc/' + id);
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    populateFromDoc(data);
+    closeDocList();
+  } catch {
+    await createDoc('blank');
+  }
+}
+
+function populateFromDoc(data) {
+  docId = data.id;
+  history.replaceState({}, '', '?doc=' + docId);
+
+  qs('#doc-title-input').value = data.title || '';
+  const m = data.meta || {};
+  setVal('#f-project-name', m.projectName || '');
+  setVal('#f-project-no',   m.projectNo   || '');
+  setVal('#f-site-address', m.siteAddress || '');
+  setVal('#f-date',         m.date        || '');
+  setVal('#f-sheet-title',  m.sheetTitle  || '');
+  setVal('#f-prepared-by',  m.preparedBy  || 'Singh360 Engineer Team');
+  setVal('#f-status',       m.status      || 'Preliminary');
+
+  // Scope: strip HTML → plain text
+  const scopeDiv = document.createElement('div');
+  scopeDiv.innerHTML = data.scope || '';
+  setVal('#f-scope', scopeDiv.innerText.replace(/\n{3,}/g, '\n\n').trim());
+
+  const notesDiv = document.createElement('div');
+  notesDiv.innerHTML = data.notes || '';
+  setVal('#f-notes', notesDiv.innerText.trim());
+
+  loadBomRows(data.bom || []);
+
+  // Drawing images: support both legacy previewImageHref and new previewImages array
+  let imgs = data.previewImages || [];
+  if (!imgs.length && data.previewImageHref) {
+    imgs = [{ label: 'Drawing', href: data.previewImageHref }];
+  }
+  renderDrawingSlides(imgs);
+
+  updatePreview();
+  setSaveStatus('saved', data.modified);
+}
+
+function collectDocData() {
+  return {
+    title: qs('#doc-title-input').value.trim() || 'Untitled',
+    meta: {
+      projectName: val('#f-project-name'),
+      projectNo:   val('#f-project-no'),
+      siteAddress: val('#f-site-address'),
+      date:        val('#f-date'),
+      sheetTitle:  val('#f-sheet-title'),
+      preparedBy:  val('#f-prepared-by'),
+      status:      val('#f-status'),
+    },
+    scope: '<p>' + val('#f-scope').replace(/\n/g, '</p><p>') + '</p>',
+    notes: val('#f-notes'),
+    bom: collectBomRows(),
+    // Only save server-side hrefs (not data: URIs from uploads — too large)
+    previewImages: docImages.filter(img => !img.href.startsWith('data:')),
+  };
+}
+
+async function saveDoc() {
+  if (!docId) return;
+  try {
+    const res = await fetch('/api/doc/' + docId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(collectDocData()),
+    });
+    if (!res.ok) throw new Error();
+    const j = await res.json();
+    setSaveStatus('saved', j.modified);
+  } catch { setSaveStatus('error'); }
+}
+
+function scheduleSave() {
+  setSaveStatus('saving');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDoc, 1600);
+}
+
+function setSaveStatus(state, ts) {
+  qs('#save-dot').className = 'save-dot ' + state;
+  const t = qs('#save-text');
+  if (state === 'saving') t.textContent = 'Saving…';
+  else if (state === 'saved') t.textContent = ts ? 'Saved ' + fmtTime(ts) : 'Saved';
+  else if (state === 'error') t.textContent = 'Save error';
+  else t.textContent = '—';
+}
+
+// ─────────────────── DOC LIST ───────────────────
+async function openDocList() {
+  qs('#doc-list-overlay').classList.remove('is-hidden');
+  const list = qs('#dlc-list');
+  list.innerHTML = '<div class="dlc-empty">Loading…</div>';
+  try {
+    const { docs } = await (await fetch('/api/docs')).json();
+    if (!docs.length) { list.innerHTML = '<div class="dlc-empty">No documents yet. Click <strong>+ SA31 Copy</strong> to start.</div>'; return; }
+    list.innerHTML = '';
+    docs.forEach(doc => {
+      const item = document.createElement('div');
+      item.className = 'dlc-item';
+      const badge = (doc.status || 'draft').toLowerCase().replace(/\s+/g, '-');
+      item.innerHTML = `
+        <div class="dlc-icon"><svg fill="none" stroke="#0b3d63" viewBox="0 0 24 24" width="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+        <div class="dlc-meta">
+          <div class="dlc-title">${esc(doc.title)}</div>
+          <div class="dlc-sub">${fmtDate(doc.modified)}${doc.projectNo ? ' · ' + esc(doc.projectNo) : ''}</div>
+        </div>
+        <span class="dlc-badge ${badge}">${esc(doc.status || 'Draft')}</span>
+        <button class="dlc-del" data-id="${esc(doc.id)}" title="Delete">
+          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>`;
+      item.querySelector('.dlc-meta').onclick = () => loadDoc(doc.id);
+      item.querySelector('.dlc-icon').onclick  = () => loadDoc(doc.id);
+      item.querySelector('.dlc-del').onclick = async e => {
+        e.stopPropagation();
+        if (!confirm('Delete "' + doc.title + '"?')) return;
+        await fetch('/api/doc/' + doc.id, { method: 'DELETE' });
+        openDocList();
+      };
+      list.appendChild(item);
+    });
+  } catch { list.innerHTML = '<div class="dlc-empty">Failed to load. Is the server running at port 8765?</div>'; }
+}
+
+function closeDocList() { qs('#doc-list-overlay').classList.add('is-hidden'); }
+
+async function createDoc(template) {
+  const res = await fetch('/api/doc/new', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ template }),
+  });
+  const { id } = await res.json();
+  await loadDoc(id);
+}
+
+// ─────────────────── KEYBOARD ───────────────────
+function initKeyboard() {
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); clearTimeout(saveTimer); saveDoc(); }
+  });
+}
+
+// ─────────────────── UTILS ───────────────────
+const qs = s => document.querySelector(s);
+const val = s => { const el = qs(s); return el ? el.value : ''; };
+const setVal = (s, v) => { const el = qs(s); if (el) el.value = v; };
+function setTxt(id, v) { const el = document.getElementById(id); if (el) el.textContent = v || ''; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); } catch { return ''; } }
+function fmtDate(iso) { try { return new Date(iso).toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'}); } catch { return iso||''; } }
+</script>
+</body>
+</html>

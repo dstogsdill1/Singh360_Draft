@@ -40,6 +40,7 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote as _urlquote
 
 from flask import (
     Flask,
@@ -273,6 +274,10 @@ def download_zip(job_id: str):
 # --------------------------------------------------------------------------
 @app.get("/editor")
 def editor():
+    # Serve new split-pane live editor
+    live = WEB_DIR / "editor_live.html"
+    if live.exists():
+        return send_from_directory(WEB_DIR, "editor_live.html")
     return send_from_directory(WEB_DIR, "editor.html")
 
 
@@ -447,20 +452,37 @@ def _build_sa31_template_doc(doc_id: str = "sa31_template", as_working_copy: boo
     title = "SA31 Lighting Template" if not as_working_copy else "SA31 Lighting Working Copy"
     doc = _build_blank_doc(doc_id, title)
     doc["meta"].update({
-        "projectName": "HEB SA31 Lighting",
+        "projectName": "H-E-B SA #31 — HEB 102",
         "projectNo": "SA-31",
-        "sheetTitle": "EMS LIGHTING CONTROL PLAN",
-        "sheetNumber": "EMS-1.1",
-        "status": "Preliminary",
+        "siteAddress": "8503 NW Military Highway, San Antonio, TX 78231",
+        "date": "06/11/2026",
+        "sheetTitle": "LIGHT DIMMING & EMS INTEGRATION (SA31-HEB 102)",
+        "preparedBy": "Singh360 Engineer Team",
+        "status": "For Construction",
     })
     doc["scope"] = (
-        "<p>This SA31 template is pre-seeded from the existing source schedules in "
-        "<code>output/SA31/source/</code>.</p>"
-        "<ul>"
-        "<li>Edit BOM and text directly in this page.</li>"
-        "<li>Use the canvas for floorplan markup (lines/arrows/boxes/text).</li>"
-        "<li>Export a fresh PDF at any time.</li>"
-        "</ul>"
+        "<p><b>1. Executive Summary &amp; Scope of Work</b></p>"
+        "<p>Singh360 is delivering a comprehensive, turn-key light dimming control system solution "
+        "for the SA31-HEB 102 project. The scope of work encompasses the complete engineering, hardware "
+        "provisioning, and field deployment of a light dimming system integrated with a Resource Data "
+        "Management (RDM) Energy Management System (EMS). Singh360 will supply fully pre-configured "
+        "control panels and all essential ancillary components required to deliver a fully operational, "
+        "end-to-end system.</p>"
+        "<p><b>2. Logistics &amp; Equipment Delivery Protocols</b></p>"
+        "<p>Prefabricated Assemblies: Singh360 will drop-ship all pre-assembled Lighting Controls Panel "
+        "(LCP-x) and modular lighting components directly to the designated electrical subcontractor, "
+        "Eldridge, at project commencement. No components will be delivered directly to the store job site.</p>"
+        "<p><b>3. Critical Path Milestones &amp; Network Integration</b></p>"
+        "<p>Immediate Milestone (Priority 1): The primary critical path objective requires the immediate "
+        "mounting, power deployment, and network patching of the RDM IDF (provided by H-E-B EM) to H-E-B MDT. "
+        "The RDM Data Manager is existing on-site. All network infrastructure integration and localized "
+        "field terminations must be actively coordinated with H-E-B Electrical Maintenance (EM) Management.</p>"
+        "<p><b>4. Control Loop Installation &amp; Programming</b></p>"
+        "<p>Subcontractor Biesenbach Inc. will execute the physical installation of the localized light "
+        "dimming control loop. Every lighting zone must be independently wired back to its designated "
+        "dimming control module inside LCP-1. Each individual zone will be independently programmed with "
+        "distinct scheduling algorithms. Upon successful deployment, a custom dynamic graphic will be "
+        "deployed to the RDM Data Manager to visually illustrate real-time zone status and operational metrics.</p>"
     )
 
     refs: list[dict[str, str]] = []
@@ -471,15 +493,16 @@ def _build_sa31_template_doc(doc_id: str = "sa31_template", as_working_copy: boo
             {"label": "SA31 network.csv", "path": str(SA31_SOURCE_DIR / "network.csv"), "href": "/api/source/sa31/source/network.csv"},
         ])
 
-    preview_path = _pick_sa31_preview_image()
-    if preview_path is not None:
-        rel = preview_path.relative_to(SA31_DIR).as_posix()
+    # Gather all available drawing images with URL-encoded paths
+    all_images = _get_sa31_preview_images()
+    doc["previewImages"] = all_images
+    if all_images:
+        doc["previewImageHref"] = all_images[0]["href"]  # backward compat
         refs.append({
             "label": "SA31 drawing preview image",
-            "path": str(preview_path),
-            "href": f"/api/source/sa31/{rel}",
+            "path": str(SA31_DIR / all_images[0]["label"]),
+            "href": all_images[0]["href"],
         })
-        doc["previewImageHref"] = f"/api/source/sa31/{rel}"
 
     editable_pdf = SA31_DIR / "HEB_SA31_Lighting_Editable (2).pdf"
     if editable_pdf.exists():
@@ -520,22 +543,24 @@ def _build_sa31_template_doc(doc_id: str = "sa31_template", as_working_copy: boo
     doc["bom"] = bom_rows
     doc["sourceRefs"] = refs
     doc["notes"] = (
-        "<p><b>Template lineage:</b> This document points back to the current SA31 source files, "
-        "so your live document can be edited and re-exported without moving those files.</p>"
-        "<p>Use <i>All Docs</i> to duplicate this pattern for future stores.</p>"
-        "<p><b>How to start quickly:</b> Open the <i>Drawing</i> page tab to see the seeded SA31 preview, "
-        "then trace/annotate directly and export PDF.</p>"
+        "<p><b>SA31 Project Notes:</b></p>"
+        "<p>Store: HEB 102, 8503 NW Military Hwy, San Antonio, TX 78231 — Located in Alon Town Market.</p>"
+        "<p>Panel Hub Source: Panel HA (277V Line Voltage Feed). "
+        "EMS Hardware Mapping: PR0650CD-TDB Unit ID: 601.</p>"
+        "<p>Sales Floor Sq Ft: 92,657. H-E-B San Antonio 31 / 102.</p>"
+        "<p>Note: All images are for illustrative purposes only and are not drawn to scale (N.T.S.).</p>"
     )
     return doc
 
 
 def _pick_sa31_preview_image() -> Path | None:
+    """Return the first available SA31 preview image path, or None."""
     if not SA31_DIR.exists():
         return None
     preferred_names = [
-        "RDM Lighting Control.png",
         "Lighting Control Ecosystem-1-5.png",
         "Lighting Control Ecosystem-6-10.png",
+        "RDM Lighting Control.png",
     ]
     for name in preferred_names:
         p = SA31_DIR / name
@@ -546,6 +571,32 @@ def _pick_sa31_preview_image() -> Path | None:
         if found:
             return found[0]
     return None
+
+
+def _get_sa31_preview_images() -> list[dict[str, str]]:
+    """Return all available SA31 drawing images as [{label, href}] with URL-encoded paths."""
+    if not SA31_DIR.exists():
+        return []
+    preferred = [
+        "Lighting Control Ecosystem-1-5.png",
+        "Lighting Control Ecosystem-6-10.png",
+        "RDM Lighting Control.png",
+    ]
+    images: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for name in preferred:
+        p = SA31_DIR / name
+        if p.exists():
+            rel = p.relative_to(SA31_DIR).as_posix()
+            images.append({"label": p.stem, "href": f"/api/source/sa31/{_urlquote(rel, safe='/')}"})
+            seen.add(name)
+    for ext in ("*.png", "*.jpg", "*.jpeg"):
+        for p in sorted(SA31_DIR.glob(ext)):
+            if p.name not in seen:
+                rel = p.relative_to(SA31_DIR).as_posix()
+                images.append({"label": p.stem, "href": f"/api/source/sa31/{_urlquote(rel, safe='/')}"})
+                seen.add(p.name)
+    return images
 
 
 # Playwright snippet executed in a subprocess for PDF export.
