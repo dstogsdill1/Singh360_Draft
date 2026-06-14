@@ -30,7 +30,7 @@
     }
 
     html, body {
-      height: 100%; width: 100%; background: var(--bg);
+      height: 100%; width: 100%; background: #3a3a3a;
       color: var(--text); font-family: var(--font); font-size: 14px;
       line-height: 1.5; -webkit-font-smoothing: antialiased;
     }
@@ -41,9 +41,9 @@
     /* Top bar */
     #topbar {
       height: var(--topbar-h); min-height: var(--topbar-h);
-      background: var(--navy); color: #fff;
+      background: linear-gradient(90deg, #0b3d63 0%, #0e8fd0 100%); color: #fff;
       display: flex; align-items: center; gap: 16px; padding: 0 20px;
-      z-index: 100; flex-shrink: 0;
+      z-index: 100; flex-shrink: 0; box-shadow: 0 2px 18px rgba(0,0,0,0.18);
     }
     .tb-logo { height: 30px; object-fit: contain; }
     .tb-divider { width: 1px; height: 28px; background: rgba(255,255,255,0.2); flex-shrink: 0; }
@@ -78,7 +78,7 @@
       padding: 6px 14px; transition: background .15s, border-color .15s; white-space: nowrap;
     }
     .tb-btn:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.4); }
-    .tb-btn.primary { background: var(--blue); border-color: var(--blue); }
+    .tb-btn.primary { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.26); }
     .tb-btn.primary:hover { background: #0d82bd; border-color: #0d82bd; }
     .tb-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
 
@@ -86,18 +86,23 @@
     .tb-btn.sa31:hover { background: #1d4ed8; border-color: #1d4ed8; }
 
     /* Body area */
-    #body { display: flex; flex: 1; overflow: hidden; }
+    #body {
+      display: grid; grid-template-columns: 280px minmax(0, 1fr);
+      flex: 1; gap: 24px; padding: 24px;
+      overflow: hidden; background: #3a3a3a; align-items: stretch;
+    }
 
     /* Left sidebar */
     #sidebar {
-      width: var(--sidebar-w); min-width: var(--sidebar-w);
-      background: var(--surface); border-right: 1px solid var(--border);
-      display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+      width: 280px; min-width: 280px;
+      background: #f2f4f7; border: 1px solid #d9dee7; border-radius: 16px;
+      display: flex; flex-direction: column; gap: 18px; overflow-y: auto; flex-shrink: 0;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.18); padding: 18px;
     }
-    .sb-section { padding: 16px 12px 8px; }
+    .sb-section { padding: 0; }
     .sb-section-label {
       font-size: 10px; font-weight: 700; text-transform: uppercase;
-      letter-spacing: .07em; color: var(--text-3); padding: 0 8px 6px;
+      letter-spacing: .07em; color: var(--text-3); padding: 0 2px 10px;
     }
     .sb-link {
       display: flex; align-items: center; gap: 10px; padding: 8px 10px;
@@ -109,7 +114,7 @@
     .sb-link.active { background: var(--blue-l); color: var(--navy); font-weight: 600; }
     .sb-link svg { width: 16px; height: 16px; flex-shrink: 0; }
 
-    .sb-meta { padding: 16px 12px; border-top: 1px solid var(--border); margin-top: auto; }
+    .sb-meta { padding: 16px 0 0; border-top: 1px solid var(--border); margin-top: 8px; }
     .sb-meta-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-3); margin-bottom: 10px; }
     .meta-field { margin-bottom: 10px; }
     .meta-field label { display: block; font-size: 11px; color: var(--text-3); margin-bottom: 3px; }
@@ -122,7 +127,7 @@
     .meta-field select:focus,
     .meta-field input:focus { border-color: var(--blue); }
 
-    .source-ref-list { display: grid; gap: 6px; }
+    .source-ref-list { display: grid; gap: 8px; }
     .source-ref-empty { font-size: 11px; color: var(--text-3); }
     .mt-10 { margin-top: 10px; }
     .source-ref-link {
@@ -137,29 +142,38 @@
       margin-top: 2px;
     }
 
-    /* Main content */
+    /* Main content = the slide/page */
     #main {
-      flex: 1; overflow-y: auto; padding: 28px 32px 64px;
-      display: flex; flex-direction: column; gap: 24px;
+      min-width: 0; width: min(100%, 900px);
+      height: calc(100vh - var(--topbar-h) - 48px);
+      align-self: center;
+      justify-self: center;
+      overflow-y: auto; padding: 28px 36px 40px;
+      display: flex; flex-direction: column; gap: 22px;
+      background: #ffffff; border-radius: 18px;
+      border: 1px solid #dbe2ea;
+      box-shadow: 0 28px 90px rgba(0,0,0,0.34);
     }
 
     /* Document sections */
     .doc-section {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; overflow: hidden;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      background: var(--surface); border: 1px solid #e5e7eb;
+      border-radius: 12px; overflow: hidden;
+      box-shadow: none;
     }
     .sec-header {
       display: flex; align-items: center; gap: 12px;
-      background: #f8fafc; border-bottom: 1px solid var(--border);
+      background: linear-gradient(90deg, #0b3d63 0%, #0e8fd0 100%); color: #fff;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
       padding: 12px 20px; cursor: pointer; -webkit-user-select: none; user-select: none;
     }
-    .sec-header:hover { background: #f1f5f9; }
-    .sec-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--navy); flex: 1; }
-    .sec-chevron { width: 16px; height: 16px; color: var(--text-3); transition: transform .2s; flex-shrink: 0; }
+    .sec-header:hover { filter: brightness(1.03); }
+    .sec-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #fff; flex: 1; }
+    .sec-chevron { width: 16px; height: 16px; color: rgba(255,255,255,0.8); transition: transform .2s; flex-shrink: 0; }
     .doc-section.collapsed .sec-chevron { transform: rotate(-90deg); }
     .doc-section.collapsed .sec-body { display: none; }
-    .sec-body { padding: 20px; }
+    .sec-body { padding: 22px 24px 24px; }
+    .sec-body.no-pad { padding: 0; }
 
     /* Project header grid */
     .header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -167,17 +181,18 @@
     .hf { display: flex; flex-direction: column; gap: 4px; }
     .hf label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); }
     .hf [contenteditable] {
-      border: none; border-bottom: 1px dashed var(--border-2); outline: none;
-      padding: 4px 2px; font-family: var(--font); font-size: 14px; color: var(--text);
-      min-height: 28px; transition: border-color .15s;
+      border: none; border-bottom: 1px solid #e5e7eb; outline: none;
+      padding: 5px 4px 7px; font-family: var(--font); font-size: 14px; color: var(--text);
+      min-height: 34px; transition: border-color .15s, background .15s;
+      background: #fff;
     }
-    .hf [contenteditable]:focus { border-bottom-color: var(--blue); }
+    .hf [contenteditable]:focus { border-bottom-color: var(--blue); background: #fbfdff; }
     .hf [contenteditable]:empty::before { content: attr(data-ph); color: var(--text-3); }
 
     /* Rich text editor */
     .rte-toolbar {
-      display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border);
-      background: #f8fafc; flex-wrap: wrap;
+      display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #e5e7eb;
+      background: #ffffff; flex-wrap: wrap;
     }
     .rte-btn {
       background: var(--surface); border: 1px solid var(--border-2); border-radius: 4px;
@@ -186,8 +201,8 @@
     }
     .rte-btn:hover { background: var(--bg); color: var(--navy); border-color: var(--blue); }
     .rte-content {
-      min-height: 120px; padding: 14px; outline: none;
-      font-family: var(--font); font-size: 14px; line-height: 1.7; color: var(--text);
+      min-height: 140px; padding: 18px 20px 20px; outline: none;
+      font-family: var(--font); font-size: 14px; line-height: 1.8; color: var(--text);
     }
     .rte-content:empty::before { content: 'Click to edit…'; color: var(--text-3); }
     .rte-content ul, .rte-content ol { padding-left: 24px; }
@@ -195,20 +210,20 @@
     /* BOM Table */
     .bom-wrap { overflow-x: auto; }
     .bom-table {
-      width: 100%; border-collapse: collapse; font-size: 13px;
+      width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed;
     }
     .bom-table thead th {
-      background: var(--navy); color: #fff; padding: 9px 12px;
+      background: linear-gradient(90deg, #0b3d63 0%, #0e8fd0 100%); color: #fff; padding: 10px 12px;
       text-align: left; font-size: 11px; font-weight: 700;
       text-transform: uppercase; letter-spacing: .05em; white-space: nowrap;
     }
-    .bom-table tbody tr:nth-child(even) { background: #f8fafc; }
-    .bom-table tbody tr:hover { background: var(--blue-l); }
+    .bom-table tbody tr:nth-child(even) { background: #fbfdff; }
+    .bom-table tbody tr:hover { background: #f3f8fc; }
     .bom-table td {
-      padding: 0; border-bottom: 1px solid var(--border);
+      padding: 0; border-bottom: 1px solid #dde3ea;
     }
     .bom-table td [contenteditable] {
-      display: block; padding: 8px 10px; outline: none; min-height: 36px;
+      display: block; padding: 9px 10px; outline: none; min-height: 40px;
       font-family: var(--font); font-size: 13px; color: var(--text);
       white-space: pre-wrap; word-break: break-word;
     }
@@ -232,28 +247,27 @@
 
     /* Canvas section */
     .canvas-toolbar {
-      display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border);
-      background: #f8fafc; align-items: center; flex-wrap: wrap;
+      display: flex; flex-direction: column; gap: 10px; padding: 0;
+      border: none; background: transparent; align-items: stretch; flex-wrap: nowrap;
     }
     .tool-btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: var(--surface); border: 1px solid var(--border-2);
-      border-radius: 6px; padding: 6px 12px; font-family: var(--font);
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #fff; border: 1px solid #d6dbe3;
+      border-radius: 10px; padding: 10px 12px; font-family: var(--font);
       font-size: 12px; font-weight: 500; color: var(--text-2);
       cursor: pointer; transition: all .12s; white-space: nowrap;
     }
     .tool-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
-    .tool-btn:hover { background: var(--bg); color: var(--navy); border-color: var(--navy); }
-    .tool-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
-    .tool-sep { width: 1px; height: 28px; background: var(--border-2); flex-shrink: 0; margin: 0 4px; }
+    .tool-btn:hover { background: #eef6fb; color: var(--navy); border-color: #94c7e7; }
+    .tool-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); box-shadow: 0 8px 18px rgba(11,61,99,0.18); }
+    .tool-sep { width: 100%; height: 1px; background: #d6dbe3; flex-shrink: 0; margin: 4px 0; }
     .tool-btn.danger:hover { background: #fef2f2; color: var(--red); border-color: var(--red); }
 
     .canvas-container-wrap {
       position: relative; overflow: hidden;
-      background: repeating-linear-gradient(
-        0deg, transparent, transparent 19px, #e5e7eb 20px),
-        repeating-linear-gradient(90deg, transparent, transparent 19px, #e5e7eb 20px);
-      background-color: #f9fafb;
+      background: #fff;
+      border: 1px solid #e5e7eb; border-radius: 12px;
+      margin: 0 24px 24px; padding: 12px;
     }
     #draw-canvas { display: block; }
     .canvas-hint {
@@ -273,6 +287,13 @@
     .stroke-row { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
     .stroke-row label { font-size: 11px; color: var(--text-3); white-space: nowrap; }
     .stroke-row input[type=range] { width: 70px; cursor: pointer; }
+
+    .tool-panel-note {
+      font-size: 12px; color: var(--text-2); line-height: 1.5;
+      background: #fff; border: 1px solid #d6dbe3; border-radius: 10px; padding: 12px;
+    }
+
+    .source-ref-panel { display: grid; gap: 8px; }
 
     /* Doc List overlay */
     #doc-list-overlay {
@@ -333,6 +354,27 @@
     .dlc-footer a { font-size: 13px; color: var(--blue); text-decoration: none; }
     .dlc-footer a:hover { text-decoration: underline; }
 
+    .page-nav-note {
+      font-size: 12px; color: var(--text-2); line-height: 1.45;
+      padding: 0 2px 4px;
+    }
+
+    .hidden-input { display: none; }
+    .th-num { width: 48px; }
+    .th-qty { width: 64px; }
+    .th-unit { width: 64px; }
+    .th-model { width: 180px; }
+    .is-hidden { display: none !important; }
+
+    @media (max-width: 1180px) {
+      #body { grid-template-columns: 1fr; grid-template-rows: auto auto; overflow: auto; }
+      #sidebar { width: 100%; min-width: 0; }
+      #main {
+        width: 100%; max-width: 100%; height: auto; min-height: 720px;
+        justify-self: stretch;
+      }
+    }
+
     /* Print mode */
     body.print-mode #topbar,
     body.print-mode #sidebar,
@@ -341,7 +383,7 @@
     body.print-mode .bom-footer,
     body.print-mode .td-del,
     body.print-mode .sec-chevron { display: none !important; }
-    body.print-mode #main { padding: 0; }
+    body.print-mode #main { padding: 0; box-shadow: none; border: none; width: 100%; height: auto; }
     body.print-mode #body { overflow: visible; }
     body.print-mode #app { height: auto; overflow: visible; }
     body.print-mode .doc-section.collapsed .sec-body { display: block !important; }
@@ -362,8 +404,7 @@
   <header id="topbar" class="no-print">
     <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="tb-logo" onerror="this.style.display='none'" />
     <div class="tb-divider"></div>
-    <span class="tb-breadcrumb"><a href="/">SmartDraw</a> / Doc Editor</span>
-    <div class="tb-divider"></div>
+    <span class="tb-breadcrumb"><a href="/">SmartDraw</a> / Live Doc Editor</span>
     <input id="doc-title-input" type="text" placeholder="Document Title" autocomplete="off" />
     <div id="save-status">
       <span class="save-dot" id="save-dot"></span>
@@ -372,15 +413,11 @@
     <div class="tb-divider"></div>
     <button class="tb-btn" id="btn-open-list" title="All Documents">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-      All Docs
+      My Docs
     </button>
-    <button class="tb-btn" id="btn-new-doc" title="New Document">
-      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-      New
-    </button>
-    <button class="tb-btn sa31" id="btn-new-sa31" title="Create SA31 working copy">
-      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2m-1 0v12a2 2 0 01-2 2H9a2 2 0 01-2-2V7m3 4h4m-4 4h4"/></svg>
-      New SA31 Copy
+    <button class="tb-btn" id="btn-save-doc" title="Save current document">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5h11l3 3v11H5zM7 5v6h8V5M9 18h6"/></svg>
+      Save
     </button>
     <button class="tb-btn primary" id="btn-export-pdf" title="Export PDF via Playwright">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
@@ -394,27 +431,57 @@
     <!-- Left Sidebar -->
     <aside id="sidebar" class="no-print">
       <div class="sb-section">
-        <div class="sb-section-label">Sections</div>
-        <a class="sb-link active" onclick="scrollTo('sec-header')">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          Project Header
-        </a>
-        <a class="sb-link" onclick="scrollTo('sec-scope')">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-          Scope of Work
-        </a>
-        <a class="sb-link" onclick="scrollTo('sec-bom')">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h7"/></svg>
-          Bill of Materials
-        </a>
-        <a class="sb-link" onclick="scrollTo('sec-canvas')">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-          Drawing Canvas
-        </a>
-        <a class="sb-link" onclick="scrollTo('sec-notes')">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg>
-          General Notes
-        </a>
+        <div class="sb-section-label">Drawing Tools</div>
+        <div class="canvas-toolbar no-print">
+          <button class="tool-btn active" id="tool-select" onclick="setTool('select')" title="Select & Move (V)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l7 18 2.5-7.5L22 11z"/></svg>
+            Select
+          </button>
+          <button class="tool-btn" id="tool-rect" onclick="setTool('rect')" title="Rectangle (R)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1" stroke-width="2"/></svg>
+            Rect
+          </button>
+          <button class="tool-btn" id="tool-line" onclick="setTool('line')" title="Line (L)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="4" stroke-width="2"/></svg>
+            Line
+          </button>
+          <button class="tool-btn" id="tool-arrow" onclick="setTool('arrow')" title="Arrow (A)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19l14-14M19 5H9m10 0v10"/></svg>
+            Arrow
+          </button>
+          <button class="tool-btn" id="tool-text" onclick="setTool('text')" title="Text Box (T)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5M18 2l4 4-9 9H9v-4z"/></svg>
+            Text
+          </button>
+          <div class="tool-sep"></div>
+          <div class="color-row">
+            <label>Stroke</label>
+            <input type="color" class="color-swatch" id="stroke-color" value="#0b3d63" title="Stroke color" />
+          </div>
+          <div class="color-row">
+            <label>Fill</label>
+            <input type="color" class="color-swatch" id="fill-color" value="#e0f2fe" title="Fill color" />
+          </div>
+          <div class="stroke-row">
+            <label>Width</label>
+            <input type="range" id="stroke-width" min="1" max="8" value="2" title="Stroke width" aria-label="Stroke width" />
+            <span id="stroke-width-val">2</span>
+          </div>
+          <div class="tool-sep"></div>
+          <label class="tool-btn" title="Upload background image (floor plan)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15l-5-5L5 21"/></svg>
+            BG Image
+            <input type="file" id="bg-upload" accept="image/*" class="hidden-input" />
+          </label>
+          <button class="tool-btn" onclick="deleteSelected()" title="Delete selected (Del)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            Delete
+          </button>
+          <button class="tool-btn danger" onclick="clearCanvas()" title="Clear all canvas objects">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16v16H4z"/><path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round" stroke-width="2"/></svg>
+            Clear
+          </button>
+        </div>
       </div>
 
       <!-- Doc metadata in sidebar -->
@@ -435,7 +502,7 @@
           <input type="text" id="meta-prepared-by" placeholder="Singh360 Inc." />
         </div>
         <div class="sb-meta-label mt-10">Source References</div>
-        <div id="source-ref-list" class="source-ref-list">
+        <div id="source-ref-list" class="source-ref-list source-ref-panel">
           <span class="source-ref-empty">No linked source files.</span>
         </div>
       </div>
@@ -486,7 +553,7 @@
           <span class="sec-title">Scope of Work</span>
           <svg class="sec-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
-        <div class="sec-body" style="padding:0">
+        <div class="sec-body no-pad">
           <div class="rte-toolbar no-print">
             <button class="rte-btn" onclick="fmt('bold')"><b>B</b></button>
             <button class="rte-btn" onclick="fmt('italic')"><i>I</i></button>
@@ -510,11 +577,11 @@
             <table class="bom-table">
               <thead>
                 <tr>
-                  <th style="width:48px">#</th>
+                  <th class="th-num">#</th>
                   <th>Description</th>
-                  <th style="width:64px">Qty</th>
-                  <th style="width:64px">Unit</th>
-                  <th style="width:180px">Make / Model</th>
+                  <th class="th-qty">Qty</th>
+                  <th class="th-unit">Unit</th>
+                  <th class="th-model">Make / Model</th>
                   <th>Notes</th>
                   <th class="td-del no-print"></th>
                 </tr>
@@ -537,64 +604,7 @@
           <span class="sec-title">Drawing Canvas</span>
           <svg class="sec-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
-        <div class="sec-body" style="padding:0">
-          <div class="canvas-toolbar no-print">
-            <!-- Selection / drawing tools -->
-            <button class="tool-btn active" id="tool-select" onclick="setTool('select')" title="Select & Move (V)">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l7 18 2.5-7.5L22 11z"/></svg>
-              Select
-            </button>
-            <button class="tool-btn" id="tool-rect" onclick="setTool('rect')" title="Rectangle (R)">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1" stroke-width="2"/></svg>
-              Rect
-            </button>
-            <button class="tool-btn" id="tool-line" onclick="setTool('line')" title="Line (L)">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="4" stroke-width="2"/></svg>
-              Line
-            </button>
-            <button class="tool-btn" id="tool-arrow" onclick="setTool('arrow')" title="Arrow (A)">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19l14-14M19 5H9m10 0v10"/></svg>
-              Arrow
-            </button>
-            <button class="tool-btn" id="tool-text" onclick="setTool('text')" title="Text Box (T)">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5M18 2l4 4-9 9H9v-4z"/></svg>
-              Text
-            </button>
-            <div class="tool-sep"></div>
-            <!-- Color + stroke -->
-            <div class="color-row">
-              <label>Stroke</label>
-              <input type="color" class="color-swatch" id="stroke-color" value="#0b3d63" title="Stroke color" />
-            </div>
-            <div class="color-row">
-              <label>Fill</label>
-              <input type="color" class="color-swatch" id="fill-color" value="#e0f2fe" title="Fill color" />
-            </div>
-            <div class="stroke-row">
-              <label>Width</label>
-              <input type="range" id="stroke-width" min="1" max="8" value="2" title="Stroke width" aria-label="Stroke width" />
-              <span id="stroke-width-val">2</span>
-            </div>
-            <div class="tool-sep"></div>
-            <!-- Background image -->
-            <label class="tool-btn" title="Upload background image (floor plan)">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15l-5-5L5 21"/></svg>
-              BG Image
-              <input type="file" id="bg-upload" accept="image/*" style="display:none" />
-            </label>
-            <div class="tool-sep"></div>
-            <!-- Utility -->
-            <button class="tool-btn" onclick="deleteSelected()" title="Delete selected (Del)">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-              Delete
-            </button>
-            <button class="tool-btn danger" onclick="clearCanvas()" title="Clear all canvas objects">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16v16H4z"/><path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round" stroke-width="2"/></svg>
-              Clear
-            </button>
-          </div>
-
-          <!-- Canvas -->
+        <div class="sec-body no-pad">
           <div class="canvas-container-wrap" id="canvas-wrap">
             <canvas id="draw-canvas"></canvas>
             <span class="canvas-hint no-print">Click &amp; drag to draw • Double-click text to edit</span>
@@ -608,7 +618,7 @@
           <span class="sec-title">General Notes</span>
           <svg class="sec-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
-        <div class="sec-body" style="padding:0">
+        <div class="sec-body no-pad">
           <div class="rte-toolbar no-print">
             <button class="rte-btn" onclick="fmt2('bold')"><b>B</b></button>
             <button class="rte-btn" onclick="fmt2('italic')"><i>I</i></button>
@@ -624,7 +634,7 @@
 </div><!-- /#app -->
 
 <!-- ── DOCUMENT LIST OVERLAY ── -->
-<div id="doc-list-overlay" style="display:none">
+<div id="doc-list-overlay" class="is-hidden">
   <div class="doc-list-card">
     <div class="dlc-header">
       <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="dlc-logo" onerror="this.style.display='none'" />
@@ -674,8 +684,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Bind buttons
   qs('#btn-open-list').onclick = openDocList;
-  qs('#btn-new-doc').onclick = () => createNewDoc('blank');
-  qs('#btn-new-sa31').onclick = () => createNewDoc('sa31');
+  qs('#btn-save-doc').onclick = () => saveDoc();
   qs('#btn-export-pdf').onclick = exportPdf;
   qs('#dlc-new-btn').onclick = () => createNewDoc('blank');
   qs('#dlc-new-sa31-btn').onclick = () => createNewDoc('sa31');
