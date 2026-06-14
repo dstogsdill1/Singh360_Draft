@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import io
 import json
+import csv
 import re
 import subprocess
 import sys
@@ -55,6 +56,8 @@ JOBS_DIR = HERE / ".jobs"
 JOBS_DIR.mkdir(exist_ok=True)
 DOCS_DIR = HERE / ".docs"
 DOCS_DIR.mkdir(exist_ok=True)
+SA31_DIR = HERE / "output" / "SA31"
+SA31_SOURCE_DIR = SA31_DIR / "source"
 
 # Bounds: keep a single-user local tool predictable.
 MAX_CONTENT_LENGTH = 64 * 1024 * 1024  # 64 MB total upload ceiling
@@ -70,6 +73,38 @@ app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 
+def _seed_default_documents() -> None:
+    """Ensure the editor always has at least a master template and SA31 template."""
+    master_path = DOCS_DIR / "master_template.json"
+    if not master_path.exists():
+        master = _build_blank_doc("master_template", "Master Engineering Template")
+        master["scope"] = (
+            "<p><b>Purpose:</b> Use this master as your baseline template for new stores/projects.</p>"
+            "<ul>"
+            "<li>Edit header fields (project number/title/date/status).</li>"
+            "<li>Populate BOM rows.</li>"
+            "<li>Use the canvas for linework, arrows, notes, and overlays.</li>"
+            "</ul>"
+        )
+        master["notes"] = (
+            "<p><b>How to use:</b></p>"
+            "<ol>"
+            "<li>Open this template from <i>All Docs</i>.</li>"
+            "<li>Change metadata to the new site.</li>"
+            "<li>Export PDF when ready.</li>"
+            "</ol>"
+        )
+        master_path.write_text(json.dumps(master, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    sa31_path = DOCS_DIR / "sa31_template.json"
+    if not sa31_path.exists():
+        sa31_doc = _build_sa31_template_doc()
+        sa31_path.write_text(json.dumps(sa31_doc, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# Seed docs after helper builders are defined (see bottom of file).
+
+
 # --------------------------------------------------------------------------
 # Static GUI
 # --------------------------------------------------------------------------
@@ -81,6 +116,14 @@ def index():
 @app.get("/health")
 def health():
     return jsonify(ok=True)
+
+
+@app.get("/api/source/sa31/<path:filename>")
+def download_sa31_source(filename: str):
+    target = (SA31_DIR / filename).resolve()
+    if SA31_DIR.resolve() not in target.parents or not target.is_file():
+        abort(404)
+    return send_file(target, as_attachment=False, download_name=target.name)
 
 
 # --------------------------------------------------------------------------
@@ -253,27 +296,17 @@ def list_docs():
 
 @app.post("/api/doc/new")
 def new_doc():
+    req = request.get_json(silent=True) or {}
+    template = (request.args.get("template") or request.form.get("template") or req.get("template") or "blank").strip().lower()
     doc_id = uuid.uuid4().hex[:16]
-    today = datetime.now().strftime("%m/%d/%Y")
-    data: dict = {
-        "id": doc_id,
-        "title": "Untitled Engineering Document",
-        "modified": _utcnow(),
-        "meta": {
-            "projectName": "",
-            "projectNo": "",
-            "siteAddress": "",
-            "date": today,
-            "preparedBy": "Singh360 Inc.",
-            "status": "Preliminary",
-        },
-        "scope": "<p>Enter scope of work here.</p>",
-        "notes": "",
-        "bom": [
-            {"item": "1", "desc": "", "qty": "", "unit": "EA", "make": "", "notes": ""},
-        ],
-        "canvas": None,
-    }
+
+    if template == "sa31":
+        data = _build_sa31_template_doc(doc_id=doc_id, as_working_copy=True)
+    elif template == "master":
+        data = _build_blank_doc(doc_id, "Master Engineering Template")
+    else:
+        data = _build_blank_doc(doc_id, "Untitled Engineering Document")
+
     path = DOCS_DIR / f"{doc_id}.json"
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return jsonify(ok=True, id=doc_id)
@@ -384,6 +417,98 @@ def _safe_doc_path(doc_id: str) -> Path:
     return path
 
 
+def _build_blank_doc(doc_id: str, title: str) -> dict:
+    today = datetime.now().strftime("%m/%d/%Y")
+    return {
+        "id": doc_id,
+        "title": title,
+        "modified": _utcnow(),
+        "meta": {
+            "projectName": "",
+            "projectNo": "",
+            "siteAddress": "",
+            "date": today,
+            "preparedBy": "Singh360 Inc.",
+            "status": "Preliminary",
+            "sheetTitle": "",
+            "sheetNumber": "",
+        },
+        "scope": "<p>Enter scope of work here.</p>",
+        "notes": "",
+        "sourceRefs": [],
+        "bom": [
+            {"item": "1", "desc": "", "qty": "", "unit": "EA", "make": "", "notes": ""},
+        ],
+        "canvas": None,
+    }
+
+
+def _build_sa31_template_doc(doc_id: str = "sa31_template", as_working_copy: bool = False) -> dict:
+    title = "SA31 Lighting Template" if not as_working_copy else "SA31 Lighting Working Copy"
+    doc = _build_blank_doc(doc_id, title)
+    doc["meta"].update({
+        "projectName": "HEB SA31 Lighting",
+        "projectNo": "SA-31",
+        "sheetTitle": "EMS LIGHTING CONTROL PLAN",
+        "sheetNumber": "EMS-1.1",
+        "status": "Preliminary",
+    })
+    doc["scope"] = (
+        "<p>This SA31 template is pre-seeded from the existing source schedules in "
+        "<code>output/SA31/source/</code>.</p>"
+        "<ul>"
+        "<li>Edit BOM and text directly in this page.</li>"
+        "<li>Use the canvas for floorplan markup (lines/arrows/boxes/text).</li>"
+        "<li>Export a fresh PDF at any time.</li>"
+        "</ul>"
+    )
+
+    refs: list[dict[str, str]] = []
+    if SA31_SOURCE_DIR.exists():
+        refs.extend([
+            {"label": "SA31 assets.csv", "path": str(SA31_SOURCE_DIR / "assets.csv"), "href": "/api/source/sa31/source/assets.csv"},
+            {"label": "SA31 control_matrix.csv", "path": str(SA31_SOURCE_DIR / "control_matrix.csv"), "href": "/api/source/sa31/source/control_matrix.csv"},
+            {"label": "SA31 network.csv", "path": str(SA31_SOURCE_DIR / "network.csv"), "href": "/api/source/sa31/source/network.csv"},
+        ])
+
+    bom_rows: list[dict[str, str]] = []
+    assets_csv = SA31_SOURCE_DIR / "assets.csv"
+    if assets_csv.exists():
+        try:
+            with assets_csv.open("r", encoding="utf-8-sig", newline="") as f:
+                reader = csv.DictReader(f)
+                for i, row in enumerate(reader, start=1):
+                    name = (row.get("Name") or "").strip()
+                    if not name:
+                        continue
+                    desc = (row.get("Issue-Desc") or "").strip() or (row.get("Connected/Area Served/Refrigerant/Number Of Racks") or "").strip()
+                    unit = (row.get("Unit/Type") or "").strip() or "EA"
+                    make = (row.get("Fixture Type/Rack Type/Suction Temp/Make") or "").strip()
+                    notes = (row.get("Control Type") or "").strip()
+                    bom_rows.append({
+                        "item": str(i),
+                        "desc": name if not desc else f"{name} — {desc}",
+                        "qty": "1",
+                        "unit": unit,
+                        "make": make,
+                        "notes": notes,
+                    })
+        except Exception:
+            pass
+
+    if not bom_rows:
+        bom_rows = doc["bom"]
+
+    doc["bom"] = bom_rows
+    doc["sourceRefs"] = refs
+    doc["notes"] = (
+        "<p><b>Template lineage:</b> This document points back to the current SA31 source files, "
+        "so your live document can be edited and re-exported without moving those files.</p>"
+        "<p>Use <i>All Docs</i> to duplicate this pattern for future stores.</p>"
+    )
+    return doc
+
+
 # Playwright snippet executed in a subprocess for PDF export.
 # Avoids asyncio conflicts with Flask's WSGI thread.
 _PLAYWRIGHT_PDF_SCRIPT = """\
@@ -407,6 +532,9 @@ async def go():
 
 asyncio.run(go())
 """
+
+
+_seed_default_documents()
 
 
 if __name__ == "__main__":

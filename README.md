@@ -272,6 +272,60 @@ web/index.html  --FormData(POST /api/generate)-->  server.py (Flask)
 > `GET /api/download/<job>/<file>` · `GET /api/download/<job>.zip`. The server
 > binds `127.0.0.1:8765` (local only).
 
+### Live HTML Engineering Document Editor (`/editor`)
+
+The repo now includes a browser-based living-document editor for text, BOM
+tables, and canvas markup (Fabric.js), with auto-save and PDF export.
+
+#### Start it
+
+```powershell
+cd "<...>\Singh360_SmartDraw"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+playwright install chromium
+python server.py
+```
+
+Open:
+
+- `http://localhost:8765/editor`
+
+#### What you should see immediately
+
+`All Docs` opens with seeded templates (created automatically if missing):
+
+- `Master Engineering Template`
+- `SA31 Lighting Template` (pre-seeded from `output/SA31/source/*.csv`)
+
+If you click **New SA31 Copy**, the server creates a new working document from
+the SA31 template data.
+
+#### Data locations (single source of truth)
+
+- Live editor documents save to: `.docs/<doc_id>.json`
+- PDF exports save to: `.docs/<doc_id>.pdf` (and download to browser)
+- Existing SA31 source files stay in place at: `output/SA31/source/`
+  - `assets.csv`
+  - `control_matrix.csv`
+  - `network.csv`
+
+The editor stores source references and links back to those files (read-only)
+via `/api/source/sa31/...`; it does **not** move or rewrite your SA31 source
+files.
+
+#### Editor endpoint summary
+
+- `GET /editor` — live editor UI
+- `GET /api/docs` — list saved docs
+- `POST /api/doc/new` — create new doc (`template=blank|master|sa31`)
+- `GET /api/doc/<id>` — load one doc
+- `POST /api/doc/<id>` — save one doc (auto-save target)
+- `DELETE /api/doc/<id>` — delete one doc
+- `POST /api/export/pdf/<id>` — render PDF snapshot with Playwright
+- `GET /api/source/sa31/<path>` — read SA31 source file/image reference
+
 ---
 
 ## 4. Output formats

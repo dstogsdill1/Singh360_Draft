@@ -82,6 +82,9 @@
     .tb-btn.primary:hover { background: #0d82bd; border-color: #0d82bd; }
     .tb-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
 
+    .tb-btn.sa31 { background: #1e40af; border-color: #1e40af; }
+    .tb-btn.sa31:hover { background: #1d4ed8; border-color: #1d4ed8; }
+
     /* Body area */
     #body { display: flex; flex: 1; overflow: hidden; }
 
@@ -118,6 +121,21 @@
     }
     .meta-field select:focus,
     .meta-field input:focus { border-color: var(--blue); }
+
+    .source-ref-list { display: grid; gap: 6px; }
+    .source-ref-empty { font-size: 11px; color: var(--text-3); }
+    .mt-10 { margin-top: 10px; }
+    .source-ref-link {
+      display: block; font-size: 12px; color: #1d4ed8; text-decoration: none;
+      background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 5px;
+      padding: 6px 8px;
+    }
+    .source-ref-link:hover { background: #dbeafe; }
+    .source-ref-path {
+      display: block; font-size: 10px; color: var(--text-3);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-top: 2px;
+    }
 
     /* Main content */
     #main {
@@ -281,6 +299,8 @@
       cursor: pointer; transition: background .15s;
     }
     .dlc-new-btn:hover { background: #0d82bd; }
+    .dlc-new-btn.alt { background: #1e40af; }
+    .dlc-new-btn.alt:hover { background: #1d4ed8; }
     .dlc-list { overflow-y: auto; flex: 1; }
     .dlc-empty { padding: 40px; text-align: center; color: var(--text-3); font-size: 14px; }
     .dlc-item {
@@ -358,6 +378,10 @@
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
       New
     </button>
+    <button class="tb-btn sa31" id="btn-new-sa31" title="Create SA31 working copy">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2m-1 0v12a2 2 0 01-2 2H9a2 2 0 01-2-2V7m3 4h4m-4 4h4"/></svg>
+      New SA31 Copy
+    </button>
     <button class="tb-btn primary" id="btn-export-pdf" title="Export PDF via Playwright">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
       Export PDF
@@ -409,6 +433,10 @@
         <div class="meta-field">
           <label>Prepared By</label>
           <input type="text" id="meta-prepared-by" placeholder="Singh360 Inc." />
+        </div>
+        <div class="sb-meta-label mt-10">Source References</div>
+        <div id="source-ref-list" class="source-ref-list">
+          <span class="source-ref-empty">No linked source files.</span>
         </div>
       </div>
     </aside>
@@ -605,6 +633,10 @@
         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
         New Document
       </button>
+      <button class="dlc-new-btn alt" id="dlc-new-sa31-btn">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12h14M12 5v14"/></svg>
+        New SA31 Copy
+      </button>
     </div>
     <div class="dlc-list" id="dlc-list">
       <div class="dlc-empty">Loading…</div>
@@ -642,9 +674,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Bind buttons
   qs('#btn-open-list').onclick = openDocList;
-  qs('#btn-new-doc').onclick = createNewDoc;
+  qs('#btn-new-doc').onclick = () => createNewDoc('blank');
+  qs('#btn-new-sa31').onclick = () => createNewDoc('sa31');
   qs('#btn-export-pdf').onclick = exportPdf;
-  qs('#dlc-new-btn').onclick = createNewDoc;
+  qs('#dlc-new-btn').onclick = () => createNewDoc('blank');
+  qs('#dlc-new-sa31-btn').onclick = () => createNewDoc('sa31');
 
   // Print mode
   if (params.get('print') === '1') {
@@ -1078,6 +1112,7 @@ function populateDoc(data) {
 
   qs('#scope-editor').innerHTML = data.scope || '<p>Enter scope of work here.</p>';
   qs('#notes-editor').innerHTML = data.notes || '';
+  renderSourceRefs(data.sourceRefs || []);
 
   renderBomRows(data.bom || [{ item: '1', desc: '', qty: '', unit: 'EA', make: '', notes: '' }]);
 
@@ -1147,10 +1182,28 @@ qs('#doc-list-overlay').addEventListener('click', e => {
 // ══════════════════════════════════════════════════════════════════
 //  NEW DOC
 // ══════════════════════════════════════════════════════════════════
-async function createNewDoc() {
-  const res = await fetch('/api/doc/new', { method: 'POST' });
+async function createNewDoc(template = 'blank') {
+  const res = await fetch('/api/doc/new', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template }),
+  });
   const { id } = await res.json();
   await loadDoc(id);
+}
+
+function renderSourceRefs(refs) {
+  const wrap = qs('#source-ref-list');
+  if (!refs.length) {
+    wrap.innerHTML = '<span class="source-ref-empty">No linked source files.</span>';
+    return;
+  }
+  wrap.innerHTML = refs.map(r => `
+    <a class="source-ref-link" href="${esc(r.href || '#')}" target="_blank" rel="noopener noreferrer">
+      ${esc(r.label || 'Source file')}
+      <span class="source-ref-path">${esc(r.path || '')}</span>
+    </a>
+  `).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════
