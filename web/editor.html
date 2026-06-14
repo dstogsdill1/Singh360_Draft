@@ -92,6 +92,14 @@
       overflow: hidden; background: #3a3a3a; align-items: stretch;
     }
 
+    #app.sidebar-collapsed #body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    #app.sidebar-collapsed #sidebar {
+      display: none;
+    }
+
     /* Left sidebar */
     #sidebar {
       width: 280px; min-width: 280px;
@@ -165,7 +173,7 @@
       display: flex; align-items: center; gap: 12px;
       background: linear-gradient(90deg, #0b3d63 0%, #0e8fd0 100%); color: #fff;
       border-bottom: 1px solid rgba(255,255,255,0.08);
-      padding: 12px 20px; cursor: pointer; -webkit-user-select: none; user-select: none;
+      padding: 12px 20px; cursor: default; -webkit-user-select: none; user-select: none;
     }
     .sec-header:hover { filter: brightness(1.03); }
     .sec-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #fff; flex: 1; }
@@ -295,6 +303,34 @@
 
     .source-ref-panel { display: grid; gap: 8px; }
 
+    .sb-page-list { display: grid; gap: 8px; margin-bottom: 8px; }
+    .sb-page-btn {
+      width: 100%; text-align: left; border: 1px solid #d6dbe3; background: #fff;
+      color: #334155; border-radius: 10px; padding: 10px 12px; cursor: pointer;
+      font-family: var(--font); font-size: 12px; font-weight: 600;
+      transition: all .12s;
+    }
+    .sb-page-btn:hover { border-color: #94c7e7; background: #eef6fb; color: var(--navy); }
+    .sb-page-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+    .page-tabs {
+      position: sticky; top: 0; z-index: 9;
+      display: flex; gap: 10px; flex-wrap: wrap;
+      background: #fff; padding: 0 0 8px;
+      border-bottom: 1px solid #eef2f7;
+      margin-bottom: 4px;
+    }
+    .page-tab {
+      border: 1px solid #d6dbe3; background: #f8fafc; color: #334155;
+      border-radius: 999px; padding: 8px 14px; cursor: pointer;
+      font-family: var(--font); font-size: 12px; font-weight: 700;
+      letter-spacing: .02em; transition: all .12s;
+    }
+    .page-tab:hover { border-color: #94c7e7; background: #eef6fb; color: var(--navy); }
+    .page-tab.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+    .doc-section.page-hidden { display: none; }
+
     /* Doc List overlay */
     #doc-list-overlay {
       position: fixed; inset: 0; z-index: 200;
@@ -373,6 +409,7 @@
         width: 100%; max-width: 100%; height: auto; min-height: 720px;
         justify-self: stretch;
       }
+      .page-tabs { top: -2px; }
     }
 
     /* Print mode */
@@ -387,6 +424,7 @@
     body.print-mode #body { overflow: visible; }
     body.print-mode #app { height: auto; overflow: visible; }
     body.print-mode .doc-section.collapsed .sec-body { display: block !important; }
+    body.print-mode .doc-section.page-hidden { display: block !important; }
     body.print-mode .sec-header { cursor: default; background: var(--navy); color: #fff; }
     body.print-mode .sec-title { color: #fff; }
 
@@ -414,6 +452,10 @@
     <button class="tb-btn" id="btn-open-list" title="All Documents">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
       My Docs
+    </button>
+    <button class="tb-btn" id="btn-toggle-sidebar" title="Show/hide tools panel">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      Tools
     </button>
     <button class="tb-btn" id="btn-save-doc" title="Save current document">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5h11l3 3v11H5zM7 5v6h8V5M9 18h6"/></svg>
@@ -484,6 +526,17 @@
         </div>
       </div>
 
+      <div class="sb-section">
+        <div class="sb-section-label">Document Pages</div>
+        <div class="sb-page-list">
+          <button class="sb-page-btn active" data-target="sec-header">Project Header</button>
+          <button class="sb-page-btn" data-target="sec-scope">Scope of Work</button>
+          <button class="sb-page-btn" data-target="sec-bom">Bill of Materials</button>
+          <button class="sb-page-btn" data-target="sec-canvas">Drawing Canvas</button>
+          <button class="sb-page-btn" data-target="sec-notes">General Notes</button>
+        </div>
+      </div>
+
       <!-- Doc metadata in sidebar -->
       <div class="sb-meta">
         <div class="sb-meta-label">Document Properties</div>
@@ -511,9 +564,17 @@
     <!-- Main content -->
     <main id="main">
 
+      <div class="page-tabs no-print" id="page-tabs">
+        <button class="page-tab active" data-target="sec-header">Project Header</button>
+        <button class="page-tab" data-target="sec-scope">Scope</button>
+        <button class="page-tab" data-target="sec-bom">Materials</button>
+        <button class="page-tab" data-target="sec-canvas">Drawing</button>
+        <button class="page-tab" data-target="sec-notes">Notes</button>
+      </div>
+
       <!-- ── SECTION: PROJECT HEADER ── -->
       <div class="doc-section" id="sec-header">
-        <div class="sec-header" onclick="toggleSection(this)">
+        <div class="sec-header">
           <span class="sec-title">Project Header</span>
           <svg class="sec-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
@@ -549,7 +610,7 @@
 
       <!-- ── SECTION: SCOPE OF WORK ── -->
       <div class="doc-section" id="sec-scope">
-        <div class="sec-header" onclick="toggleSection(this)">
+        <div class="sec-header">
           <span class="sec-title">Scope of Work</span>
           <svg class="sec-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
@@ -568,7 +629,7 @@
 
       <!-- ── SECTION: BILL OF MATERIALS ── -->
       <div class="doc-section" id="sec-bom">
-        <div class="sec-header" onclick="toggleSection(this)">
+        <div class="sec-header">
           <span class="sec-title">Bill of Materials</span>
           <svg class="sec-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
@@ -600,7 +661,7 @@
 
       <!-- ── SECTION: DRAWING CANVAS ── -->
       <div class="doc-section" id="sec-canvas">
-        <div class="sec-header" onclick="toggleSection(this)">
+        <div class="sec-header">
           <span class="sec-title">Drawing Canvas</span>
           <svg class="sec-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
@@ -614,7 +675,7 @@
 
       <!-- ── SECTION: GENERAL NOTES ── -->
       <div class="doc-section" id="sec-notes">
-        <div class="sec-header" onclick="toggleSection(this)">
+        <div class="sec-header">
           <span class="sec-title">General Notes</span>
           <svg class="sec-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
@@ -668,6 +729,7 @@ let isDrawing = false;
 let startX = 0, startY = 0;
 let tempShape = null;
 let fabricCanvas = null;
+let activePage = 'sec-header';
 const params = new URLSearchParams(location.search);
 
 // ══════════════════════════════════════════════════════════════════
@@ -681,9 +743,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   initTitleWatcher();
   initBgUpload();
   initKeyboardShortcuts();
+  initPageTabs();
 
   // Bind buttons
   qs('#btn-open-list').onclick = openDocList;
+  qs('#btn-toggle-sidebar').onclick = toggleSidebar;
   qs('#btn-save-doc').onclick = () => saveDoc();
   qs('#btn-export-pdf').onclick = exportPdf;
   qs('#dlc-new-btn').onclick = () => createNewDoc('blank');
@@ -700,6 +764,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   } else {
     await openDocList();
   }
+
+  setActivePage(activePage);
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -780,6 +846,47 @@ function setTool(tool) {
     fabricCanvas.defaultCursor = 'crosshair';
     fabricCanvas.discardActiveObject();
     fabricCanvas.renderAll();
+  }
+}
+
+function initPageTabs() {
+  document.querySelectorAll('.page-tab, .sb-page-btn').forEach(btn => {
+    btn.addEventListener('click', () => setActivePage(btn.dataset.target || 'sec-header'));
+  });
+}
+
+function setActivePage(targetId) {
+  activePage = targetId;
+  document.querySelectorAll('.doc-section').forEach(sec => {
+    sec.classList.toggle('page-hidden', sec.id !== targetId);
+  });
+
+  document.querySelectorAll('.page-tab, .sb-page-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.target === targetId);
+  });
+
+  if (targetId === 'sec-canvas' && fabricCanvas) {
+    requestAnimationFrame(() => {
+      const wrap = qs('#canvas-wrap');
+      const newW = Math.max(680, (wrap?.offsetWidth || 900) - 24);
+      fabricCanvas.setWidth(newW);
+      fabricCanvas.calcOffset();
+      fabricCanvas.renderAll();
+    });
+  }
+}
+
+function toggleSidebar() {
+  const app = qs('#app');
+  app.classList.toggle('sidebar-collapsed');
+  if (fabricCanvas && activePage === 'sec-canvas') {
+    requestAnimationFrame(() => {
+      const wrap = qs('#canvas-wrap');
+      const newW = Math.max(680, (wrap?.offsetWidth || 900) - 24);
+      fabricCanvas.setWidth(newW);
+      fabricCanvas.calcOffset();
+      fabricCanvas.renderAll();
+    });
   }
 }
 
@@ -1248,13 +1355,6 @@ async function exportPdf() {
     btn.innerHTML = orig;
     btn.disabled = false;
   }
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  SECTION COLLAPSE TOGGLE
-// ══════════════════════════════════════════════════════════════════
-function toggleSection(header) {
-  header.closest('.doc-section').classList.toggle('collapsed');
 }
 
 function scrollTo(id) {
