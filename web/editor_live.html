@@ -260,6 +260,73 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #b0bec5; border-radius: 3px; }
 
+    /* ── CANVAS TOOLBAR (left panel) ── */
+    .canvas-tools { display: flex; flex-wrap: wrap; gap: 4px; }
+    .ct-btn {
+      width: 30px; height: 30px; border: 1px solid #cdd6e2; border-radius: 6px;
+      background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: #475569; transition: all .12s;
+    }
+    .ct-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .ct-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .ct-btn svg { width: 15px; height: 15px; pointer-events: none; }
+    .ct-row { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
+    .ct-row label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
+    .ct-row input[type="color"] { width: 28px; height: 24px; border: 1px solid #cdd6e2; border-radius: 4px; padding: 0; cursor: pointer; background: #fff; }
+    .ct-row input[type="range"] { flex: 1; accent-color: var(--blue); }
+    .ct-width-val { font-size: 10px; color: #475569; min-width: 26px; text-align: right; }
+
+    /* ── FABRIC CANVAS SLIDE ── */
+    .slide.canvas-slide .slide-card { padding: 0; }
+    .slide.canvas-slide .card-body { padding: 0; position: relative; display: block; overflow: hidden; }
+    #fabric-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #fdfefe; }
+    #fabric-canvas { box-shadow: inset 0 0 0 1px #e2e8f0; }
+
+    /* ── HELP OVERLAY ── */
+    #help-overlay { position: fixed; inset: 0; z-index: 210; background: rgba(6,31,51,0.9); display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .help-card { background: #fff; border-radius: 12px; width: 560px; max-width: 95vw; max-height: 86vh; overflow-y: auto; box-shadow: 0 20px 70px rgba(0,0,0,0.5); }
+    .help-hd { background: linear-gradient(90deg, var(--navy), var(--blue)); color: #fff; padding: 18px 22px; display: flex; align-items: center; gap: 10px; border-radius: 12px 12px 0 0; }
+    .help-hd h2 { font-size: 17px; font-weight: 700; flex: 1; }
+    .help-hd .help-close { background: rgba(255,255,255,0.15); border: none; color: #fff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 16px; line-height: 1; }
+    .help-hd .help-close:hover { background: rgba(255,255,255,0.3); }
+    .help-body { padding: 22px; }
+    .help-step { display: flex; gap: 13px; margin-bottom: 16px; }
+    .help-num { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+    .help-step h3 { font-size: 13.5px; color: var(--navy); margin-bottom: 2px; }
+    .help-step p { font-size: 12px; color: #475569; line-height: 1.55; }
+
+    /* ── FILE:// GUARD ── */
+    #file-guard { position: fixed; inset: 0; z-index: 300; background: linear-gradient(160deg, #0b3d63, #061f33); display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .fg-card { background: #fff; border-radius: 14px; max-width: 460px; padding: 32px; text-align: center; box-shadow: 0 25px 80px rgba(0,0,0,0.5); }
+    .fg-card h2 { color: var(--navy); font-size: 19px; margin-bottom: 10px; }
+    .fg-card p { color: #475569; font-size: 13px; line-height: 1.6; margin-bottom: 20px; }
+    .fg-card a { display: inline-block; background: var(--blue); color: #fff; text-decoration: none; padding: 11px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; }
+    .fg-card a:hover { background: #0d82bd; }
+    .fg-card code { background: #eef2f7; padding: 2px 7px; border-radius: 4px; font-size: 12px; color: var(--navy); }
+
+    /* ── RESPONSIVE ── */
+    #mobile-toggle { display: none; }
+    @media (max-width: 860px) {
+      #mobile-toggle {
+        display: inline-flex; align-items: center; gap: 5px;
+        border: 1px solid rgba(255,255,255,0.22); border-radius: 6px;
+        background: rgba(255,255,255,0.09); color: #fff; cursor: pointer;
+        font-family: var(--font); font-size: 11.5px; padding: 5px 10px;
+      }
+      #edit-panel {
+        position: absolute; top: 50px; left: 0; bottom: 0; z-index: 90;
+        width: 84vw; max-width: 340px;
+        transform: translateX(-100%); transition: transform .25s ease;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.35);
+      }
+      #app.panel-open #edit-panel { transform: translateX(0); }
+      #app.panel-open #preview-area::after {
+        content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.35); z-index: 80;
+      }
+      .tb-crumb, #doc-title-input { font-size: 12px; }
+      .tb-btn span, .tb-btn { font-size: 10.5px; }
+    }
+
     /* ── PRINT STYLES ── */
     @media print {
       @page { size: A3 landscape; margin: 0; }
@@ -275,12 +342,16 @@
       .slide:last-child { break-after: auto; page-break-after: auto; }
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
 </head>
 <body>
 <div id="app">
 
   <!-- ── TOP BAR ── -->
   <header id="topbar">
+    <button id="mobile-toggle" title="Toggle editor panel">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
     <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="tb-logo" onerror="this.style.display='none'" />
     <div class="tb-div"></div>
     <span class="tb-crumb"><a href="/">SmartDraw</a> / Live Editor</span>
@@ -290,6 +361,10 @@
       <span id="save-text">—</span>
     </div>
     <div class="tb-div"></div>
+    <button class="tb-btn" id="btn-help" title="How this works">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Help
+    </button>
     <button class="tb-btn" id="btn-my-docs">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
       My Docs
@@ -370,6 +445,59 @@
           </div>
         </div>
 
+        <!-- Annotation Canvas -->
+        <div class="ep-sec" id="eps-canvas">
+          <div class="ep-sec-hd" onclick="toggleSec('eps-canvas')">Annotation Drawing <span class="chev">▾</span></div>
+          <div class="ep-bd">
+            <div class="canvas-tools" role="toolbar" aria-label="Drawing tools">
+              <button class="ct-btn active" data-tool="select" title="Select / Move">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l7 17 2-7 7-2z"/></svg>
+              </button>
+              <button class="ct-btn" data-tool="draw" title="Free draw">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 11l6-6 3 3-6 6H9v-3z"/></svg>
+              </button>
+              <button class="ct-btn" data-tool="rect" title="Rectangle">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1" stroke-width="2"/></svg>
+              </button>
+              <button class="ct-btn" data-tool="ellipse" title="Ellipse">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="6" stroke-width="2"/></svg>
+              </button>
+              <button class="ct-btn" data-tool="line" title="Line">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M5 19L19 5"/></svg>
+              </button>
+              <button class="ct-btn" data-tool="arrow" title="Arrow">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19L19 5m0 0h-7m7 0v7"/></svg>
+              </button>
+              <button class="ct-btn" data-tool="text" title="Text box">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M9 6v12m6-12v12M7 18h4m2 0h4"/></svg>
+              </button>
+              <button class="ct-btn" data-tool="delete" title="Delete selected">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-1 12a2 2 0 01-2 2H8a2 2 0 01-2-2L5 7m5 4v6m4-6v6M9 7V4h6v3m-9 0h12"/></svg>
+              </button>
+            </div>
+            <div class="ct-row">
+              <label for="ct-stroke">Stroke</label>
+              <input type="color" id="ct-stroke" value="#0b3d63" title="Stroke color" />
+              <label for="ct-fill">Fill</label>
+              <input type="color" id="ct-fill" value="#cce6f4" title="Fill color" />
+            </div>
+            <div class="ct-row">
+              <label for="ct-width">Width</label>
+              <input type="range" id="ct-width" min="1" max="14" value="2" title="Line thickness" />
+              <span class="ct-width-val" id="ct-width-val">2px</span>
+            </div>
+            <label class="upload-lbl" style="margin-top:6px">
+              <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 4h16v16H4z"/></svg>
+              Set Canvas Background
+              <input type="file" id="canvas-bg-upload" accept="image/*" class="is-hidden" />
+            </label>
+            <button class="btn-add-row" id="btn-clear-canvas" type="button">
+              <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+              Clear canvas
+            </button>
+          </div>
+        </div>
+
         <!-- Notes -->
         <div class="ep-sec" id="eps-notes">
           <div class="ep-sec-hd" onclick="toggleSec('eps-notes')">General Notes <span class="chev">▾</span></div>
@@ -442,6 +570,21 @@
       <!-- DRAWING SLIDES (dynamic) -->
       <div id="drawing-slides"></div>
 
+      <!-- ANNOTATION CANVAS SLIDE -->
+      <div class="slide canvas-slide" id="slide-canvas">
+        <div class="slide-card">
+          <div class="card-hd" id="prev-canvas-title">Annotation / Markup</div>
+          <div class="card-body">
+            <div id="fabric-wrap"><canvas id="fabric-canvas"></canvas></div>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>PROJECT: <span class="ft-proj"></span></span>
+          <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360" class="slide-foot-logo" onerror="this.style.display='none'" />
+          <span><span class="ft-date"></span> · MARKUP</span>
+        </div>
+      </div>
+
       <!-- LAST SLIDE: NOTES -->
       <div class="slide" id="slide-notes">
         <div class="slide-card">
@@ -478,18 +621,59 @@
   </div>
 </div>
 
+<!-- HELP OVERLAY -->
+<div id="help-overlay" class="is-hidden">
+  <div class="help-card">
+    <div class="help-hd">
+      <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <h2>How the Live Editor Works</h2>
+      <button class="help-close" id="help-close" title="Close">×</button>
+    </div>
+    <div class="help-body">
+      <div class="help-step"><div class="help-num">1</div><div><h3>Pick a document</h3><p>Click <strong>My Docs</strong> in the top bar. Open the <strong>SA31</strong> copy to start from a complete example, or create a new blank document.</p></div></div>
+      <div class="help-step"><div class="help-num">2</div><div><h3>Edit on the left</h3><p>Use the collapsible sections in the left panel — Project Header, Scope, Bill of Materials, Drawing Images, Annotation Drawing, and Notes.</p></div></div>
+      <div class="help-step"><div class="help-num">3</div><div><h3>Watch the right preview</h3><p>The pages on the right update <strong>instantly</strong> as you type. Each page is a Singh360-branded slide that mirrors the SA31 PDF.</p></div></div>
+      <div class="help-step"><div class="help-num">4</div><div><h3>Draw &amp; annotate</h3><p>In <strong>Annotation Drawing</strong>, pick a tool (rectangle, ellipse, line, arrow, text, free draw), set stroke/fill/width, and mark up an uploaded background. Everything is saved with the document.</p></div></div>
+      <div class="help-step"><div class="help-num">5</div><div><h3>Save &amp; export</h3><p>Edits auto-save (you can also press <strong>Ctrl+S</strong>). Click <strong>Export PDF</strong> to print exactly what you see in the preview, including your annotations.</p></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- FILE:// GUARD -->
+<div id="file-guard" class="is-hidden">
+  <div class="fg-card">
+    <h2>Open via the local server</h2>
+    <p>This editor needs the Singh360 bridge running. It looks like you opened it as a <code>file://</code> path, so saving, templates, and SA31 data won't work.</p>
+    <p>Start the server (<code>python server.py</code>) then use this link:</p>
+    <a href="http://127.0.0.1:8765/editor">Open http://127.0.0.1:8765/editor</a>
+  </div>
+</div>
+
 <script>
 // ─────────────────── STATE ───────────────────
 let docId = null;
 let docImages = [];   // [{label, href}]
 let saveTimer = null;
+let fabricCanvas = null;
+let activeTool = 'select';
+let isLoadingCanvas = false;
 const params = new URLSearchParams(location.search);
 
 // ─────────────────── INIT ───────────────────
 window.addEventListener('DOMContentLoaded', async () => {
+  // file:// guard — saving + templates require the local bridge
+  if (location.protocol === 'file:') {
+    qs('#file-guard').classList.remove('is-hidden');
+    return;
+  }
+
   qs('#btn-my-docs').onclick = openDocList;
   qs('#btn-save').onclick = () => { clearTimeout(saveTimer); saveDoc(); };
   qs('#btn-print').onclick = () => window.print();
+  qs('#btn-help').onclick = () => qs('#help-overlay').classList.remove('is-hidden');
+  qs('#help-close').onclick = () => qs('#help-overlay').classList.add('is-hidden');
+  qs('#help-overlay').onclick = e => { if (e.target === qs('#help-overlay')) qs('#help-overlay').classList.add('is-hidden'); };
+  qs('#mobile-toggle').onclick = () => qs('#app').classList.toggle('panel-open');
   qs('#dlc-new').onclick   = () => createDoc('blank');
   qs('#dlc-sa31').onclick  = () => createDoc('sa31');
   qs('#doc-title-input').oninput = scheduleSave;
@@ -498,6 +682,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   qs('#img-upload').onchange = handleImgUpload;
   bindEdits();
   initKeyboard();
+  initFabric();
 
   const id = params.get('doc');
   if (id) await loadDoc(id);
@@ -682,6 +867,172 @@ function handleImgUpload() {
   this.value = '';
 }
 
+// ─────────────────── FABRIC CANVAS ───────────────────
+function initFabric() {
+  if (typeof fabric === 'undefined') return;  // CDN blocked → degrade gracefully
+  const wrap = qs('#fabric-wrap');
+  const W = 1040, H = 720;  // A3-landscape-ish working surface
+  fabricCanvas = new fabric.Canvas('fabric-canvas', {
+    width: W, height: H, backgroundColor: '#ffffff', preserveObjectStacking: true,
+  });
+  fitFabric();
+  window.addEventListener('resize', fitFabric);
+
+  // Tool buttons
+  document.querySelectorAll('.ct-btn').forEach(btn => {
+    btn.onclick = () => selectTool(btn.dataset.tool, btn);
+  });
+  qs('#ct-width').oninput = e => {
+    qs('#ct-width-val').textContent = e.target.value + 'px';
+    if (fabricCanvas.freeDrawingBrush) fabricCanvas.freeDrawingBrush.width = parseInt(e.target.value, 10);
+    const o = fabricCanvas.getActiveObject();
+    if (o) { o.set('strokeWidth', parseInt(e.target.value, 10)); fabricCanvas.requestRenderAll(); markCanvasDirty(); }
+  };
+  qs('#ct-stroke').oninput = e => {
+    if (fabricCanvas.freeDrawingBrush) fabricCanvas.freeDrawingBrush.color = e.target.value;
+    const o = fabricCanvas.getActiveObject();
+    if (o) { o.set('stroke', e.target.value); if (o.type === 'i-text') o.set('fill', e.target.value); fabricCanvas.requestRenderAll(); markCanvasDirty(); }
+  };
+  qs('#ct-fill').oninput = e => {
+    const o = fabricCanvas.getActiveObject();
+    if (o && o.type !== 'i-text' && o.type !== 'line' && o.type !== 'path') { o.set('fill', e.target.value); fabricCanvas.requestRenderAll(); markCanvasDirty(); }
+  };
+  qs('#canvas-bg-upload').onchange = handleCanvasBg;
+  qs('#btn-clear-canvas').onclick = () => {
+    if (!confirm('Clear all annotations on the canvas?')) return;
+    fabricCanvas.clear(); fabricCanvas.backgroundColor = '#ffffff'; fabricCanvas.requestRenderAll();
+    markCanvasDirty();
+  };
+
+  // Shape creation on mousedown when a shape tool is active
+  let drawing = false, startX = 0, startY = 0, shape = null;
+  fabricCanvas.on('mouse:down', opt => {
+    if (['select','draw'].includes(activeTool)) return;
+    const p = fabricCanvas.getPointer(opt.e);
+    startX = p.x; startY = p.y; drawing = true;
+    const stroke = qs('#ct-stroke').value, fill = qs('#ct-fill').value;
+    const w = parseInt(qs('#ct-width').value, 10);
+    if (activeTool === 'rect') {
+      shape = new fabric.Rect({ left: startX, top: startY, width: 1, height: 1, fill, stroke, strokeWidth: w });
+    } else if (activeTool === 'ellipse') {
+      shape = new fabric.Ellipse({ left: startX, top: startY, rx: 1, ry: 1, fill, stroke, strokeWidth: w });
+    } else if (activeTool === 'line' || activeTool === 'arrow') {
+      shape = new fabric.Line([startX, startY, startX, startY], { stroke, strokeWidth: w });
+    } else if (activeTool === 'text') {
+      shape = new fabric.IText('Text', { left: startX, top: startY, fill: stroke, fontSize: 22, fontFamily: 'Segoe UI, sans-serif' });
+      fabricCanvas.add(shape); fabricCanvas.setActiveObject(shape); shape.enterEditing();
+      drawing = false; shape = null; selectTool('select', document.querySelector('[data-tool="select"]')); markCanvasDirty();
+      return;
+    }
+    if (shape) fabricCanvas.add(shape);
+  });
+  fabricCanvas.on('mouse:move', opt => {
+    if (!drawing || !shape) return;
+    const p = fabricCanvas.getPointer(opt.e);
+    if (activeTool === 'rect') {
+      shape.set({ width: Math.abs(p.x - startX), height: Math.abs(p.y - startY), left: Math.min(p.x, startX), top: Math.min(p.y, startY) });
+    } else if (activeTool === 'ellipse') {
+      shape.set({ rx: Math.abs(p.x - startX) / 2, ry: Math.abs(p.y - startY) / 2, left: Math.min(p.x, startX), top: Math.min(p.y, startY) });
+    } else if (activeTool === 'line' || activeTool === 'arrow') {
+      shape.set({ x2: p.x, y2: p.y });
+    }
+    fabricCanvas.requestRenderAll();
+  });
+  fabricCanvas.on('mouse:up', () => {
+    if (drawing && shape && activeTool === 'arrow') addArrowHead(shape);
+    if (drawing) { drawing = false; shape = null; markCanvasDirty();
+      selectTool('select', document.querySelector('[data-tool="select"]')); }
+  });
+  fabricCanvas.on('object:modified', markCanvasDirty);
+  fabricCanvas.on('path:created', markCanvasDirty);
+}
+
+function fitFabric() {
+  if (!fabricCanvas) return;
+  const wrap = qs('#fabric-wrap');
+  if (!wrap || !wrap.clientWidth) return;
+  const scale = Math.min(wrap.clientWidth / 1040, wrap.clientHeight / 720);
+  if (scale > 0 && isFinite(scale)) {
+    fabricCanvas.setZoom(1);  // keep internal coords; CSS scales the element
+    const el = fabricCanvas.getElement();
+    const upper = el.parentElement; // .canvas-container
+    if (upper) {
+      upper.style.transform = `scale(${scale})`;
+      upper.style.transformOrigin = 'center center';
+    }
+  }
+}
+
+function selectTool(tool, btn) {
+  activeTool = tool;
+  document.querySelectorAll('.ct-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (!fabricCanvas) return;
+  if (tool === 'delete') {
+    const objs = fabricCanvas.getActiveObjects();
+    objs.forEach(o => fabricCanvas.remove(o));
+    fabricCanvas.discardActiveObject(); fabricCanvas.requestRenderAll(); markCanvasDirty();
+    selectTool('select', document.querySelector('[data-tool="select"]'));
+    return;
+  }
+  fabricCanvas.isDrawingMode = (tool === 'draw');
+  if (tool === 'draw' && fabricCanvas.freeDrawingBrush) {
+    fabricCanvas.freeDrawingBrush.color = qs('#ct-stroke').value;
+    fabricCanvas.freeDrawingBrush.width = parseInt(qs('#ct-width').value, 10);
+  }
+  fabricCanvas.selection = (tool === 'select');
+  fabricCanvas.forEachObject(o => { o.selectable = (tool === 'select'); o.evented = (tool === 'select'); });
+  fabricCanvas.defaultCursor = (tool === 'select') ? 'default' : 'crosshair';
+}
+
+function addArrowHead(line) {
+  if (!fabricCanvas) return;
+  const angle = Math.atan2(line.y2 - line.y1, line.x2 - line.x1);
+  const head = new fabric.Triangle({
+    left: line.x2, top: line.y2, originX: 'center', originY: 'center',
+    width: 14 + line.strokeWidth * 2, height: 14 + line.strokeWidth * 2,
+    fill: line.stroke, angle: (angle * 180 / Math.PI) + 90,
+  });
+  fabricCanvas.add(head);
+}
+
+function handleCanvasBg() {
+  const file = this.files[0];
+  if (!file || !fabricCanvas) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    fabric.Image.fromURL(e.target.result, img => {
+      const scale = Math.min(1040 / img.width, 720 / img.height);
+      img.set({ originX: 'left', originY: 'top', left: 0, top: 0, scaleX: scale, scaleY: scale, selectable: false, evented: false });
+      fabricCanvas.setBackgroundImage(img, fabricCanvas.renderAll.bind(fabricCanvas));
+      markCanvasDirty();
+    });
+  };
+  reader.readAsDataURL(file);
+  this.value = '';
+}
+
+function markCanvasDirty() { if (!isLoadingCanvas) scheduleSave(); }
+
+function loadCanvasState(data) {
+  if (!fabricCanvas) return;
+  isLoadingCanvas = true;
+  if (data && data.objects) {
+    fabricCanvas.loadFromJSON(data, () => { fabricCanvas.renderAll(); fitFabric(); isLoadingCanvas = false; });
+  } else {
+    fabricCanvas.clear(); fabricCanvas.backgroundColor = '#ffffff'; fabricCanvas.renderAll();
+    isLoadingCanvas = false;
+  }
+}
+
+function getCanvasState() {
+  if (!fabricCanvas) return null;
+  const objs = fabricCanvas.getObjects();
+  const bg = fabricCanvas.backgroundImage;
+  if (!objs.length && !bg) return null;
+  return fabricCanvas.toJSON();
+}
+
 // ─────────────────── SECTION TOGGLE ───────────────────
 function toggleSec(id) { qs('#' + id).classList.toggle('closed'); }
 
@@ -730,6 +1081,9 @@ function populateFromDoc(data) {
   }
   renderDrawingSlides(imgs);
 
+  // Annotation canvas state
+  loadCanvasState(data.canvas);
+
   updatePreview();
   setSaveStatus('saved', data.modified);
 }
@@ -751,6 +1105,8 @@ function collectDocData() {
     bom: collectBomRows(),
     // Only save server-side hrefs (not data: URIs from uploads — too large)
     previewImages: docImages.filter(img => !img.href.startsWith('data:')),
+    // Fabric.js annotation canvas (serialized JSON, incl. background image)
+    canvas: getCanvasState(),
   };
 }
 
