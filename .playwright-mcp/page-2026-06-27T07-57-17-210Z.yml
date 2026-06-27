@@ -1,0 +1,181 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=e3]:
+    - generic "Top contact bar" [ref=e4]:
+      - generic [ref=e5]:
+        - link "Call Singh360 at 1-530-636-0360" [ref=e6] [cursor=pointer]:
+          - /url: tel:+15306360360
+          - generic [ref=e7]: ☎
+          - generic [ref=e8]: "Call: 1-530-636-0360"
+        - generic [ref=e9]:
+          - generic [ref=e10]: "Follow us:"
+          - link "Login to 360-Cloud" [ref=e11] [cursor=pointer]:
+            - /url: https://ems.stogsdill.net/#
+    - navigation "Primary navigation" [ref=e12]:
+      - generic [ref=e13]:
+        - link "Singh360 home" [ref=e14] [cursor=pointer]:
+          - /url: "#top"
+          - img "singh360" [ref=e15]
+        - list [ref=e16]:
+          - listitem [ref=e17]:
+            - link "Home" [ref=e18] [cursor=pointer]:
+              - /url: "#home"
+          - listitem [ref=e19]:
+            - link "About" [ref=e20] [cursor=pointer]:
+              - /url: "#about"
+          - listitem [ref=e21]:
+            - link "Services" [ref=e22] [cursor=pointer]:
+              - /url: "#services"
+          - listitem [ref=e23]:
+            - link "Products" [ref=e24] [cursor=pointer]:
+              - /url: "#products"
+          - listitem [ref=e25]:
+            - link "Resources" [ref=e26] [cursor=pointer]:
+              - /url: "#resources"
+          - listitem [ref=e27]:
+            - link "Contact" [ref=e28] [cursor=pointer]:
+              - /url: "#contact"
+  - main [ref=e29]:
+    - region "Singh360 Engineers Solutions to Optimize Energy Efficiency & Facility Management Expense for Multi-Site Owners" [ref=e30]:
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - paragraph [ref=e33]: Powerful, Cloud-based Commissioning and Energy Audit Application Released from Singh360
+          - heading "Singh360 Engineers Solutions to Optimize Energy Efficiency & Facility Management Expense for Multi-Site Owners" [level=1] [ref=e34]
+          - paragraph [ref=e35]: Singh360 is a software & services company focused on driving energy savings for multi-site building owners.
+        - generic "Singh360 homepage slides" [ref=e36]:
+          - 'article "Slide 1 of 5: Singh360 video" [ref=e38]':
+            - iframe [ref=e40]:
+              - generic [active] [ref=f1e1]:
+                - generic "YouTube Video Player" [ref=f1e3]
+                - generic [ref=f1e5]:
+                  - generic:
+                    - generic:
+                      - button "Play video" [ref=f1e10] [cursor=pointer]:
+                        - generic [ref=f1e13]:
+                          - img
+                      - button "Hide player controls" [ref=f1e14] [cursor=pointer]
+                      - generic [ref=f1e16]:
+                        - generic [ref=f1e21]:
+                          - generic [ref=f1e22]:
+                            - link "Singh360, Inc. | Complete Facility Solutions" [ref=f1e23] [cursor=pointer]:
+                              - /url: https://www.youtube.com/watch?v=2hwafP8qaYU
+                            - link "kWh360 - Energy Efficiency" [ref=f1e24] [cursor=pointer]:
+                              - /url: /channel/UCX6bvpB9ZDGM6LdVczSc6CA
+                              - generic [ref=f1e25]: kWh360 - Energy Efficiency
+                          - generic [ref=f1e26]:
+                            - button "thumbnail-image" [ref=f1e27] [cursor=pointer]:
+                              - img "thumbnail-image" [ref=f1e28]
+                            - generic [ref=f1e30]:
+                              - generic: kWh360 - Energy Efficiency
+                              - generic: 14 subscribers
+                        - generic [ref=f1e31]:
+                          - button "Share" [ref=f1e34] [cursor=pointer]:
+                            - generic [ref=f1e38]:
+                              - img
+                          - link "Watch on YouTube" [ref=f1e45] [cursor=pointer]:
+                            - /url: https://www.youtube.com/watch?v=2hwafP8qaYU
+                            - generic [ref=f1e48]:
+                              - text: Watch on
+                              - img [ref=f1e50]:
+                                - generic [ref=f1e52]:
+                                  - img
+          - generic "Slide controls" [ref=e41]:
+            - button "Prev" [ref=e42] [cursor=pointer]
+            - generic "Choose slide" [ref=e43]:
+              - button "Show slide 1" [ref=e44] [cursor=pointer]: "1"
+              - button "Show slide 2" [ref=e45] [cursor=pointer]: "2"
+              - button "Show slide 3" [ref=e46] [cursor=pointer]: "3"
+              - button "Show slide 4" [ref=e47] [cursor=pointer]: "4"
+              - button "Show slide 5" [ref=e48] [cursor=pointer]: "5"
+            - button "Next" [ref=e49] [cursor=pointer]
+    - region "Singh360 Engineers Solutions to Optimize Energy Efficiency & Facility Management Expense for Multi-Site Owners" [ref=e50]:
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - paragraph [ref=e53]: singh360
+          - heading "Singh360 Engineers Solutions to Optimize Energy Efficiency & Facility Management Expense for Multi-Site Owners" [level=2] [ref=e54]
+        - paragraph [ref=e56]: Singh360 is a software & services company focused on driving energy savings for multi-site building owners. We specialize in building management systems (BMS), energy efficiency, utility data analytics, and system optimization for buildings. Our solutions reflect the latest innovative technologies. From building envelope assessments to a complete mechanical and electrical design, and renewable energy evaluations for both new and existing buildings. Our range of new and existing building commissioning experience allows us to engineer solutions in a cost effective and efficient manner tailored to the needs of Facility Managers.
+    - region "Singh360 Services" [ref=e57]:
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - paragraph [ref=e60]: Services
+          - heading "Singh360 Services" [level=2] [ref=e61]
+        - generic [ref=e62]:
+          - article [ref=e63]:
+            - img "Commissioning Icon" [ref=e64]
+            - heading "Building Commissioning & Retro-Commissioning" [level=3] [ref=e65]
+            - paragraph [ref=e66]: Commissioning Services are used by many of the leading grocer store retailers. Run a better store and keep more of yo...
+            - link "Read more about Building Commissioning and Retro-Commissioning" [ref=e67] [cursor=pointer]:
+              - /url: "#contact"
+              - text: Read More
+          - article [ref=e68]:
+            - img "Leadership Icon" [ref=e69]
+            - heading "Energy Management System (EMS) Design" [level=3] [ref=e70]
+            - paragraph [ref=e71]: If every idea or directive came with blueprints, nothing would be difficult. Evaluate many design options before fina...
+            - link "Read more about Energy Management System Design" [ref=e72] [cursor=pointer]:
+              - /url: "#contact"
+              - text: Read More
+          - article [ref=e73]:
+            - img "Energy Management Icon" [ref=e74]
+            - heading "Energy Efficiency Project Management & Tracking" [level=3] [ref=e75]
+            - paragraph [ref=e76]: Want to cut energy usage and related expenses by 20 to 30%? We provide many energy efficiency project services to he...
+            - link "Read more about Energy Efficiency Project Management and Tracking" [ref=e77] [cursor=pointer]:
+              - /url: "#contact"
+              - text: Read More
+    - region "AI Driven Modeling & Energy Analytics Highlight Cost Savings" [ref=e78]:
+      - generic [ref=e79]:
+        - generic [ref=e80]:
+          - paragraph [ref=e81]: AI & Data Analytics
+          - heading "AI Driven Modeling & Energy Analytics Highlight Cost Savings" [level=2] [ref=e82]
+          - paragraph [ref=e83]: At Singh360, we support you in making decisions based on fact, science and great engineering. We deploy computer modeling tools and our custom developed HVAC and refrigeration modeling tools. These models include real-time pricing, time of use rates, and fixed energy rate structures. We not only help client’s engineer efficient building but also design processes, train people, and deploy appropriate tools to hold on to the energy savings for the long term.
+        - generic "Cloud software and mobile applications preview" [ref=e84]:
+          - heading "Singh360 Products" [level=3] [ref=e85]
+          - paragraph [ref=e86]: Singh360 will identify energy conservation opportunities including fine tuning your energy management systems, equipment, and control systems. We’ll help plot your path to better operating buildings through the use of our cloud-based software and mobile phone applications.
+          - generic [ref=e87]:
+            - generic [ref=e88]:
+              - strong [ref=e89]: Cloud-Based Software
+              - generic [ref=e90]: Artificial Intelligence (AI) targeting energy analytics to discover saving potentials.
+            - generic [ref=e91]:
+              - strong [ref=e92]: Mobile Applications
+              - generic [ref=e93]: Manage field surveys and facility audits. Provide an easy-to-use mobile application for site surveyors.
+    - region "I have collaborated with Singh360 for several years. Singh360 possesses a profound and impressive understanding of store operations, IT infrastructure, control systems, and energy technologies. Their persuasion led us to implement a web-based facility solution, ultimately reducing our energy costs by more than 10%." [ref=e94]:
+      - figure "- Wally Lindeman, Director of Facilities, Lunds Food Holding" [ref=e96]:
+        - paragraph [ref=e97]: Testimonials
+        - blockquote [ref=e98]: I have collaborated with Singh360 for several years. Singh360 possesses a profound and impressive understanding of store operations, IT infrastructure, control systems, and energy technologies. Their persuasion led us to implement a web-based facility solution, ultimately reducing our energy costs by more than 10%.
+        - generic [ref=e99]: "- Wally Lindeman, Director of Facilities, Lunds Food Holding"
+    - region "We’d love to hear about your goals, priorities and projects." [ref=e100]:
+      - generic [ref=e101]:
+        - generic [ref=e102]:
+          - paragraph [ref=e103]: Contact
+          - heading "We’d love to hear about your goals, priorities and projects." [level=2] [ref=e104]
+          - paragraph [ref=e105]: Please call 1-530-636-0360 or email info@singh360.com.
+          - generic [ref=e106]:
+            - text: "Corporate Office:"
+            - text: 879 Meander Ct
+            - text: Medina, MN 55340
+            - text: USA
+        - generic [ref=e107]:
+          - link "Call 1-530-636-0360" [ref=e108] [cursor=pointer]:
+            - /url: tel:+15306360360
+          - link "Email info@singh360.com" [ref=e109] [cursor=pointer]:
+            - /url: mailto:info@singh360.com?subject=Singh360%20Website%20Inquiry
+          - link "Login to 360-Cloud" [ref=e110] [cursor=pointer]:
+            - /url: https://ems.stogsdill.net/#
+  - contentinfo [ref=e111]:
+    - generic [ref=e112]:
+      - generic [ref=e113]:
+        - img "singh360" [ref=e114]
+        - paragraph [ref=e115]: Copyright © 2026 Singh360, Inc. All rights reserved
+      - navigation "Footer navigation" [ref=e116]:
+        - link "Home" [ref=e117] [cursor=pointer]:
+          - /url: "#home"
+        - link "About" [ref=e118] [cursor=pointer]:
+          - /url: "#about"
+        - link "Services" [ref=e119] [cursor=pointer]:
+          - /url: "#services"
+        - link "Products" [ref=e120] [cursor=pointer]:
+          - /url: "#products"
+        - link "Resources" [ref=e121] [cursor=pointer]:
+          - /url: "#resources"
+        - link "Contact" [ref=e122] [cursor=pointer]:
+          - /url: "#contact"
