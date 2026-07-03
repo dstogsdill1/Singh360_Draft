@@ -61,6 +61,19 @@
 .tb-code-value { font-size: 26px; font-weight: 800; line-height: 1; }
 .tb-page-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #333; }
 
+/* ── TITLE BLOCK V3 (architectural line hierarchy) ── */
+.sheet-title-block.tb-v3 { border-width: 2.5px; }
+.tb-v3 .tb-cell { border-right: 1.5px solid #000; }
+.tb-v3 .tb-firm-name { letter-spacing: 0.1em; }
+.tb-v3 .tb-sheet-title-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.tb-v3 .tb-sheet-title { font-size: 19px; }
+.tb-v3 .tb-continued { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #a5661a; }
+.tb-v3 .tb-field-label { color: #555; border-bottom: 0.5px solid #d8dce0; padding-bottom: 1px; margin-bottom: 1px; }
+.tb-v3 .tb-rev .tb-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tb-v3 .tb-code { background: #f7f8fa; }
+.tb-v3 .tb-code-value { font-size: 28px; letter-spacing: 0.02em; }
+.tb-v3 .tb-page-label { font-weight: 700; }
+
 /* ── NORMALIZED PAGE BLOCKS ── */
 .np { padding: 40px 48px; color: #111; font-size: 14px; line-height: 1.5; }
 .np-empty { padding: 48px; color: #888; }
@@ -89,6 +102,12 @@
 }
 .np-image-ph-icon { font-size: 34px; color: #9aa3ac; }
 .np-image-ph-text { font-size: 13px; }
+
+.np-image-embed {
+  display: flex; align-items: center; justify-content: center;
+  margin: 12px 0; padding: 4px; background: #fff; overflow: hidden;
+}
+.np-image-embed-img { max-width: 100%; max-height: 620px; object-fit: contain; }
 
 .np-cover { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 48px; }
 .np-cover-brand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 28px; }

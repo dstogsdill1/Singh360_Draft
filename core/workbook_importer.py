@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -205,7 +206,65 @@ def _parse_index(workbook, index_sheet_name: str | None) -> list[dict[str, Any]]
     return entries
 
 
-def import_workbook(path: str | Path, project_id: str | None = None) -> dict[str, Any]:
+def _safe_name(text: str) -> str:
+    out = re.sub(r"[^A-Za-z0-9._-]+", "_", (text or "sheet").strip())
+    return out[:40] or "sheet"
+
+
+def _extract_embedded_images(ws, assets_dir, url_prefix: str, sheet_name: str) -> list[dict[str, Any]]:
+    """Extract embedded worksheet images to disk; return metadata list.
+
+    Never raises — unsupported/unknown image types are skipped.
+    """
+    if assets_dir is None or not url_prefix:
+        return []
+    out: list[dict[str, Any]] = []
+    images = getattr(ws, "_images", None) or []
+    for i, img in enumerate(images):
+        try:
+            data = None
+            getter = getattr(img, "_data", None)
+            if callable(getter):
+                data = getter()
+            if not data:
+                ref = getattr(img, "ref", None)
+                if hasattr(ref, "read"):
+                    data = ref.read()
+            if not data:
+                continue
+            fmt = (getattr(img, "format", None) or "png").lower()
+            if fmt not in ("png", "jpg", "jpeg", "gif", "bmp", "webp"):
+                fmt = "png"
+            fname = f"{_safe_name(sheet_name)}_{i + 1}.{fmt}"
+            (Path(assets_dir) / fname).write_bytes(data)
+            anchor_cell = ""
+            try:
+                frm = img.anchor._from  # type: ignore[attr-defined]
+                anchor_cell = f"{get_column_letter(frm.col + 1)}{frm.row + 1}"
+            except Exception:
+                anchor_cell = ""
+            out.append(
+                {
+                    "id": f"xlimg_{_safe_name(sheet_name)}_{i + 1}",
+                    "sheetName": sheet_name,
+                    "anchorCell": anchor_cell,
+                    "width": getattr(img, "width", None),
+                    "height": getattr(img, "height", None),
+                    "name": fname,
+                    "url": f"{url_prefix}/{fname}",
+                }
+            )
+        except Exception:
+            continue
+    return out
+
+
+def import_workbook(
+    path: str | Path,
+    project_id: str | None = None,
+    assets_dir=None,
+    asset_url_prefix: str | None = None,
+) -> dict[str, Any]:
     xlsx = Path(path)
     wb = load_workbook(filename=xlsx, data_only=False)
 
@@ -222,6 +281,11 @@ def import_workbook(path: str | Path, project_id: str | None = None) -> dict[str
     )
 
     sheet_payloads = [_worksheet_payload(wb[sheet_name]) for sheet_name in wb.sheetnames]
+    embedded_by_sheet: dict[str, list[dict[str, Any]]] = {}
+    for sheet_name in wb.sheetnames:
+        embedded_by_sheet[sheet_name] = _extract_embedded_images(
+            wb[sheet_name], assets_dir, asset_url_prefix or "", sheet_name
+        )
 
     for i, ws in enumerate(sheet_payloads):
         project["worksheets"].append(
@@ -237,6 +301,7 @@ def import_workbook(path: str | Path, project_id: str | None = None) -> dict[str
                 "mergedCells": ws["mergedCells"],
                 "rowHeights": ws["rowHeights"],
                 "columnWidths": ws["columnWidths"],
+                "embeddedImages": embedded_by_sheet.get(ws["name"], []),
                 "provenance": {"sheet": ws["name"]},
             }
         )
@@ -253,6 +318,22 @@ def import_workbook(path: str | Path, project_id: str | None = None) -> dict[str
         page_type = classify_page_type(ws["name"], title, idx["useSource"] if idx else "")
 
         blocks = normalize_page(ws, ws["id"], page_type, title)
+
+        # Embedded workbook images → real image blocks (rendered, not placeholders).
+        for j, emb in enumerate(ws.get("embeddedImages", []) or []):
+            blocks.append(
+                {
+                    "id": f"{ws['id']}_emb_{j}",
+                    "type": "imagePlaceholder",
+                    "sourceWorksheetId": ws["id"],
+                    "sourceRange": emb.get("anchorCell", ""),
+                    "filename": emb.get("name", ""),
+                    "url": emb.get("url", ""),
+                    "text": emb.get("name", ""),
+                    "styleRole": "note",
+                    "editable": False,
+                }
+            )
 
         page = {
             "id": f"page_{i+1}",

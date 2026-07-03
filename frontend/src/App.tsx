@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   attachCsv,
   createProjectFromWorkbook,
+  exportPackage,
   exportPdf,
   getProject,
+  renameProject,
   savePages,
   saveProject,
   uploadAssetDataUrl,
@@ -30,6 +32,26 @@ function getUrlParams() {
 
 const clampScale = (v: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, v));
 const CANVAS_TYPES = new Set(['canvas', 'hybrid', 'underlay']);
+
+// Recompute live "Page X of Y" numbering across included, non-continuation pages.
+function withPageNumbers(pages: PageModel[]): PageModel[] {
+  const included = pages.filter((p) => p.include && !p.continuationOf);
+  const total = included.length;
+  let n = 0;
+  const numberById = new Map<string, number>();
+  for (const p of included) {
+    n += 1;
+    numberById.set(p.id, n);
+  }
+  return pages.map((p) => {
+    if (!p.include) return { ...p, pageNumber: null, pageTotal: total };
+    if (p.continuationOf) {
+      const parentNum = numberById.get(p.continuationOf) ?? null;
+      return { ...p, pageNumber: parentNum, pageTotal: total };
+    }
+    return { ...p, pageNumber: numberById.get(p.id) ?? null, pageTotal: total };
+  });
+}
 
 export default function App() {
   const { projectId: initialProjectId, print: printMode } = getUrlParams();
@@ -203,9 +225,10 @@ export default function App() {
 
   const updatePages = async (pages: PageModel[]) => {
     if (!project) return;
-    const next: ProjectModel = { ...project, pages };
+    const numbered = withPageNumbers(pages);
+    const next: ProjectModel = { ...project, pages: numbered };
     setProject(next);
-    await savePages(project.id, pages);
+    await savePages(project.id, numbered);
   };
 
   const onUploadWorkbook = async (file: File) => {
@@ -243,6 +266,44 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const onExportPackage = async () => {
+    if (!project) return;
+    const blob = await exportPackage(project.id);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${project.metadata.projectName || project.id}_package.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const onRenumber = () => {
+    if (!project) return;
+    void updatePages(project.pages);
+  };
+
+  const onRenameProject = async (name: string) => {
+    if (!project || !name.trim()) return;
+    try {
+      setSaveStatus('saving');
+      const res = await renameProject(project.id, name.trim());
+      setProject((prev) =>
+        prev
+          ? {
+              ...prev,
+              projectDisplayName: res.projectDisplayName ?? name.trim(),
+              projectFolder: res.projectFolder ?? prev.projectFolder,
+              metadata: { ...prev.metadata, projectName: name.trim() },
+            }
+          : prev,
+      );
+      setSaveStatus('saved');
+    } catch (err) {
+      console.error('rename failed', err);
+      setSaveStatus('failed');
+    }
+  };
+
   const onBlockChange = (pageId: string, blockId: string, patch: Partial<PageBlock>) => {
     setProject((prev) => {
       if (!prev) return prev;
@@ -271,17 +332,26 @@ export default function App() {
       canvas={{
         addText: () => canvasApiRef.current?.addText(),
         addRect: () => canvasApiRef.current?.addRect(),
+        addCircle: () => canvasApiRef.current?.addCircle(),
         addLine: () => canvasApiRef.current?.addLine(),
         addArrow: () => canvasApiRef.current?.addArrow(),
         deleteSelected: () => canvasApiRef.current?.deleteSelected(),
         duplicateSelected: () => canvasApiRef.current?.duplicateSelected(),
         undo: () => canvasApiRef.current?.undo(),
         redo: () => canvasApiRef.current?.redo(),
+        group: () => canvasApiRef.current?.group(),
+        ungroup: () => canvasApiRef.current?.ungroup(),
+        bringForward: () => canvasApiRef.current?.bringForward(),
+        sendBackward: () => canvasApiRef.current?.sendBackward(),
+        bringToFront: () => canvasApiRef.current?.bringToFront(),
+        sendToBack: () => canvasApiRef.current?.sendToBack(),
       }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
       onUploadCsv={(f) => void onUploadCsv(f)}
       onSaveNow={() => project && void saveProject(project)}
       onExportPdf={() => void onExportPdf()}
+      onExportPackage={() => void onExportPackage()}
+      onRenumber={onRenumber}
     />
   );
 
@@ -386,6 +456,10 @@ export default function App() {
             onChange={(next) => setProject({ ...project, pages: project.pages.map((p) => (p.id === next.id ? next : p)) })}
             selection={selection}
             onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
+            projectDisplayName={project.projectDisplayName ?? project.metadata.projectName}
+            projectFolder={project.projectFolder}
+            onRenameProject={(name) => void onRenameProject(name)}
+            overflowWarning={Array.isArray(activePage.layoutWarnings) && activePage.layoutWarnings.length > 0}
           />
         </div>
       }

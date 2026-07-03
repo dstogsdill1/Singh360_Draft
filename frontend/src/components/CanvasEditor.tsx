@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Canvas, Rect, Textbox, Line, Triangle, Group, FabricImage, type FabricObject } from 'fabric';
+import { Canvas, Rect, Circle, Textbox, Line, Triangle, Group, ActiveSelection, FabricImage, type FabricObject } from 'fabric';
 import type { CanvasApi, CanvasSelection } from '../model/types';
 
 interface Props {
@@ -20,10 +20,17 @@ function summarize(obj: FabricObject): CanvasSelection {
   const anyObj = obj as unknown as Record<string, unknown>;
   return {
     type: (obj.type as string) || 'object',
+    name: typeof anyObj.objName === 'string' ? (anyObj.objName as string) : undefined,
     fill: typeof anyObj.fill === 'string' ? (anyObj.fill as string) : '',
     stroke: typeof anyObj.stroke === 'string' ? (anyObj.stroke as string) : '',
     strokeWidth: (anyObj.strokeWidth as number) ?? 1,
+    opacity: typeof anyObj.opacity === 'number' ? (anyObj.opacity as number) : 1,
     fontSize: typeof anyObj.fontSize === 'number' ? (anyObj.fontSize as number) : undefined,
+    x: Math.round(obj.left ?? 0),
+    y: Math.round(obj.top ?? 0),
+    width: Math.round((obj.width ?? 0) * (obj.scaleX ?? 1)),
+    height: Math.round((obj.height ?? 0) * (obj.scaleY ?? 1)),
+    angle: Math.round(obj.angle ?? 0),
     locked: obj.lockMovementX === true,
   };
 }
@@ -33,6 +40,9 @@ function makeText(x: number, y: number) {
 }
 function makeRect(x: number, y: number) {
   return new Rect({ left: x, top: y, width: 180, height: 90, fill: 'transparent', stroke: '#111', strokeWidth: 1.5 });
+}
+function makeCircle(x: number, y: number) {
+  return new Circle({ left: x, top: y, radius: 60, fill: 'transparent', stroke: '#111', strokeWidth: 1.5 });
 }
 function makeLine(x: number, y: number) {
   return new Line([x, y, x + 200, y], { stroke: '#111', strokeWidth: 2 });
@@ -84,11 +94,11 @@ export default function CanvasEditor({
 
     const persist = () => {
       if (restoringRef.current) return;
-      onSerRef.current((canvas.toJSON().objects ?? []) as Record<string, unknown>[]);
+      onSerRef.current((canvas.toObject(['objName']).objects ?? []) as Record<string, unknown>[]);
     };
     const pushHistory = () => {
       if (restoringRef.current) return;
-      const snapshot = JSON.stringify(canvas.toJSON());
+      const snapshot = JSON.stringify(canvas.toObject(['objName']));
       const hist = historyRef.current.slice(0, histIdxRef.current + 1);
       hist.push(snapshot);
       historyRef.current = hist;
@@ -102,7 +112,7 @@ export default function CanvasEditor({
     if (serialized.length) {
       void canvas.loadFromJSON({ version: '6', objects: serialized }).then(() => canvas.renderAll());
     }
-    historyRef.current = [JSON.stringify(canvas.toJSON())];
+    historyRef.current = [JSON.stringify(canvas.toObject(['objName']))];
     histIdxRef.current = 0;
 
     canvas.on('object:modified', onChanged);
@@ -131,6 +141,7 @@ export default function CanvasEditor({
       let obj: FabricObject | null = null;
       if (tool === 'text') obj = makeText(p.x, p.y);
       else if (tool === 'rectangle') obj = makeRect(p.x, p.y);
+      else if (tool === 'circle') obj = makeCircle(p.x, p.y);
       else if (tool === 'line') obj = makeLine(p.x, p.y);
       else if (tool === 'arrow') obj = makeArrow(p.x, p.y);
       if (obj) {
@@ -164,7 +175,7 @@ export default function CanvasEditor({
       c.renderAll();
       histIdxRef.current = idx;
       restoringRef.current = false;
-      onSerRef.current((c.toJSON().objects ?? []) as Record<string, unknown>[]);
+      onSerRef.current((c.toObject(['objName']).objects ?? []) as Record<string, unknown>[]);
     });
   };
 
@@ -172,6 +183,7 @@ export default function CanvasEditor({
     const api: CanvasApi = {
       addText: () => addObj(makeText(200, 160)),
       addRect: () => addObj(makeRect(200, 200)),
+      addCircle: () => addObj(makeCircle(200, 200)),
       addLine: () => addObj(makeLine(200, 260)),
       addArrow: () => addObj(makeArrow(200, 320)),
       addImage: (url: string, name?: string) => {
@@ -189,7 +201,7 @@ export default function CanvasEditor({
             scaleX: scale,
             scaleY: scale,
           });
-          (img as unknown as Record<string, unknown>).assetName = name || 'image';
+          (img as unknown as Record<string, unknown>).objName = name || 'image';
           c.add(img);
           c.setActiveObject(img);
           c.requestRenderAll();
@@ -217,6 +229,52 @@ export default function CanvasEditor({
       },
       undo: () => restore(histIdxRef.current - 1),
       redo: () => restore(histIdxRef.current + 1),
+      group: () => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const active = c.getActiveObject();
+        if (active && active.type === 'activeselection') {
+          const sel = active as ActiveSelection;
+          const objs = sel.getObjects();
+          const grp = new Group(objs);
+          objs.forEach((o) => c.remove(o));
+          c.add(grp);
+          c.setActiveObject(grp);
+          c.requestRenderAll();
+        }
+      },
+      ungroup: () => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const active = c.getActiveObject();
+        if (active && active.type === 'group') {
+          const grp = active as Group;
+          const items = grp.removeAll();
+          c.remove(grp);
+          items.forEach((o) => c.add(o as FabricObject));
+          c.requestRenderAll();
+        }
+      },
+      bringForward: () => {
+        const c = fabricRef.current;
+        const o = c?.getActiveObject();
+        if (c && o) { c.bringObjectForward(o); c.requestRenderAll(); }
+      },
+      sendBackward: () => {
+        const c = fabricRef.current;
+        const o = c?.getActiveObject();
+        if (c && o) { c.sendObjectBackwards(o); c.requestRenderAll(); }
+      },
+      bringToFront: () => {
+        const c = fabricRef.current;
+        const o = c?.getActiveObject();
+        if (c && o) { c.bringObjectToFront(o); c.requestRenderAll(); }
+      },
+      sendToBack: () => {
+        const c = fabricRef.current;
+        const o = c?.getActiveObject();
+        if (c && o) { c.sendObjectToBack(o); c.requestRenderAll(); }
+      },
       updateSelected: (patch) => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
@@ -224,6 +282,13 @@ export default function CanvasEditor({
         if (patch.fill !== undefined) o.set('fill', patch.fill);
         if (patch.stroke !== undefined) o.set('stroke', patch.stroke);
         if (patch.strokeWidth !== undefined) o.set('strokeWidth', patch.strokeWidth);
+        if (patch.opacity !== undefined) o.set('opacity', patch.opacity);
+        if (patch.name !== undefined) (o as unknown as Record<string, unknown>).objName = patch.name;
+        if (patch.x !== undefined) o.set('left', patch.x);
+        if (patch.y !== undefined) o.set('top', patch.y);
+        if (patch.angle !== undefined) o.set('angle', patch.angle);
+        if (patch.width !== undefined && o.width) o.set('scaleX', patch.width / o.width);
+        if (patch.height !== undefined && o.height) o.set('scaleY', patch.height / o.height);
         if (patch.fontSize !== undefined && 'fontSize' in o) {
           (o as unknown as Record<string, unknown>).fontSize = patch.fontSize;
         }
@@ -236,8 +301,9 @@ export default function CanvasEditor({
             lockRotation: patch.locked,
           });
         }
+        o.setCoords();
         c.requestRenderAll();
-        onSerRef.current((c.toJSON().objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current((c.toObject(['objName']).objects ?? []) as Record<string, unknown>[]);
         onSelRef.current(summarize(o));
       },
     };

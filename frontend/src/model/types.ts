@@ -26,6 +26,7 @@ export interface PageBlock {
   filename?: string;
   styleRole?: string;
   editable?: boolean;
+  url?: string;
 }
 
 export interface CellStyle {
@@ -98,22 +99,32 @@ export interface ProjectModel {
   pages: PageModel[];
   sources: Record<string, unknown>[];
   modified?: string;
+  projectFolder?: string;
+  projectDisplayName?: string;
 }
 
 export type ViewMode = 'normalized' | 'source';
 
 export interface CanvasSelection {
   type: string;
+  name?: string;
   fill: string;
   stroke: string;
   strokeWidth: number;
+  opacity?: number;
   fontSize?: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  angle?: number;
   locked: boolean;
 }
 
 export interface CanvasApi {
   addText: () => void;
   addRect: () => void;
+  addCircle: () => void;
   addLine: () => void;
   addArrow: () => void;
   addImage: (url: string, name?: string) => void;
@@ -121,5 +132,11 @@ export interface CanvasApi {
   duplicateSelected: () => void;
   undo: () => void;
   redo: () => void;
+  group: () => void;
+  ungroup: () => void;
+  bringForward: () => void;
+  sendBackward: () => void;
+  bringToFront: () => void;
+  sendToBack: () => void;
   updateSelected: (patch: Partial<CanvasSelection>) => void;
 }

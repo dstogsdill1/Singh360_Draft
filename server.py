@@ -25,6 +25,7 @@ from core.export_pdf import export_pdf_via_playwright
 from core.page_composer import compose_pages
 from core.pdf_importer import import_pdf
 from core.project_model import ensure_project_shape, recalc_page_numbers
+from core.project_store import ProjectStore, slugify
 from core.validation import validate_project
 from core.vsdx_importer import import_vsdx
 from core.workbook_importer import import_workbook
@@ -90,13 +91,27 @@ def _safe_id(project_id: str) -> str:
 
 
 def _project_path(project_id: str) -> Path:
-    """Resolve a safe on-disk path for a project JSON file."""
+    """Resolve a safe on-disk path for a project JSON file (legacy flat layout)."""
     _safe_id(project_id)
     path = (DOCS_DIR / f"{project_id}.json").resolve()
     # Path-traversal guard
     if DOCS_DIR.resolve() not in path.parents:
         abort(403)
     return path
+
+
+# Project package store (folder-per-project with legacy fallback).
+store = ProjectStore(DOCS_DIR)
+
+
+def _load_doc(project_id: str) -> dict | None:
+    _safe_id(project_id)
+    return store.load(project_id)
+
+
+def _save_doc(project_id: str, data: dict) -> None:
+    _safe_id(project_id)
+    store.save(project_id, data)
 
 
 def _err(message: str, detail: str = "") -> dict:
@@ -229,22 +244,7 @@ def serve_firm_logo():
 
 @app.get("/api/projects")
 def list_projects():
-    projects = []
-    for p in sorted(DOCS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
-        try:
-            data = json.loads(p.read_text("utf-8"))
-            projects.append({
-                "id":          p.stem,
-                "projectName": data.get("projectName", "Untitled Project"),
-                "projectNo":   data.get("projectNo", ""),
-                "modified":    data.get("modified", ""),
-                "status":      data.get("status", "Draft"),
-                "preparedBy":  data.get("preparedBy", "Singh360 Inc."),
-            })
-        except (json.JSONDecodeError, OSError) as exc:
-            app.logger.error("Skipping corrupt project file %s: %s", p.name, exc)
-            continue
-    return jsonify({"projects": projects})
+    return jsonify({"projects": store.list_projects()})
 
 
 @app.post("/api/projects/new")
@@ -267,14 +267,19 @@ def new_project():
         upload.save(temp_path)
         app.logger.info("Parsing workbook for new project %s", project_id)
 
-        project_state = import_workbook(temp_path, project_id=project_id)
+        project_state = import_workbook(temp_path, project_id=project_id, assets_dir=store.assets_excel_dir(project_id), asset_url_prefix=f"/api/assets/{project_id}")
+        project_state["sourceWorkbookName"] = upload.filename
+        project_state["projectDisplayName"] = project_state.get("metadata", {}).get("projectName") or Path(upload.filename).stem
         project_state = ensure_project_shape(project_state)
 
-        out_path = _project_path(project_id)
-        out_path.write_text(
-            json.dumps(project_state, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        # Persist under the project folder, and keep a copy of the source workbook.
+        store.save(project_id, project_state)
+        try:
+            wb_copy = store.sources_dir(project_id, "workbook") / upload.filename
+            wb_copy.write_bytes(temp_path.read_bytes())
+        except OSError as exc:
+            app.logger.error("Could not copy source workbook for %s: %s", project_id, exc)
+
         app.logger.info("Project %s created with %d pages.", project_id, len(project_state.get("pages", [])))
         return jsonify({"ok": True, "id": project_id})
 
@@ -297,19 +302,19 @@ def new_project():
 
 @app.get("/api/projects/<project_id>")
 def get_project(project_id: str):
-    path = _project_path(project_id)
-    if not path.is_file():
-        abort(404)
     try:
-        return jsonify(json.loads(path.read_text("utf-8")))
+        doc = _load_doc(project_id)
     except (json.JSONDecodeError, OSError) as exc:
         app.logger.error("Could not read project %s: %s", project_id, exc)
         return jsonify(_err("Project file is corrupt or unreadable.")), 500
+    if doc is None:
+        abort(404)
+    return jsonify(doc)
 
 
 @app.post("/api/projects/<project_id>")
 def save_project(project_id: str):
-    path = _project_path(project_id)
+    _safe_id(project_id)
     data = request.get_json(force=True, silent=True)
     if data is None:
         return jsonify(_err("Request body must be valid JSON.")), 400
@@ -321,31 +326,30 @@ def save_project(project_id: str):
         return jsonify(_err("Project validation failed.", " | ".join(problems[:20]))), 400
 
     try:
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        store.save(project_id, data)
     except OSError as exc:
         app.logger.error("Could not write project %s: %s", project_id, exc)
         return jsonify(_err("Failed to save project.", str(exc))), 500
 
-    return jsonify({"ok": True, "id": project_id, "modified": data["modified"]})
+    return jsonify({"ok": True, "id": project_id, "modified": data["modified"], "projectFolder": data.get("projectFolder", "")})
 
 
 @app.post("/api/projects/<project_id>/pages")
 def upsert_pages(project_id: str):
-    path = _project_path(project_id)
-    if not path.is_file():
+    doc = _load_doc(project_id)
+    if doc is None:
         abort(404)
     body = request.get_json(force=True, silent=True) or {}
     pages = body.get("pages")
     if not isinstance(pages, list):
         return jsonify(_err("Request body must include pages as a list.")), 400
     try:
-        doc = json.loads(path.read_text("utf-8"))
         doc["pages"] = pages
         doc = ensure_project_shape(doc)
         problems = validate_project(doc)
         if problems:
             return jsonify(_err("Page update failed validation.", " | ".join(problems[:20]))), 400
-        path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+        store.save(project_id, doc)
     except Exception as exc:
         app.logger.error("Page update failed for %s: %s", project_id, exc)
         return jsonify(_err("Failed to update pages.", str(exc))), 500
@@ -380,13 +384,14 @@ def add_source_to_project(project_id: str):
             ".webp": "image",
         }.get(ext, "asset")
 
-    source_dir = DOCS_DIR / "sources" / project_id
-    source_dir.mkdir(parents=True, exist_ok=True)
+    source_dir = store.sources_dir(project_id, source_kind if source_kind in {"workbook", "csv", "pdf", "vsdx"} else "csv")
     source_path = source_dir / f"{source_id}{ext}"
 
     try:
         upload.save(source_path)
-        doc = json.loads(path.read_text("utf-8"))
+        doc = _load_doc(project_id)
+        if doc is None:
+            abort(404)
         doc = ensure_project_shape(doc)
 
         source_meta: dict = {
@@ -428,7 +433,7 @@ def add_source_to_project(project_id: str):
         if problems:
             return jsonify(_err("Source import failed validation.", " | ".join(problems[:20]))), 400
 
-        path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+        store.save(project_id, doc)
     except Exception as exc:
         app.logger.error("Failed to add source for %s: %s", project_id, exc)
         return jsonify(_err("Failed to import source.", str(exc))), 500
@@ -440,8 +445,7 @@ def add_source_to_project(project_id: str):
 def attach_csv_structured(project_id: str):
     """Attach a CSV as a structured source: raw worksheet + Equipment Summary
     and per-category inventory output pages."""
-    path = _project_path(project_id)
-    if not path.is_file():
+    if _load_doc(project_id) is None:
         abort(404)
     if "file" not in request.files:
         return jsonify(_err("No CSV uploaded.")), 400
@@ -451,13 +455,11 @@ def attach_csv_structured(project_id: str):
         return jsonify(_err("Only .csv is supported for this endpoint.")), 400
 
     source_id = uuid.uuid4().hex[:16]
-    source_dir = DOCS_DIR / "sources" / project_id
-    source_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = source_dir / f"{source_id}.csv"
+    csv_path = store.sources_dir(project_id, "csv") / f"{source_id}.csv"
 
     try:
         upload.save(csv_path)
-        doc = json.loads(path.read_text("utf-8"))
+        doc = _load_doc(project_id)
         doc = ensure_project_shape(doc)
 
         ws_id = f"ws_csv_{source_id}"
@@ -485,7 +487,7 @@ def attach_csv_structured(project_id: str):
         if problems:
             return jsonify(_err("CSV import failed validation.", " | ".join(problems[:20]))), 400
 
-        path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+        store.save(project_id, doc)
     except Exception as exc:
         app.logger.error("CSV structured import failed for %s: %s", project_id, exc)
         return jsonify(_err("Failed to import CSV.", str(exc))), 500
@@ -507,8 +509,8 @@ def add_asset(project_id: str):
     Returns the asset id + URL to reference from a canvas image object.
     """
     _safe_id(project_id)
-    assets_dir = DOCS_DIR / "assets" / project_id
-    assets_dir.mkdir(parents=True, exist_ok=True)
+    doc = _load_doc(project_id)
+    assets_dir = store.assets_images_dir(project_id, doc or {})
     asset_id = uuid.uuid4().hex[:16]
 
     try:
@@ -550,13 +552,18 @@ def add_asset(project_id: str):
 @app.get("/api/assets/<project_id>/<asset_name>")
 def get_asset(project_id: str, asset_name: str):
     _safe_id(project_id)
-    if not re.fullmatch(r"[a-f0-9]{16}\.(png|jpg|jpeg|webp|gif)", asset_name):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}\.(png|jpg|jpeg|webp|gif)", asset_name):
         abort(404)
-    asset_path = (DOCS_DIR / "assets" / project_id / asset_name).resolve()
-    base = (DOCS_DIR / "assets" / project_id).resolve()
-    if base not in asset_path.parents or not asset_path.is_file():
-        abort(404)
-    return send_file(asset_path)
+    candidates = [
+        store.assets_images_dir(project_id) / asset_name,
+        store.assets_excel_dir(project_id) / asset_name,
+        DOCS_DIR / "assets" / project_id / asset_name,  # legacy
+    ]
+    for cand in candidates:
+        resolved = cand.resolve()
+        if resolved.is_file() and DOCS_DIR.resolve() in resolved.parents:
+            return send_file(resolved)
+    abort(404)
 
 
 @app.post("/api/import/workbook")
@@ -620,10 +627,15 @@ def import_vsdx_route():
 
 @app.delete("/api/projects/<project_id>")
 def delete_project(project_id: str):
-    path = _project_path(project_id)
+    _safe_id(project_id)
     try:
-        if path.is_file():
-            path.unlink()
+        pdir = store.find_dir(project_id)
+        if pdir and pdir.is_dir():
+            import shutil
+            shutil.rmtree(pdir, ignore_errors=True)
+        legacy = _project_path(project_id)
+        if legacy.is_file():
+            legacy.unlink()
         pdf_path = DOCS_DIR / f"{project_id}.pdf"
         if pdf_path.is_file():
             pdf_path.unlink()
@@ -641,23 +653,85 @@ def delete_project(project_id: str):
 @app.post("/api/export/pdf/<project_id>")
 @app.post("/api/projects/<project_id>/export/pdf")
 def export_pdf(project_id: str):
-    path = _project_path(project_id)
-    if not path.is_file():
+    doc = _load_doc(project_id)
+    if doc is None:
         abort(404)
 
-    pdf_path = DOCS_DIR / f"{project_id}.pdf"
+    pdf_path = store.exports_pdf_dir(project_id, doc) / f"{project_id}.pdf"
     url = f"http://127.0.0.1:{_SERVER_PORT}/app?project={project_id}&print=1"
     ok, detail = export_pdf_via_playwright(url, pdf_path)
     if not ok:
         app.logger.error("Playwright export failed for %s: %s", project_id, detail)
         return jsonify(_err("PDF export failed.", detail)), 500
 
+    download = f"{(doc.get('projectDisplayName') or project_id)}.pdf"
     return send_file(
         pdf_path,
         mimetype="application/pdf",
         as_attachment=True,
-        download_name=f"{project_id}.pdf",
+        download_name=download,
     )
+
+
+@app.post("/api/projects/<project_id>/rename")
+def rename_project(project_id: str):
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    body = request.get_json(force=True, silent=True) or {}
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        return jsonify(_err("New project name is required.")), 400
+    try:
+        store.rename(project_id, new_name)
+        doc = _load_doc(project_id)
+    except Exception as exc:
+        app.logger.error("Rename failed for %s: %s", project_id, exc)
+        return jsonify(_err("Failed to rename project.", str(exc))), 500
+    return jsonify({"ok": True, "id": project_id, "projectFolder": doc.get("projectFolder", ""), "projectDisplayName": doc.get("projectDisplayName", "")})
+
+
+@app.post("/api/projects/<project_id>/export/package")
+def export_package(project_id: str):
+    """Build a ZIP package: project.json + sources + assets + latest PDF + manifest."""
+    import io
+    import zipfile
+
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    pdir = store.dir_for(project_id, doc)
+    store.ensure_folders(pdir)
+
+    included = [p for p in doc.get("pages", []) if p.get("include", True)]
+    source_names = [s.get("name", "") for s in doc.get("sources", [])]
+    manifest = {
+        "projectId": project_id,
+        "projectName": doc.get("projectDisplayName") or doc.get("metadata", {}).get("projectName", ""),
+        "created": doc.get("metadata", {}).get("createdDate", ""),
+        "modified": doc.get("modified", ""),
+        "pageCount": len(doc.get("pages", [])),
+        "includedPageCount": len(included),
+        "sourceFiles": source_names,
+        "assetCount": len(doc.get("assets", [])),
+        "generatedAt": _utcnow(),
+    }
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("project.json", json.dumps(doc, ensure_ascii=False, indent=2))
+        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        for folder in ("sources", "assets", "exports"):
+            base = pdir / folder
+            if not base.is_dir():
+                continue
+            for f in base.rglob("*"):
+                if f.is_file():
+                    zf.write(f, arcname=str(f.relative_to(pdir)))
+    buf.seek(0)
+
+    download = f"{store._display_name(doc, project_id)}_package.zip"
+    return send_file(buf, mimetype="application/zip", as_attachment=True, download_name=download)
 
 
 # --------------------------------------------------------------------------

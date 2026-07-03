@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { CanvasSelection, PageModel } from '../model/types';
 
 interface Props {
@@ -5,11 +6,64 @@ interface Props {
   onChange: (next: PageModel) => void;
   selection: CanvasSelection | null;
   onUpdateSelection: (patch: Partial<CanvasSelection>) => void;
+  projectDisplayName?: string;
+  projectFolder?: string;
+  onRenameProject?: (name: string) => void;
+  overflowWarning?: boolean;
 }
 
-export default function PropertiesPanel({ page, onChange, selection, onUpdateSelection }: Props) {
+export default function PropertiesPanel({
+  page,
+  onChange,
+  selection,
+  onUpdateSelection,
+  projectDisplayName,
+  projectFolder,
+  onRenameProject,
+  overflowWarning,
+}: Props) {
+  const [renameValue, setRenameValue] = useState('');
   return (
     <>
+      {(projectDisplayName !== undefined || projectFolder) && (
+        <div className="props-group">
+          <h3>Project</h3>
+          <div className="field">
+            <label htmlFor="proj-name">Display Name</label>
+            <input
+              id="proj-name"
+              value={renameValue || projectDisplayName || ''}
+              onChange={(e) => setRenameValue(e.target.value)}
+            />
+          </div>
+          {onRenameProject && (
+            <button
+              className="props-btn"
+              disabled={!renameValue.trim() || renameValue.trim() === projectDisplayName}
+              onClick={() => {
+                onRenameProject(renameValue.trim());
+                setRenameValue('');
+              }}
+            >
+              Rename Project
+            </button>
+          )}
+          {projectFolder && (
+            <div className="field">
+              <label>Project Folder</label>
+              <div className="props-path" title={projectFolder}>{projectFolder}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {overflowWarning && (
+        <div className="props-group props-warning">
+          <h3>⚠ Layout Warning</h3>
+          <p className="props-note">Content exceeds printable area. Consider recomposing, scaling, or splitting this page.</p>
+        </div>
+      )}
+
       <div className="props-group">
         <h3>Page Properties</h3>
         <div className="field">
@@ -47,6 +101,36 @@ export default function PropertiesPanel({ page, onChange, selection, onUpdateSel
               <label htmlFor="sel-type">Object Type</label>
               <input id="sel-type" title="Object type" value={selection.type} readOnly />
             </div>
+            {selection.name !== undefined && (
+              <div className="field">
+                <label htmlFor="sel-name">Object Name</label>
+                <input id="sel-name" type="text" value={selection.name} onChange={(e) => onUpdateSelection({ name: e.target.value })} />
+              </div>
+            )}
+            <div className="field-row">
+              <div className="field">
+                <label htmlFor="sel-x">X</label>
+                <input id="sel-x" type="number" value={selection.x ?? 0} onChange={(e) => onUpdateSelection({ x: Number(e.target.value) })} />
+              </div>
+              <div className="field">
+                <label htmlFor="sel-y">Y</label>
+                <input id="sel-y" type="number" value={selection.y ?? 0} onChange={(e) => onUpdateSelection({ y: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label htmlFor="sel-w">W</label>
+                <input id="sel-w" type="number" value={selection.width ?? 0} onChange={(e) => onUpdateSelection({ width: Number(e.target.value) })} />
+              </div>
+              <div className="field">
+                <label htmlFor="sel-h">H</label>
+                <input id="sel-h" type="number" value={selection.height ?? 0} onChange={(e) => onUpdateSelection({ height: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="sel-angle">Rotation</label>
+              <input id="sel-angle" type="number" step={1} value={selection.angle ?? 0} onChange={(e) => onUpdateSelection({ angle: Number(e.target.value) })} />
+            </div>
             <div className="field">
               <label htmlFor="sel-fill">Fill</label>
               <input id="sel-fill" type="text" value={selection.fill} placeholder="transparent" onChange={(e) => onUpdateSelection({ fill: e.target.value })} />
@@ -58,6 +142,10 @@ export default function PropertiesPanel({ page, onChange, selection, onUpdateSel
             <div className="field">
               <label htmlFor="sel-sw">Stroke Width</label>
               <input id="sel-sw" type="number" min={0} step={0.5} value={selection.strokeWidth} onChange={(e) => onUpdateSelection({ strokeWidth: Number(e.target.value) })} />
+            </div>
+            <div className="field">
+              <label htmlFor="sel-opacity">Opacity</label>
+              <input id="sel-opacity" type="number" min={0} max={1} step={0.05} value={selection.opacity ?? 1} onChange={(e) => onUpdateSelection({ opacity: Number(e.target.value) })} />
             </div>
             {selection.fontSize !== undefined && (
               <div className="field">

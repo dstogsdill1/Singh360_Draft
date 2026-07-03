@@ -78,3 +78,19 @@ export async function attachCsv(projectId: string, file: File): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
+export async function renameProject(projectId: string, name: string): Promise<{ projectFolder?: string; projectDisplayName?: string }> {
+  const res = await fetch(`/api/projects/${projectId}/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function exportPackage(projectId: string): Promise<Blob> {
+  const res = await fetch(`/api/projects/${projectId}/export/package`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.blob();
+}
+

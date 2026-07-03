@@ -24,21 +24,30 @@ interface Props {
   canvas: {
     addText: () => void;
     addRect: () => void;
+    addCircle: () => void;
     addLine: () => void;
     addArrow: () => void;
     deleteSelected: () => void;
     duplicateSelected: () => void;
     undo: () => void;
     redo: () => void;
+    group: () => void;
+    ungroup: () => void;
+    bringForward: () => void;
+    sendBackward: () => void;
+    bringToFront: () => void;
+    sendToBack: () => void;
   };
   onUploadFile: (file: File) => void;
   onUploadCsv: (file: File) => void;
   onSaveNow: () => void;
   onExportPdf: () => void;
+  onExportPackage: () => void;
+  onRenumber: () => void;
 }
 
-type RibbonTab = 'File' | 'Home' | 'Insert' | 'Draw' | 'View' | 'Export';
-const TABS: RibbonTab[] = ['File', 'Home', 'Insert', 'Draw', 'View', 'Export'];
+type RibbonTab = 'File' | 'Home' | 'Insert' | 'Draw' | 'Arrange' | 'View' | 'Export';
+const TABS: RibbonTab[] = ['File', 'Home', 'Insert', 'Draw', 'Arrange', 'View', 'Export'];
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -69,6 +78,8 @@ export default function Ribbon({
   onUploadCsv,
   onSaveNow,
   onExportPdf,
+  onExportPackage,
+  onRenumber,
 }: Props) {
   const [tab, setTab] = useState<RibbonTab>('File');
   const cx = canvasEnabled;
@@ -125,9 +136,11 @@ export default function Ribbon({
             <Group title="Data">{csvBtn}</Group>
             <Group title="Project">
               <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow}>Save Now</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onRenumber}>Renumber Sheet Codes</button>
             </Group>
             <Group title="Output">
               <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf}>Export PDF</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPackage}>Export Package</button>
             </Group>
           </>
         )}
@@ -146,6 +159,10 @@ export default function Ribbon({
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.deleteSelected}>Delete</button>
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.duplicateSelected}>Duplicate</button>
             </Group>
+            <Group title="Group">
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.group}>Group</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.ungroup}>Ungroup</button>
+            </Group>
           </>
         )}
 
@@ -154,12 +171,33 @@ export default function Ribbon({
             <Group title="Basic">
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.addText}>Text</button>
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.addRect}>Rectangle</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addCircle}>Circle</button>
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.addLine}>Line</button>
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.addArrow}>Arrow</button>
             </Group>
             <Group title="Objects">
-              <PlaceholderBtn label="Image" />
+              <PlaceholderBtn label="Callout" />
               <PlaceholderBtn label="Table" />
+            </Group>
+          </>
+        )}
+
+        {tab === 'Arrange' && (
+          <>
+            <Group title="Order">
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.bringForward}>Forward</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.sendBackward}>Backward</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.bringToFront}>To Front</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.sendToBack}>To Back</button>
+            </Group>
+            <Group title="Align">
+              <PlaceholderBtn label="Left" />
+              <PlaceholderBtn label="Center" />
+              <PlaceholderBtn label="Right" />
+            </Group>
+            <Group title="Distribute">
+              <PlaceholderBtn label="Horizontal" />
+              <PlaceholderBtn label="Vertical" />
             </Group>
           </>
         )}
@@ -169,6 +207,7 @@ export default function Ribbon({
             <Group title="Place">
               <button className={`ribbon-btn ${activeTool === 'text' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('text')}>Text</button>
               <button className={`ribbon-btn ${activeTool === 'rectangle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('rectangle')}>Rectangle</button>
+              <button className={`ribbon-btn ${activeTool === 'circle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('circle')}>Circle</button>
               <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')}>Line</button>
               <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')}>Arrow</button>
             </Group>
