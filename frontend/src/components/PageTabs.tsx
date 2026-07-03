@@ -6,10 +6,13 @@ interface Props {
   activePageId: string | null;
   onSelect: (id: string) => void;
   onReorder: (pages: PageModel[]) => void;
+  onRenameTitle: (id: string, title: string) => void;
 }
 
-export default function PageTabs({ pages, activePageId, onSelect, onReorder }: Props) {
+export default function PageTabs({ pages, activePageId, onSelect, onReorder, onRenameTitle }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
   const included = pages.filter((p) => p.include);
 
   const reorder = (draggedId: string, targetId: string) => {
@@ -25,15 +28,32 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder }: P
     onReorder(next);
   };
 
+  const startEdit = (p: PageModel) => {
+    setEditId(p.id);
+    setEditValue(p.sheetTitle);
+  };
+  const commitEdit = () => {
+    if (editId) onRenameTitle(editId, editValue.trim() || 'Untitled Sheet');
+    setEditId(null);
+  };
+
   return (
     <div className="page-tabs">
       {included.map((p) => (
-        <button
+        <div
           key={p.id}
+          role="button"
+          tabIndex={0}
           className={`page-tab ${p.id === activePageId ? 'active' : ''} ${p.generatedContinuation ? 'cont' : ''}`}
           onClick={() => onSelect(p.id)}
-          title={`${p.displaySheetCode || p.sheetCode} ${p.sheetTitle}`}
-          draggable
+          onDoubleClick={() => startEdit(p)}
+          onKeyDown={(e) => {
+            if (editId === p.id) return;
+            if (e.key === 'Enter' || e.key === ' ') onSelect(p.id);
+            else if (e.key === 'F2') startEdit(p);
+          }}
+          title={`${p.displaySheetCode || p.sheetCode} ${p.sheetTitle} — double-click to rename`}
+          draggable={editId !== p.id}
           onDragStart={() => setDragId(p.id)}
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => {
@@ -43,8 +63,26 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder }: P
         >
           {p.generatedContinuation && <span className="pt-cont">↳</span>}
           <span className="pt-code">{p.displaySheetCode || p.sheetCode}</span>
-          <span className="pt-title">{p.sheetTitle}</span>
-        </button>
+          {editId === p.id ? (
+            <input
+              className="pt-title-input"
+              value={editValue}
+              autoFocus
+              aria-label="Sheet title"
+              title="Sheet title — Enter to save, Esc to cancel"
+              placeholder="Sheet title"
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitEdit();
+                else if (e.key === 'Escape') setEditId(null);
+              }}
+            />
+          ) : (
+            <span className="pt-title">{p.sheetTitle}</span>
+          )}
+        </div>
       ))}
     </div>
   );

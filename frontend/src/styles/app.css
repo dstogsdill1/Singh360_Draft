@@ -222,6 +222,21 @@ body { background: var(--board); color: var(--ink); }
 .reorder-btn { border: 1px solid var(--panel-line); background: #fff; width: 22px; height: 22px; line-height: 1; padding: 0; cursor: pointer; }
 .reorder-btn:hover { background: #eef1f4; }
 
+.sheet-inline-input { font: inherit; border: 1px solid var(--accent); border-radius: 2px; padding: 0 4px; background: #fff; }
+.sheet-inline-input.code { width: 56px; font-size: 11px; }
+.sheet-inline-input.title { flex: 1; font-size: 13px; }
+.sheet-item.cont { border-left: 3px solid #e0b96a; }
+.sheet-cont-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 5px; padding: 3px 6px; font-size: 10px; color: #8a5a12;
+  background: #fff6e5; border: 1px solid #e6c684; border-radius: 3px;
+}
+.cont-convert-btn {
+  border: 1px solid #d3a94e; background: #fff; border-radius: 3px;
+  font-size: 10px; padding: 1px 6px; cursor: pointer; white-space: nowrap;
+}
+.cont-convert-btn:hover { background: #fbeecb; }
+
 .source-tab-btn { display: block; width: 100%; text-align: left; border: none; border-bottom: 1px solid var(--panel-line); background: transparent; padding: 6px 12px; font-size: 12px; cursor: pointer; }
 .source-tab-btn:hover { background: #e2e6ea; }
 .source-tab-btn.active { background: #f6f8fa; font-weight: 600; }
@@ -408,3 +423,40 @@ button, select, input, textarea { font: inherit; }
 }
 
 
+
+/* -- MODAL (renumber, etc.) -- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(20, 24, 29, 0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal {
+  background: #fff; border: 1px solid #000; border-radius: 6px;
+  width: min(720px, 92vw); max-height: 88vh; display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #d5dade; }
+.modal-head h2 { margin: 0; font-size: 15px; }
+.modal-x { border: none; background: transparent; font-size: 22px; line-height: 1; cursor: pointer; color: #556; }
+.modal-body { padding: 14px 16px; overflow: auto; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #d5dade; }
+.btn { padding: 7px 14px; border: 1px solid #b9c0c7; background: #fff; border-radius: 4px; font-size: 13px; cursor: pointer; }
+.btn:hover { background: #eef2f6; }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: #0f4585; }
+
+.renumber-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.renumber-options label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.renumber-options label.active { font-weight: 600; }
+.prefix-input { margin-left: 8px; width: 120px; padding: 3px 6px; border: 1px solid #b9c0c7; border-radius: 3px; }
+.renumber-note { font-size: 11px; color: #667; line-height: 1.4; margin: 4px 0 0; }
+.renumber-preview { width: 100%; border-collapse: collapse; font-size: 12px; }
+.renumber-preview th, .renumber-preview td { border: 1px solid #d5dade; padding: 5px 8px; text-align: left; }
+.renumber-preview th { background: #f1f3f5; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.renumber-preview tr.changed .new-code { color: var(--accent); font-weight: 700; }
+
+/* -- PAGE TAB INLINE RENAME -- */
+.pt-title-input {
+  font: inherit; border: 1px solid var(--accent); border-radius: 2px;
+  padding: 0 4px; width: 140px; background: #fff;
+}

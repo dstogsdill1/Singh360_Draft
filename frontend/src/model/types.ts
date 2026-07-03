@@ -67,6 +67,7 @@ export interface PageModel {
   sheetTab: string;
   pageType: PageType;
   pageFamily?: string;
+  template?: string;
   templateId: string;
   linkedWorksheetId?: string;
   blocks?: PageBlock[];

@@ -9,6 +9,7 @@ interface Props {
   viewMode: ViewMode;
   activeTool: string;
   snap: boolean;
+  overlayMode: boolean;
   onToolConsumed: () => void;
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
@@ -24,6 +25,7 @@ export default function PageRenderer({
   viewMode,
   activeTool,
   snap,
+  overlayMode,
   onToolConsumed,
   onRegisterApi,
   onSelectionChange,
@@ -50,6 +52,7 @@ export default function PageRenderer({
       worksheet={worksheet}
       activeTool={activeTool}
       snap={snap}
+      overlayMode={overlayMode}
       onToolConsumed={onToolConsumed}
       onRegisterApi={onRegisterApi}
       onSelectionChange={onSelectionChange}

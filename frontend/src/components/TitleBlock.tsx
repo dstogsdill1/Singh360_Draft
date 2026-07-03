@@ -20,7 +20,7 @@ export default function TitleBlock({ project, page }: Props) {
   const pageLabel = page.pageNumber
     ? `Sheet ${page.pageNumber} of ${page.pageTotal ?? 0}`
     : `Sheet — of ${page.pageTotal ?? 0}`;
-  const projectName = project.projectDisplayName || m.projectName;
+  const projectName = m.projectName || project.projectDisplayName;
 
   return (
     <div className="sheet-title-block tb-v3">

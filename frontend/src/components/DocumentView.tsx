@@ -36,12 +36,14 @@ interface Props {
   onViewModeChange: (mode: ViewMode) => void;
   activeTool: string;
   snap: boolean;
+  overlayMode: boolean;
   onToolConsumed: () => void;
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
   onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
   onSelectPage: (id: string) => void;
   onReorderPages: (pages: PageModel[]) => void;
+  onRenamePageTitle: (id: string, title: string) => void;
   onDropImageFile: (file: File) => void;
   onScaleChange: (scale: number) => void;
   onGridChange: (worksheetId: string, grid: string[][]) => void;
@@ -59,12 +61,14 @@ export default function DocumentView({
   onViewModeChange,
   activeTool,
   snap,
+  overlayMode,
   onToolConsumed,
   onRegisterApi,
   onSelectionChange,
   onBlockChange,
   onSelectPage,
   onReorderPages,
+  onRenamePageTitle,
   onDropImageFile,
   onScaleChange,
   onGridChange,
@@ -114,7 +118,7 @@ export default function DocumentView({
 
   return (
     <>
-      <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} onReorder={onReorderPages} />
+      <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} onReorder={onReorderPages} onRenameTitle={onRenamePageTitle} />
       <ViewportToolbar activePage={activePage} view={view} viewMode={viewMode} onViewModeChange={onViewModeChange} />
       <div
         className="sheet-viewport"
@@ -143,6 +147,7 @@ export default function DocumentView({
                 viewMode={viewMode}
                 activeTool={activeTool}
                 snap={snap}
+                overlayMode={overlayMode}
                 onToolConsumed={onToolConsumed}
                 onRegisterApi={onRegisterApi}
                 onSelectionChange={onSelectionChange}

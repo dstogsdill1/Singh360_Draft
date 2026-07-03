@@ -21,6 +21,8 @@ interface Props {
   canvasEnabled: boolean;
   activeTool: string;
   onSetTool: (tool: string) => void;
+  overlayMode: boolean;
+  onToggleOverlay: () => void;
   canvas: {
     addText: () => void;
     addRect: () => void;
@@ -73,6 +75,8 @@ export default function Ribbon({
   canvasEnabled,
   activeTool,
   onSetTool,
+  overlayMode,
+  onToggleOverlay,
   canvas,
   onUploadFile,
   onUploadCsv,
@@ -135,12 +139,12 @@ export default function Ribbon({
             <Group title="Workbook">{uploadBtn}</Group>
             <Group title="Data">{csvBtn}</Group>
             <Group title="Project">
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow}>Save Now</button>
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onRenumber}>Renumber Sheet Codes</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow} title="Save the project now">Save Now</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onRenumber} title="Preview and apply new engineering sheet codes">Renumber Sheet Codes</button>
             </Group>
             <Group title="Output">
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf}>Export PDF</button>
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPackage}>Export Package</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf} title="Export the included pages to a 17x11 PDF">Export PDF</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPackage} title="Export a ZIP with project.json, manifest, sources, assets and exports">Export Package</button>
             </Group>
           </>
         )}
@@ -148,20 +152,22 @@ export default function Ribbon({
         {tab === 'Home' && (
           <>
             <Group title="Tools">
-              <button className={`ribbon-btn ${activeTool === 'select' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('select')}>Select</button>
-              <button className="ribbon-btn" disabled title="Coming soon">Pan</button>
+              <button className={`ribbon-btn ${activeTool === 'select' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('select')} title="Select and move overlay objects">Select</button>
+              <button className={`ribbon-btn ${overlayMode ? 'active' : ''}`} disabled={!cx} onClick={onToggleOverlay} title="Toggle overlay edit mode: edit pasted images, shapes and annotations on top of the page">
+                {overlayMode ? 'Overlay: On' : 'Edit Overlay'}
+              </button>
             </Group>
             <Group title="History">
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.undo}>Undo</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.redo}>Redo</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.undo} title="Undo (Ctrl+Z)">Undo</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.redo} title="Redo (Ctrl+Y)">Redo</button>
             </Group>
             <Group title="Edit">
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.deleteSelected}>Delete</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.duplicateSelected}>Duplicate</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.deleteSelected} title="Delete selected object (Del)">Delete</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.duplicateSelected} title="Duplicate selected object (Ctrl+D)">Duplicate</button>
             </Group>
             <Group title="Group">
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.group}>Group</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.ungroup}>Ungroup</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.group} title="Group selected objects">Group</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.ungroup} title="Ungroup selected group">Ungroup</button>
             </Group>
           </>
         )}
@@ -169,11 +175,11 @@ export default function Ribbon({
         {tab === 'Insert' && (
           <>
             <Group title="Basic">
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addText}>Text</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addRect}>Rectangle</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addCircle}>Circle</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addLine}>Line</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addArrow}>Arrow</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addText} title="Add a text box to the overlay">Text</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addRect} title="Add a rectangle to the overlay">Rectangle</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addCircle} title="Add a circle to the overlay">Circle</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addLine} title="Add a line to the overlay">Line</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addArrow} title="Add an arrow to the overlay">Arrow</button>
             </Group>
             <Group title="Objects">
               <PlaceholderBtn label="Callout" />
@@ -185,10 +191,10 @@ export default function Ribbon({
         {tab === 'Arrange' && (
           <>
             <Group title="Order">
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.bringForward}>Forward</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.sendBackward}>Backward</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.bringToFront}>To Front</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.sendToBack}>To Back</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.bringForward} title="Bring selected object forward one step">Forward</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.sendBackward} title="Send selected object backward one step">Backward</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.bringToFront} title="Bring selected object to the front">To Front</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.sendToBack} title="Send selected object to the back">To Back</button>
             </Group>
             <Group title="Align">
               <PlaceholderBtn label="Left" />

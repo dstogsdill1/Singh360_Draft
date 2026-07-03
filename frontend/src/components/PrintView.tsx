@@ -24,13 +24,21 @@ export default function PrintView({ project }: Props) {
 
   useEffect(() => {
     if (!project) return;
-    // Mark ready on the next frame after paint so the exporter can wait for it.
+    // Mark ready after paint AND a short settle delay so async Fabric overlay
+    // images (pasted screenshots / embedded workbook images) finish loading
+    // before the PDF exporter captures the page.
+    let timer: number | undefined;
     const raf = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        document.body.setAttribute('data-print-ready', '1');
+        timer = window.setTimeout(() => {
+          document.body.setAttribute('data-print-ready', '1');
+        }, 600);
       });
     });
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (timer) window.clearTimeout(timer);
+    };
   }, [project, includedPages.length]);
 
   if (!project) {
@@ -51,6 +59,7 @@ export default function PrintView({ project }: Props) {
                 viewMode="normalized"
                 activeTool="select"
                 snap={false}
+                overlayMode={false}
                 onToolConsumed={noop}
                 onRegisterApi={noop}
                 onSelectionChange={noop}

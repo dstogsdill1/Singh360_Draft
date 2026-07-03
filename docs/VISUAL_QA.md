@@ -64,3 +64,29 @@ python server.py
 - [ ] 1366×768 — shell + tabs + panels stay fixed.
 - [ ] 1600×900 — OK.
 - [ ] 1920×1080 — OK.
+
+## Milestone 2E � editor hardening
+
+- [ ] Page template dropdown shows friendly names (Cover, Text / Instructions, Table / Schedule, Matrix, Image / Layout, Hybrid Sheet, Underlay / Reference, Sheet Index). No "index" / "canvas" / "data-grid".
+- [ ] Ctrl+V pastes a screenshot on ANY page (cover, text, matrix, table), auto-enables Overlay edit, selects the image with handles.
+- [ ] Pasted screenshot auto-named "Screenshot YYYY-MM-DD HH-mm-ss.png".
+- [ ] Drag/drop an image onto any page inserts it.
+- [ ] "Edit Overlay" toggle (Home tab) turns overlay editing on/off; base content is clickable when off.
+- [ ] Double-click a top page tab renames the sheet title (Enter save, Esc cancel); left list, right panel, page heading, title block all update.
+- [ ] Double-click sheet code / title in the left Output Pages list edits inline.
+- [ ] Renumber Sheet Codes opens a modal with Old/New/Title preview and Keep / Sequential / Custom-prefix schemes; Apply updates tabs, left list, title block.
+- [ ] Continuation pages show a badge + "Make independent" button in the left list.
+- [ ] Title Block V3/V4 looks like an issued drawing (firm block, project block, revision block, sheet code, Sheet X of Y, CONTINUED marker).
+- [ ] Right panel shows Project Folder, Assets Folder, Screenshots folder paths.
+- [ ] Collapse both side panels; drawing area expands; reopen with rail buttons.
+- [ ] Every ribbon button is enabled+working, or disabled with a "Coming soon" tooltip.
+- [ ] Save, reload browser: overlays, titles, codes, order all persist.
+- [ ] Export PDF includes pasted screenshots and edits.
+- [ ] Export Package ZIP includes project.json, manifest.json, sources, assets, exports.
+
+### Known partial / coming soon (2E)
+- Rich text / table formatting toolbar (Phase E): bold/align exist on contenteditable via browser only; dedicated ribbon controls are "Coming soon".
+- Full Layers panel (Phase J): overlay is a single annotation layer; per-layer lock/visibility is "Coming soon".
+- Asset Manager list with rename-file / insert-on-page / delete (Phase N): folder paths are shown; full list UI is "Coming soon".
+- Right-click context menu paste: use Ctrl+V (browser clipboard-image limitation).
+- Align / distribute buttons (Arrange tab): "Coming soon".

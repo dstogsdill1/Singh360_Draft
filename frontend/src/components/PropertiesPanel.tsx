@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { CanvasSelection, PageModel } from '../model/types';
+import { PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
 
 interface Props {
   page: PageModel;
@@ -54,6 +55,18 @@ export default function PropertiesPanel({
               <div className="props-path" title={projectFolder}>{projectFolder}</div>
             </div>
           )}
+          {projectFolder && (
+            <div className="field">
+              <label>Assets Folder</label>
+              <div className="props-path" title={`${projectFolder}\\assets\\images`}>{projectFolder}\assets\images</div>
+            </div>
+          )}
+          {projectFolder && (
+            <div className="field">
+              <label>Screenshots / Pasted</label>
+              <div className="props-path" title={`${projectFolder}\\assets\\images`}>{projectFolder}\assets\images</div>
+            </div>
+          )}
         </div>
       )}
 
@@ -75,14 +88,15 @@ export default function PropertiesPanel({
           <input id="page-title" value={page.sheetTitle} onChange={(e) => onChange({ ...page, sheetTitle: e.target.value })} />
         </div>
         <div className="field">
-          <label htmlFor="page-type">Page Type</label>
-          <select id="page-type" value={page.pageType} onChange={(e) => onChange({ ...page, pageType: e.target.value as PageModel['pageType'] })}>
-            <option value="data-grid">data-grid</option>
-            <option value="canvas">canvas</option>
-            <option value="underlay">underlay</option>
-            <option value="hybrid">hybrid</option>
-            <option value="cover">cover</option>
-            <option value="index">index</option>
+          <label htmlFor="page-type">Page Template</label>
+          <select
+            id="page-type"
+            value={templateForPage(page)}
+            onChange={(e) => onChange(applyTemplate(page, e.target.value as PageTemplate))}
+          >
+            {PAGE_TEMPLATES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
           </select>
         </div>
         <div className="field">

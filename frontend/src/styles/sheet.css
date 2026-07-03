@@ -124,6 +124,38 @@
 .canvas-wrap { width: 100%; height: 100%; }
 .canvas-surface { display: block; }
 
+/* ── UNIVERSAL PAGE OVERLAY (base + editable canvas) ── */
+.np-page-root { position: relative; min-height: 100%; height: 100%; }
+.np-base-layer { position: relative; z-index: 1; height: 100%; overflow: auto; }
+.np-base-layer.passthrough { pointer-events: none; }
+.np-image-base { height: 100%; }
+.np-overlay-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1560px;
+  height: 860px;
+  z-index: 5;
+  pointer-events: none;
+}
+.np-overlay-layer.active { pointer-events: auto; }
+.np-overlay-layer.active::before {
+  content: 'OVERLAY EDIT';
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 6;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #a5661a;
+  background: rgba(255, 246, 229, 0.9);
+  border: 1px solid #e0b96a;
+  border-radius: 3px;
+  padding: 1px 5px;
+  pointer-events: none;
+}
+
 /* Data-grid worksheet table — contained + readable */
 .grid-table { border-collapse: collapse; font-size: 12px; table-layout: fixed; }
 .grid-table td {

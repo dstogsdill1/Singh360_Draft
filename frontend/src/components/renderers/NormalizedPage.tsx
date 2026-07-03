@@ -4,7 +4,7 @@ import TablePageRenderer from './TablePageRenderer';
 import MatrixPageRenderer from './MatrixPageRenderer';
 import CoverPageRenderer from './CoverPageRenderer';
 import ImagePlaceholderRenderer from './ImagePlaceholderRenderer';
-import CanvasPageRenderer from './CanvasPageRenderer';
+import CanvasEditor from '../CanvasEditor';
 
 interface Props {
   page: PageModel;
@@ -12,6 +12,7 @@ interface Props {
   worksheet?: Worksheet;
   activeTool: string;
   snap: boolean;
+  overlayMode: boolean;
   onToolConsumed: () => void;
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
@@ -20,15 +21,20 @@ interface Props {
 }
 
 /**
- * Normalized output page: renders the page's normalized blocks with the right
- * professional renderer per block type. Falls back to a raw-ish table when a
- * page has no blocks (older projects).
+ * Normalized output page. Every page is composed of two layers:
+ *  - a BASE layer (normalized blocks: cover / text / table / matrix / image), and
+ *  - an editable OVERLAY canvas (screenshots, shapes, arrows, text boxes).
+ *
+ * The overlay exists on every page so users can paste/annotate anywhere. Pointer
+ * events on the overlay are enabled only when overlay edit mode is on or a draw
+ * tool is active, so base content (editable tables/text) stays clickable.
  */
 export default function NormalizedPage({
   page,
   project,
   activeTool,
   snap,
+  overlayMode,
   onToolConsumed,
   onRegisterApi,
   onSelectionChange,
@@ -36,51 +42,67 @@ export default function NormalizedPage({
   onCanvasChange,
 }: Props) {
   const blocks = page.blocks ?? [];
+  const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
+  const overlayInteractive = overlayMode || activeTool !== 'select';
 
-  const hasCanvasBlock = blocks.some((b) => b.type === 'canvas');
-  if (hasCanvasBlock || page.pageType === 'canvas' || page.pageType === 'underlay' || page.pageType === 'hybrid') {
+  const base = (() => {
+    if (isImageType) {
+      const imgBlocks = blocks.filter((b) => b.type === 'imagePlaceholder' || b.type === 'underlayPlaceholder');
+      return (
+        <div className="np np-image-base">
+          {imgBlocks.length ? (
+            imgBlocks.map((b) => <ImagePlaceholderRenderer key={b.id} block={b} />)
+          ) : (
+            <div className="np-canvas-hint">
+              Image / Layout page — paste a screenshot (Ctrl+V), drag an image here, or use the Insert tab.
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (!blocks.length) {
+      return <div className="np np-empty">No normalized content — switch to Source View to see the raw worksheet.</div>;
+    }
+
     return (
-      <div className="np np-canvas-page">
-        <CanvasPageRenderer
-          page={page}
-          activeTool={activeTool}
-          snap={snap}
-          onToolConsumed={onToolConsumed}
-          onRegisterApi={onRegisterApi}
-          onSelectionChange={onSelectionChange}
-          onCanvasChange={onCanvasChange}
-        />
-        {blocks
-          .filter((b) => b.type === 'imagePlaceholder')
-          .map((b) => (
-            <ImagePlaceholderRenderer key={b.id} block={b} />
-          ))}
+      <div className="np">
+        {blocks.map((b) => {
+          const patch = (p: Partial<PageBlock>) => onBlockChange(page.id, b.id, p);
+          switch (b.type) {
+            case 'cover':
+              return <CoverPageRenderer key={b.id} block={b} project={project} />;
+            case 'table':
+              return <TablePageRenderer key={b.id} block={b} onChange={patch} />;
+            case 'matrix':
+              return <MatrixPageRenderer key={b.id} block={b} onChange={patch} />;
+            case 'imagePlaceholder':
+            case 'underlayPlaceholder':
+              return <ImagePlaceholderRenderer key={b.id} block={b} />;
+            default:
+              return <TextPageRenderer key={b.id} block={b} onChange={patch} />;
+          }
+        })}
       </div>
     );
-  }
-
-  if (!blocks.length) {
-    return <div className="np np-empty">No normalized content — switch to Source View to see the raw worksheet.</div>;
-  }
+  })();
 
   return (
-    <div className="np">
-      {blocks.map((b) => {
-        const patch = (p: Partial<PageBlock>) => onBlockChange(page.id, b.id, p);
-        switch (b.type) {
-          case 'cover':
-            return <CoverPageRenderer key={b.id} block={b} project={project} />;
-          case 'table':
-            return <TablePageRenderer key={b.id} block={b} onChange={patch} />;
-          case 'matrix':
-            return <MatrixPageRenderer key={b.id} block={b} onChange={patch} />;
-          case 'imagePlaceholder':
-          case 'underlayPlaceholder':
-            return <ImagePlaceholderRenderer key={b.id} block={b} />;
-          default:
-            return <TextPageRenderer key={b.id} block={b} onChange={patch} />;
-        }
-      })}
+    <div className="np-page-root">
+      <div className={`np-base-layer ${overlayInteractive ? 'passthrough' : ''}`}>
+        {base}
+      </div>
+      <div className={`np-overlay-layer ${overlayInteractive ? 'active' : ''}`}>
+        <CanvasEditor
+          serialized={page.canvasObjects || []}
+          onSerializedChange={(o) => onCanvasChange(page.id, o)}
+          registerApi={onRegisterApi}
+          onSelectionChange={onSelectionChange}
+          activeTool={activeTool}
+          onToolConsumed={onToolConsumed}
+          snap={snap}
+        />
+      </div>
     </div>
   );
 }

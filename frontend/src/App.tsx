@@ -19,6 +19,7 @@ import DocumentView, { type FitMode, MAX_SCALE, MIN_SCALE } from './components/D
 import PropertiesPanel from './components/PropertiesPanel';
 import PrintView from './components/PrintView';
 import Ribbon, { type ViewControls } from './components/Ribbon';
+import RenumberModal from './components/RenumberModal';
 import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 
@@ -31,7 +32,12 @@ function getUrlParams() {
 }
 
 const clampScale = (v: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, v));
-const CANVAS_TYPES = new Set(['canvas', 'hybrid', 'underlay']);
+
+function screenshotName(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `Screenshot ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}.png`;
+}
 
 // Recompute live "Page X of Y" numbering across included, non-continuation pages.
 function withPageNumbers(pages: PageModel[]): PageModel[] {
@@ -71,7 +77,9 @@ export default function App() {
   // Rendering + editing state.
   const [viewMode, setViewMode] = useState<ViewMode>('normalized');
   const [activeTool, setActiveTool] = useState('select');
+  const [overlayMode, setOverlayMode] = useState(false);
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
+  const [renumberOpen, setRenumberOpen] = useState(false);
   const canvasApiRef = useRef<CanvasApi | null>(null);
 
   useEffect(() => {
@@ -119,14 +127,14 @@ export default function App() {
 
   const isCanvasContext = () =>
     !!activePageRef.current &&
-    viewModeRef.current === 'normalized' &&
-    CANVAS_TYPES.has(activePageRef.current.pageType);
+    viewModeRef.current === 'normalized';
 
   const addImageFromDataUrl = async (dataUrl: string, name: string) => {
     const pid = projectRef.current?.id;
     if (!pid) return;
     try {
       const asset = await uploadAssetDataUrl(pid, dataUrl, name);
+      setOverlayMode(true);
       canvasApiRef.current?.addImage(asset.url, asset.name);
     } catch (err) {
       console.error('paste image failed', err);
@@ -138,6 +146,7 @@ export default function App() {
     if (!pid || !isCanvasContext()) return;
     try {
       const asset = await uploadAssetFile(pid, file);
+      setOverlayMode(true);
       canvasApiRef.current?.addImage(asset.url, asset.name);
     } catch (err) {
       console.error('drop image failed', err);
@@ -158,7 +167,7 @@ export default function App() {
             e.preventDefault();
             const reader = new FileReader();
             reader.onload = () => {
-              if (typeof reader.result === 'string') void addImageFromDataUrl(reader.result, file.name || 'pasted.png');
+              if (typeof reader.result === 'string') void addImageFromDataUrl(reader.result, screenshotName());
             };
             reader.readAsDataURL(file);
           }
@@ -231,6 +240,19 @@ export default function App() {
     await savePages(project.id, numbered);
   };
 
+  // Single source of truth for per-page edits. Every edit surface (tab, left
+  // list, page heading, right panel) funnels through here so all views stay in
+  // sync, page numbering stays correct, and the change autosaves.
+  const patchPage = (pageId: string, patch: Partial<PageModel>) => {
+    setProject((prev) => {
+      if (!prev) return prev;
+      const pages = withPageNumbers(prev.pages.map((p) => (p.id === pageId ? { ...p, ...patch } : p)));
+      return { ...prev, pages };
+    });
+  };
+
+  const onRenamePageTitle = (pageId: string, title: string) => patchPage(pageId, { sheetTitle: title });
+
   const onUploadWorkbook = async (file: File) => {
     const { id } = await createProjectFromWorkbook(file);
     const p = await getProject(id);
@@ -279,7 +301,12 @@ export default function App() {
 
   const onRenumber = () => {
     if (!project) return;
-    void updatePages(project.pages);
+    setRenumberOpen(true);
+  };
+
+  const applyRenumber = (updated: PageModel[]) => {
+    setRenumberOpen(false);
+    void updatePages(updated);
   };
 
   const onRenameProject = async (name: string) => {
@@ -319,7 +346,7 @@ export default function App() {
   };
 
   const canvasEnabled =
-    !!activePage && viewMode === 'normalized' && CANVAS_TYPES.has(activePage.pageType);
+    !!activePage && viewMode === 'normalized';
 
   const ribbon = (
     <Ribbon
@@ -329,6 +356,8 @@ export default function App() {
       canvasEnabled={canvasEnabled}
       activeTool={activeTool}
       onSetTool={setActiveTool}
+      overlayMode={overlayMode}
+      onToggleOverlay={() => setOverlayMode((v) => !v)}
       canvas={{
         addText: () => canvasApiRef.current?.addText(),
         addRect: () => canvasApiRef.current?.addRect(),
@@ -377,6 +406,7 @@ export default function App() {
   const includedCount = project.pages.filter((p) => p.include).length;
 
   return (
+    <>
     <ProjectShell
       ribbon={ribbon}
       left={
@@ -401,6 +431,7 @@ export default function App() {
           onViewModeChange={setViewMode}
           activeTool={activeTool}
           snap={snap}
+          overlayMode={overlayMode}
           onToolConsumed={onToolConsumed}
           onRegisterApi={onRegisterApi}
           onSelectionChange={onSelectionChange}
@@ -410,6 +441,7 @@ export default function App() {
             setSelection(null);
           }}
           onReorderPages={(pages) => void updatePages(pages)}
+          onRenamePageTitle={onRenamePageTitle}
           onDropImageFile={(file) => void onDropImageFile(file)}
           onScaleChange={onScaleChange}
           onGridChange={(wsId, grid) => {
@@ -453,7 +485,7 @@ export default function App() {
           </div>
           <PropertiesPanel
             page={activePage}
-            onChange={(next) => setProject({ ...project, pages: project.pages.map((p) => (p.id === next.id ? next : p)) })}
+            onChange={(next) => patchPage(next.id, next)}
             selection={selection}
             onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
             projectDisplayName={project.projectDisplayName ?? project.metadata.projectName}
@@ -473,5 +505,9 @@ export default function App() {
         />
       }
     />
+    {renumberOpen && (
+      <RenumberModal pages={project.pages} onApply={applyRenumber} onCancel={() => setRenumberOpen(false)} />
+    )}
+    </>
   );
 }
