@@ -32,6 +32,7 @@ interface Props {
     redo: () => void;
   };
   onUploadFile: (file: File) => void;
+  onUploadCsv: (file: File) => void;
   onSaveNow: () => void;
   onExportPdf: () => void;
 }
@@ -65,6 +66,7 @@ export default function Ribbon({
   onSetTool,
   canvas,
   onUploadFile,
+  onUploadCsv,
   onSaveNow,
   onExportPdf,
 }: Props) {
@@ -79,6 +81,19 @@ export default function Ribbon({
         accept=".xlsx"
         title="Upload Workbook"
         onChange={(e) => e.target.files?.[0] && onUploadFile(e.target.files[0])}
+      />
+    </label>
+  );
+
+  const csvBtn = (
+    <label className={`ribbon-btn file-ribbon-btn ${hasProject ? '' : 'disabled'}`} title="Attach CSV">
+      Attach CSV
+      <input
+        type="file"
+        accept=".csv"
+        title="Attach CSV"
+        disabled={!hasProject}
+        onChange={(e) => e.target.files?.[0] && onUploadCsv(e.target.files[0])}
       />
     </label>
   );
@@ -107,6 +122,7 @@ export default function Ribbon({
         {tab === 'File' && (
           <>
             <Group title="Workbook">{uploadBtn}</Group>
+            <Group title="Data">{csvBtn}</Group>
             <Group title="Project">
               <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow}>Save Now</button>
             </Group>

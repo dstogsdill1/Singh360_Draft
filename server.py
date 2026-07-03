@@ -6,6 +6,7 @@ packages. The legacy /editor page is retained only as a fallback.
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -19,10 +20,11 @@ from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, redirect, request, send_file, send_from_directory
 
-from core.csv_importer import import_csv_to_grid
+from core.csv_importer import build_csv_worksheet_and_pages, import_csv_to_grid
 from core.export_pdf import export_pdf_via_playwright
+from core.page_composer import compose_pages
 from core.pdf_importer import import_pdf
-from core.project_model import ensure_project_shape
+from core.project_model import ensure_project_shape, recalc_page_numbers
 from core.validation import validate_project
 from core.vsdx_importer import import_vsdx
 from core.workbook_importer import import_workbook
@@ -432,6 +434,129 @@ def add_source_to_project(project_id: str):
         return jsonify(_err("Failed to import source.", str(exc))), 500
 
     return jsonify({"ok": True, "id": project_id, "source": source_meta})
+
+
+@app.post("/api/projects/<project_id>/import/csv")
+def attach_csv_structured(project_id: str):
+    """Attach a CSV as a structured source: raw worksheet + Equipment Summary
+    and per-category inventory output pages."""
+    path = _project_path(project_id)
+    if not path.is_file():
+        abort(404)
+    if "file" not in request.files:
+        return jsonify(_err("No CSV uploaded.")), 400
+
+    upload = request.files["file"]
+    if not (upload.filename or "").lower().endswith(".csv"):
+        return jsonify(_err("Only .csv is supported for this endpoint.")), 400
+
+    source_id = uuid.uuid4().hex[:16]
+    source_dir = DOCS_DIR / "sources" / project_id
+    source_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = source_dir / f"{source_id}.csv"
+
+    try:
+        upload.save(csv_path)
+        doc = json.loads(path.read_text("utf-8"))
+        doc = ensure_project_shape(doc)
+
+        ws_id = f"ws_csv_{source_id}"
+        worksheet, new_pages = build_csv_worksheet_and_pages(
+            csv_path, ws_id, source_id, upload.filename, len(doc.get("pages", [])) + 1
+        )
+        # Paginate any oversized CSV tables.
+        new_pages = compose_pages(new_pages)
+
+        doc["worksheets"].append(worksheet)
+        doc["sources"].append(
+            {
+                "id": source_id,
+                "type": "csv",
+                "name": upload.filename,
+                "path": str(csv_path),
+                "importedAt": _utcnow(),
+            }
+        )
+        doc["pages"].extend(new_pages)
+        doc = ensure_project_shape(doc)
+        recalc_page_numbers(doc)
+
+        problems = validate_project(doc)
+        if problems:
+            return jsonify(_err("CSV import failed validation.", " | ".join(problems[:20]))), 400
+
+        path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        app.logger.error("CSV structured import failed for %s: %s", project_id, exc)
+        return jsonify(_err("Failed to import CSV.", str(exc))), 500
+
+    return jsonify({"ok": True, "id": project_id, "worksheetId": ws_id, "pagesAdded": len(new_pages)})
+
+
+# --------------------------------------------------------------------------
+# Image assets (pasted screenshots / dropped image files)
+# --------------------------------------------------------------------------
+
+_IMAGE_EXTS = {"png", "jpg", "jpeg", "webp", "gif"}
+
+
+@app.post("/api/projects/<project_id>/assets")
+def add_asset(project_id: str):
+    """Store an image asset for a project. Accepts either a multipart 'file' or
+    a JSON body {"dataUrl": "data:image/png;base64,...", "name": "..."}.
+    Returns the asset id + URL to reference from a canvas image object.
+    """
+    _safe_id(project_id)
+    assets_dir = DOCS_DIR / "assets" / project_id
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    asset_id = uuid.uuid4().hex[:16]
+
+    try:
+        if "file" in request.files:
+            upload = request.files["file"]
+            ext = Path(upload.filename or "").suffix.lower().lstrip(".") or "png"
+            if ext not in _IMAGE_EXTS:
+                return jsonify(_err("Unsupported image type.", ext)), 400
+            name = upload.filename or f"{asset_id}.{ext}"
+            asset_path = assets_dir / f"{asset_id}.{ext}"
+            upload.save(asset_path)
+        else:
+            body = request.get_json(force=True, silent=True) or {}
+            data_url = body.get("dataUrl", "")
+            name = body.get("name") or f"{asset_id}.png"
+            m = re.match(r"^data:image/(png|jpe?g|webp|gif);base64,(.+)$", data_url, re.IGNORECASE)
+            if not m:
+                return jsonify(_err("Invalid image dataUrl.")), 400
+            ext = m.group(1).lower().replace("jpeg", "jpg")
+            raw = base64.b64decode(m.group(2))
+            asset_path = assets_dir / f"{asset_id}.{ext}"
+            asset_path.write_bytes(raw)
+    except Exception as exc:
+        app.logger.error("Asset store failed for %s: %s", project_id, exc)
+        return jsonify(_err("Failed to store asset.", str(exc))), 500
+
+    return jsonify(
+        {
+            "ok": True,
+            "asset": {
+                "id": asset_id,
+                "name": name,
+                "url": f"/api/assets/{project_id}/{asset_path.name}",
+            },
+        }
+    )
+
+
+@app.get("/api/assets/<project_id>/<asset_name>")
+def get_asset(project_id: str, asset_name: str):
+    _safe_id(project_id)
+    if not re.fullmatch(r"[a-f0-9]{16}\.(png|jpg|jpeg|webp|gif)", asset_name):
+        abort(404)
+    asset_path = (DOCS_DIR / "assets" / project_id / asset_name).resolve()
+    base = (DOCS_DIR / "assets" / project_id).resolve()
+    if base not in asset_path.parents or not asset_path.is_file():
+        abort(404)
+    return send_file(asset_path)
 
 
 @app.post("/api/import/workbook")

@@ -9,6 +9,7 @@ from openpyxl.utils.cell import get_column_letter
 
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 from core.page_normalizer import normalize_page
+from core.page_composer import compose_pages, page_family
 
 _INDEX_ALIASES = {
     "include": {"include", "inc", "include?", "use?", "selected"},
@@ -258,20 +259,29 @@ def import_workbook(path: str | Path, project_id: str | None = None) -> dict[str
             "order": order_cursor,
             "include": include,
             "sheetCode": idx["orderRaw"] if idx and idx["orderRaw"] else str(order_cursor),
+            "displaySheetCode": idx["orderRaw"] if idx and idx["orderRaw"] else str(order_cursor),
             "sheetTitle": title,
             "sheetTab": ws["name"],
             "pageType": page_type,
+            "pageFamily": page_family(ws["name"], title, idx["useSource"] if idx else ""),
             "templateId": "ansi-b-standard",
             "linkedWorksheetId": ws["id"],
             "blocks": blocks,
             "canvasObjects": [],
+            "assets": [],
             "underlays": [],
             "notes": idx["notes"] if idx else "",
             "revisionRows": [],
+            "pageGroupId": f"page_{i+1}",
+            "continuationOf": None,
+            "continuationIndex": 0,
+            "generatedContinuation": False,
+            "layoutWarnings": [],
         }
         pages.append(page)
         order_cursor += 1
 
-    project["pages"] = sorted(pages, key=lambda p: p["order"])
+    pages = sorted(pages, key=lambda p: p["order"])
+    project["pages"] = compose_pages(pages)
     recalc_page_numbers(project)
     return sanitize_json(project)

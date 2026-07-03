@@ -61,16 +61,24 @@ export interface PageModel {
   order: number;
   include: boolean;
   sheetCode: string;
+  displaySheetCode?: string;
   sheetTitle: string;
   sheetTab: string;
   pageType: PageType;
+  pageFamily?: string;
   templateId: string;
   linkedWorksheetId?: string;
   blocks?: PageBlock[];
   canvasObjects: Record<string, unknown>[];
+  assets?: Record<string, unknown>[];
   notes: string;
   pageNumber?: number | null;
   pageTotal?: number;
+  pageGroupId?: string;
+  continuationOf?: string | null;
+  continuationIndex?: number;
+  generatedContinuation?: boolean;
+  layoutWarnings?: string[];
 }
 
 export interface ProjectModel {
@@ -108,6 +116,7 @@ export interface CanvasApi {
   addRect: () => void;
   addLine: () => void;
   addArrow: () => void;
+  addImage: (url: string, name?: string) => void;
   deleteSelected: () => void;
   duplicateSelected: () => void;
   undo: () => void;

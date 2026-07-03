@@ -208,6 +208,12 @@ body { background: var(--board); color: var(--ink); }
 .page-tab .pt-code { font-weight: 700; color: #9fb8d6; }
 .page-tab.active .pt-code { color: #cfe0f4; }
 .page-tab .pt-title { overflow: hidden; text-overflow: ellipsis; }
+.page-tab.cont { font-style: italic; opacity: 0.92; }
+.page-tab .pt-cont { color: #7fa9d8; font-weight: 700; }
+
+.cont-mark { color: #12539b; font-weight: 700; }
+
+.ribbon-btn.file-ribbon-btn.disabled { opacity: 0.4; pointer-events: none; }
 
 /* ── VIEWPORT TOOLBAR ── */
 .viewport-toolbar {

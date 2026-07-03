@@ -28,8 +28,11 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate }
           onClick={() => onSelect(p.id)}
         >
           <div className="sheet-item-head">
-            <span className="sheet-item-code">{p.sheetCode}</span>
-            <span className="sheet-item-title">{p.sheetTitle}</span>
+            <span className="sheet-item-code">{p.displaySheetCode || p.sheetCode}</span>
+            <span className="sheet-item-title">
+              {p.generatedContinuation && <span className="cont-mark" title="Generated continuation">↳ </span>}
+              {p.sheetTitle}
+            </span>
             <div className="sheet-item-actions" onClick={(e) => e.stopPropagation()}>
               <button className="reorder-btn" title="Move up" onClick={() => move(idx, -1)}>↑</button>
               <button className="reorder-btn" title="Move down" onClick={() => move(idx, 1)}>↓</button>

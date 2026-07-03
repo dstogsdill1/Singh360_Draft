@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Canvas, Rect, Textbox, Line, Triangle, Group, type FabricObject } from 'fabric';
+import { Canvas, Rect, Textbox, Line, Triangle, Group, FabricImage, type FabricObject } from 'fabric';
 import type { CanvasApi, CanvasSelection } from '../model/types';
 
 interface Props {
@@ -174,6 +174,27 @@ export default function CanvasEditor({
       addRect: () => addObj(makeRect(200, 200)),
       addLine: () => addObj(makeLine(200, 260)),
       addArrow: () => addObj(makeArrow(200, 320)),
+      addImage: (url: string, name?: string) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        void FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
+          const maxW = CANVAS_W * 0.6;
+          const maxH = CANVAS_H * 0.6;
+          const iw = img.width || 1;
+          const ih = img.height || 1;
+          const scale = Math.min(1, maxW / iw, maxH / ih);
+          img.set({
+            left: (CANVAS_W - iw * scale) / 2,
+            top: (CANVAS_H - ih * scale) / 2,
+            scaleX: scale,
+            scaleY: scale,
+          });
+          (img as unknown as Record<string, unknown>).assetName = name || 'image';
+          c.add(img);
+          c.setActiveObject(img);
+          c.requestRenderAll();
+        });
+      },
       deleteSelected: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();

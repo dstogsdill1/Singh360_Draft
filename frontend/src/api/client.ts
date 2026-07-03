@@ -43,3 +43,38 @@ export async function exportPdf(projectId: string): Promise<Blob> {
   if (!res.ok) throw new Error(await res.text());
   return res.blob();
 }
+
+export async function uploadAssetDataUrl(
+  projectId: string,
+  dataUrl: string,
+  name: string,
+): Promise<{ id: string; name: string; url: string }> {
+  const res = await fetch(`/api/projects/${projectId}/assets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dataUrl, name }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.asset;
+}
+
+export async function uploadAssetFile(
+  projectId: string,
+  file: File,
+): Promise<{ id: string; name: string; url: string }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`/api/projects/${projectId}/assets`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.asset;
+}
+
+export async function attachCsv(projectId: string, file: File): Promise<void> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`/api/projects/${projectId}/import/csv`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+}
+

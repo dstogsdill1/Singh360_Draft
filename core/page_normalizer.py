@@ -274,6 +274,12 @@ def normalize_page(
         ncols = _effective_columns(grid)
         image_refs = _collect_image_refs(grid)
 
+        # Sheet Index — clean index table, never image placeholders.
+        if page_type == "index":
+            block = _build_table_block(grid, styles, max(ncols, 1), ws_id, ids, "table")
+            block["styleRole"] = "index"
+            return [block]
+
         # Canvas / diagram / layout pages
         if page_type in ("canvas", "hybrid", "underlay"):
             blocks: list[dict[str, Any]] = [

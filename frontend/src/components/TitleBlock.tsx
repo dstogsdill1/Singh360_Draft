@@ -58,7 +58,7 @@ export default function TitleBlock({ project, page }: Props) {
       {/* Sheet code / page number block */}
       <div className="tb-cell tb-code">
         <span className="tb-field-label">Sheet</span>
-        <span className="tb-code-value">{page.sheetCode || ''}</span>
+        <span className="tb-code-value">{page.displaySheetCode || page.sheetCode || ''}</span>
         <span className="tb-page-label">{pageLabel}</span>
       </div>
     </div>

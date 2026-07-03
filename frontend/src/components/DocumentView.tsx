@@ -41,6 +41,8 @@ interface Props {
   onSelectionChange: (sel: CanvasSelection | null) => void;
   onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
   onSelectPage: (id: string) => void;
+  onReorderPages: (pages: PageModel[]) => void;
+  onDropImageFile: (file: File) => void;
   onScaleChange: (scale: number) => void;
   onGridChange: (worksheetId: string, grid: string[][]) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
@@ -62,6 +64,8 @@ export default function DocumentView({
   onSelectionChange,
   onBlockChange,
   onSelectPage,
+  onReorderPages,
+  onDropImageFile,
   onScaleChange,
   onGridChange,
   onCanvasChange,
@@ -110,9 +114,22 @@ export default function DocumentView({
 
   return (
     <>
-      <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} />
+      <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} onReorder={onReorderPages} />
       <ViewportToolbar activePage={activePage} view={view} viewMode={viewMode} onViewModeChange={onViewModeChange} />
-      <div className="sheet-viewport" ref={viewportRef}>
+      <div
+        className="sheet-viewport"
+        ref={viewportRef}
+        onDragOver={(e) => {
+          if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          const file = e.dataTransfer?.files?.[0];
+          if (file && file.type.startsWith('image/')) {
+            e.preventDefault();
+            onDropImageFile(file);
+          }
+        }}
+      >
         <div className="sheet-stage" style={{ width: SHEET_W * scale, height: SHEET_H * scale }}>
           <div
             className={`sheet-scale ${view.showGrid ? 'show-grid' : ''}`}

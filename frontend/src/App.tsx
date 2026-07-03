@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createProjectFromWorkbook, exportPdf, getProject, savePages, saveProject } from './api/client';
+import {
+  attachCsv,
+  createProjectFromWorkbook,
+  exportPdf,
+  getProject,
+  savePages,
+  saveProject,
+  uploadAssetDataUrl,
+  uploadAssetFile,
+} from './api/client';
 import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, ViewMode } from './model/types';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
@@ -78,6 +87,93 @@ export default function App() {
   const onSelectionChange = useCallback((sel: CanvasSelection | null) => setSelection(sel), []);
   const onToolConsumed = useCallback(() => setActiveTool('select'), []);
 
+  // Refs so global paste/keyboard handlers read current values.
+  const projectRef = useRef(project);
+  const activePageRef = useRef(activePage);
+  const viewModeRef = useRef(viewMode);
+  projectRef.current = project;
+  activePageRef.current = activePage;
+  viewModeRef.current = viewMode;
+
+  const isCanvasContext = () =>
+    !!activePageRef.current &&
+    viewModeRef.current === 'normalized' &&
+    CANVAS_TYPES.has(activePageRef.current.pageType);
+
+  const addImageFromDataUrl = async (dataUrl: string, name: string) => {
+    const pid = projectRef.current?.id;
+    if (!pid) return;
+    try {
+      const asset = await uploadAssetDataUrl(pid, dataUrl, name);
+      canvasApiRef.current?.addImage(asset.url, asset.name);
+    } catch (err) {
+      console.error('paste image failed', err);
+    }
+  };
+
+  const onDropImageFile = async (file: File) => {
+    const pid = projectRef.current?.id;
+    if (!pid || !isCanvasContext()) return;
+    try {
+      const asset = await uploadAssetFile(pid, file);
+      canvasApiRef.current?.addImage(asset.url, asset.name);
+    } catch (err) {
+      console.error('drop image failed', err);
+    }
+  };
+
+  // Global clipboard paste → image onto active canvas page.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (!isCanvasContext()) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it.type.startsWith('image/')) {
+          const file = it.getAsFile();
+          if (file) {
+            e.preventDefault();
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === 'string') void addImageFromDataUrl(reader.result, file.name || 'pasted.png');
+            };
+            reader.readAsDataURL(file);
+          }
+          return;
+        }
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Global keyboard: delete / undo / redo / duplicate on canvas (not while typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (!isCanvasContext()) return;
+      const k = e.key.toLowerCase();
+      if (e.key === 'Delete') {
+        canvasApiRef.current?.deleteSelected();
+      } else if ((e.ctrlKey || e.metaKey) && k === 'z') {
+        e.preventDefault();
+        canvasApiRef.current?.undo();
+      } else if ((e.ctrlKey || e.metaKey) && k === 'y') {
+        e.preventDefault();
+        canvasApiRef.current?.redo();
+      } else if ((e.ctrlKey || e.metaKey) && k === 'd') {
+        e.preventDefault();
+        canvasApiRef.current?.duplicateSelected();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const view: ViewControls = {
     fitMode,
     showGrid,
@@ -120,6 +216,20 @@ export default function App() {
     setSelectedWorksheetId(p.worksheets?.[0]?.id);
     setSelection(null);
     window.history.replaceState({}, '', `?project=${id}`);
+  };
+
+  const onUploadCsv = async (file: File) => {
+    if (!project) return;
+    try {
+      setSaveStatus('saving');
+      await attachCsv(project.id, file);
+      const p = await getProject(project.id);
+      setProject(p);
+      setSaveStatus('saved');
+    } catch (err) {
+      console.error('CSV attach failed', err);
+      setSaveStatus('failed');
+    }
   };
 
   const onExportPdf = async () => {
@@ -169,6 +279,7 @@ export default function App() {
         redo: () => canvasApiRef.current?.redo(),
       }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
+      onUploadCsv={(f) => void onUploadCsv(f)}
       onSaveNow={() => project && void saveProject(project)}
       onExportPdf={() => void onExportPdf()}
     />
@@ -228,6 +339,8 @@ export default function App() {
             setActivePageId(id);
             setSelection(null);
           }}
+          onReorderPages={(pages) => void updatePages(pages)}
+          onDropImageFile={(file) => void onDropImageFile(file)}
           onScaleChange={onScaleChange}
           onGridChange={(wsId, grid) => {
             setProject({
