@@ -75,7 +75,7 @@ export default function App() {
   const [actualZoom, setActualZoom] = useState(1);
   const [effectiveScale, setEffectiveScale] = useState(0.5);
   const [showGrid, setShowGrid] = useState(false);
-  const [snap, setSnap] = useState(false);
+  const [snap, setSnap] = useState(true);
 
   // Rendering + editing state.
   const [viewMode, setViewMode] = useState<ViewMode>('normalized');
@@ -115,6 +115,19 @@ export default function App() {
     if (!project || !activePageId) return null;
     return project.pages.find((p) => p.id === activePageId) ?? null;
   }, [project, activePageId]);
+
+  // Auto-enable overlay edit mode when the active page has overlay objects or is
+  // a drawing page, so existing objects are immediately selectable/movable and
+  // the Text/Draw toolbars unlock. On empty content pages, leave the base
+  // editable (overlay off). Runs only on page change.
+  useEffect(() => {
+    const p = activePage;
+    if (!p) return;
+    const hasObjects = (p.canvasObjects?.length ?? 0) > 0;
+    const drawingPage = p.pageType === 'canvas' || p.pageType === 'hybrid' || p.pageType === 'underlay';
+    setOverlayMode(hasObjects || drawingPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePageId]);
 
   const onScaleChange = useCallback((s: number) => setEffectiveScale(s), []);
   const onRegisterApi = useCallback((api: CanvasApi | null) => {
@@ -579,15 +592,15 @@ export default function App() {
       view={view}
       canvasEnabled={canvasEnabled}
       activeTool={activeTool}
-      onSetTool={setActiveTool}
+      onSetTool={(t) => { if (t !== 'select') setOverlayMode(true); setActiveTool(t); }}
       overlayMode={overlayMode}
       onToggleOverlay={() => setOverlayMode((v) => !v)}
       canvas={{
-        addText: () => canvasApiRef.current?.addText(),
-        addRect: () => canvasApiRef.current?.addRect(),
-        addCircle: () => canvasApiRef.current?.addCircle(),
-        addLine: () => canvasApiRef.current?.addLine(),
-        addArrow: () => canvasApiRef.current?.addArrow(),
+        addText: () => { setOverlayMode(true); canvasApiRef.current?.addText(); },
+        addRect: () => { setOverlayMode(true); canvasApiRef.current?.addRect(); },
+        addCircle: () => { setOverlayMode(true); canvasApiRef.current?.addCircle(); },
+        addLine: () => { setOverlayMode(true); canvasApiRef.current?.addLine(); },
+        addArrow: () => { setOverlayMode(true); canvasApiRef.current?.addArrow(); },
         addPageTitle: () => { setOverlayMode(true); canvasApiRef.current?.addPageTitle(activePage?.sheetTitle ?? 'Page Title'); },
         addSectionHeader: () => { setOverlayMode(true); canvasApiRef.current?.addSectionHeader('Section Header'); },
         addNote: () => { setOverlayMode(true); canvasApiRef.current?.addNote('Note'); },

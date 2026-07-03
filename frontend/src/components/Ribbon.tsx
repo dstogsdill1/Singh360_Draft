@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import type { FitMode } from './DocumentView';
 import type { CanvasSelection } from '../model/types';
 
@@ -96,6 +96,19 @@ export default function Ribbon({
   onUpdateSelection,
 }: Props) {
   const [tab, setTab] = useState<RibbonTab>('File');
+
+  // Auto-switch to the relevant tab when an object is freshly selected, so the
+  // right controls are visible without hunting. Only switches on a *change* of
+  // selection kind (text ↔ line ↔ other), never fighting a manual tab change.
+  const prevKind = useRef<string>('');
+  useEffect(() => {
+    const kind = selection?.isText ? 'text' : selection?.isConnector ? 'line' : selection ? 'obj' : 'none';
+    if (kind !== prevKind.current) {
+      prevKind.current = kind;
+      if (kind === 'text') setTab('Text');
+      else if (kind === 'line') setTab('Draw');
+    }
+  }, [selection]);
   const cx = canvasEnabled;
 
   const uploadBtn = (

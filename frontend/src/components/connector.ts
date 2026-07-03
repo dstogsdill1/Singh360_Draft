@@ -44,6 +44,8 @@ export class Connector extends Line {
     this.padding = 10;
     this.hasBorders = true;
     this.objectCaching = false;
+    this.borderColor = '#12539b';
+    this.borderScaleFactor = 2;
     this.controls = {
       start: new Control({
         positionHandler: endpointPosition('start'),

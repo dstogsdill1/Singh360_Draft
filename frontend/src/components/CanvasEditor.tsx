@@ -312,67 +312,27 @@ export default function CanvasEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Smart pointer pass-through: the overlay is only "grabbable" when the cursor
-  // is over an overlay object, when a draw tool is active, or when overlay edit
-  // mode is forced on. Otherwise clicks fall through to the base content layer
-  // (editable tables / text). This makes objects behave like PowerPoint/Visio
-  // without a hidden mode toggle.
-  useEffect(() => {
-    const canvasEl = canvasRef.current;
-    if (!canvasEl) return;
-    const overlayEl = canvasEl.parentElement?.parentElement as HTMLElement | null; // .np-overlay-layer
-    const rootEl = overlayEl?.parentElement as HTMLElement | null; // .np-page-root
-    if (!overlayEl || !rootEl) return;
+  // NOTE: overlay pointer-events are driven purely by React/CSS in NormalizedPage
+  // (`overlayInteractive`). A previous DOM-walking hover pass-through was removed
+  // because Fabric v6 wraps the <canvas> in a `.canvas-container`, so the effect
+  // targeted the wrong elements and objects became unselectable.
 
-    const setInteractive = (on: boolean) => {
-      overlayEl.style.pointerEvents = on ? 'auto' : 'none';
-    };
-
-    const overPoint = (clientX: number, clientY: number): boolean => {
-      const canvas = fabricRef.current;
-      if (!canvas) return false;
-      const rect = canvasEl.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return false;
-      const x = ((clientX - rect.left) / rect.width) * CANVAS_W;
-      const y = ((clientY - rect.top) / rect.height) * CANVAS_H;
-      // Generous hit slop so thin lines and small objects are easy to grab.
-      const SLOP = 12;
-      return canvas.getObjects().some((o) => {
-        if ((o as unknown as Record<string, unknown>).excludeFromExport === true) return false;
-        const b = o.getBoundingRect();
-        return x >= b.left - SLOP && x <= b.left + b.width + SLOP && y >= b.top - SLOP && y <= b.top + b.height + SLOP;
-      });
-    };
-
-    const onMove = (ev: MouseEvent) => {
-      if (overlayModeRef.current || toolRef.current !== 'select') {
-        setInteractive(true);
-        return;
-      }
-      // When actively dragging/selecting, keep it interactive.
-      const canvas = fabricRef.current;
-      if (canvas && canvas.getActiveObject()) {
-        setInteractive(true);
-        return;
-      }
-      setInteractive(overPoint(ev.clientX, ev.clientY));
-    };
-    const onLeave = () => {
-      if (!overlayModeRef.current && toolRef.current === 'select') setInteractive(false);
-    };
-
-    rootEl.addEventListener('mousemove', onMove);
-    rootEl.addEventListener('mouseleave', onLeave);
-    return () => {
-      rootEl.removeEventListener('mousemove', onMove);
-      rootEl.removeEventListener('mouseleave', onLeave);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Apply clear, high-contrast selection handles so users can see what's selected.
+  const styleForSelection = (obj: FabricObject) => {
+    obj.set({
+      borderColor: '#12539b',
+      cornerColor: '#12539b',
+      cornerStrokeColor: '#ffffff',
+      cornerSize: 11,
+      transparentCorners: false,
+      borderScaleFactor: 2,
+    });
+  };
 
   const addObj = (obj: FabricObject) => {
     const c = fabricRef.current;
     if (!c) return;
+    styleForSelection(obj);
     c.add(obj);
     c.setActiveObject(obj);
     c.requestRenderAll();
@@ -424,6 +384,7 @@ export default function CanvasEditor({
           }
           img.set({ left, top, scaleX: scale, scaleY: scale });
           (img as unknown as Record<string, unknown>).objName = name || 'image';
+          styleForSelection(img);
           c.add(img);
           c.setActiveObject(img);
           c.requestRenderAll();
@@ -450,6 +411,7 @@ export default function CanvasEditor({
           }
           img.set({ left, top, scaleX: scale, scaleY: scale });
           (img as unknown as Record<string, unknown>).objName = name;
+          styleForSelection(img);
           c.add(img);
           if (label) {
             const lbl = new Textbox(label, {
