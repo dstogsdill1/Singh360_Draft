@@ -13,6 +13,7 @@ import SheetFrame from './SheetFrame';
 import TitleBlock from './TitleBlock';
 import PageTabs from './PageTabs';
 import ViewportToolbar from './ViewportToolbar';
+import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
 import type { ViewControls } from './Ribbon';
 
 export type FitMode = 'width' | 'page' | 'actual';
@@ -46,6 +47,7 @@ interface Props {
   onRenamePageTitle: (id: string, title: string) => void;
   onPageContextMenu: (id: string, x: number, y: number) => void;
   onDropImageFile: (file: File) => void;
+  onDropComponent: (url: string, name: string, clientX: number, clientY: number) => void;
   onScaleChange: (scale: number) => void;
   onGridChange: (worksheetId: string, grid: string[][]) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
@@ -72,6 +74,7 @@ export default function DocumentView({
   onRenamePageTitle,
   onPageContextMenu,
   onDropImageFile,
+  onDropComponent,
   onScaleChange,
   onGridChange,
   onCanvasChange,
@@ -126,9 +129,21 @@ export default function DocumentView({
         className="sheet-viewport"
         ref={viewportRef}
         onDragOver={(e) => {
-          if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+          const types = e.dataTransfer?.types;
+          if (types?.includes('Files') || types?.includes(COMPONENT_DRAG_TYPE)) e.preventDefault();
         }}
         onDrop={(e) => {
+          const payload = e.dataTransfer?.getData(COMPONENT_DRAG_TYPE);
+          if (payload) {
+            e.preventDefault();
+            try {
+              const { url, name } = JSON.parse(payload) as { url: string; name: string };
+              onDropComponent(url, name, e.clientX, e.clientY);
+            } catch {
+              /* ignore malformed payload */
+            }
+            return;
+          }
           const file = e.dataTransfer?.files?.[0];
           if (file && file.type.startsWith('image/')) {
             e.preventDefault();

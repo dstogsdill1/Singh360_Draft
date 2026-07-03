@@ -22,6 +22,7 @@ from flask import Flask, Response, abort, jsonify, redirect, request, send_file,
 
 from core.csv_importer import build_csv_worksheet_and_pages, import_csv_to_grid
 from core.export_pdf import export_pdf_via_playwright
+from core.library_store import LibraryStore
 from core.page_composer import compose_pages
 from core.pdf_importer import import_pdf
 from core.project_model import ensure_project_shape, recalc_page_numbers
@@ -564,6 +565,57 @@ def get_asset(project_id: str, asset_name: str):
         if resolved.is_file() and DOCS_DIR.resolve() in resolved.parents:
             return send_file(resolved)
     abort(404)
+
+
+# --------------------------------------------------------------------------
+# Component Library (local .docs/library, seeded from the seed folder)
+# --------------------------------------------------------------------------
+library = LibraryStore(DOCS_DIR, HERE)
+
+
+@app.get("/api/library")
+def get_library():
+    return jsonify(library.load())
+
+
+@app.post("/api/library/import-seed")
+def import_library_seed():
+    try:
+        result = library.import_seed()
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Library seed import failed: %s", exc)
+        return jsonify(_err("Failed to import seed library.", str(exc))), 500
+    return jsonify(result if result.get("ok") else _err(result.get("error", "Seed import failed"))), (200 if result.get("ok") else 400)
+
+
+@app.get("/api/library/assets/<path:rel>")
+def get_library_asset(rel: str):
+    target = library.asset_path(rel)
+    if target is None:
+        abort(404)
+    return send_file(target)
+
+
+@app.post("/api/library/components/<comp_id>/retire")
+def retire_library_component(comp_id: str):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", comp_id):
+        abort(404)
+    if not library.retire_component(comp_id):
+        return jsonify(_err("Component not found.")), 404
+    return jsonify({"ok": True, "id": comp_id, "status": "retired"})
+
+
+@app.delete("/api/library/components/<comp_id>")
+def delete_library_component(comp_id: str):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", comp_id):
+        abort(404)
+    # Safe delete: require an explicit confirm flag.
+    confirm = request.args.get("confirm") == "1" or (request.get_json(silent=True) or {}).get("confirm") is True
+    if not confirm:
+        return jsonify(_err("Deletion requires confirm=1.", "This removes the library entry (assets on disk are kept).")), 400
+    if not library.delete_component(comp_id):
+        return jsonify(_err("Component not found.")), 404
+    return jsonify({"ok": True, "id": comp_id, "deleted": True})
 
 
 @app.post("/api/import/workbook")

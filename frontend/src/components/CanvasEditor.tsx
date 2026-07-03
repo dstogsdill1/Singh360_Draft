@@ -137,10 +137,15 @@ export default function CanvasEditor({
     };
 
     if (serialized.length) {
-      void canvas.loadFromJSON({ version: '6', objects: serialized }).then(() => canvas.renderAll());
+      void canvas.loadFromJSON({ version: '6', objects: serialized }).then(() => {
+        canvas.renderAll();
+        historyRef.current = [JSON.stringify(canvas.toObject(['objName', 'arrowStart', 'arrowEnd']))];
+        histIdxRef.current = 0;
+      });
+    } else {
+      historyRef.current = [JSON.stringify(canvas.toObject(['objName', 'arrowStart', 'arrowEnd']))];
+      histIdxRef.current = 0;
     }
-    historyRef.current = [JSON.stringify(canvas.toObject(['objName', 'arrowStart', 'arrowEnd']))];
-    histIdxRef.current = 0;
 
     canvas.on('object:modified', onChanged);
     canvas.on('object:added', onChanged);
@@ -316,7 +321,7 @@ export default function CanvasEditor({
       addPageTitle: (text: string) => addObj(makePageTitle(text)),
       addSectionHeader: (text: string) => addObj(makeSectionHeader(text)),
       addNote: (text: string) => addObj(makeNote(text)),
-      addImage: (url: string, name?: string) => {
+      addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => {
         const c = fabricRef.current;
         if (!c) return;
         void FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
@@ -325,12 +330,20 @@ export default function CanvasEditor({
           const iw = img.width || 1;
           const ih = img.height || 1;
           const scale = Math.min(1, maxW / iw, maxH / ih);
-          img.set({
-            left: (CANVAS_W - iw * scale) / 2,
-            top: (CANVAS_H - ih * scale) / 2,
-            scaleX: scale,
-            scaleY: scale,
-          });
+          let left = (CANVAS_W - iw * scale) / 2;
+          let top = (CANVAS_H - ih * scale) / 2;
+          // If a drop point is supplied, place the image centered on that point.
+          const el = canvasRef.current;
+          if (at && el) {
+            const rect = el.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              const px = ((at.clientX - rect.left) / rect.width) * CANVAS_W;
+              const py = ((at.clientY - rect.top) / rect.height) * CANVAS_H;
+              left = px - (iw * scale) / 2;
+              top = py - (ih * scale) / 2;
+            }
+          }
+          img.set({ left, top, scaleX: scale, scaleY: scale });
           (img as unknown as Record<string, unknown>).objName = name || 'image';
           c.add(img);
           c.setActiveObject(img);

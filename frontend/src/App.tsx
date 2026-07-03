@@ -15,6 +15,7 @@ import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, Vi
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
+import ComponentLibrary from './components/ComponentLibrary';
 import DocumentView, { type FitMode, MAX_SCALE, MIN_SCALE } from './components/DocumentView';
 import PropertiesPanel from './components/PropertiesPanel';
 import PrintView from './components/PrintView';
@@ -154,6 +155,19 @@ export default function App() {
     } catch (err) {
       console.error('drop image failed', err);
     }
+  };
+
+  // Insert a library component (image asset) onto the ACTIVE page only.
+  const onInsertComponent = (name: string, url: string) => {
+    if (!isCanvasContext()) return;
+    setOverlayMode(true);
+    canvasApiRef.current?.addImage(url, name);
+  };
+
+  const onDropComponent = (url: string, name: string, clientX: number, clientY: number) => {
+    if (!isCanvasContext()) return;
+    setOverlayMode(true);
+    canvasApiRef.current?.addImage(url, name, { clientX, clientY });
   };
 
   // Explicit "Paste Image" via the app context menu. Uses the async Clipboard
@@ -607,6 +621,9 @@ export default function App() {
           <CollapsibleSection title="Source Tabs" defaultOpen={false}>
             <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
           </CollapsibleSection>
+          <CollapsibleSection title="Component Library" defaultOpen={false}>
+            <ComponentLibrary onInsert={onInsertComponent} canInsert={canvasEnabled} />
+          </CollapsibleSection>
         </>
       }
       center={
@@ -634,6 +651,7 @@ export default function App() {
           onRenamePageTitle={onRenamePageTitle}
           onPageContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })}
           onDropImageFile={(file) => void onDropImageFile(file)}
+          onDropComponent={onDropComponent}
           onScaleChange={onScaleChange}
           onGridChange={(wsId, grid) => {
             setProject({

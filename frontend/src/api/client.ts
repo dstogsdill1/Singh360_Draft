@@ -94,3 +94,53 @@ export async function exportPackage(projectId: string): Promise<Blob> {
   return res.blob();
 }
 
+// ── Component Library ──
+export interface LibraryComponent {
+  id: string;
+  displayName: string;
+  shortName?: string;
+  category?: string;
+  family?: string;
+  partNumber?: string;
+  aliases?: string[];
+  tags?: string[];
+  assetKind?: string;
+  assetPath?: string;
+  thumbnailPath?: string;
+  defaultWidth?: number;
+  defaultHeight?: number;
+  status?: string;
+}
+
+export interface LibraryData {
+  components: LibraryComponent[];
+  categories: Array<{ id: string; count: number }>;
+  connectorStyles: Array<Record<string, unknown>>;
+  symbols: Array<Record<string, unknown>>;
+}
+
+export function libraryAssetUrl(path: string): string {
+  return `/api/library/assets/${path.replace(/^\/+/, '')}`;
+}
+
+export async function getLibrary(): Promise<LibraryData> {
+  const res = await fetch('/api/library');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function importLibrarySeed(): Promise<{ ok: boolean; componentCount?: number; filesCopied?: number; error?: string }> {
+  const res = await fetch('/api/library/import-seed', { method: 'POST' });
+  return res.json();
+}
+
+export async function retireLibraryComponent(id: string): Promise<void> {
+  const res = await fetch(`/api/library/components/${id}/retire`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function deleteLibraryComponent(id: string): Promise<void> {
+  const res = await fetch(`/api/library/components/${id}?confirm=1`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await res.text());
+}
+

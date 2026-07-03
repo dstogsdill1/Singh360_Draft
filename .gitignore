@@ -27,6 +27,15 @@ WORK-FOLDER/
 *.pdf
 *DO-NOT-SHARE*
 
+# Component library seed + local library (private / customer-derived images)
+Singh360_Component_Library_Seed/
+.reference_inputs/
+.docs/library/
+.docs/library_staging/
+.docs/projects/
+*.zip
+*.pptx
+
 # Legacy pipeline artifacts (pre-Draft overhaul)
 *.vsdx
 *.vson

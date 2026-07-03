@@ -94,6 +94,7 @@ export default function NormalizedPage({
       </div>
       <div className={`np-overlay-layer ${overlayInteractive ? 'active' : ''}`}>
         <CanvasEditor
+          key={page.id}
           serialized={page.canvasObjects || []}
           onSerializedChange={(o) => onCanvasChange(page.id, o)}
           registerApi={onRegisterApi}

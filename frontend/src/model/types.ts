@@ -128,7 +128,7 @@ export interface CanvasApi {
   addCircle: () => void;
   addLine: () => void;
   addArrow: () => void;
-  addImage: (url: string, name?: string) => void;
+  addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
   addPageTitle: (text: string) => void;
   addSectionHeader: (text: string) => void;
   addNote: (text: string) => void;
