@@ -521,3 +521,4 @@ button, select, input, textarea { font: inherit; }
 .lib-toolbar { padding: 0 8px 6px; display: flex; gap: 6px; }
 .ribbon-select { font-size: 11px; padding: 2px 4px; border: 1px solid #55606b; background: #2f353c; color: #e6e9ec; border-radius: 3px; max-width: 92px; }
 .ribbon-select:disabled { opacity: 0.45; }
+.export-rev { margin-top: 12px; padding-top: 12px; border-top: 1px solid #d5dade; display: flex; flex-direction: column; gap: 8px; }

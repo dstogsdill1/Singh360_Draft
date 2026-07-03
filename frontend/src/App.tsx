@@ -480,14 +480,34 @@ export default function App() {
     }
   };
 
-  const onExportPdfSized = async (width: number, height: number) => {
+  const onExportPdfSized = async (width: number, height: number, rev: { updateRevision: boolean; newRevision: string; notes: string }) => {
     if (!project) return;
     setExportOpen(false);
-    const blob = await exportPdf(project.id, { width, height });
+    let proj = project;
+    // Optionally stamp a new revision into the title block + revision history.
+    if (rev.updateRevision) {
+      const today = new Date().toISOString().slice(0, 10);
+      const history = [...(project.revisionHistory ?? []), {
+        revision: rev.newRevision,
+        date: today,
+        description: rev.notes || 'Issued',
+        exportedBy: 'Singh360',
+      }];
+      proj = {
+        ...project,
+        revisionHistory: history,
+        metadata: { ...project.metadata, revision: rev.newRevision, issueDate: today },
+      };
+      setProject(proj);
+      try { await saveProject(proj); } catch { /* best-effort */ }
+    }
+    const base = proj.metadata.drawingPackageFileName || proj.projectDisplayName || proj.metadata.projectName || proj.id;
+    const revSuffix = rev.updateRevision ? `_${rev.newRevision.replace(/\s+/g, '')}` : '';
+    const blob = await exportPdf(proj.id, { width, height });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${project.metadata.projectName || project.id}.pdf`;
+    a.download = `${base}${revSuffix}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -621,13 +641,13 @@ export default function App() {
       ribbon={ribbon}
       left={
         <>
-          <CollapsibleSection title="Output Pages">
+          <CollapsibleSection title="Output Pages" hint="The pages that make up your drawing package. Drag to reorder; right-click for actions.">
             <SheetManager pages={project.pages} activePageId={activePageId} onSelect={setActivePageId} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
           </CollapsibleSection>
-          <CollapsibleSection title="Source Tabs" defaultOpen={false}>
+          <CollapsibleSection title="Source Tabs" defaultOpen={false} hint="The original workbook worksheets, for reference.">
             <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
           </CollapsibleSection>
-          <CollapsibleSection title="Component Library" defaultOpen={false}>
+          <CollapsibleSection title="Component Library" defaultOpen={false} hint="Reusable EMS/RDM components. Search, then drag onto the active page.">
             <ComponentLibrary onInsert={onInsertComponent} canInsert={canvasEnabled} />
           </CollapsibleSection>
         </>
@@ -678,24 +698,77 @@ export default function App() {
           <div className="props-group">
             <h3>Project Properties</h3>
             <div className="field">
-              <label htmlFor="proj-name">Project Name</label>
+              <label htmlFor="proj-name" title="User-facing project name shown in the title block">Project Name</label>
               <input
                 id="proj-name"
+                title="User-facing project name shown in the title block"
                 value={project.metadata.projectName || ''}
                 onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, projectName: e.target.value } })}
               />
             </div>
             <div className="field">
-              <label htmlFor="proj-loc">Location</label>
+              <label htmlFor="proj-pkg" title="Output package / export filename, e.g. SA31_EMS_Lighting_V1">Drawing Package File Name</label>
+              <input
+                id="proj-pkg"
+                title="Output package / export filename, e.g. SA31_EMS_Lighting_V1"
+                placeholder="SA31_EMS_Lighting_V1"
+                value={project.metadata.drawingPackageFileName || ''}
+                onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, drawingPackageFileName: e.target.value } })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="proj-loc" title="Project location / store address">Location</label>
               <input
                 id="proj-loc"
+                title="Project location / store address"
                 value={project.metadata.location || ''}
                 onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, location: e.target.value } })}
               />
             </div>
+            <div className="field-row">
+              <div className="field">
+                <label htmlFor="proj-rev" title="Revision / version shown in the title block">Revision</label>
+                <input
+                  id="proj-rev"
+                  title="Revision / version shown in the title block"
+                  placeholder="V1"
+                  value={project.metadata.revision || ''}
+                  onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, revision: e.target.value } })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="proj-issue" title="Date this package was issued">Issue Date</label>
+                <input
+                  id="proj-issue"
+                  title="Date this package was issued"
+                  value={project.metadata.issueDate || ''}
+                  onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, issueDate: e.target.value } })}
+                />
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label htmlFor="proj-drawn" title="Person who drew the package">Drawn By</label>
+                <input
+                  id="proj-drawn"
+                  title="Person who drew the package"
+                  value={project.metadata.drawnBy || ''}
+                  onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, drawnBy: e.target.value } })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="proj-checked" title="Person who checked the package">Checked By</label>
+                <input
+                  id="proj-checked"
+                  title="Person who checked the package"
+                  value={project.metadata.checkedBy || ''}
+                  onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, checkedBy: e.target.value } })}
+                />
+              </div>
+            </div>
             <div className="field">
-              <label htmlFor="proj-file">File</label>
-              <input id="proj-file" value={project.metadata.sourceFile || ''} readOnly />
+              <label htmlFor="proj-file" title="Original uploaded workbook filename (read-only)">Source Workbook</label>
+              <input id="proj-file" title="Original uploaded workbook filename (read-only)" value={project.metadata.sourceFile || ''} readOnly />
             </div>
           </div>
           <PropertiesPanel
@@ -724,7 +797,12 @@ export default function App() {
       <RenumberModal pages={project.pages} onApply={applyRenumber} onCancel={() => setRenumberOpen(false)} />
     )}
     {exportOpen && (
-      <ExportModal onExport={(w, h) => void onExportPdfSized(w, h)} onCancel={() => setExportOpen(false)} />
+      <ExportModal
+        currentRevision={project.metadata.revision || project.metadata.version || ''}
+        packageName={project.metadata.drawingPackageFileName || project.projectDisplayName || project.metadata.projectName || ''}
+        onExport={(w, h, rev) => void onExportPdfSized(w, h, rev)}
+        onCancel={() => setExportOpen(false)}
+      />
     )}
     {ctxMenu && (
       <SheetContextMenu

@@ -38,8 +38,11 @@ export class Connector extends Line {
     this.arrowEnd = options.arrowEnd ?? true;
     this.objName = options.objName;
     this.strokeUniform = true;
-    this.perPixelTargetFind = true;
-    this.hasBorders = false;
+    // Easy to grab: use the bounding box (not per-pixel) and add generous hit
+    // padding so thin lines/arrows are simple to select and move.
+    this.perPixelTargetFind = false;
+    this.padding = 10;
+    this.hasBorders = true;
     this.objectCaching = false;
     this.controls = {
       start: new Control({

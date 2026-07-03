@@ -1,7 +1,15 @@
 import { useState } from 'react';
 
+export interface ExportRevisionResult {
+  updateRevision: boolean;
+  newRevision: string;
+  notes: string;
+}
+
 interface Props {
-  onExport: (width: number, height: number) => void;
+  currentRevision: string;
+  packageName: string;
+  onExport: (width: number, height: number, rev: ExportRevisionResult) => void;
   onCancel: () => void;
 }
 
@@ -26,11 +34,23 @@ const PRESETS: Preset[] = [
   { id: 'custom', label: 'Custom…', w: 17, h: 11 },
 ];
 
-export default function ExportModal({ onExport, onCancel }: Props) {
+export default function ExportModal({ currentRevision, packageName, onExport, onCancel }: Props) {
   const [presetId, setPresetId] = useState('ansi_b');
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
   const [customW, setCustomW] = useState('17');
   const [customH, setCustomH] = useState('11');
+  const [updateRev, setUpdateRev] = useState(false);
+  const [revMode, setRevMode] = useState<'increment' | 'custom'>('increment');
+  const [customRev, setCustomRev] = useState('');
+  const [revNotes, setRevNotes] = useState('');
+
+  const nextRevision = (() => {
+    if (revMode === 'custom') return customRev.trim() || currentRevision;
+    // Increment: bump a trailing integer, else V1 -> V2, else append " Rev 1".
+    const m = currentRevision.match(/(\d+)\s*$/);
+    if (m) return currentRevision.replace(/\d+\s*$/, String(parseInt(m[1], 10) + 1));
+    return currentRevision ? `${currentRevision} Rev 1` : 'V1';
+  })();
 
   const preset = PRESETS.find((p) => p.id === presetId)!;
   const isCustom = presetId === 'custom';
@@ -90,11 +110,42 @@ export default function ExportModal({ onExport, onCancel }: Props) {
           <p className="renumber-note">
             Output: {resolved.width}&quot; × {resolved.height}&quot;. The 17×11 sheet layout (title block + body) is scaled to fit the selected paper — nothing is clipped.
           </p>
+
+          <div className="export-rev">
+            <div className="field">
+              <label>Current Revision</label>
+              <div className="props-path">{currentRevision || '(none)'} · Package: {packageName || '(project name)'}</div>
+            </div>
+            <label className="lib-showretired" title="Record a new revision in the title block and revision history when you export">
+              <input type="checkbox" checked={updateRev} onChange={(e) => setUpdateRev(e.target.checked)} /> Update revision on export
+            </label>
+            {updateRev && (
+              <>
+                <div className="field">
+                  <label htmlFor="rev-mode">Revision</label>
+                  <select id="rev-mode" value={revMode} onChange={(e) => setRevMode(e.target.value as 'increment' | 'custom')}>
+                    <option value="increment">Increment → {nextRevision}</option>
+                    <option value="custom">Set custom…</option>
+                  </select>
+                </div>
+                {revMode === 'custom' && (
+                  <div className="field">
+                    <label htmlFor="rev-custom">Custom Revision</label>
+                    <input id="rev-custom" type="text" placeholder="V2" value={customRev} onChange={(e) => setCustomRev(e.target.value)} />
+                  </div>
+                )}
+                <div className="field">
+                  <label htmlFor="rev-notes">Revision Notes</label>
+                  <input id="rev-notes" type="text" placeholder="Description of this revision" value={revNotes} onChange={(e) => setRevNotes(e.target.value)} />
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="modal-foot">
           <button className="btn" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-primary" onClick={() => onExport(resolved.width, resolved.height)}>Export PDF</button>
+          <button className="btn btn-primary" onClick={() => onExport(resolved.width, resolved.height, { updateRevision: updateRev, newRevision: nextRevision, notes: revNotes })}>Export PDF</button>
         </div>
       </div>
     </div>

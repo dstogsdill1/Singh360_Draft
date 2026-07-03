@@ -56,7 +56,7 @@ function summarize(obj: FabricObject): CanvasSelection {
 }
 
 function makeText(x: number, y: number) {
-  return new Textbox('Text', { left: x, top: y, width: 200, fontSize: 20, fill: '#111' });
+  return new Textbox('Text', { left: x, top: y, width: 200, fontSize: 20, fill: '#111', padding: 6 });
 }
 function makePageTitle(text: string) {
   const t = new Textbox((text || 'PAGE TITLE').toUpperCase(), {
@@ -136,6 +136,8 @@ export default function CanvasEditor({
       height: CANVAS_H,
       selection: true,
       backgroundColor: '',
+      targetFindTolerance: 12,
+      perPixelTargetFind: false,
     });
     fabricRef.current = canvas;
 
@@ -333,9 +335,12 @@ export default function CanvasEditor({
       if (rect.width === 0 || rect.height === 0) return false;
       const x = ((clientX - rect.left) / rect.width) * CANVAS_W;
       const y = ((clientY - rect.top) / rect.height) * CANVAS_H;
+      // Generous hit slop so thin lines and small objects are easy to grab.
+      const SLOP = 12;
       return canvas.getObjects().some((o) => {
+        if ((o as unknown as Record<string, unknown>).excludeFromExport === true) return false;
         const b = o.getBoundingRect();
-        return x >= b.left - 4 && x <= b.left + b.width + 4 && y >= b.top - 4 && y <= b.top + b.height + 4;
+        return x >= b.left - SLOP && x <= b.left + b.width + SLOP && y >= b.top - SLOP && y <= b.top + b.height + SLOP;
       });
     };
 

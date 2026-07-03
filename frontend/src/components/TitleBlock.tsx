@@ -23,7 +23,8 @@ export default function TitleBlock({ project, page }: Props) {
   const pageLabel = page.pageNumber
     ? `Sheet ${page.pageNumber} of ${page.pageTotal ?? 0}`
     : `Sheet — of ${page.pageTotal ?? 0}`;
-  const projectName = m.projectName || project.projectDisplayName;
+  // Prefer a clean package/display name over the raw uploaded workbook filename.
+  const projectName = m.drawingPackageFileName || project.projectDisplayName || m.projectName;
 
   return (
     <div className="sheet-title-block tb-v3">
@@ -55,12 +56,12 @@ export default function TitleBlock({ project, page }: Props) {
 
       {/* Revision / creator / date block */}
       <div className="tb-cell tb-stack tb-rev">
-        <Field label="Drawn By" value={m.createdBy} />
+        <Field label="Drawn By" value={m.drawnBy || m.createdBy} />
+        <Field label="Checked By" value={m.checkedBy || m.editedBy} />
         <Field label="Created" value={m.createdDate} />
-        <Field label="Checked By" value={m.editedBy} />
         <div className="tb-field-pair">
-          <Field label="Rev" value={m.version} />
-          <Field label="Date" value={m.date} />
+          <Field label="Rev" value={m.revision || m.version} />
+          <Field label="Issued" value={m.issueDate || m.date} />
         </div>
       </div>
 

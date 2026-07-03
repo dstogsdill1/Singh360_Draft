@@ -95,6 +95,11 @@ export interface ProjectModel {
     status?: string;
     editedBy?: string;
     date?: string;
+    drawnBy?: string;
+    checkedBy?: string;
+    issueDate?: string;
+    revision?: string;
+    drawingPackageFileName?: string;
   };
   worksheets: Worksheet[];
   pages: PageModel[];
@@ -102,6 +107,7 @@ export interface ProjectModel {
   modified?: string;
   projectFolder?: string;
   projectDisplayName?: string;
+  revisionHistory?: Array<{ revision: string; date: string; description?: string; exportedBy?: string }>;
 }
 
 export type ViewMode = 'normalized' | 'source';

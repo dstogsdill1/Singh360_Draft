@@ -79,6 +79,9 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
         "templates": [default_template()],
         "assets": [],
         "revisionLog": [],
+        "revisionHistory": [],
+        "projectDisplayName": "",
+        "projectFolder": "",
         "modified": created,
     }
 
@@ -106,8 +109,12 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
     if isinstance(project.get("metadata"), dict):
         merged["metadata"].update(project["metadata"])
 
-    for key in ("sources", "worksheets", "pages", "templates", "assets", "revisionLog"):
+    for key in ("sources", "worksheets", "pages", "templates", "assets", "revisionLog", "revisionHistory"):
         if isinstance(project.get(key), list):
+            merged[key] = project[key]
+    # Preserve string identity fields set by the project store / rename flow.
+    for key in ("projectDisplayName", "projectFolder"):
+        if isinstance(project.get(key), str) and project[key]:
             merged[key] = project[key]
 
     merged = sanitize_json(merged)
