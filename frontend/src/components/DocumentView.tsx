@@ -44,6 +44,7 @@ interface Props {
   onSelectPage: (id: string) => void;
   onReorderPages: (pages: PageModel[]) => void;
   onRenamePageTitle: (id: string, title: string) => void;
+  onPageContextMenu: (id: string, x: number, y: number) => void;
   onDropImageFile: (file: File) => void;
   onScaleChange: (scale: number) => void;
   onGridChange: (worksheetId: string, grid: string[][]) => void;
@@ -69,6 +70,7 @@ export default function DocumentView({
   onSelectPage,
   onReorderPages,
   onRenamePageTitle,
+  onPageContextMenu,
   onDropImageFile,
   onScaleChange,
   onGridChange,
@@ -118,7 +120,7 @@ export default function DocumentView({
 
   return (
     <>
-      <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} onReorder={onReorderPages} onRenameTitle={onRenamePageTitle} />
+      <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} onReorder={onReorderPages} onRenameTitle={onRenamePageTitle} onContextMenu={onPageContextMenu} />
       <ViewportToolbar activePage={activePage} view={view} viewMode={viewMode} onViewModeChange={onViewModeChange} />
       <div
         className="sheet-viewport"

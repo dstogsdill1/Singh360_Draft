@@ -29,6 +29,9 @@ interface Props {
     addCircle: () => void;
     addLine: () => void;
     addArrow: () => void;
+    addPageTitle: () => void;
+    addSectionHeader: () => void;
+    addNote: () => void;
     deleteSelected: () => void;
     duplicateSelected: () => void;
     undo: () => void;
@@ -184,6 +187,11 @@ export default function Ribbon({
             <Group title="Objects">
               <PlaceholderBtn label="Callout" />
               <PlaceholderBtn label="Table" />
+            </Group>
+            <Group title="Headings">
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addPageTitle} title="Add a page title styled like the sheet heading (uppercase, ruled)">Page Title</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addSectionHeader} title="Add a section header">Section Header</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addNote} title="Add a small note label">Note Label</button>
             </Group>
           </>
         )}

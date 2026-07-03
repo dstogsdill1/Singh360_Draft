@@ -7,9 +7,10 @@ interface Props {
   activePageId: string | null;
   onSelect: (id: string) => void;
   onUpdate: (next: PageModel[]) => void;
+  onContextMenu: (id: string, x: number, y: number) => void;
 }
 
-export default function SheetManager({ pages, activePageId, onSelect, onUpdate }: Props) {
+export default function SheetManager({ pages, activePageId, onSelect, onUpdate, onContextMenu }: Props) {
   const [edit, setEdit] = useState<{ id: string; field: 'code' | 'title'; value: string } | null>(null);
 
   const patch = (idx: number, p: Partial<PageModel>) => {
@@ -44,6 +45,10 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate }
             key={p.id}
             className={`sheet-item ${p.id === activePageId ? 'active' : ''} ${isCont ? 'cont' : ''}`}
             onClick={() => onSelect(p.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onContextMenu(p.id, e.clientX, e.clientY);
+            }}
           >
             <div className="sheet-item-head">
               {edit && edit.id === p.id && edit.field === 'code' ? (

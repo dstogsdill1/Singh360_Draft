@@ -85,7 +85,7 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
             </label>
             <label className={scheme === 'prefix' ? 'active' : ''}>
               <input type="radio" name="scheme" checked={scheme === 'prefix'} onChange={() => setScheme('prefix')} />
-              Custom prefix
+              Prefix + sequential
               <input
                 className="prefix-input"
                 type="text"
@@ -106,17 +106,19 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
                 <th>Old Code</th>
                 <th>New Code</th>
                 <th>Sheet Title</th>
+                <th>Included</th>
               </tr>
             </thead>
             <tbody>
-              {included.map((p) => {
+              {pages.map((p) => {
                 const next = proposed.get(p.id) ?? p.sheetCode;
-                const changed = next !== (p.sheetCode || '');
+                const changed = p.include && next !== (p.sheetCode || '');
                 return (
                   <tr key={p.id} className={changed ? 'changed' : ''}>
                     <td>{p.displaySheetCode || p.sheetCode || '—'}</td>
-                    <td className="new-code">{next || '—'}</td>
+                    <td className="new-code">{p.include ? (next || '—') : '—'}</td>
                     <td>{p.sheetTitle}{p.continuationOf ? ' — CONTINUED' : ''}</td>
+                    <td>{p.include ? 'Yes' : 'No'}</td>
                   </tr>
                 );
               })}

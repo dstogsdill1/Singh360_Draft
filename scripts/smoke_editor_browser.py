@@ -79,7 +79,9 @@ def main() -> int:
     target["displaySheetCode"] = "TESTCODE"
     target["canvasObjects"] = [
         {"type": "image", "left": 100, "top": 120, "width": 300, "height": 200,
-         "scaleX": 1, "scaleY": 1, "src": "/api/assets/x/test.png", "objName": "Storefront Map"}
+         "scaleX": 1, "scaleY": 1, "src": "/api/assets/x/test.png", "objName": "Storefront Map"},
+        {"type": "Connector", "x1": 120, "y1": 140, "x2": 400, "y2": 300,
+         "stroke": "#111", "strokeWidth": 2, "arrowEnd": True, "objName": "Arrow A"},
     ]
     res = client.post(f"/api/projects/{pid}/pages", json={"pages": pages})
     if res.status_code != 200:
@@ -92,10 +94,14 @@ def main() -> int:
         problems.append("sheetTitle did not persist")
     if t2.get("displaySheetCode") != "TESTCODE":
         problems.append("displaySheetCode did not persist")
-    if not t2.get("canvasObjects"):
-        problems.append("overlay canvas object did not persist")
+    objs = t2.get("canvasObjects") or []
+    if len(objs) < 2:
+        problems.append("overlay objects did not persist")
     else:
-        print("overlay object persisted:", t2["canvasObjects"][0].get("objName"))
+        types = {o.get("type") for o in objs}
+        print("overlay objects persisted:", sorted(types))
+        if "Connector" not in types:
+            problems.append("connector object did not persist")
 
     # 7. Export package ZIP.
     res = client.post(f"/api/projects/{pid}/export/package")

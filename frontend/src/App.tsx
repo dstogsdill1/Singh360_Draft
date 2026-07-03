@@ -82,6 +82,7 @@ export default function App() {
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [renumberOpen, setRenumberOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [pageMenu, setPageMenu] = useState<{ x: number; y: number; pageId: string } | null>(null);
   const canvasApiRef = useRef<CanvasApi | null>(null);
 
   useEffect(() => {
@@ -242,6 +243,8 @@ export default function App() {
     const onCtx = (e: MouseEvent) => {
       const t = e.target as HTMLElement | null;
       if (!t || !t.closest('.sheet-viewport')) return;
+      // Tables/matrices provide their own row/column context menu.
+      if (t.closest('.np-table, .np-matrix')) return;
       if (!isCanvasContext()) return;
       e.preventDefault();
       setCtxMenu({ x: e.clientX, y: e.clientY });
@@ -298,6 +301,144 @@ export default function App() {
   };
 
   const onRenamePageTitle = (pageId: string, title: string) => patchPage(pageId, { sheetTitle: title });
+
+  // ── Structural page operations (used by tab + left-list context menus) ──
+  const newPageId = () => `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+  const mutatePages = (fn: (pages: PageModel[]) => PageModel[]) => {
+    if (!project) return;
+    const next = withPageNumbers(fn(project.pages).map((p, i) => ({ ...p, order: i + 1 })));
+    setProject({ ...project, pages: next });
+    void savePages(project.id, next);
+  };
+
+  const duplicatePage = (id: string) => {
+    mutatePages((pages) => {
+      const idx = pages.findIndex((p) => p.id === id);
+      if (idx < 0) return pages;
+      const src = pages[idx];
+      const copy: PageModel = {
+        ...structuredClone(src),
+        id: newPageId(),
+        sheetTitle: `${src.sheetTitle} Copy`,
+        continuationOf: null,
+        generatedContinuation: false,
+        continuationIndex: undefined,
+      };
+      const out = [...pages];
+      out.splice(idx + 1, 0, copy);
+      return out;
+    });
+  };
+
+  const addPage = (refId: string, where: 'before' | 'after') => {
+    const title = window.prompt('New sheet title:', 'New Sheet');
+    if (title === null) return;
+    const code = window.prompt('Sheet code:', '') ?? '';
+    mutatePages((pages) => {
+      const idx = pages.findIndex((p) => p.id === refId);
+      if (idx < 0) return pages;
+      const blank: PageModel = {
+        id: newPageId(),
+        order: 0,
+        include: true,
+        sheetCode: code,
+        displaySheetCode: code,
+        sheetTitle: title || 'New Sheet',
+        sheetTab: '',
+        pageType: 'data-grid',
+        template: 'Text / Instructions',
+        templateId: '',
+        blocks: [{ id: `b_${newPageId()}`, type: 'paragraph', text: '' }],
+        canvasObjects: [],
+        notes: '',
+      };
+      const out = [...pages];
+      out.splice(where === 'before' ? idx : idx + 1, 0, blank);
+      return out;
+    });
+  };
+
+  const deletePage = (id: string) => {
+    if (!window.confirm('Delete this page? This cannot be undone. (Tip: use Exclude to keep it out of the package instead.)')) return;
+    if (activePageId === id) {
+      const remaining = project?.pages.filter((p) => p.id !== id) ?? [];
+      setActivePageId(remaining[0]?.id ?? null);
+    }
+    mutatePages((pages) => pages.filter((p) => p.id !== id));
+  };
+
+  const toggleInclude = (id: string) =>
+    mutatePages((pages) => pages.map((p) => (p.id === id ? { ...p, include: !p.include } : p)));
+
+  const movePage = (id: string, dir: -1 | 1) =>
+    mutatePages((pages) => {
+      const idx = pages.findIndex((p) => p.id === id);
+      const t = idx + dir;
+      if (idx < 0 || t < 0 || t >= pages.length) return pages;
+      const out = [...pages];
+      [out[idx], out[t]] = [out[t], out[idx]];
+      return out;
+    });
+
+  const makeIndependent = (id: string) =>
+    mutatePages((pages) =>
+      pages.map((p) =>
+        p.id === id ? { ...p, continuationOf: null, generatedContinuation: false, continuationIndex: undefined } : p,
+      ),
+    );
+
+  const mergeContinuationIntoPrevious = (id: string) => {
+    mutatePages((pages) => {
+      const idx = pages.findIndex((p) => p.id === id);
+      if (idx <= 0) return pages;
+      const cont = pages[idx];
+      const baseId = cont.continuationOf;
+      const baseIdx = baseId ? pages.findIndex((p) => p.id === baseId) : idx - 1;
+      const target = baseIdx >= 0 ? baseIdx : idx - 1;
+      const base = pages[target];
+      const mergedBlocks = [...(base.blocks ?? []), ...(cont.blocks ?? [])];
+      const out = pages
+        .map((p, i) => (i === target ? { ...base, blocks: mergedBlocks, layoutWarnings: ['Merged from continuation — verify it fits one sheet.'] } : p))
+        .filter((p) => p.id !== id);
+      return out;
+    });
+  };
+
+  const renamePagePrompt = (id: string) => {
+    const cur = project?.pages.find((p) => p.id === id);
+    const v = window.prompt('Sheet title:', cur?.sheetTitle ?? '');
+    if (v !== null) patchPage(id, { sheetTitle: v.trim() || 'Untitled Sheet' });
+  };
+  const editCodePrompt = (id: string) => {
+    const cur = project?.pages.find((p) => p.id === id);
+    const v = window.prompt('Sheet code:', cur?.displaySheetCode || cur?.sheetCode || '');
+    if (v !== null) patchPage(id, { sheetCode: v.trim(), displaySheetCode: v.trim() });
+  };
+
+  // Build the shared page-action menu for a page id (tab + left list reuse it).
+  const buildPageActions = (id: string) => {
+    const pg = project?.pages.find((p) => p.id === id);
+    const isCont = !!pg?.continuationOf || !!pg?.generatedContinuation;
+    const actions = [
+      { label: 'Rename Sheet Title', onClick: () => renamePagePrompt(id) },
+      { label: 'Edit Sheet Code', onClick: () => editCodePrompt(id) },
+      { label: 'Duplicate Page', divider: true, onClick: () => duplicatePage(id) },
+      { label: 'Add Page Before', onClick: () => addPage(id, 'before') },
+      { label: 'Add Page After', onClick: () => addPage(id, 'after') },
+      { label: pg?.include ? 'Exclude Page' : 'Include Page', divider: true, onClick: () => toggleInclude(id) },
+      { label: 'Delete Page', onClick: () => deletePage(id) },
+      { label: 'Move Left', divider: true, onClick: () => movePage(id, -1) },
+      { label: 'Move Right', onClick: () => movePage(id, 1) },
+    ];
+    if (isCont) {
+      actions.push(
+        { label: 'Make Independent', divider: true, onClick: () => makeIndependent(id) },
+        { label: 'Merge Into Previous', onClick: () => mergeContinuationIntoPrevious(id) },
+      );
+    }
+    return actions;
+  };
 
   const onUploadWorkbook = async (file: File) => {
     const { id } = await createProjectFromWorkbook(file);
@@ -410,6 +551,9 @@ export default function App() {
         addCircle: () => canvasApiRef.current?.addCircle(),
         addLine: () => canvasApiRef.current?.addLine(),
         addArrow: () => canvasApiRef.current?.addArrow(),
+        addPageTitle: () => { setOverlayMode(true); canvasApiRef.current?.addPageTitle(activePage?.sheetTitle ?? 'Page Title'); },
+        addSectionHeader: () => { setOverlayMode(true); canvasApiRef.current?.addSectionHeader('Section Header'); },
+        addNote: () => { setOverlayMode(true); canvasApiRef.current?.addNote('Note'); },
         deleteSelected: () => canvasApiRef.current?.deleteSelected(),
         duplicateSelected: () => canvasApiRef.current?.duplicateSelected(),
         undo: () => canvasApiRef.current?.undo(),
@@ -458,7 +602,7 @@ export default function App() {
       left={
         <>
           <CollapsibleSection title="Output Pages">
-            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={setActivePageId} onUpdate={(p) => void updatePages(p)} />
+            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={setActivePageId} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
           </CollapsibleSection>
           <CollapsibleSection title="Source Tabs" defaultOpen={false}>
             <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
@@ -488,6 +632,7 @@ export default function App() {
           }}
           onReorderPages={(pages) => void updatePages(pages)}
           onRenamePageTitle={onRenamePageTitle}
+          onPageContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })}
           onDropImageFile={(file) => void onDropImageFile(file)}
           onScaleChange={onScaleChange}
           onGridChange={(wsId, grid) => {
@@ -570,6 +715,14 @@ export default function App() {
           { label: 'Send to Back', disabled: !selection, onClick: () => canvasApiRef.current?.sendToBack() },
           { label: selection?.locked ? 'Unlock' : 'Lock', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.updateSelected({ locked: !selection?.locked }) },
         ]}
+      />
+    )}
+    {pageMenu && (
+      <SheetContextMenu
+        x={pageMenu.x}
+        y={pageMenu.y}
+        onClose={() => setPageMenu(null)}
+        actions={buildPageActions(pageMenu.pageId)}
       />
     )}
     </>

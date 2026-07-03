@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { Canvas, Rect, Circle, Textbox, Line, Triangle, Group, ActiveSelection, FabricImage, type FabricObject } from 'fabric';
+import { Canvas, Rect, Circle, Textbox, Group, ActiveSelection, FabricImage, type FabricObject } from 'fabric';
 import type { CanvasApi, CanvasSelection } from '../model/types';
+import { Connector } from './connector';
 
 interface Props {
   serialized: Record<string, unknown>[];
@@ -39,6 +40,28 @@ function summarize(obj: FabricObject): CanvasSelection {
 function makeText(x: number, y: number) {
   return new Textbox('Text', { left: x, top: y, width: 200, fontSize: 20, fill: '#111' });
 }
+function makePageTitle(text: string) {
+  const t = new Textbox((text || 'PAGE TITLE').toUpperCase(), {
+    left: 40, top: 24, width: 900, fontSize: 30, fontWeight: 'bold', fill: '#111',
+    fontFamily: 'Arial', charSpacing: 40, underline: true,
+  });
+  (t as unknown as Record<string, unknown>).objName = 'Page Title';
+  return t;
+}
+function makeSectionHeader(text: string) {
+  const t = new Textbox(text || 'Section Header', {
+    left: 40, top: 90, width: 700, fontSize: 20, fontWeight: 'bold', fill: '#12539b', fontFamily: 'Arial',
+  });
+  (t as unknown as Record<string, unknown>).objName = 'Section Header';
+  return t;
+}
+function makeNote(text: string) {
+  const t = new Textbox(text || 'Note', {
+    left: 40, top: 140, width: 460, fontSize: 13, fontStyle: 'italic', fill: '#444', fontFamily: 'Arial',
+  });
+  (t as unknown as Record<string, unknown>).objName = 'Note';
+  return t;
+}
 function makeRect(x: number, y: number) {
   return new Rect({ left: x, top: y, width: 180, height: 90, fill: 'transparent', stroke: '#111', strokeWidth: 1.5 });
 }
@@ -46,12 +69,10 @@ function makeCircle(x: number, y: number) {
   return new Circle({ left: x, top: y, radius: 60, fill: 'transparent', stroke: '#111', strokeWidth: 1.5 });
 }
 function makeLine(x: number, y: number) {
-  return new Line([x, y, x + 200, y], { stroke: '#111', strokeWidth: 2 });
+  return new Connector([x, y, x + 200, y], { stroke: '#111', strokeWidth: 2, arrowEnd: false });
 }
 function makeArrow(x: number, y: number) {
-  const line = new Line([0, 8, 180, 8], { stroke: '#111', strokeWidth: 2 });
-  const head = new Triangle({ left: 180, top: 0, width: 18, height: 16, angle: 90, fill: '#111' });
-  return new Group([line, head], { left: x, top: y });
+  return new Connector([x, y, x + 200, y], { stroke: '#111', strokeWidth: 2, arrowEnd: true });
 }
 
 export default function CanvasEditor({
@@ -85,6 +106,8 @@ export default function CanvasEditor({
   const historyRef = useRef<string[]>([]);
   const histIdxRef = useRef(-1);
   const restoringRef = useRef(false);
+  // Connector currently being drawn via drag-to-create.
+  const creatingRef = useRef<Connector | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -98,11 +121,11 @@ export default function CanvasEditor({
 
     const persist = () => {
       if (restoringRef.current) return;
-      onSerRef.current((canvas.toObject(['objName']).objects ?? []) as Record<string, unknown>[]);
+      onSerRef.current((canvas.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
     };
     const pushHistory = () => {
       if (restoringRef.current) return;
-      const snapshot = JSON.stringify(canvas.toObject(['objName']));
+      const snapshot = JSON.stringify(canvas.toObject(['objName', 'arrowStart', 'arrowEnd']));
       const hist = historyRef.current.slice(0, histIdxRef.current + 1);
       hist.push(snapshot);
       historyRef.current = hist;
@@ -116,7 +139,7 @@ export default function CanvasEditor({
     if (serialized.length) {
       void canvas.loadFromJSON({ version: '6', objects: serialized }).then(() => canvas.renderAll());
     }
-    historyRef.current = [JSON.stringify(canvas.toObject(['objName']))];
+    historyRef.current = [JSON.stringify(canvas.toObject(['objName', 'arrowStart', 'arrowEnd']))];
     histIdxRef.current = 0;
 
     canvas.on('object:modified', onChanged);
@@ -153,17 +176,51 @@ export default function CanvasEditor({
       const tool = toolRef.current;
       if (tool === 'select' || opt.target) return;
       const p = canvas.getScenePoint(opt.e);
+      // Line / arrow: start a drag-to-create connector.
+      if (tool === 'line' || tool === 'arrow') {
+        const conn = new Connector([p.x, p.y, p.x, p.y], {
+          stroke: '#111',
+          strokeWidth: 2,
+          arrowEnd: tool === 'arrow',
+        });
+        canvas.add(conn);
+        canvas.setActiveObject(conn);
+        creatingRef.current = conn;
+        canvas.requestRenderAll();
+        return;
+      }
       let obj: FabricObject | null = null;
       if (tool === 'text') obj = makeText(p.x, p.y);
       else if (tool === 'rectangle') obj = makeRect(p.x, p.y);
       else if (tool === 'circle') obj = makeCircle(p.x, p.y);
-      else if (tool === 'line') obj = makeLine(p.x, p.y);
-      else if (tool === 'arrow') obj = makeArrow(p.x, p.y);
       if (obj) {
         canvas.add(obj);
         canvas.setActiveObject(obj);
         canvas.requestRenderAll();
       }
+      consumeRef.current();
+    });
+    canvas.on('mouse:move', (opt) => {
+      const conn = creatingRef.current;
+      if (!conn) return;
+      const p = canvas.getScenePoint(opt.e);
+      conn.set({ x2: p.x, y2: p.y });
+      conn.setCoords();
+      canvas.requestRenderAll();
+    });
+    canvas.on('mouse:up', () => {
+      const conn = creatingRef.current;
+      if (!conn) return;
+      // Give a minimum length if the user just clicked without dragging.
+      const dx = (conn.x2 ?? 0) - (conn.x1 ?? 0);
+      const dy = (conn.y2 ?? 0) - (conn.y1 ?? 0);
+      if (Math.hypot(dx, dy) < 6) {
+        conn.set({ x2: (conn.x1 ?? 0) + 160, y2: conn.y1 ?? 0 });
+        conn.setCoords();
+      }
+      creatingRef.current = null;
+      canvas.requestRenderAll();
+      onChanged();
       consumeRef.current();
     });
 
@@ -245,7 +302,7 @@ export default function CanvasEditor({
       c.renderAll();
       histIdxRef.current = idx;
       restoringRef.current = false;
-      onSerRef.current((c.toObject(['objName']).objects ?? []) as Record<string, unknown>[]);
+      onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
     });
   };
 
@@ -256,6 +313,9 @@ export default function CanvasEditor({
       addCircle: () => addObj(makeCircle(200, 200)),
       addLine: () => addObj(makeLine(200, 260)),
       addArrow: () => addObj(makeArrow(200, 320)),
+      addPageTitle: (text: string) => addObj(makePageTitle(text)),
+      addSectionHeader: (text: string) => addObj(makeSectionHeader(text)),
+      addNote: (text: string) => addObj(makeNote(text)),
       addImage: (url: string, name?: string) => {
         const c = fabricRef.current;
         if (!c) return;
@@ -373,7 +433,7 @@ export default function CanvasEditor({
         }
         o.setCoords();
         c.requestRenderAll();
-        onSerRef.current((c.toObject(['objName']).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
         onSelRef.current(summarize(o));
       },
     };

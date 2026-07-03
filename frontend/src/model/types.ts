@@ -129,6 +129,9 @@ export interface CanvasApi {
   addLine: () => void;
   addArrow: () => void;
   addImage: (url: string, name?: string) => void;
+  addPageTitle: (text: string) => void;
+  addSectionHeader: (text: string) => void;
+  addNote: (text: string) => void;
   deleteSelected: () => void;
   duplicateSelected: () => void;
   undo: () => void;

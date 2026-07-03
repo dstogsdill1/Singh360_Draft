@@ -7,9 +7,10 @@ interface Props {
   onSelect: (id: string) => void;
   onReorder: (pages: PageModel[]) => void;
   onRenameTitle: (id: string, title: string) => void;
+  onContextMenu: (id: string, x: number, y: number) => void;
 }
 
-export default function PageTabs({ pages, activePageId, onSelect, onReorder, onRenameTitle }: Props) {
+export default function PageTabs({ pages, activePageId, onSelect, onReorder, onRenameTitle, onContextMenu }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -47,6 +48,10 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
           className={`page-tab ${p.id === activePageId ? 'active' : ''} ${p.generatedContinuation ? 'cont' : ''}`}
           onClick={() => onSelect(p.id)}
           onDoubleClick={() => startEdit(p)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            onContextMenu(p.id, e.clientX, e.clientY);
+          }}
           onKeyDown={(e) => {
             if (editId === p.id) return;
             if (e.key === 'Enter' || e.key === ' ') onSelect(p.id);
