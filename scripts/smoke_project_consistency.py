@@ -63,6 +63,14 @@ def main() -> int:
             if base not in id_set and base not in {p2.get("pageGroupId") for p2 in pages}:
                 problems.append(f"continuation {pg.get('id')} not linked to a base page")
 
+    # Every page must carry a human title and a known internal page type.
+    known_types = {"data-grid", "canvas", "underlay", "hybrid", "cover", "index"}
+    for pg in pages:
+        if not (pg.get("sheetTitle") or "").strip():
+            problems.append(f"missing sheetTitle on {pg.get('id')}")
+        if pg.get("pageType") not in known_types:
+            problems.append(f"unknown pageType '{pg.get('pageType')}' on {pg.get('id')}")
+
     invalid = find_invalid_scalars(p)
     if invalid:
         problems.append(f"{len(invalid)} invalid scalar(s), first: {invalid[0]}")

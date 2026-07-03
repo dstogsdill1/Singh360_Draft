@@ -422,6 +422,11 @@ button, select, input, textarea { font: inherit; }
   .print-page { margin: 0; }
 }
 
+@page {
+  size: 17in 11in;
+  margin: 0;
+}
+
 
 
 /* -- MODAL (renumber, etc.) -- */
@@ -460,3 +465,17 @@ button, select, input, textarea { font: inherit; }
   font: inherit; border: 1px solid var(--accent); border-radius: 2px;
   padding: 0 4px; width: 140px; background: #fff;
 }
+
+/* -- SHEET CONTEXT MENU -- */
+.ctx-backdrop { position: fixed; inset: 0; z-index: 1100; }
+.ctx-menu {
+  position: fixed; min-width: 190px; background: #fff; border: 1px solid #98a0a8;
+  border-radius: 5px; box-shadow: 0 8px 26px rgba(0,0,0,0.28); padding: 4px;
+}
+.ctx-item {
+  display: block; width: 100%; text-align: left; border: none; background: transparent;
+  padding: 6px 12px; font-size: 13px; cursor: pointer; border-radius: 3px; color: var(--ink);
+}
+.ctx-item:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.ctx-item:disabled { color: #a6adb4; cursor: default; }
+.ctx-divider { height: 1px; background: #e0e4e8; margin: 4px 6px; }

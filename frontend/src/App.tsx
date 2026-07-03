@@ -20,6 +20,7 @@ import PropertiesPanel from './components/PropertiesPanel';
 import PrintView from './components/PrintView';
 import Ribbon, { type ViewControls } from './components/Ribbon';
 import RenumberModal from './components/RenumberModal';
+import SheetContextMenu from './components/SheetContextMenu';
 import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 
@@ -80,6 +81,7 @@ export default function App() {
   const [overlayMode, setOverlayMode] = useState(false);
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [renumberOpen, setRenumberOpen] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const canvasApiRef = useRef<CanvasApi | null>(null);
 
   useEffect(() => {
@@ -153,6 +155,36 @@ export default function App() {
     }
   };
 
+  // Explicit "Paste Image" via the app context menu. Uses the async Clipboard
+  // API when the browser allows it; otherwise instructs the user to press Ctrl+V
+  // (never silently fails).
+  const pasteImageFromClipboard = async () => {
+    if (!isCanvasContext()) return;
+    try {
+      const nav = navigator as Navigator & { clipboard?: { read?: () => Promise<ClipboardItem[]> } };
+      if (!nav.clipboard?.read) {
+        window.alert('Press Ctrl+V to paste your screenshot.');
+        return;
+      }
+      const items = await nav.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (type) {
+          const blob = await item.getType(type);
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === 'string') void addImageFromDataUrl(reader.result, screenshotName());
+          };
+          reader.readAsDataURL(blob);
+          return;
+        }
+      }
+      window.alert('No image found on the clipboard. Press Ctrl+V to paste a screenshot.');
+    } catch {
+      window.alert('Clipboard image paste was blocked by the browser. Press Ctrl+V to paste your screenshot instead.');
+    }
+  };
+
   // Global clipboard paste → image onto active canvas page.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
@@ -202,6 +234,20 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // App-level right-click menu on the sheet body (suppress the browser menu).
+  useEffect(() => {
+    const onCtx = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t || !t.closest('.sheet-viewport')) return;
+      if (!isCanvasContext()) return;
+      e.preventDefault();
+      setCtxMenu({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('contextmenu', onCtx);
+    return () => window.removeEventListener('contextmenu', onCtx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -507,6 +553,24 @@ export default function App() {
     />
     {renumberOpen && (
       <RenumberModal pages={project.pages} onApply={applyRenumber} onCancel={() => setRenumberOpen(false)} />
+    )}
+    {ctxMenu && (
+      <SheetContextMenu
+        x={ctxMenu.x}
+        y={ctxMenu.y}
+        onClose={() => setCtxMenu(null)}
+        actions={[
+          { label: 'Paste Image (Ctrl+V)', onClick: () => void pasteImageFromClipboard(), hint: 'Paste a screenshot from the clipboard' },
+          { label: 'Insert Text Box', divider: true, onClick: () => { setOverlayMode(true); canvasApiRef.current?.addText(); } },
+          { label: 'Insert Arrow', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addArrow(); } },
+          { label: 'Insert Line', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addLine(); } },
+          { label: 'Duplicate', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.duplicateSelected() },
+          { label: 'Delete', disabled: !selection, onClick: () => canvasApiRef.current?.deleteSelected() },
+          { label: 'Bring to Front', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.bringToFront() },
+          { label: 'Send to Back', disabled: !selection, onClick: () => canvasApiRef.current?.sendToBack() },
+          { label: selection?.locked ? 'Unlock' : 'Lock', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.updateSelected({ locked: !selection?.locked }) },
+        ]}
+      />
     )}
     </>
   );

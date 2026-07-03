@@ -16,7 +16,10 @@ function Field({ label, value }: { label: string; value?: string }) {
 
 export default function TitleBlock({ project, page }: Props) {
   const m = project.metadata;
-  const isContinuation = !!page.continuationOf;
+  const isContinuation = !!page.continuationOf || !!page.generatedContinuation;
+  // Strip any pre-baked "— CONTINUED" from the title so we never double it; the
+  // badge is the single source of the continued marker.
+  const cleanTitle = (page.sheetTitle || 'Untitled Sheet').replace(/\s*[—-]\s*CONTINUED\s*$/i, '').trim();
   const pageLabel = page.pageNumber
     ? `Sheet ${page.pageNumber} of ${page.pageTotal ?? 0}`
     : `Sheet — of ${page.pageTotal ?? 0}`;
@@ -41,7 +44,7 @@ export default function TitleBlock({ project, page }: Props) {
       {/* Sheet title + notes */}
       <div className="tb-cell tb-titleblock">
         <div className="tb-sheet-title-row">
-          <span className="tb-sheet-title">{page.sheetTitle || 'Untitled Sheet'}</span>
+          <span className="tb-sheet-title">{cleanTitle}</span>
           {isContinuation && <span className="tb-continued">— CONTINUED</span>}
         </div>
         <div className="tb-notes">

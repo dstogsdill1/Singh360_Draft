@@ -10,6 +10,7 @@ interface Props {
   activeTool: string;
   onToolConsumed: () => void;
   snap: boolean;
+  overlayMode: boolean;
 }
 
 const CANVAS_W = 1560;
@@ -61,6 +62,7 @@ export default function CanvasEditor({
   activeTool,
   onToolConsumed,
   snap,
+  overlayMode,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fabricRef = useRef<Canvas | null>(null);
@@ -68,11 +70,13 @@ export default function CanvasEditor({
   // Latest-prop refs so long-lived Fabric handlers read current values.
   const toolRef = useRef(activeTool);
   const snapRef = useRef(snap);
+  const overlayModeRef = useRef(overlayMode);
   const consumeRef = useRef(onToolConsumed);
   const onSelRef = useRef(onSelectionChange);
   const onSerRef = useRef(onSerializedChange);
   toolRef.current = activeTool;
   snapRef.current = snap;
+  overlayModeRef.current = overlayMode;
   consumeRef.current = onToolConsumed;
   onSelRef.current = onSelectionChange;
   onSerRef.current = onSerializedChange;
@@ -128,11 +132,22 @@ export default function CanvasEditor({
     });
     canvas.on('selection:cleared', () => onSelRef.current(null));
     canvas.on('object:moving', (e) => {
-      if (!snapRef.current || !e.target) return;
-      e.target.set({
-        left: Math.round((e.target.left ?? 0) / SNAP) * SNAP,
-        top: Math.round((e.target.top ?? 0) / SNAP) * SNAP,
-      });
+      const t = e.target;
+      if (!t) return;
+      // Center snap: snap object center to the canvas centre when close.
+      const cx = (t.left ?? 0) + ((t.width ?? 0) * (t.scaleX ?? 1)) / 2;
+      const cy = (t.top ?? 0) + ((t.height ?? 0) * (t.scaleY ?? 1)) / 2;
+      const midX = CANVAS_W / 2;
+      const midY = CANVAS_H / 2;
+      if (Math.abs(cx - midX) < 8) t.set({ left: midX - ((t.width ?? 0) * (t.scaleX ?? 1)) / 2 });
+      if (Math.abs(cy - midY) < 8) t.set({ top: midY - ((t.height ?? 0) * (t.scaleY ?? 1)) / 2 });
+      // Grid snap (when Snap is on).
+      if (snapRef.current) {
+        t.set({
+          left: Math.round((t.left ?? 0) / SNAP) * SNAP,
+          top: Math.round((t.top ?? 0) / SNAP) * SNAP,
+        });
+      }
     });
     canvas.on('mouse:down', (opt) => {
       const tool = toolRef.current;
@@ -155,6 +170,61 @@ export default function CanvasEditor({
     return () => {
       void canvas.dispose();
       fabricRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Smart pointer pass-through: the overlay is only "grabbable" when the cursor
+  // is over an overlay object, when a draw tool is active, or when overlay edit
+  // mode is forced on. Otherwise clicks fall through to the base content layer
+  // (editable tables / text). This makes objects behave like PowerPoint/Visio
+  // without a hidden mode toggle.
+  useEffect(() => {
+    const canvasEl = canvasRef.current;
+    if (!canvasEl) return;
+    const overlayEl = canvasEl.parentElement?.parentElement as HTMLElement | null; // .np-overlay-layer
+    const rootEl = overlayEl?.parentElement as HTMLElement | null; // .np-page-root
+    if (!overlayEl || !rootEl) return;
+
+    const setInteractive = (on: boolean) => {
+      overlayEl.style.pointerEvents = on ? 'auto' : 'none';
+    };
+
+    const overPoint = (clientX: number, clientY: number): boolean => {
+      const canvas = fabricRef.current;
+      if (!canvas) return false;
+      const rect = canvasEl.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return false;
+      const x = ((clientX - rect.left) / rect.width) * CANVAS_W;
+      const y = ((clientY - rect.top) / rect.height) * CANVAS_H;
+      return canvas.getObjects().some((o) => {
+        const b = o.getBoundingRect();
+        return x >= b.left - 4 && x <= b.left + b.width + 4 && y >= b.top - 4 && y <= b.top + b.height + 4;
+      });
+    };
+
+    const onMove = (ev: MouseEvent) => {
+      if (overlayModeRef.current || toolRef.current !== 'select') {
+        setInteractive(true);
+        return;
+      }
+      // When actively dragging/selecting, keep it interactive.
+      const canvas = fabricRef.current;
+      if (canvas && canvas.getActiveObject()) {
+        setInteractive(true);
+        return;
+      }
+      setInteractive(overPoint(ev.clientX, ev.clientY));
+    };
+    const onLeave = () => {
+      if (!overlayModeRef.current && toolRef.current === 'select') setInteractive(false);
+    };
+
+    rootEl.addEventListener('mousemove', onMove);
+    rootEl.addEventListener('mouseleave', onLeave);
+    return () => {
+      rootEl.removeEventListener('mousemove', onMove);
+      rootEl.removeEventListener('mouseleave', onLeave);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -101,6 +101,7 @@ export default function NormalizedPage({
           activeTool={activeTool}
           onToolConsumed={onToolConsumed}
           snap={snap}
+          overlayMode={overlayMode}
         />
       </div>
     </div>
