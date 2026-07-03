@@ -1,0 +1,46 @@
+.sheet-shell {
+  width: 1632px;
+  height: 1056px;
+  background: #fff;
+  border: 2px solid #111;
+  margin: 0 auto;
+  position: relative;
+}
+
+.sheet-inner {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  border: 1px solid #333;
+}
+
+.sheet-body {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  right: 8px;
+  bottom: 150px;
+  overflow: auto;
+}
+
+.sheet-title-block {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  height: 136px;
+  border: 2px solid #000;
+  display: grid;
+  grid-template-columns: 22% 20% 38% 20%;
+}
+
+.tb-cell { border-right: 1px solid #000; padding: 6px; font-size: 12px; }
+.tb-cell:last-child { border-right: none; }
+.tb-title { font-size: 18px; font-weight: bold; letter-spacing: 0.04em; }
+.tb-mini { font-size: 11px; text-transform: uppercase; }
+
+.grid-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.grid-table td { border: 1px solid #222; min-width: 80px; padding: 4px 6px; }
+.grid-table td[contenteditable='true']:focus { outline: 2px solid #1463a6; }

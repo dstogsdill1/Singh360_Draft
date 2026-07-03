@@ -8,8 +8,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import subprocess
-import sys
 import traceback
 import uuid
 from datetime import datetime, timezone
@@ -17,10 +15,17 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 
-from core.excel_parser import parse_workbook
+from core.csv_importer import import_csv_to_grid
+from core.export_pdf import export_pdf_via_playwright
+from core.pdf_importer import import_pdf
+from core.project_model import ensure_project_shape
+from core.validation import validate_project
+from core.vsdx_importer import import_vsdx
+from core.workbook_importer import import_workbook
 
 HERE = Path(__file__).resolve().parent
 WEB_DIR = HERE / "web"
+FRONTEND_DIST_DIR = HERE / "frontend" / "dist"
 DOCS_DIR = HERE / ".docs"
 DOCS_DIR.mkdir(exist_ok=True)
 
@@ -78,7 +83,27 @@ def index():
     return send_from_directory(WEB_DIR, "index.html")
 
 
+@app.get("/app")
+def app_modular_index():
+    if (FRONTEND_DIST_DIR / "index.html").is_file():
+        return send_from_directory(FRONTEND_DIST_DIR, "index.html")
+    return jsonify(
+        _err(
+            "Modular frontend is not built yet.",
+            "Run frontend build and open /app again; legacy editor remains at /editor.",
+        )
+    ), 503
+
+
+@app.get("/assets/<path:asset_path>")
+def app_modular_assets(asset_path: str):
+    if not FRONTEND_DIST_DIR.is_dir():
+        abort(404)
+    return send_from_directory(FRONTEND_DIST_DIR / "assets", asset_path)
+
+
 @app.get("/health")
+@app.get("/api/health")
 def health():
     return jsonify({"ok": True})
 
@@ -145,9 +170,8 @@ def new_project():
         upload.save(temp_path)
         app.logger.info("Parsing workbook for new project %s", project_id)
 
-        project_state = parse_workbook(temp_path)
-        project_state["id"] = project_id
-        project_state["modified"] = _utcnow()
+        project_state = import_workbook(temp_path, project_id=project_id)
+        project_state = ensure_project_shape(project_state)
 
         out_path = _project_path(project_id)
         out_path.write_text(
@@ -163,7 +187,7 @@ def new_project():
 
     except Exception as exc:
         tb = traceback.format_exc()
-        app.logger.error("parse_workbook failed for project %s:\n%s", project_id, tb)
+        app.logger.error("workbook import failed for project %s:\n%s", project_id, tb)
         return jsonify(_err("Failed to parse Excel workbook.", str(exc))), 500
 
     finally:
@@ -194,7 +218,10 @@ def save_project(project_id: str):
         return jsonify(_err("Request body must be valid JSON.")), 400
 
     data["id"] = project_id
-    data["modified"] = _utcnow()
+    data = ensure_project_shape(data)
+    problems = validate_project(data)
+    if problems:
+        return jsonify(_err("Project validation failed.", " | ".join(problems[:20]))), 400
 
     try:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -203,6 +230,172 @@ def save_project(project_id: str):
         return jsonify(_err("Failed to save project.", str(exc))), 500
 
     return jsonify({"ok": True, "id": project_id, "modified": data["modified"]})
+
+
+@app.post("/api/projects/<project_id>/pages")
+def upsert_pages(project_id: str):
+    path = _project_path(project_id)
+    if not path.is_file():
+        abort(404)
+    body = request.get_json(force=True, silent=True) or {}
+    pages = body.get("pages")
+    if not isinstance(pages, list):
+        return jsonify(_err("Request body must include pages as a list.")), 400
+    try:
+        doc = json.loads(path.read_text("utf-8"))
+        doc["pages"] = pages
+        doc = ensure_project_shape(doc)
+        problems = validate_project(doc)
+        if problems:
+            return jsonify(_err("Page update failed validation.", " | ".join(problems[:20]))), 400
+        path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        app.logger.error("Page update failed for %s: %s", project_id, exc)
+        return jsonify(_err("Failed to update pages.", str(exc))), 500
+    return jsonify({"ok": True, "id": project_id, "pageCount": len(doc.get("pages", []))})
+
+
+@app.post("/api/projects/<project_id>/sources")
+def add_source_to_project(project_id: str):
+    path = _project_path(project_id)
+    if not path.is_file():
+        abort(404)
+
+    if "file" not in request.files:
+        return jsonify(_err("No source file uploaded.")), 400
+
+    upload = request.files["file"]
+    source_kind = (request.form.get("type") or "").strip().lower()
+    if not upload.filename:
+        return jsonify(_err("Empty filename.")), 400
+
+    source_id = uuid.uuid4().hex[:16]
+    ext = Path(upload.filename).suffix.lower()
+    if not source_kind:
+        source_kind = {
+            ".xlsx": "workbook",
+            ".csv": "csv",
+            ".pdf": "pdf",
+            ".vsdx": "vsdx",
+            ".png": "image",
+            ".jpg": "image",
+            ".jpeg": "image",
+            ".webp": "image",
+        }.get(ext, "asset")
+
+    source_dir = DOCS_DIR / "sources" / project_id
+    source_dir.mkdir(parents=True, exist_ok=True)
+    source_path = source_dir / f"{source_id}{ext}"
+
+    try:
+        upload.save(source_path)
+        doc = json.loads(path.read_text("utf-8"))
+        doc = ensure_project_shape(doc)
+
+        source_meta: dict = {
+            "id": source_id,
+            "type": source_kind,
+            "name": upload.filename,
+            "path": str(source_path),
+            "importedAt": _utcnow(),
+        }
+
+        if source_kind == "csv":
+            grid = import_csv_to_grid(source_path)
+            ws_id = f"ws_{len(doc['worksheets']) + 1}"
+            doc["worksheets"].append(
+                {
+                    "id": ws_id,
+                    "name": upload.filename,
+                    "sourceId": source_id,
+                    "visible": True,
+                    "classHint": "data-grid",
+                    "grid": grid,
+                    "formulas": {},
+                    "styles": {},
+                    "mergedCells": [],
+                    "rowHeights": {},
+                    "columnWidths": {},
+                    "provenance": {"sheet": upload.filename},
+                }
+            )
+        elif source_kind == "pdf":
+            source_meta.update(import_pdf(source_path))
+        elif source_kind == "vsdx":
+            source_meta.update(import_vsdx(source_path))
+
+        doc["sources"].append(source_meta)
+        doc = ensure_project_shape(doc)
+
+        problems = validate_project(doc)
+        if problems:
+            return jsonify(_err("Source import failed validation.", " | ".join(problems[:20]))), 400
+
+        path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        app.logger.error("Failed to add source for %s: %s", project_id, exc)
+        return jsonify(_err("Failed to import source.", str(exc))), 500
+
+    return jsonify({"ok": True, "id": project_id, "source": source_meta})
+
+
+@app.post("/api/import/workbook")
+def import_workbook_route():
+    return new_project()
+
+
+@app.post("/api/import/csv")
+def import_csv_route():
+    if "file" not in request.files:
+        return jsonify(_err("No CSV uploaded.")), 400
+    upload = request.files["file"]
+    if not upload.filename.lower().endswith(".csv"):
+        return jsonify(_err("Only .csv is supported for this endpoint.")), 400
+    temp_id = uuid.uuid4().hex[:16]
+    temp_path = DOCS_DIR / f"temp_{temp_id}.csv"
+    try:
+        upload.save(temp_path)
+        grid = import_csv_to_grid(temp_path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+    return jsonify({"ok": True, "name": upload.filename, "grid": grid})
+
+
+@app.post("/api/import/pdf")
+def import_pdf_route():
+    if "file" not in request.files:
+        return jsonify(_err("No PDF uploaded.")), 400
+    upload = request.files["file"]
+    if not upload.filename.lower().endswith(".pdf"):
+        return jsonify(_err("Only .pdf is supported for this endpoint.")), 400
+    temp_id = uuid.uuid4().hex[:16]
+    temp_path = DOCS_DIR / f"temp_{temp_id}.pdf"
+    try:
+        upload.save(temp_path)
+        meta = import_pdf(temp_path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+    return jsonify({"ok": True, "source": meta})
+
+
+@app.post("/api/import/vsdx")
+def import_vsdx_route():
+    if "file" not in request.files:
+        return jsonify(_err("No VSDX uploaded.")), 400
+    upload = request.files["file"]
+    if not upload.filename.lower().endswith(".vsdx"):
+        return jsonify(_err("Only .vsdx is supported for this endpoint.")), 400
+    temp_id = uuid.uuid4().hex[:16]
+    temp_path = DOCS_DIR / f"temp_{temp_id}.vsdx"
+    try:
+        upload.save(temp_path)
+        meta = import_vsdx(temp_path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+    return jsonify({"ok": True, "source": meta})
 
 
 @app.delete("/api/projects/<project_id>")
@@ -226,6 +419,7 @@ def delete_project(project_id: str):
 # --------------------------------------------------------------------------
 
 @app.post("/api/export/pdf/<project_id>")
+@app.post("/api/projects/<project_id>/export/pdf")
 def export_pdf(project_id: str):
     path = _project_path(project_id)
     if not path.is_file():
@@ -233,50 +427,10 @@ def export_pdf(project_id: str):
 
     pdf_path = DOCS_DIR / f"{project_id}.pdf"
     url = f"http://127.0.0.1:{_SERVER_PORT}/editor?project={project_id}&print=1"
-
-    # Executed in a subprocess to avoid async-loop conflicts with Flask's WSGI thread.
-    script = f"""\
-import asyncio
-from playwright.async_api import async_playwright
-
-async def run_export():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page(viewport={{"width": 1632, "height": 1056}})
-        await page.goto("{url}", wait_until="networkidle")
-        await page.wait_for_timeout(3000)
-        await page.pdf(
-            path=r"{pdf_path}",
-            width="17in",
-            height="11in",
-            landscape=True,
-            print_background=True,
-            margin={{"top": "0in", "bottom": "0in", "left": "0in", "right": "0in"}},
-        )
-        await browser.close()
-
-asyncio.run(run_export())
-"""
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", script],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            cwd=str(HERE),
-        )
-        if proc.returncode != 0:
-            stderr_tail = (proc.stderr or "Subprocess exited non-zero.")[-2000:]
-            app.logger.error("Playwright export failed for %s:\n%s", project_id, stderr_tail)
-            return jsonify(_err("PDF export failed.", stderr_tail)), 500
-
-    except subprocess.TimeoutExpired:
-        app.logger.error("Playwright export timed out for project %s", project_id)
-        return jsonify(_err("PDF export timed out after 120 s.")), 504
-
-    except OSError as exc:
-        app.logger.error("Could not launch Playwright subprocess: %s", exc)
-        return jsonify(_err("PDF export failed — could not start renderer.", str(exc))), 500
+    ok, detail = export_pdf_via_playwright(url, pdf_path)
+    if not ok:
+        app.logger.error("Playwright export failed for %s: %s", project_id, detail)
+        return jsonify(_err("PDF export failed.", detail)), 500
 
     return send_file(
         pdf_path,

@@ -1,0 +1,52 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; background: #2b2f34; }
+
+.app-shell {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 320px 1fr 320px;
+  grid-template-rows: 56px 1fr;
+  grid-template-areas:
+    'toolbar toolbar toolbar'
+    'left center right';
+}
+
+.toolbar { grid-area: toolbar; display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: #1f2328; color: #fff; border-bottom: 2px solid #000; }
+.panel-left { grid-area: left; border-right: 1px solid #000; background: #ebedf0; overflow: auto; }
+.panel-center { grid-area: center; overflow: auto; padding: 16px; }
+.panel-right { grid-area: right; border-left: 1px solid #000; background: #ebedf0; overflow: auto; }
+
+button, select, input, textarea { font: inherit; }
+button { border: 1px solid #111; background: #fff; padding: 6px 10px; cursor: pointer; }
+button:hover { background: #f5f5f5; }
+
+.meta-grid { display: grid; gap: 8px; padding: 10px; }
+.meta-grid label { font-size: 11px; font-weight: bold; text-transform: uppercase; }
+
+.status-pill { margin-left: auto; padding: 4px 10px; border: 1px solid #666; background: #fff; color: #111; font-size: 12px; }
+
+.section-title { padding: 10px; margin: 0; }
+.sheet-item { padding: 8px 10px; border-bottom: 1px solid #c7ccd1; }
+.sheet-item.active { background: #d9e7f5; }
+.sheet-item-title { cursor: pointer; font-weight: 700; }
+.sheet-item-fields { display: grid; gap: 6px; margin-top: 6px; }
+.sheet-item-actions { display: flex; gap: 4px; }
+
+.source-tab-btn { display: block; width: 100%; text-align: left; border: none; border-top: 1px solid #c7ccd1; }
+.source-tab-btn.active { background: #f6f8fa; }
+
+.toolbar-inline { display: flex; gap: 8px; }
+.panel-padding { padding: 12px; }
+.panel-intro { color: #fff; }
+.props-panel { padding: 10px; }
+.props-note { font-size: 12px; }
+
+.logo-img { max-height: 56px; max-width: 100%; object-fit: contain; }
+.tb-mini-spaced { margin-top: 8px; }
+.canvas-surface { border: 1px solid #111; }
