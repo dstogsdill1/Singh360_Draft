@@ -1,27 +1,60 @@
-import type { PageModel, ProjectModel, Worksheet } from '../model/types';
-import CanvasEditor from './CanvasEditor';
-import GridPage from './GridPage';
+import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from '../model/types';
+import NormalizedPage from './renderers/NormalizedPage';
+import RawGridRenderer from './renderers/RawGridRenderer';
 
 interface Props {
   page: PageModel;
   worksheet?: Worksheet;
   project: ProjectModel;
+  viewMode: ViewMode;
+  activeTool: string;
+  snap: boolean;
+  onToolConsumed: () => void;
+  onRegisterApi: (api: CanvasApi | null) => void;
+  onSelectionChange: (sel: CanvasSelection | null) => void;
+  onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
   onGridChange: (worksheetId: string, grid: string[][]) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
 }
 
-export default function PageRenderer({ page, worksheet, onGridChange, onCanvasChange }: Props) {
-  if (page.pageType === 'canvas' || page.pageType === 'hybrid' || page.pageType === 'underlay') {
-    return <CanvasEditor serialized={page.canvasObjects || []} onSerializedChange={(o) => onCanvasChange(page.id, o)} />;
+export default function PageRenderer({
+  page,
+  worksheet,
+  project,
+  viewMode,
+  activeTool,
+  snap,
+  onToolConsumed,
+  onRegisterApi,
+  onSelectionChange,
+  onBlockChange,
+  onGridChange,
+  onCanvasChange,
+}: Props) {
+  if (viewMode === 'source') {
+    return (
+      <RawGridRenderer
+        worksheet={worksheet}
+        onGridChange={(grid) => {
+          if (!page.linkedWorksheetId) return;
+          onGridChange(page.linkedWorksheetId, grid);
+        }}
+      />
+    );
   }
 
   return (
-    <GridPage
-      grid={worksheet?.grid || [[]]}
-      onGridChange={(grid) => {
-        if (!page.linkedWorksheetId) return;
-        onGridChange(page.linkedWorksheetId, grid);
-      }}
+    <NormalizedPage
+      page={page}
+      project={project}
+      worksheet={worksheet}
+      activeTool={activeTool}
+      snap={snap}
+      onToolConsumed={onToolConsumed}
+      onRegisterApi={onRegisterApi}
+      onSelectionChange={onSelectionChange}
+      onBlockChange={onBlockChange}
+      onCanvasChange={onCanvasChange}
     />
   );
 }

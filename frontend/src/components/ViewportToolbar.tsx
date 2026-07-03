@@ -1,12 +1,14 @@
-import type { PageModel } from '../model/types';
+import type { PageModel, ViewMode } from '../model/types';
 import type { ViewControls } from './Ribbon';
 
 interface Props {
   activePage: PageModel;
   view: ViewControls;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
 }
 
-export default function ViewportToolbar({ activePage, view }: Props) {
+export default function ViewportToolbar({ activePage, view, viewMode, onViewModeChange }: Props) {
   const pageLabel =
     activePage.pageNumber != null
       ? `Page ${activePage.pageNumber} of ${activePage.pageTotal ?? '—'}`
@@ -17,6 +19,10 @@ export default function ViewportToolbar({ activePage, view }: Props) {
       <span className="vt-label">
         <span className="vt-code">{activePage.sheetCode}</span>
         {activePage.sheetTitle}
+      </span>
+      <span className="vt-viewmode">
+        <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Normalized</button>
+        <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Source</button>
       </span>
       <span className="vt-spacer" />
       <span className="sb-item">{pageLabel}</span>

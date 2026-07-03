@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import type { PageModel, ProjectModel, Worksheet } from '../model/types';
+import type {
+  CanvasApi,
+  CanvasSelection,
+  PageBlock,
+  PageModel,
+  ProjectModel,
+  ViewMode,
+  Worksheet,
+} from '../model/types';
 import PageRenderer from './PageRenderer';
 import SheetFrame from './SheetFrame';
 import TitleBlock from './TitleBlock';
@@ -24,6 +32,14 @@ interface Props {
   worksheets: Worksheet[];
   view: ViewControls;
   actualZoom: number;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
+  activeTool: string;
+  snap: boolean;
+  onToolConsumed: () => void;
+  onRegisterApi: (api: CanvasApi | null) => void;
+  onSelectionChange: (sel: CanvasSelection | null) => void;
+  onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
   onSelectPage: (id: string) => void;
   onScaleChange: (scale: number) => void;
   onGridChange: (worksheetId: string, grid: string[][]) => void;
@@ -37,6 +53,14 @@ export default function DocumentView({
   worksheets,
   view,
   actualZoom,
+  viewMode,
+  onViewModeChange,
+  activeTool,
+  snap,
+  onToolConsumed,
+  onRegisterApi,
+  onSelectionChange,
+  onBlockChange,
   onSelectPage,
   onScaleChange,
   onGridChange,
@@ -87,7 +111,7 @@ export default function DocumentView({
   return (
     <>
       <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} />
-      <ViewportToolbar activePage={activePage} view={view} />
+      <ViewportToolbar activePage={activePage} view={view} viewMode={viewMode} onViewModeChange={onViewModeChange} />
       <div className="sheet-viewport" ref={viewportRef}>
         <div className="sheet-stage" style={{ width: SHEET_W * scale, height: SHEET_H * scale }}>
           <div
@@ -99,6 +123,13 @@ export default function DocumentView({
                 page={activePage}
                 worksheet={worksheet}
                 project={project}
+                viewMode={viewMode}
+                activeTool={activeTool}
+                snap={snap}
+                onToolConsumed={onToolConsumed}
+                onRegisterApi={onRegisterApi}
+                onSelectionChange={onSelectionChange}
+                onBlockChange={onBlockChange}
                 onGridChange={onGridChange}
                 onCanvasChange={onCanvasChange}
               />

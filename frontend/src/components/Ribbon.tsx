@@ -18,6 +18,19 @@ interface Props {
   saveStatus: string;
   hasProject: boolean;
   view: ViewControls;
+  canvasEnabled: boolean;
+  activeTool: string;
+  onSetTool: (tool: string) => void;
+  canvas: {
+    addText: () => void;
+    addRect: () => void;
+    addLine: () => void;
+    addArrow: () => void;
+    deleteSelected: () => void;
+    duplicateSelected: () => void;
+    undo: () => void;
+    redo: () => void;
+  };
   onUploadFile: (file: File) => void;
   onSaveNow: () => void;
   onExportPdf: () => void;
@@ -43,8 +56,20 @@ function PlaceholderBtn({ label }: { label: string }) {
   );
 }
 
-export default function Ribbon({ saveStatus, hasProject, view, onUploadFile, onSaveNow, onExportPdf }: Props) {
+export default function Ribbon({
+  saveStatus,
+  hasProject,
+  view,
+  canvasEnabled,
+  activeTool,
+  onSetTool,
+  canvas,
+  onUploadFile,
+  onSaveNow,
+  onExportPdf,
+}: Props) {
   const [tab, setTab] = useState<RibbonTab>('File');
+  const cx = canvasEnabled;
 
   const uploadBtn = (
     <label className="ribbon-btn file-ribbon-btn" title="Upload Workbook">
@@ -94,16 +119,16 @@ export default function Ribbon({ saveStatus, hasProject, view, onUploadFile, onS
         {tab === 'Home' && (
           <>
             <Group title="Tools">
-              <PlaceholderBtn label="Select" />
-              <PlaceholderBtn label="Pan" />
+              <button className={`ribbon-btn ${activeTool === 'select' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('select')}>Select</button>
+              <button className="ribbon-btn" disabled title="Coming soon">Pan</button>
             </Group>
             <Group title="History">
-              <PlaceholderBtn label="Undo" />
-              <PlaceholderBtn label="Redo" />
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.undo}>Undo</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.redo}>Redo</button>
             </Group>
             <Group title="Edit">
-              <PlaceholderBtn label="Delete" />
-              <PlaceholderBtn label="Duplicate" />
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.deleteSelected}>Delete</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.duplicateSelected}>Duplicate</button>
             </Group>
           </>
         )}
@@ -111,10 +136,10 @@ export default function Ribbon({ saveStatus, hasProject, view, onUploadFile, onS
         {tab === 'Insert' && (
           <>
             <Group title="Basic">
-              <PlaceholderBtn label="Text" />
-              <PlaceholderBtn label="Rectangle" />
-              <PlaceholderBtn label="Line" />
-              <PlaceholderBtn label="Arrow" />
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addText}>Text</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addRect}>Rectangle</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addLine}>Line</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.addArrow}>Arrow</button>
             </Group>
             <Group title="Objects">
               <PlaceholderBtn label="Image" />
@@ -124,11 +149,18 @@ export default function Ribbon({ saveStatus, hasProject, view, onUploadFile, onS
         )}
 
         {tab === 'Draw' && (
-          <Group title="Drawing">
-            <PlaceholderBtn label="Connector" />
-            <PlaceholderBtn label="Callout" />
-            <PlaceholderBtn label="Shapes" />
-          </Group>
+          <>
+            <Group title="Place">
+              <button className={`ribbon-btn ${activeTool === 'text' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('text')}>Text</button>
+              <button className={`ribbon-btn ${activeTool === 'rectangle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('rectangle')}>Rectangle</button>
+              <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')}>Line</button>
+              <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')}>Arrow</button>
+            </Group>
+            <Group title="Drawing">
+              <PlaceholderBtn label="Connector" />
+              <PlaceholderBtn label="Callout" />
+            </Group>
+          </>
         )}
 
         {tab === 'View' && (

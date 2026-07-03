@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createProjectFromWorkbook, exportPdf, getProject, savePages, saveProject } from './api/client';
-import type { PageModel, ProjectModel } from './model/types';
+import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, ViewMode } from './model/types';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
@@ -20,6 +20,7 @@ function getUrlParams() {
 }
 
 const clampScale = (v: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, v));
+const CANVAS_TYPES = new Set(['canvas', 'hybrid', 'underlay']);
 
 export default function App() {
   const { projectId: initialProjectId, print: printMode } = getUrlParams();
@@ -29,12 +30,18 @@ export default function App() {
   const [selectedWorksheetId, setSelectedWorksheetId] = useState<string | undefined>(undefined);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
 
-  // Viewport view-state (single source of truth for ribbon + viewport toolbar).
+  // Viewport view-state.
   const [fitMode, setFitMode] = useState<FitMode>('page');
   const [actualZoom, setActualZoom] = useState(1);
   const [effectiveScale, setEffectiveScale] = useState(0.5);
   const [showGrid, setShowGrid] = useState(false);
   const [snap, setSnap] = useState(false);
+
+  // Rendering + editing state.
+  const [viewMode, setViewMode] = useState<ViewMode>('normalized');
+  const [activeTool, setActiveTool] = useState('select');
+  const [selection, setSelection] = useState<CanvasSelection | null>(null);
+  const canvasApiRef = useRef<CanvasApi | null>(null);
 
   useEffect(() => {
     if (!initialProjectId) return;
@@ -65,6 +72,11 @@ export default function App() {
   }, [project, activePageId]);
 
   const onScaleChange = useCallback((s: number) => setEffectiveScale(s), []);
+  const onRegisterApi = useCallback((api: CanvasApi | null) => {
+    canvasApiRef.current = api;
+  }, []);
+  const onSelectionChange = useCallback((sel: CanvasSelection | null) => setSelection(sel), []);
+  const onToolConsumed = useCallback(() => setActiveTool('select'), []);
 
   const view: ViewControls = {
     fitMode,
@@ -106,6 +118,7 @@ export default function App() {
     setProject(p);
     setActivePageId(p.pages?.[0]?.id ?? null);
     setSelectedWorksheetId(p.worksheets?.[0]?.id);
+    setSelection(null);
     window.history.replaceState({}, '', `?project=${id}`);
   };
 
@@ -120,11 +133,41 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const onBlockChange = (pageId: string, blockId: string, patch: Partial<PageBlock>) => {
+    setProject((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        pages: prev.pages.map((pg) =>
+          pg.id === pageId
+            ? { ...pg, blocks: (pg.blocks ?? []).map((b) => (b.id === blockId ? { ...b, ...patch } : b)) }
+            : pg,
+        ),
+      };
+    });
+  };
+
+  const canvasEnabled =
+    !!activePage && viewMode === 'normalized' && CANVAS_TYPES.has(activePage.pageType);
+
   const ribbon = (
     <Ribbon
       saveStatus={saveStatus}
       hasProject={!!project}
       view={view}
+      canvasEnabled={canvasEnabled}
+      activeTool={activeTool}
+      onSetTool={setActiveTool}
+      canvas={{
+        addText: () => canvasApiRef.current?.addText(),
+        addRect: () => canvasApiRef.current?.addRect(),
+        addLine: () => canvasApiRef.current?.addLine(),
+        addArrow: () => canvasApiRef.current?.addArrow(),
+        deleteSelected: () => canvasApiRef.current?.deleteSelected(),
+        duplicateSelected: () => canvasApiRef.current?.duplicateSelected(),
+        undo: () => canvasApiRef.current?.undo(),
+        redo: () => canvasApiRef.current?.redo(),
+      }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
       onSaveNow={() => project && void saveProject(project)}
       onExportPdf={() => void onExportPdf()}
@@ -173,7 +216,18 @@ export default function App() {
           worksheets={project.worksheets}
           view={view}
           actualZoom={actualZoom}
-          onSelectPage={setActivePageId}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          activeTool={activeTool}
+          snap={snap}
+          onToolConsumed={onToolConsumed}
+          onRegisterApi={onRegisterApi}
+          onSelectionChange={onSelectionChange}
+          onBlockChange={onBlockChange}
+          onSelectPage={(id) => {
+            setActivePageId(id);
+            setSelection(null);
+          }}
           onScaleChange={onScaleChange}
           onGridChange={(wsId, grid) => {
             setProject({
@@ -217,6 +271,8 @@ export default function App() {
           <PropertiesPanel
             page={activePage}
             onChange={(next) => setProject({ ...project, pages: project.pages.map((p) => (p.id === next.id ? next : p)) })}
+            selection={selection}
+            onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
           />
         </div>
       }

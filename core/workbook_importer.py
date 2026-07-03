@@ -8,6 +8,7 @@ from openpyxl.cell.cell import MergedCell
 from openpyxl.utils.cell import get_column_letter
 
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
+from core.page_normalizer import normalize_page
 
 _INDEX_ALIASES = {
     "include": {"include", "inc", "include?", "use?", "selected"},
@@ -58,6 +59,35 @@ def _included(raw: str, sheet_title: str, use_source: str) -> bool:
     return True
 
 
+def _cell_fill_hex(cell) -> str | None:
+    """Return a solid fill color as #RRGGBB, or None."""
+    try:
+        fill = cell.fill
+        if not fill or fill.patternType != "solid":
+            return None
+        fg = fill.fgColor
+        if fg is None or getattr(fg, "type", None) != "rgb":
+            return None
+        rgb = fg.rgb
+        if not rgb or rgb in ("00000000", "FFFFFFFF"):
+            return None
+        if len(rgb) == 8:
+            return "#" + rgb[2:]
+        if len(rgb) == 6:
+            return "#" + rgb
+    except Exception:
+        return None
+    return None
+
+
+def _cell_has_border(cell) -> bool:
+    try:
+        b = cell.border
+        return any(side is not None and side.style for side in (b.left, b.right, b.top, b.bottom))
+    except Exception:
+        return False
+
+
 def _worksheet_payload(ws) -> dict[str, Any]:
     max_row = ws.max_row or 0
     max_col = ws.max_column or 0
@@ -78,13 +108,17 @@ def _worksheet_payload(ws) -> dict[str, Any]:
             if isinstance(cell.value, str) and cell.value.startswith("="):
                 formulas[f"{col_letter}{r}"] = cell.value
             if cell.has_style:
-                s = {
+                s: dict[str, Any] = {
                     "bold": bool(getattr(cell.font, "bold", False)),
+                    "italic": bool(getattr(cell.font, "italic", False)),
+                    "underline": bool(getattr(cell.font, "underline", None)),
                     "fontSize": getattr(cell.font, "size", None),
                     "hAlign": getattr(cell.alignment, "horizontal", None),
                     "vAlign": getattr(cell.alignment, "vertical", None),
+                    "fill": _cell_fill_hex(cell),
+                    "border": _cell_has_border(cell),
                 }
-                if any(v is not None and v is not False for v in s.values()):
+                if any(v not in (None, False) for v in s.values()):
                     styles[f"{col_letter}{r}"] = s
         grid.append(row_vals)
 
@@ -217,6 +251,8 @@ def import_workbook(path: str | Path, project_id: str | None = None) -> dict[str
         include = idx["include"] if idx else True
         page_type = classify_page_type(ws["name"], title, idx["useSource"] if idx else "")
 
+        blocks = normalize_page(ws, ws["id"], page_type, title)
+
         page = {
             "id": f"page_{i+1}",
             "order": order_cursor,
@@ -227,7 +263,7 @@ def import_workbook(path: str | Path, project_id: str | None = None) -> dict[str
             "pageType": page_type,
             "templateId": "ansi-b-standard",
             "linkedWorksheetId": ws["id"],
-            "blocks": [],
+            "blocks": blocks,
             "canvasObjects": [],
             "underlays": [],
             "notes": idx["notes"] if idx else "",

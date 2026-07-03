@@ -48,6 +48,13 @@ export default function PrintView({ project }: Props) {
                 page={page}
                 worksheet={worksheet}
                 project={project}
+                viewMode="normalized"
+                activeTool="select"
+                snap={false}
+                onToolConsumed={noop}
+                onRegisterApi={noop}
+                onSelectionChange={noop}
+                onBlockChange={noop}
                 onGridChange={noop}
                 onCanvasChange={noop}
               />

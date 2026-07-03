@@ -1,11 +1,13 @@
-import type { PageModel } from '../model/types';
+import type { CanvasSelection, PageModel } from '../model/types';
 
 interface Props {
   page: PageModel;
   onChange: (next: PageModel) => void;
+  selection: CanvasSelection | null;
+  onUpdateSelection: (patch: Partial<CanvasSelection>) => void;
 }
 
-export default function PropertiesPanel({ page, onChange }: Props) {
+export default function PropertiesPanel({ page, onChange, selection, onUpdateSelection }: Props) {
   return (
     <>
       <div className="props-group">
@@ -31,29 +33,45 @@ export default function PropertiesPanel({ page, onChange }: Props) {
         </div>
         <div className="field">
           <label htmlFor="page-notes">Notes</label>
-          <textarea id="page-notes" value={page.notes} onChange={(e) => onChange({ ...page, notes: e.target.value })} rows={5} />
+          <textarea id="page-notes" value={page.notes} onChange={(e) => onChange({ ...page, notes: e.target.value })} rows={4} />
         </div>
       </div>
 
       <div className="props-group">
         <h3>Selection Properties</h3>
-        <p className="props-note">Select a table cell, shape, or object to edit properties.</p>
-        <div className="props-placeholder-field">
-          <label>Fill</label>
-          <div className="fake-input" />
-        </div>
-        <div className="props-placeholder-field">
-          <label>Stroke</label>
-          <div className="fake-input" />
-        </div>
-        <div className="props-placeholder-field">
-          <label>Line Weight</label>
-          <div className="fake-input" />
-        </div>
-        <div className="props-placeholder-field">
-          <label>Lock / Layer</label>
-          <div className="fake-input" />
-        </div>
+        {!selection ? (
+          <p className="props-note">Select a table cell, shape, or object to edit properties.</p>
+        ) : (
+          <>
+            <div className="field">
+              <label htmlFor="sel-type">Object Type</label>
+              <input id="sel-type" title="Object type" value={selection.type} readOnly />
+            </div>
+            <div className="field">
+              <label htmlFor="sel-fill">Fill</label>
+              <input id="sel-fill" type="text" value={selection.fill} placeholder="transparent" onChange={(e) => onUpdateSelection({ fill: e.target.value })} />
+            </div>
+            <div className="field">
+              <label htmlFor="sel-stroke">Stroke</label>
+              <input id="sel-stroke" type="text" value={selection.stroke} placeholder="#111111" onChange={(e) => onUpdateSelection({ stroke: e.target.value })} />
+            </div>
+            <div className="field">
+              <label htmlFor="sel-sw">Stroke Width</label>
+              <input id="sel-sw" type="number" min={0} step={0.5} value={selection.strokeWidth} onChange={(e) => onUpdateSelection({ strokeWidth: Number(e.target.value) })} />
+            </div>
+            {selection.fontSize !== undefined && (
+              <div className="field">
+                <label htmlFor="sel-fs">Font Size</label>
+                <input id="sel-fs" type="number" min={6} step={1} value={selection.fontSize} onChange={(e) => onUpdateSelection({ fontSize: Number(e.target.value) })} />
+              </div>
+            )}
+            <div className="field">
+              <label>
+                <input type="checkbox" checked={selection.locked} onChange={(e) => onUpdateSelection({ locked: e.target.checked })} /> Lock object
+              </label>
+            </div>
+          </>
+        )}
       </div>
     </>
   );
