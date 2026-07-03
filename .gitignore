@@ -1,4 +1,4 @@
-# --- Singh360_SmartDraw ignore rules ---
+# --- Singh360 Draft ignore rules ---
 # Code-only repo. Never commit customer drawings, exports, or secrets.
 
 # Secrets / local env
@@ -6,32 +6,38 @@
 .env.local
 *.key
 
-# Generated diagram outputs
+# Generated outputs
 output/
-*.vsdx
-*.vson
-*.vson.json
 
-# Web bridge job sandbox (uploads + per-run outputs)
+# Web bridge job sandbox
 .jobs/
 
-# Live document editor — JSON docs + exported PDFs (never commit customer docs)
+# Live document editor — JSON docs + exported PDFs
 .docs/
 
-# Local probes / scratch (never customer data in the repo)
+# Local probes / scratch
 _inspect_*.py
 _probe_*.py
 _verify_*.py
 *.xlsx
 
-# Customer / project source material (raw plans, stencils, exports)
+# Customer / project source material
 input_docs/
 WORK-FOLDER/
 *.pdf
+*DO-NOT-SHARE*
+
+# Legacy pipeline artifacts (pre-Draft overhaul)
+*.vsdx
+*.vson
+*.vson.json
 *.vsd
 *.vssx
 *.vss
-*DO-NOT-SHARE*
+*.rdm.xml
+
+# Legacy catalog / compliance UI (removed from Draft)
+ems/
 
 # Python
 __pycache__/
@@ -41,6 +47,6 @@ venv/
 .mypy_cache/
 .pytest_cache/
 
-# Allow the synthetic demo inputs (explicitly NOT customer data)
+# Allow synthetic demo inputs
 !sample_data/
 !sample_data/**

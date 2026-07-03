@@ -3,731 +3,855 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Singh360 SmartDraw Generator</title>
-  <meta name="description" content="Render Singh360 assets into SmartDraw VSON, Microsoft Visio VSDX, and RDM Layout XML diagrams" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%238ab4f8'/><text x='16' y='23' font-family='Arial,sans-serif' font-size='18' font-weight='700' text-anchor='middle' fill='%23202124'>SD</text></svg>" />
-    <!-- Singh360 Shared Shell CSS -->
-    <link rel="stylesheet" href="../../Singh360 Dashboard/src/shared_ui/singh360-theme.css" onerror="this.onerror=null;this.href='';console.warn('Shared theme CSS not found, using fallback root variables.')">
-    <style>
+  <title>Singh360 Draft — CAD WYSIWYG Editor</title>
+  <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root {
-      /* Shared Theme Colors Mapped */
-      --bg:        #fafafa;
-      --surface:   #ffffff;
-      --surface-2: #f8fafc;
-      --surface-3: #f1f5f9;
-      --border:    #e5e7eb;
-      --border-2:  #cbd5e1;
-      --text-1:    #1f2937;
-      --text-2:    #475569;
-      --text-3:    #64748b;
-      --g-blue:    #019CDC;
-      --g-blue-d:  #007ba8;
-      --g-green:   #10b981;
-      --g-red:     #ef4444;
-      --g-amber:   #f59e0b;
-      
-      --sidebar-w: 240px;
-      --topbar-h: 64px;
-
-      --font: 'Outfit', 'Inter', system-ui, sans-serif;
-      --mono: 'Cascadia Code', Consolas, 'Courier New', monospace;
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #2d2d2d;
+      color: #000;
     }
 
-    html, body {
-      margin: 0;
+    /* ── APP SHELL ── */
+    #app {
+      display: flex;
       height: 100vh;
       width: 100vw;
-      background: var(--bg);
-      color: var(--text-1);
-      font-family: var(--font);
-      font-size: 14px;
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
-      display: flex;
-      overflow: hidden;
     }
 
-    /* ── GLOBAL LEFT SIDEBAR ── */
-    #global-sidebar {
-      width: var(--sidebar-w);
-      min-width: var(--sidebar-w);
-      background: #FBFCFE;
-      border-right: 1px solid var(--border);
+    /* ── SIDEBAR (300px checklist) ── */
+    #sidebar {
+      width: 300px;
+      flex-shrink: 0;
+      background: #e8e8e8;
+      border-right: 2px solid #000;
       display: flex;
       flex-direction: column;
-      flex-shrink: 0;
-      z-index: 50;
+      overflow: hidden;
+    }
+    .sidebar-head {
+      padding: 16px;
+      border-bottom: 1px solid #999;
+      background: #ddd;
+    }
+    .sidebar-head h1 {
+      font-size: 14px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 12px;
+    }
+    .sidebar-head input[type=file] { display: none; }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      border: 2px solid #000;
+      background: #fff;
+      cursor: pointer;
+      border-radius: 0;
+    }
+    .btn:hover { background: #f0f0f0; }
+    #checklist {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    .check-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-bottom: 1px solid #ccc;
+    }
+    .check-item:hover { background: #d8d8d8; }
+    .check-item.active { background: #c0c0c0; }
+    .check-item input { width: 14px; height: 14px; margin-top: 2px; flex-shrink: 0; cursor: pointer; }
+    .check-item span { word-break: break-word; line-height: 1.3; }
+    .sidebar-meta {
+      padding: 12px 16px;
+      border-top: 1px solid #999;
+      font-size: 11px;
+    }
+    .sidebar-meta label {
+      display: block;
+      font-size: 8px;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+      margin-top: 8px;
+    }
+    .sidebar-meta input {
+      width: 100%;
+      padding: 6px;
+      border: 1px solid #000;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11px;
+      border-radius: 0;
+    }
+    #status-line {
+      padding: 8px 16px;
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      border-top: 1px solid #999;
+      background: #ddd;
     }
 
-    .sb-brand {
-      height: var(--topbar-h);
+    /* ── MAIN WORKSPACE (drafting board) ── */
+    #workspace {
+      flex: 1;
+      background: #2d2d2d;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-bottom: 1px solid var(--border);
+      overflow: auto;
+      padding: 32px;
     }
 
-    .sb-brand img {
-      height: 40px;
-      object-fit: contain;
-    }
-
-    .sb-nav {
-      flex: 1;
-      padding: 16px 0;
-      overflow-y: auto;
-    }
-
-    .sb-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 16px 10px 24px;
-      margin: 2px 12px;
-      border-radius: 6px;
-      color: #004c70;
-      font-size: 14px;
-      font-weight: 500;
-      text-decoration: none;
-      transition: background 0.15s;
-    }
-
-    .sb-item:hover { background: #e5e7eb; }
-    .sb-item.active {
-      background: #ffffff;
-      font-weight: 600;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    }
-
-    .sb-item svg { width: 20px; height: 20px; }
-    .sb-item.active svg { color: var(--g-blue); }
-
-    /* ── MAIN CONTENT WRAPPER ── */
-    #main-wrapper {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    #topbar {
-      height: var(--topbar-h);
-      min-height: var(--topbar-h);
-      background: #004c70;
-      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-      display: flex;
-      align-items: center;
-      padding: 0 24px;
-      justify-content: space-between;
-      z-index: 40;
-    }
-
-    .tb-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #ffffff;
-      letter-spacing: 0.02em;
-    }
-
-    #viewport {
-      flex: 1;
-      overflow-y: auto;
+    /* ── 11×17 PAPER ── */
+    #paper {
+      width: 1632px;
+      height: 1056px;
+      background: #fff;
       position: relative;
+      flex-shrink: 0;
+      border: 4px solid #000;
+      padding: 4px;
+      border-radius: 0;
+    }
+    #paper-inner {
+      width: 100%;
+      height: 100%;
+      border: 1px solid #000;
+      position: relative;
+      background: #fff;
+      overflow: hidden;
+      border-radius: 0;
+    }
+    #paper-content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 110px;
+      overflow: auto;
+      padding: 20px 24px;
+    }
+
+    /* ── DATA TABLE ── */
+    .sheet-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10px;
+      color: #000;
+    }
+    .sheet-table td {
+      border: 1px solid #000;
+      padding: 4px 6px;
+      vertical-align: top;
+      min-width: 40px;
+      min-height: 18px;
+      outline: none;
+      background: #fff;
+    }
+    .sheet-table td:focus {
+      outline: 2px solid #217346;
+      outline-offset: -1px;
+    }
+
+    /* ── TITLE BLOCK (110px, rigid grid) ── */
+    #title-block {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 110px;
+      border-top: 3px solid #000;
+      display: grid;
+      grid-template-columns: 15% 20% 25% 25% 15%;
+      background: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+    }
+    .tb-col {
+      border-right: 2px solid #000;
+      position: relative;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
     }
-
-    .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 24px 64px; width: 100%; }
-
-    /* ── Header ── */
-    .masthead { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
-    .logo {
-      width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0;
-      background: #e0f2fe;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 16px; color: var(--g-blue); letter-spacing: -0.02em;
+    .tb-col:last-child { border-right: none; }
+    .tb-label {
+      position: absolute;
+      top: 2px;
+      left: 4px;
+      font-size: 8px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #000;
     }
-    h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: #004c70; }
-    .masthead p { font-size: 14px; color: var(--text-2); margin-top: 2px; }
-    .masthead .home { display: none; } /* Hidden inside shared shell */
-
-    .lead {
-      color: var(--text-2); font-size: 14px; margin: 14px 0 24px;
-      border-left: 3px solid var(--g-blue); padding-left: 12px;
-    }
-    .lead code { font-family: var(--mono); font-size: 13px; background: #e2e8f0; padding: 2px 6px; border-radius: 4px; color: #004c70; font-weight: 500; }
-
-    /* ── Panel ── */
-    .panel {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 24px; margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-    .panel h2 {
-      font-size: 13px; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.05em; color: #004c70; margin-bottom: 18px;
-      display: flex; align-items: center; gap: 10px;
-    }
-    .panel h2 .step {
-      width: 20px; height: 20px; border-radius: 50%; background: #e0f2fe;
-      color: var(--g-blue); font-size: 11px; display: inline-flex;
-      align-items: center; justify-content: center; font-weight: 700;
+    .tb-value {
+      font-weight: bold;
+      text-transform: uppercase;
+      color: #000;
     }
 
-    .field { margin-bottom: 20px; }
-    .field:last-child { margin-bottom: 0; }
-    .field > label {
-      display: block; font-size: 12px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.04em; color: var(--text-2); margin-bottom: 8px;
+    /* Col 1 — Revisions */
+    .tb-rev-head {
+      font-size: 8px;
+      font-weight: bold;
+      text-transform: uppercase;
+      text-align: center;
+      border-bottom: 1px solid #000;
+      padding: 2px;
+      background: #e2e2e2;
+      flex: 0 0 auto;
     }
-    .text-input {
-      width: 100%; background: #ffffff; border: 1px solid var(--border-2);
-      border-radius: 8px; padding: 12px 14px; color: var(--text-1);
-      font-family: var(--font); font-size: 14px; outline: none; transition: border-color .15s, box-shadow .15s;
+    .tb-rev-grid {
+      display: grid;
+      grid-template-columns: 22% 28% 50%;
+      flex: 1;
+      font-size: 7px;
+      font-weight: bold;
+      text-transform: uppercase;
     }
-    .text-input:focus { border-color: var(--g-blue); box-shadow: 0 0 0 3px rgba(1, 156, 220, 0.15); }
-    .text-input::placeholder { color: #94a3b8; }
-
-    /* ── Dropzones ── */
-    .drop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    @media (max-width: 680px) { .drop-grid { grid-template-columns: 1fr; } }
-
-    .dz {
-      position: relative; border: 2px dashed var(--border-2); border-radius: 10px;
-      background: var(--surface-2); padding: 16px; cursor: pointer;
-      transition: all .15s; min-height: 110px;
-      display: flex; flex-direction: column; gap: 6px;
+    .tb-rev-grid span {
+      border-bottom: 1px solid #000;
+      border-right: 1px solid #000;
+      padding: 1px 3px;
     }
-    .dz:hover { border-color: var(--g-blue); background: #f0f9ff; }
-    .dz.dragover { border-color: var(--g-blue); background: #e0f2fe; border-style: solid; box-shadow: inset 0 0 0 1px var(--g-blue); }
-    .dz.has-file { border-style: solid; border-color: var(--g-green); background: #f0fdf4; }
-    .dz.required-missing { border-color: #fca5a5; background: #fef2f2; }
+    .tb-rev-grid span:nth-child(3n) { border-right: none; }
 
-    .dz-head { display: flex; align-items: center; gap: 10px; }
-    .dz-icon { width: 32px; height: 32px; border-radius: 8px; background: #ffffff; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .dz-icon svg { width: 16px; height: 16px; }
-    .dz-name { font-size: 14px; font-weight: 600; color: var(--text-1); }
-    .dz-req { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; border-radius: 12px; }
-    .dz-req.req { background: #fee2e2; color: #b91c1c; }
-    .dz-req.opt { background: #e5e7eb; color: #4b5563; }
-    .dz-hint { font-size: 12px; color: var(--text-2); margin-top: 4px; }
-    .dz-file { display: none; align-items: center; gap: 8px; margin-top: auto; font-size: 13px; color: #047857; font-weight: 500; }
-    .dz.has-file .dz-file { display: flex; }
-    .dz.has-file .dz-hint { display: none; }
-    .dz-file .fname { font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
-    .dz-file .fsize { color: var(--text-3); font-weight: 400; }
-    .dz-clear { margin-left: auto; background: #ffffff; border: 1px solid var(--border); color: var(--text-3); cursor: pointer; padding: 4px; border-radius: 6px; line-height: 0; transition: all 0.1sec; }
-    .dz-clear:hover { color: var(--g-red); border-color: var(--g-red); background: #fef2f2; }
-    .dz input[type=file] { display: none; }
-
-    .pages-row { margin-top: 14px; display: none; }
-    .pages-row.show { display: block; }
-
-    /* ── Targets ── */
-    .chips { display: flex; gap: 12px; flex-wrap: wrap; }
-    .chip {
-      display: flex; align-items: center; gap: 10px; padding: 12px 18px;
-      border: 1px solid var(--border-2); border-radius: 8px; background: #ffffff;
-      cursor: pointer; transition: all .15s;
-      -webkit-user-select: none; user-select: none;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    /* Col 2 — Firm */
+    .tb-firm {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 6px;
     }
-    .chip:hover { border-color: var(--g-blue); transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .chip.on { border-color: var(--g-blue); background: #f0f9ff; box-shadow: inset 0 0 0 1px var(--g-blue); }
-    .chip .box {
-      width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--border-2);
-      display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: #ffffff; transition: .15s;
+    .tb-firm img {
+      max-height: 40px;
+      width: auto;
+      object-fit: contain;
+      margin-bottom: 4px;
     }
-    .chip.on .box { background: var(--g-blue); border-color: var(--g-blue); }
-    .chip .box svg { width: 14px; height: 14px; color: #ffffff; opacity: 0; transition: opacity .15s; stroke-width: 3;}
-    .chip.on .box svg { opacity: 1; }
-    .chip .label { font-size: 14px; font-weight: 600; color: #004c70; }
-    .chip .ext { font-family: var(--mono); font-size: 12px; color: var(--text-2); }
-
-    /* ── Action ── */
-    .actions { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
-    .generate {
-      display: inline-flex; align-items: center; gap: 10px; border: none; cursor: pointer;
-      background: var(--g-blue); color: #ffffff;
-      font-family: var(--font); font-size: 15px; font-weight: 600;
-      padding: 14px 28px; border-radius: 8px; transition: all .15s;
-      box-shadow: 0 4px 6px -1px rgba(1, 156, 220, 0.2);
+    .tb-firm-addr {
+      font-size: 8px;
+      font-weight: bold;
+      text-transform: uppercase;
+      line-height: 1.35;
     }
-    .generate:hover:not(:disabled) { transform: translateY(-1px); background: var(--g-blue-d); box-shadow: 0 6px 10px -2px rgba(1, 156, 220, 0.3); }
-    .generate:active:not(:disabled) { transform: translateY(0); }
-    .generate:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; background: #cbd5e1; }
-    .generate .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #ffffff; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
-    .generate.busy .spinner { display: inline-block; }
-    .generate.busy .gen-label::after { content: 'Generating…'; }
-    .generate .gen-label::after { content: 'Generate Diagrams'; }
-    .generate.busy .gen-icon { display: none; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .hint-inline { font-size: 13px; color: var(--text-2); }
 
-    /* ── Results ── */
-    .results { display: none; }
-    .results.show { display: block; animation: fade .25s ease; }
-    @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-
-    .banner { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; margin-bottom: 20px; }
-    .banner.ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
-    .banner.warn { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; }
-    .banner.err { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
-    .banner svg { width: 20px; height: 20px; flex-shrink: 0; }
-
-    .file-list { display: grid; gap: 12px; margin-bottom: 20px; }
-    .file-row {
-      display: flex; align-items: center; gap: 14px; padding: 14px 16px;
-      background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    /* Col 3 — Project */
+    .tb-proj-field {
+      flex: 1;
+      border-bottom: 1px solid #000;
+      display: flex;
+      align-items: center;
+      padding: 10px 6px 2px;
+      min-height: 0;
     }
-    .file-row .fi { width: 38px; height: 38px; border-radius: 6px; background: var(--surface-3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--border-2);}
-    .file-row .fi svg { width: 18px; height: 18px; }
-    .file-row .meta { min-width: 0; }
-    .file-row .meta .n { font-size: 14px; font-weight: 600; color: #004c70; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-row .meta .s { font-size: 12px; color: var(--text-2); font-family: var(--mono); margin-top: 2px;}
-    .dl {
-      margin-left: auto; display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
-      font-size: 13px; font-weight: 600; color: var(--g-blue); border: 1px solid #bae6fd;
-      padding: 8px 16px; border-radius: 6px; background: #f0f9ff; transition: all .15s; white-space: nowrap;
+    .tb-proj-field:last-child { border-bottom: none; }
+    .tb-proj-val { font-size: 11px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Col 4 — Sheet title */
+    .tb-sheet-title-col {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 4px 8px;
     }
-    .dl:hover { background: #e0f2fe; border-color: #7dd3fc; }
-    .dl.zip { color: #ffffff; border-color: #019CDC; background: var(--g-blue); }
-    .dl.zip:hover { border-color: var(--g-blue-d); background: var(--g-blue-d); color:#ffffff; }
+    .tb-sheet-title-text {
+      font-size: 20px;
+      font-weight: bold;
+      text-transform: uppercase;
+      line-height: 1.1;
+    }
 
-    .report { background: #1e293b; border: 1px solid #0f172a; border-radius: 8px; padding: 16px 20px; font-family: var(--mono); font-size: 13px; line-height: 1.6; color: #e2e8f0; white-space: pre-wrap; word-break: break-word; max-height: 380px; overflow-y: auto; }
-    .report-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 20px 0 10px; }
-    .flags { list-style: none; margin-top: 12px; display: grid; gap: 8px; }
-    .flags li { font-size: 13px; color: #b45309; display: flex; gap: 10px; align-items: flex-start; font-weight: 500; background: #fffbeb; padding: 10px; border-radius: 6px; border: 1px solid #fef3c7;}
-    .flags li::before { content: '!'; color: #ffffff; background: #f59e0b; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; margin-top: 1px;}
+    /* Col 5 — Sheet number */
+    .tb-num-top {
+      flex: 1;
+      border-bottom: 1px solid #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .tb-num-big { font-size: 24px; font-weight: bold; line-height: 1; }
+    .tb-num-bot {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+      background: #e2e2e2;
+    }
 
-    .err-detail { margin-top: 12px; color: #fca5a5; font-weight: 600; margin-bottom: 8px; }
-    footer { text-align: center; color: var(--text-3); font-size: 12px; margin-top: 32px; }
-    footer code { font-family: var(--mono); color: var(--text-2); background: #e2e8f0; padding: 2px 4px; border-radius: 4px; }
+    #empty-msg {
+      font-size: 14px;
+      font-weight: bold;
+      text-transform: uppercase;
+      color: #666;
+      text-align: center;
+      padding: 48px;
+    }
 
-    .is-hidden { display: none !important; }
-    .pages-label { display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); margin: 0 0 8px; }
-    .pages-input { max-width: 240px; }
+    /* Print */
+    #print-root { display: none; }
+    @media print {
+      #app { display: none !important; }
+      #print-root { display: block !important; }
+      .print-page { page-break-after: always; margin: 0; }
+    }
   </style>
 </head>
 <body>
 
-  <!-- GLOBAL SIDEBAR -->
-  <aside id="global-sidebar">
-    <div class="sb-brand">
-      <img src="https://ems.stogsdill.net/LOGO-750px.png" alt="Singh360 Logo" />
+<div id="app">
+  <aside id="sidebar">
+    <div class="sidebar-head">
+      <h1>Singh360 Draft</h1>
+      <input type="file" id="file-input" accept=".xlsx" />
+      <button class="btn" id="btn-upload" type="button">Upload Workbook</button>
     </div>
-    <nav class="sb-nav">
-      <a href="../../Singh360 Dashboard/index.html" class="sb-item">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
-        App Central
-      </a>
-      <a href="../../Singh360_Parser/index.html" class="sb-item">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-        Parser
-      </a>
-      <a href="../../Singh360_Catalog/index.html" class="sb-item">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-        Catalog
-      </a>
-      <a href="../../SINGH360 Compliance/index.html" class="sb-item">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
-        Compliance
-      </a>
-      <a href="http://localhost:8765/" class="sb-item active">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-        SmartDraw
-      </a>
-    </nav>
+    <div id="checklist"></div>
+    <div class="sidebar-meta">
+      <label for="meta-name">Project Name</label>
+      <input type="text" id="meta-name" />
+      <label for="meta-location">Location</label>
+      <input type="text" id="meta-location" />
+      <label for="meta-date">Date</label>
+      <input type="text" id="meta-date" placeholder="MM/DD/YYYY" />
+    </div>
+    <div id="status-line">Ready</div>
   </aside>
 
-  <!-- MAIN WRAPPER -->
-  <div id="main-wrapper">
-    <!-- GLOBAL TOP NAVBAR -->
-    <header id="topbar">
-      <div class="tb-title">Singh360 Productivity Dashboard</div>
-    </header>
-
-    <!-- VIEWPORT -->
-    <div id="viewport">
-  
-      <div class="wrap">
-        <div class="masthead">
-      <div class="logo">SD</div>
-      <div>
-        <h1>Singh360 SmartDraw Generator</h1>
-        <p>Assets &rarr; SmartDraw VSON, Microsoft Visio VSDX, and RDM XML</p>
+  <main id="workspace">
+    <div id="paper">
+      <div id="paper-inner">
+        <div id="paper-content">
+          <p id="empty-msg">Upload a workbook to begin.</p>
+        </div>
+        <div id="title-block"></div>
       </div>
-      <a class="home" href="../../Singh360 Dashboard/index.html" title="Back to App Central">&#x2190; App Central</a>
     </div>
+  </main>
+</div>
 
-    <p class="lead">
-      Upload the Singh360 data planes, name the project, pick your output formats, and the
-      Python pipeline (<code>main_generator.py</code>) renders deterministic, traceable diagrams you can
-      download and refine in SmartDraw, Visio, or RDM workflows. Only <code>assets.csv</code> is required.
-    </p>
+<div id="print-root"></div>
 
-    <form id="gen-form">
-      <!-- STEP 1: project + files -->
-      <div class="panel">
-        <h2><span class="step">1</span> Project &amp; Source Data</h2>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════════════════ */
+let project = null;
+let activeIndex = 0;
+let saveTimer = null;
 
-        <div class="field">
-          <label for="project-name">Project Name</label>
-          <input class="text-input" type="text" id="project-name" name="name"
-                 placeholder="e.g. HEB SA31 Demo" value="HEB SA31 Demo" autocomplete="off" />
-        </div>
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
-        <div class="field">
-          <label>Data Files</label>
-          <div class="drop-grid" id="drop-grid">
-            <!-- assets (required) -->
-            <div class="dz required-missing" data-key="assets" data-accept=".csv">
-              <div class="dz-head">
-                <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16M4 14h16M9 4v16"/></svg></div>
-                <span class="dz-name">assets.csv</span>
-                <span class="dz-req req">Required</span>
-              </div>
-              <div class="dz-hint">11-column Singh360 schedule. Click or drop CSV.</div>
-              <div class="dz-file"><span class="fname"></span><span class="fsize"></span>
-                <button type="button" class="dz-clear" title="Remove"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-              </div>
-              <input type="file" accept=".csv" />
-            </div>
+function setStatus(msg) {
+  document.getElementById('status-line').textContent = msg;
+}
 
-            <!-- control (optional) -->
-            <div class="dz" data-key="control" data-accept=".csv">
-              <div class="dz-head">
-                <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fdd663" stroke-width="2"><path d="M4 7h6M14 7h6M4 17h10M18 17h2"/><circle cx="12" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></svg></div>
-                <span class="dz-name">control_matrix.csv</span>
-                <span class="dz-req opt">Optional</span>
-              </div>
-              <div class="dz-hint">Relay &rarr; Contactor &rarr; Load chain.</div>
-              <div class="dz-file"><span class="fname"></span><span class="fsize"></span>
-                <button type="button" class="dz-clear" title="Remove"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-              </div>
-              <input type="file" accept=".csv" />
-            </div>
+function pageNumber(sheetObj) {
+  if (!project || !Array.isArray(project.pages)) return { num: 0, total: 0 };
+  const included = project.pages.filter(p => p.included !== false);
+  const total = included.length;
+  const idx = included.indexOf(sheetObj);
+  return { num: idx >= 0 ? idx + 1 : 0, total };
+}
 
-            <!-- network (optional) -->
-            <div class="dz" data-key="network" data-accept=".csv">
-              <div class="dz-head">
-                <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#81c995" stroke-width="2"><rect x="9" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M12 9v3M12 12H6v3M12 12h6v3"/></svg></div>
-                <span class="dz-name">network.csv</span>
-                <span class="dz-req opt">Optional</span>
-              </div>
-              <div class="dz-hint">Device &rarr; Switch / Port / IP / VLAN.</div>
-              <div class="dz-file"><span class="fname"></span><span class="fsize"></span>
-                <button type="button" class="dz-clear" title="Remove"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-              </div>
-              <input type="file" accept=".csv" />
-            </div>
+function deriveCode(sheetTab, index) {
+  const m = String(sheetTab || '').match(/^(\d+)/);
+  return m ? m[1] : String(index + 1);
+}
 
-            <!-- pdf (optional) -->
-            <div class="dz" data-key="pdf" data-accept=".pdf">
-              <div class="dz-head">
-                <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#f28b82" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5M9 13h6M9 17h6"/></svg></div>
-                <span class="dz-name">Blueprint PDF</span>
-                <span class="dz-req opt">Optional</span>
-              </div>
-              <div class="dz-hint">Floor plan for Azure DI spatial overlay.</div>
-              <div class="dz-file"><span class="fname"></span><span class="fsize"></span>
-                <button type="button" class="dz-clear" title="Remove"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-              </div>
-              <input type="file" accept=".pdf" />
-            </div>
-          </div>
+/** Coerce one backend page entry into a safe sheet object. Returns null if unusable. */
+function coercePageEntry(raw, index) {
+  if (raw == null) {
+    console.error('[coercePageEntry] null entry at index', index);
+    return null;
+  }
+  /* Legacy: pages array was sometimes a bare list of tab name strings */
+  if (typeof raw === 'string') {
+    return {
+      sheet_tab: raw,
+      page_title: raw,
+      included: true,
+      grid_data: [],
+    };
+  }
+  if (typeof raw !== 'object') {
+    console.error('[coercePageEntry] invalid entry at index', index, raw);
+    return null;
+  }
+  const sheet_tab = String(raw.sheet_tab || raw.sheetName || raw.code || ('Sheet ' + (index + 1)));
+  const page_title = String(raw.page_title || raw.title || sheet_tab);
+  const grid_data = Array.isArray(raw.grid_data)
+    ? raw.grid_data
+    : (Array.isArray(raw.data) ? raw.data : []);
+  return {
+    sheet_tab,
+    page_title,
+    included: raw.included !== false,
+    grid_data,
+    code: String(raw.code || deriveCode(sheet_tab, index)),
+  };
+}
 
-          <div class="pages-row" id="pages-row">
-            <label class="pages-label" for="pdf-pages">PDF Pages (1-based, e.g. 3-4)</label>
-            <input class="text-input pages-input" type="text" id="pdf-pages" name="pages" placeholder="3-4" autocomplete="off" />
-          </div>
-        </div>
+/** Normalize full project.pages after JSON parse — must run before any render. */
+function normalizeProjectPages() {
+  if (!project) return;
+  if (!Array.isArray(project.pages)) {
+    console.error('[normalizeProjectPages] project.pages is not an array:', project.pages);
+    project.pages = [];
+    return;
+  }
+  project.pages = project.pages
+    .map((raw, i) => coercePageEntry(raw, i))
+    .filter(Boolean);
+}
+
+function getActiveSheet() {
+  if (!project || !Array.isArray(project.pages) || project.pages.length === 0) return null;
+  if (activeIndex < 0 || activeIndex >= project.pages.length) activeIndex = 0;
+  return project.pages[activeIndex] || null;
+}
+
+/** Table-only mode — no Fabric canvas. Stub prevents ReferenceError from legacy onclick. */
+function initCanvas() {
+  /* intentionally empty */
+}
+window.initCanvas = initCanvas;
+
+/* ═══════════════════════════════════════════════════════════════
+   TITLE BLOCK BUILDER
+   ═══════════════════════════════════════════════════════════════ */
+function buildTitleBlockHTML(sheetObj) {
+  if (!sheetObj || typeof sheetObj !== 'object') {
+    console.error('[buildTitleBlockHTML] Invalid sheetObj:', sheetObj);
+    sheetObj = { page_title: 'UNTITLED SHEET', sheet_tab: '—', included: true };
+  }
+  const projName = (project && project.projectName) || 'UNTITLED PROJECT';
+  const location = (project && project.siteAddress) || '—';
+  const date = (project && project.date) || '—';
+  const title = sheetObj.page_title || sheetObj.sheet_tab || 'UNTITLED SHEET';
+  const { num, total } = pageNumber(sheetObj);
+  const sheetNo = num > 0 ? String(num) : '—';
+  const pageStr = total > 0 ? `PAGE ${num} OF ${total}` : 'NOT INCLUDED';
+
+  return `
+    <div class="tb-col">
+      <div class="tb-rev-head">Revisions</div>
+      <div class="tb-rev-grid">
+        <span>Rev</span><span>Date</span><span>Description</span>
+        <span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span>
+        <span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span>
       </div>
-
-      <!-- STEP 2: targets -->
-      <div class="panel">
-        <h2><span class="step">2</span> Target Outputs</h2>
-        <div class="chips" id="targets">
-          <div class="chip on" data-target="vson">
-            <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>
-            <span class="label">SmartDraw</span><span class="ext">.vson</span>
-          </div>
-          <div class="chip on" data-target="vsdx">
-            <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>
-            <span class="label">Microsoft Visio</span><span class="ext">.vsdx</span>
-          </div>
-          <div class="chip on" data-target="rdmxml">
-            <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>
-            <span class="label">RDM Layout XML</span><span class="ext">.rdm.xml</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- STEP 3: generate -->
-      <div class="panel">
-        <h2><span class="step">3</span> Generate</h2>
-        <div class="actions">
-          <button type="submit" class="generate" id="generate-btn" aria-label="Generate Diagrams" title="Generate Diagrams" disabled>
-            <span class="spinner"></span>
-            <svg class="gen-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#202124" stroke-width="2"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
-            <span class="gen-label"></span>
-          </button>
-          <span class="hint-inline" id="action-hint">Add <b>assets.csv</b> to enable generation.</span>
-        </div>
-      </div>
-    </form>
-
-    <!-- RESULTS -->
-    <div class="panel results" id="results">
-      <h2><span class="step">&#x2713;</span> Results</h2>
-      <div id="banner"></div>
-      <div class="file-list" id="file-list"></div>
-      <div id="flags-wrap"></div>
-      <div class="report-label is-hidden" id="report-label">Pipeline report</div>
-      <pre class="report is-hidden" id="report"></pre>
     </div>
+    <div class="tb-col tb-firm">
+      <span class="tb-label">Firm</span>
+      <img src="/static/LOGO-750px.png" alt="Singh360" onerror="this.style.display='none'" />
+      <div class="tb-firm-addr">Singh360 Inc.<br/>Engineering Services</div>
+    </div>
+    <div class="tb-col">
+      <div class="tb-proj-field"><span class="tb-label">Project Name</span><span class="tb-proj-val tb-value">${esc(projName)}</span></div>
+      <div class="tb-proj-field"><span class="tb-label">Location</span><span class="tb-proj-val tb-value">${esc(location)}</span></div>
+      <div class="tb-proj-field"><span class="tb-label">Date</span><span class="tb-proj-val tb-value">${esc(date)}</span></div>
+    </div>
+    <div class="tb-col tb-sheet-title-col">
+      <div class="tb-sheet-title-text tb-value">${esc(title)}</div>
+    </div>
+    <div class="tb-col">
+      <div class="tb-num-top">
+        <span class="tb-label">Sheet No.</span>
+        <span class="tb-num-big tb-value">${esc(sheetNo)}</span>
+      </div>
+      <div class="tb-num-bot tb-value">${esc(pageStr)}</div>
+    </div>`;
+}
 
-    <footer>
-      Served by the Singh360_SmartDraw Flask bridge &middot; <code>python server.py</code> &middot; deterministic, traceable, code-only.
-    </footer>
-  
-      </div> <!-- End wrap -->
-    </div> <!-- End viewport -->
-  </div> <!-- End main-wrapper -->
+/* ═══════════════════════════════════════════════════════════════
+   renderSheet — THE CORE RENDERER (dead simple)
+   ═══════════════════════════════════════════════════════════════ */
+function renderSheet(sheetObj) {
+  if (!sheetObj || typeof sheetObj !== 'object') {
+    console.error('[renderSheet] Invalid sheetObj:', sheetObj);
+    return;
+  }
 
-  <script>
-    'use strict';
+  const inner = document.getElementById('paper-inner');
+  if (!inner) {
+    console.error('[renderSheet] #paper-inner not found');
+    return;
+  }
 
-    // Held File objects per slot.
-    const files = { assets: null, control: null, network: null, pdf: null };
+  /* Wipe the paper */
+  inner.innerHTML = '';
 
-    const genBtn = document.getElementById('generate-btn');
-    const actionHint = document.getElementById('action-hint');
-    const pagesRow = document.getElementById('pages-row');
+  const content = document.createElement('div');
+  content.id = 'paper-content';
 
-    function fmtSize(bytes) {
-      if (bytes < 1024) return bytes + ' B';
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-    }
+  const grid = sheetObj.grid_data;
+  if (Array.isArray(grid) && grid.length > 0) {
+    const table = document.createElement('table');
+    table.className = 'sheet-table';
 
-    function refreshState() {
-      const ready = !!files.assets;
-      genBtn.disabled = !ready;
-      const assetsDz = document.querySelector('.dz[data-key="assets"]');
-      assetsDz.classList.toggle('required-missing', !files.assets);
-      if (ready) {
-        const extra = ['control', 'network', 'pdf'].filter(k => files[k]).length;
-        actionHint.innerHTML = extra
-          ? `Ready &middot; assets + ${extra} optional file${extra > 1 ? 's' : ''}.`
-          : 'Ready &middot; assets.csv loaded.';
-      } else {
-        actionHint.innerHTML = 'Add <b>assets.csv</b> to enable generation.';
+    for (let r = 0; r < grid.length; r++) {
+      const row = grid[r];
+      if (!Array.isArray(row)) {
+        console.error('[renderSheet] grid_data row', r, 'is not an array:', row);
+        continue;
       }
-      pagesRow.classList.toggle('show', !!files.pdf);
-    }
-
-    function setFile(key, file) {
-      const dz = document.querySelector(`.dz[data-key="${key}"]`);
-      const accept = dz.getAttribute('data-accept');
-      if (file && accept && !file.name.toLowerCase().endsWith(accept)) {
-        flashInvalid(dz);
-        return;
-      }
-      files[key] = file || null;
-      dz.classList.toggle('has-file', !!file);
-      if (file) {
-        dz.querySelector('.fname').textContent = file.name;
-        dz.querySelector('.fsize').textContent = '· ' + fmtSize(file.size);
-      }
-      refreshState();
-    }
-
-    function flashInvalid(dz) {
-      dz.style.borderColor = 'var(--g-red)';
-      setTimeout(() => { dz.style.borderColor = ''; }, 900);
-    }
-
-    // Wire each dropzone: click-to-browse, change, drag/drop, clear.
-    document.querySelectorAll('.dz').forEach(dz => {
-      const key = dz.getAttribute('data-key');
-      const input = dz.querySelector('input[type=file]');
-
-      dz.addEventListener('click', (e) => {
-        if (e.target.closest('.dz-clear')) return;
-        input.click();
-      });
-      input.addEventListener('change', () => {
-        if (input.files && input.files[0]) setFile(key, input.files[0]);
-      });
-      dz.querySelector('.dz-clear').addEventListener('click', (e) => {
-        e.stopPropagation();
-        input.value = '';
-        setFile(key, null);
-      });
-
-      ['dragenter', 'dragover'].forEach(ev =>
-        dz.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover'); }));
-      ['dragleave', 'dragend'].forEach(ev =>
-        dz.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover'); }));
-      dz.addEventListener('drop', (e) => {
-        e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover');
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) setFile(key, e.dataTransfer.files[0]);
-      });
-    });
-
-    // Target chips.
-    document.querySelectorAll('.chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const others = document.querySelectorAll('.chip.on');
-        if (chip.classList.contains('on') && others.length === 1) return; // keep >=1 on
-        chip.classList.toggle('on');
-      });
-    });
-
-    function selectedTargets() {
-      return Array.from(document.querySelectorAll('.chip.on')).map(c => c.getAttribute('data-target'));
-    }
-
-    // Icons for result banner.
-    const ICON_OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>';
-    const ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>';
-    const ICON_ERR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>';
-
-    function fileIcon(name) {
-      if (name.endsWith('.vsdx')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2"><path d="M6 2h12v20H6z"/><path d="M9 8l6 8M15 8l-6 8"/></svg>';
-      if (name.endsWith('.zip')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#fdd663" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M10 4v4M14 8v4M10 12v4M14 16v2"/></svg>';
-      return '<svg viewBox="0 0 24 24" fill="none" stroke="#81c995" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/></svg>';
-    }
-
-    const results = document.getElementById('results');
-    const banner = document.getElementById('banner');
-    const fileList = document.getElementById('file-list');
-    const flagsWrap = document.getElementById('flags-wrap');
-    const reportEl = document.getElementById('report');
-    const reportLabel = document.getElementById('report-label');
-
-    function showError(message, detail) {
-      banner.className = 'banner err';
-      banner.innerHTML = ICON_ERR + '<span>' + message + '</span>';
-      fileList.innerHTML = '';
-      flagsWrap.innerHTML = '';
-      if (detail) {
-        reportLabel.classList.remove('is-hidden');
-        reportLabel.textContent = 'Error detail';
-        reportEl.classList.remove('is-hidden');
-        reportEl.textContent = detail;
-      } else {
-        reportLabel.classList.add('is-hidden');
-        reportEl.classList.add('is-hidden');
-      }
-      results.classList.add('show');
-      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function showSuccess(data) {
-      const warned = data.status === 'warning';
-      banner.className = 'banner ' + (warned ? 'warn' : 'ok');
-      banner.innerHTML = (warned ? ICON_WARN : ICON_OK) +
-        '<span>' + (warned
-          ? 'Generated with validation warnings — review flags below.'
-          : 'Diagrams generated successfully.') + '</span>';
-
-      // File rows + ZIP.
-      fileList.innerHTML = '';
-      (data.files || []).forEach(f => {
-        const row = document.createElement('div');
-        row.className = 'file-row';
-        row.innerHTML =
-          '<div class="fi">' + fileIcon(f.name) + '</div>' +
-          '<div class="meta"><div class="n">' + f.name + '</div><div class="s">' + fmtSize(f.size) + '</div></div>' +
-          '<a class="dl" href="' + f.href + '" download>' +
-          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg> Download</a>';
-        fileList.appendChild(row);
-      });
-      if (data.zipHref && (data.files || []).length > 1) {
-        const zrow = document.createElement('div');
-        zrow.className = 'file-row';
-        zrow.innerHTML =
-          '<div class="fi">' + fileIcon('.zip') + '</div>' +
-          '<div class="meta"><div class="n">' + (data.name || 'diagrams') + '.zip</div><div class="s">All outputs</div></div>' +
-          '<a class="dl zip" href="' + data.zipHref + '" download>' +
-          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg> Download all (.zip)</a>';
-        fileList.appendChild(zrow);
-      }
-
-      // Flags.
-      flagsWrap.innerHTML = '';
-      if (data.flags && data.flags.length) {
-        const ul = document.createElement('ul');
-        ul.className = 'flags';
-        data.flags.forEach(fl => { const li = document.createElement('li'); li.textContent = fl; ul.appendChild(li); });
-        flagsWrap.appendChild(ul);
-      }
-
-      // Report.
-      if (data.report) {
-        reportLabel.classList.remove('is-hidden');
-        reportLabel.textContent = 'Pipeline report';
-        reportEl.classList.remove('is-hidden');
-        reportEl.textContent = data.report;
-      } else {
-        reportLabel.classList.add('is-hidden');
-        reportEl.classList.add('is-hidden');
-      }
-
-      results.classList.add('show');
-      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    // Submit → POST multipart to the bridge.
-    document.getElementById('gen-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!files.assets) return;
-      const targets = selectedTargets();
-      if (!targets.length) { showError('Select at least one target output (.vson, .vsdx, or .rdm.xml).'); return; }
-
-      const fd = new FormData();
-      fd.append('name', document.getElementById('project-name').value.trim() || 'Singh360 Diagram');
-      fd.append('targets', targets.join(','));
-      fd.append('assets', files.assets, 'assets.csv');
-      if (files.control) fd.append('control', files.control, 'control_matrix.csv');
-      if (files.network) fd.append('network', files.network, 'network.csv');
-      if (files.pdf) {
-        fd.append('pdf', files.pdf, 'blueprint.pdf');
-        fd.append('pages', document.getElementById('pdf-pages').value.trim() || '1');
-      }
-
-      genBtn.classList.add('busy');
-      genBtn.disabled = true;
-      results.classList.remove('show');
-
-      try {
-        const resp = await fetch('/api/generate', { method: 'POST', body: fd });
-        const ctype = resp.headers.get('content-type') || '';
-        if (!ctype.includes('application/json')) {
-          const text = await resp.text();
-          showError('Unexpected server response (' + resp.status + ').', text.slice(0, 4000));
-          return;
-        }
-        const data = await resp.json();
-        if (!resp.ok || data.status === 'error') {
-          showError(data.error || ('Generation failed (' + resp.status + ').'), data.detail);
+      const tr = document.createElement('tr');
+      for (let c = 0; c < row.length; c++) {
+        const td = document.createElement('td');
+        td.contentEditable = 'true';
+        td.dataset.row = String(r);
+        td.dataset.col = String(c);
+        const cell = row[c];
+        const text = (cell == null || cell === '') ? '' : String(cell);
+        if (text === '') {
+          td.innerHTML = '&nbsp;';
         } else {
-          showSuccess(data);
+          td.textContent = text;
         }
-      } catch (err) {
-        showError('Could not reach the SmartDraw bridge. Is it running?',
-          'Start it with:  python server.py   (in the Singh360_SmartDraw folder)\n\n' + (err && err.message ? err.message : String(err)));
-      } finally {
-        genBtn.classList.remove('busy');
-        genBtn.disabled = !files.assets;
+        td.addEventListener('input', () => {
+          let val = td.textContent;
+          if (val === '\u00a0') val = '';
+          if (!sheetObj.grid_data[r]) sheetObj.grid_data[r] = [];
+          sheetObj.grid_data[r][c] = val;
+          scheduleSave();
+        });
+        td.addEventListener('blur', () => {
+          if (!td.textContent.trim()) td.innerHTML = '&nbsp;';
+        });
+        tr.appendChild(td);
       }
+      table.appendChild(tr);
+    }
+    content.appendChild(table);
+  } else {
+    const empty = document.createElement('p');
+    empty.id = 'empty-msg';
+    empty.textContent = 'NO GRID DATA — CANVAS SHEET';
+    content.appendChild(empty);
+  }
+
+  inner.appendChild(content);
+
+  const tb = document.createElement('div');
+  tb.id = 'title-block';
+  tb.innerHTML = buildTitleBlockHTML(sheetObj);
+  inner.appendChild(tb);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SIDEBAR CHECKLIST
+   ═══════════════════════════════════════════════════════════════ */
+function renderChecklist() {
+  const container = document.getElementById('checklist');
+  if (!container) {
+    console.error('[renderChecklist] #checklist not found');
+    return;
+  }
+  container.innerHTML = '';
+
+  if (!project || !Array.isArray(project.pages)) {
+    console.error('[renderChecklist] No project.pages array:', project);
+    return;
+  }
+
+  project.pages.forEach((sheetObj, index) => {
+    if (!sheetObj || typeof sheetObj !== 'object') {
+      console.error('[renderChecklist] skipping invalid page at index', index, sheetObj);
+      return;
+    }
+    const label = document.createElement('label');
+    label.className = 'check-item' + (index === activeIndex ? ' active' : '');
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = sheetObj.included !== false;
+    cb.addEventListener('change', () => {
+      sheetObj.included = cb.checked;
+      renderSheet(sheetObj);
+      scheduleSave();
     });
 
-    refreshState();
-  </script>
+    const span = document.createElement('span');
+    span.textContent = sheetObj.page_title || sheetObj.sheet_tab || ('Sheet ' + (index + 1));
+
+    label.appendChild(cb);
+    label.appendChild(span);
+
+    label.addEventListener('click', (e) => {
+      if (e.target === cb) return;
+      selectSheet(index);
+    });
+
+    container.appendChild(label);
+  });
+}
+
+function selectSheet(index) {
+  if (!project || !Array.isArray(project.pages) || project.pages.length === 0) {
+    console.error('[selectSheet] No pages loaded');
+    return;
+  }
+  if (index < 0 || index >= project.pages.length) {
+    console.error('[selectSheet] Index out of range:', index, project.pages.length);
+    return;
+  }
+  const sheetObj = project.pages[index];
+  if (!sheetObj || typeof sheetObj !== 'object') {
+    console.error('[selectSheet] Invalid page at index', index, sheetObj);
+    return;
+  }
+  activeIndex = index;
+  renderChecklist();
+  renderSheet(sheetObj);
+  setStatus('Editing: ' + (sheetObj.page_title || sheetObj.sheet_tab || ('Sheet ' + (index + 1))));
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PROJECT LOAD / SAVE / UPLOAD
+   ═══════════════════════════════════════════════════════════════ */
+function bindMetaFields() {
+  document.getElementById('meta-name').addEventListener('input', (e) => {
+    if (!project) return;
+    project.projectName = e.target.value;
+    const sheet = getActiveSheet();
+    if (sheet) renderSheet(sheet);
+    scheduleSave();
+  });
+  document.getElementById('meta-location').addEventListener('input', (e) => {
+    if (!project) return;
+    project.siteAddress = e.target.value;
+    const sheet = getActiveSheet();
+    if (sheet) renderSheet(sheet);
+    scheduleSave();
+  });
+  document.getElementById('meta-date').addEventListener('input', (e) => {
+    if (!project) return;
+    project.date = e.target.value;
+    const sheet = getActiveSheet();
+    if (sheet) renderSheet(sheet);
+    scheduleSave();
+  });
+}
+
+function fillMetaFields() {
+  if (!project) return;
+  document.getElementById('meta-name').value = project.projectName || '';
+  document.getElementById('meta-location').value = project.siteAddress || '';
+  document.getElementById('meta-date').value = project.date || '';
+}
+
+function scheduleSave() {
+  if (!project || !project.id) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveProject, 600);
+  setStatus('Saving…');
+}
+
+async function saveProject() {
+  if (!project || !project.id) return;
+  const res = await fetch('/api/projects/' + project.id, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(project),
+  });
+  if (!res.ok) {
+    console.error('[saveProject] HTTP', res.status, await res.text());
+    setStatus('Save failed');
+    return;
+  }
+  setStatus('Saved');
+}
+
+async function loadProject(id) {
+  const res = await fetch('/api/projects/' + id);
+  if (!res.ok) {
+    console.error('[loadProject] HTTP', res.status);
+    setStatus('Load failed');
+    return;
+  }
+  const raw = await res.json();
+  project = raw;
+  console.log('[loadProject] Raw payload', project);
+
+  normalizeProjectPages();
+  console.log('[loadProject] Normalized pages:', project.pages.length, project.pages);
+
+  project.id = id;
+  history.replaceState({}, '', '?project=' + id);
+  activeIndex = 0;
+  fillMetaFields();
+  renderChecklist();
+
+  const first = getActiveSheet();
+  if (first) {
+    renderSheet(first);
+    setStatus(project.pages.length + ' sheets loaded');
+  } else {
+    renderEmptyPaper();
+    setStatus('No sheets in workbook');
+  }
+}
+
+function renderEmptyPaper() {
+  const inner = document.getElementById('paper-inner');
+  if (!inner) return;
+  inner.innerHTML = '';
+  const content = document.createElement('div');
+  content.id = 'paper-content';
+  const msg = document.createElement('p');
+  msg.id = 'empty-msg';
+  msg.textContent = 'Upload a workbook to begin.';
+  content.appendChild(msg);
+  inner.appendChild(content);
+  const tb = document.createElement('div');
+  tb.id = 'title-block';
+  tb.innerHTML = buildTitleBlockHTML({ page_title: 'UNTITLED SHEET', sheet_tab: '—', included: true });
+  inner.appendChild(tb);
+}
+
+async function uploadWorkbook() {
+  const input = document.getElementById('file-input');
+  const file = input.files && input.files[0];
+  if (!file) return;
+
+  setStatus('Uploading…');
+  const fd = new FormData();
+  fd.append('file', file);
+
+  const res = await fetch('/api/projects/new', { method: 'POST', body: fd });
+  if (!res.ok) {
+    const err = await res.json();
+    console.error('[uploadWorkbook]', err);
+    setStatus('Upload failed');
+    alert(err.error || 'Upload failed');
+    return;
+  }
+  const data = await res.json();
+  input.value = '';
+  await loadProject(data.id);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PRINT MODE (Playwright PDF export)
+   ═══════════════════════════════════════════════════════════════ */
+async function runPrintMode(projectId) {
+  document.getElementById('app').style.display = 'none';
+  const root = document.getElementById('print-root');
+  root.style.display = 'block';
+  root.innerHTML = '';
+
+  const res = await fetch('/api/projects/' + projectId);
+  if (!res.ok) {
+    console.error('[runPrintMode] HTTP', res.status);
+    return;
+  }
+  const proj = await res.json();
+  project = proj;
+  normalizeProjectPages();
+  const sheets = project.pages.filter(p => p && p.included !== false);
+
+  sheets.forEach((sheetObj) => {
+    if (!sheetObj || typeof sheetObj !== 'object') return;
+    const page = document.createElement('div');
+    page.className = 'print-page';
+
+    const paper = document.createElement('div');
+    paper.style.cssText = 'width:1632px;height:1056px;background:#fff;position:relative;border:4px solid #000;padding:4px;margin:0 auto;';
+
+    const inner = document.createElement('div');
+    inner.style.cssText = 'width:100%;height:100%;border:1px solid #000;position:relative;background:#fff;overflow:hidden;';
+
+    const content = document.createElement('div');
+    content.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:110px;overflow:hidden;padding:20px 24px;';
+
+    const grid = sheetObj.grid_data;
+    if (Array.isArray(grid) && grid.length > 0) {
+      const table = document.createElement('table');
+      table.className = 'sheet-table';
+      grid.forEach((row) => {
+        const tr = document.createElement('tr');
+        row.forEach((cell) => {
+          const td = document.createElement('td');
+          const text = (cell == null || cell === '') ? '' : String(cell);
+          td.innerHTML = text === '' ? '&nbsp;' : esc(text);
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      content.appendChild(table);
+    }
+
+    inner.appendChild(content);
+
+    const tb = document.createElement('div');
+    tb.id = 'title-block';
+    tb.innerHTML = buildTitleBlockHTML(sheetObj);
+    inner.appendChild(tb);
+
+    paper.appendChild(inner);
+    page.appendChild(paper);
+    root.appendChild(page);
+  });
+
+  document.body.setAttribute('data-print-ready', '1');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INIT — DOM ready, then optional project load
+   ═══════════════════════════════════════════════════════════════ */
+function bootApp() {
+  document.getElementById('btn-upload').addEventListener('click', () => {
+    document.getElementById('file-input').click();
+  });
+  document.getElementById('file-input').addEventListener('change', uploadWorkbook);
+  bindMetaFields();
+
+  const params = new URLSearchParams(location.search);
+  const projId = params.get('project');
+  const isPrint = params.get('print') === '1';
+
+  if (isPrint && projId) {
+    runPrintMode(projId);
+  } else if (projId) {
+    loadProject(projId);
+  } else {
+    renderEmptyPaper();
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootApp);
+} else {
+  bootApp();
+}
+</script>
 </body>
 </html>
