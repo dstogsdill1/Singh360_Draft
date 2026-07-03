@@ -113,63 +113,91 @@ export default function PropertiesPanel({
           <>
             <div className="field">
               <label htmlFor="sel-type">Object Type</label>
-              <input id="sel-type" title="Object type" value={selection.type} readOnly />
+              <input id="sel-type" title="What kind of object is selected" value={selection.isConnector ? 'Line / Connector' : selection.isText ? 'Text' : selection.isImage ? 'Image' : selection.type} readOnly />
             </div>
             {selection.name !== undefined && (
               <div className="field">
                 <label htmlFor="sel-name">Object Name</label>
-                <input id="sel-name" type="text" value={selection.name} onChange={(e) => onUpdateSelection({ name: e.target.value })} />
+                <input id="sel-name" type="text" title="A label for this object (does not appear on the sheet)" value={selection.name} onChange={(e) => onUpdateSelection({ name: e.target.value })} />
               </div>
             )}
             <div className="field-row">
               <div className="field">
-                <label htmlFor="sel-x">X</label>
+                <label htmlFor="sel-x" title="Horizontal position on the sheet (pixels from the left)">X Position</label>
                 <input id="sel-x" type="number" value={selection.x ?? 0} onChange={(e) => onUpdateSelection({ x: Number(e.target.value) })} />
               </div>
               <div className="field">
-                <label htmlFor="sel-y">Y</label>
+                <label htmlFor="sel-y" title="Vertical position on the sheet (pixels from the top)">Y Position</label>
                 <input id="sel-y" type="number" value={selection.y ?? 0} onChange={(e) => onUpdateSelection({ y: Number(e.target.value) })} />
               </div>
             </div>
-            <div className="field-row">
+            {!selection.isConnector && (
+              <>
+                <div className="field-row">
+                  <div className="field">
+                    <label htmlFor="sel-w" title="Object width">Width</label>
+                    <input id="sel-w" type="number" value={selection.width ?? 0} onChange={(e) => onUpdateSelection({ width: Number(e.target.value) })} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="sel-h" title="Object height">Height</label>
+                    <input id="sel-h" type="number" value={selection.height ?? 0} onChange={(e) => onUpdateSelection({ height: Number(e.target.value) })} />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="sel-angle" title="Rotation in degrees">Rotation</label>
+                  <input id="sel-angle" type="number" step={1} value={selection.angle ?? 0} onChange={(e) => onUpdateSelection({ angle: Number(e.target.value) })} />
+                </div>
+              </>
+            )}
+            {!selection.isConnector && !selection.isImage && (
               <div className="field">
-                <label htmlFor="sel-w">W</label>
-                <input id="sel-w" type="number" value={selection.width ?? 0} onChange={(e) => onUpdateSelection({ width: Number(e.target.value) })} />
+                <label htmlFor="sel-fill" title="Inside (fill) color. Use 'transparent' for no fill.">Fill Color</label>
+                <input id="sel-fill" type="text" value={selection.fill} placeholder="transparent" onChange={(e) => onUpdateSelection({ fill: e.target.value })} />
               </div>
+            )}
+            {!selection.isImage && (
               <div className="field">
-                <label htmlFor="sel-h">H</label>
-                <input id="sel-h" type="number" value={selection.height ?? 0} onChange={(e) => onUpdateSelection({ height: Number(e.target.value) })} />
+                <label htmlFor="sel-stroke" title={selection.isConnector ? 'Line color' : 'Border / outline color'}>{selection.isConnector ? 'Line Color' : 'Stroke Color'}</label>
+                <input id="sel-stroke" type="text" value={selection.stroke} placeholder="#111111" onChange={(e) => onUpdateSelection({ stroke: e.target.value })} />
               </div>
-            </div>
+            )}
+            {!selection.isImage && (
+              <div className="field">
+                <label htmlFor="sel-sw" title="Line / border thickness in pixels">Line Width</label>
+                <input id="sel-sw" type="number" min={0} step={0.5} value={selection.strokeWidth} onChange={(e) => onUpdateSelection({ strokeWidth: Number(e.target.value) })} />
+              </div>
+            )}
+            {selection.isConnector && (
+              <>
+                <div className="field">
+                  <label htmlFor="sel-dash" title="Solid, dashed, dotted, or dash-dot line">Line Style</label>
+                  <select id="sel-dash" value={selection.dash ?? 'solid'} onChange={(e) => onUpdateSelection({ dash: e.target.value })}>
+                    <option value="solid">Solid</option>
+                    <option value="dashed">Dashed</option>
+                    <option value="dotted">Dotted</option>
+                    <option value="dash-dot">Dash-dot</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label title="Show an arrowhead at the end of the line">
+                    <input type="checkbox" checked={selection.arrowEnd ?? false} onChange={(e) => onUpdateSelection({ arrowEnd: e.target.checked })} /> Arrowhead (end)
+                  </label>
+                </div>
+              </>
+            )}
             <div className="field">
-              <label htmlFor="sel-angle">Rotation</label>
-              <input id="sel-angle" type="number" step={1} value={selection.angle ?? 0} onChange={(e) => onUpdateSelection({ angle: Number(e.target.value) })} />
-            </div>
-            <div className="field">
-              <label htmlFor="sel-fill">Fill</label>
-              <input id="sel-fill" type="text" value={selection.fill} placeholder="transparent" onChange={(e) => onUpdateSelection({ fill: e.target.value })} />
-            </div>
-            <div className="field">
-              <label htmlFor="sel-stroke">Stroke</label>
-              <input id="sel-stroke" type="text" value={selection.stroke} placeholder="#111111" onChange={(e) => onUpdateSelection({ stroke: e.target.value })} />
-            </div>
-            <div className="field">
-              <label htmlFor="sel-sw">Stroke Width</label>
-              <input id="sel-sw" type="number" min={0} step={0.5} value={selection.strokeWidth} onChange={(e) => onUpdateSelection({ strokeWidth: Number(e.target.value) })} />
-            </div>
-            <div className="field">
-              <label htmlFor="sel-opacity">Opacity</label>
+              <label htmlFor="sel-opacity" title="Transparency: 1 = solid, 0 = fully transparent">Opacity</label>
               <input id="sel-opacity" type="number" min={0} max={1} step={0.05} value={selection.opacity ?? 1} onChange={(e) => onUpdateSelection({ opacity: Number(e.target.value) })} />
             </div>
             {selection.fontSize !== undefined && (
               <div className="field">
-                <label htmlFor="sel-fs">Font Size</label>
+                <label htmlFor="sel-fs" title="Text size in points">Font Size</label>
                 <input id="sel-fs" type="number" min={6} step={1} value={selection.fontSize} onChange={(e) => onUpdateSelection({ fontSize: Number(e.target.value) })} />
               </div>
             )}
             <div className="field">
-              <label>
-                <input type="checkbox" checked={selection.locked} onChange={(e) => onUpdateSelection({ locked: e.target.checked })} /> Lock object
+              <label title="Prevent this object from being moved or resized by accident">
+                <input type="checkbox" checked={selection.locked} onChange={(e) => onUpdateSelection({ locked: e.target.checked })} /> Lock Object
               </label>
             </div>
           </>

@@ -119,6 +119,11 @@ export interface CanvasSelection {
   underline?: boolean;
   textAlign?: string;
   isText?: boolean;
+  isConnector?: boolean;
+  isImage?: boolean;
+  dash?: string;
+  arrowStart?: boolean;
+  arrowEnd?: boolean;
   x?: number;
   y?: number;
   width?: number;

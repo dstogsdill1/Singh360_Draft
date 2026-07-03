@@ -265,21 +265,49 @@ export default function Ribbon({
           </>
         )}
 
-        {tab === 'Draw' && (
-          <>
-            <Group title="Place">
-              <button className={`ribbon-btn ${activeTool === 'text' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('text')}>Text</button>
-              <button className={`ribbon-btn ${activeTool === 'rectangle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('rectangle')}>Rectangle</button>
-              <button className={`ribbon-btn ${activeTool === 'circle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('circle')}>Circle</button>
-              <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')}>Line</button>
-              <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')}>Arrow</button>
-            </Group>
-            <Group title="Drawing">
-              <PlaceholderBtn label="Connector" />
-              <PlaceholderBtn label="Callout" />
-            </Group>
-          </>
-        )}
+        {tab === 'Draw' && (() => {
+          const ln = selection?.isConnector ?? false;
+          const COLORS: Array<[string, string]> = [
+            ['#111111', 'Black'], ['#888888', 'Gray'], ['#d71920', 'Red'], ['#12539b', 'Blue'],
+            ['#f2c200', 'Yellow'], ['#f28c28', 'Orange'], ['#00a651', 'Green'], ['#ffffff', 'White'],
+          ];
+          return (
+            <>
+              <Group title="Place">
+                <button className={`ribbon-btn ${activeTool === 'text' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('text')} title="Click-place a text box">Text</button>
+                <button className={`ribbon-btn ${activeTool === 'rectangle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('rectangle')} title="Click-place a rectangle">Rectangle</button>
+                <button className={`ribbon-btn ${activeTool === 'circle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('circle')} title="Click-place a circle">Circle</button>
+                <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')} title="Drag to draw a line">Line</button>
+                <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')} title="Drag to draw an arrow">Arrow</button>
+              </Group>
+              <Group title="Line Color">
+                <select className="ribbon-select" disabled={!ln} value={typeof selection?.stroke === 'string' ? selection.stroke : '#111111'} onChange={(e) => onUpdateSelection({ stroke: e.target.value })} title={ln ? 'Stroke color of the selected line/connector' : 'Select a line or connector first'}>
+                  {COLORS.map(([hex, label]) => <option key={hex} value={hex}>{label}</option>)}
+                </select>
+              </Group>
+              <Group title="Line Width">
+                <select className="ribbon-select" disabled={!ln} value={selection?.strokeWidth ?? 2} onChange={(e) => onUpdateSelection({ strokeWidth: Number(e.target.value) })} title={ln ? 'Line thickness' : 'Select a line or connector first'}>
+                  {[1, 2, 3, 4, 6].map((w) => <option key={w} value={w}>{w} px</option>)}
+                </select>
+              </Group>
+              <Group title="Line Style">
+                <select className="ribbon-select" disabled={!ln} value={selection?.dash ?? 'solid'} onChange={(e) => onUpdateSelection({ dash: e.target.value })} title={ln ? 'Solid / dashed / dotted / dash-dot' : 'Select a line or connector first'}>
+                  <option value="solid">Solid</option>
+                  <option value="dashed">Dashed</option>
+                  <option value="dotted">Dotted</option>
+                  <option value="dash-dot">Dash-dot</option>
+                </select>
+                <button className={`ribbon-btn ${selection?.arrowEnd ? 'active' : ''}`} disabled={!ln} onClick={() => onUpdateSelection({ arrowEnd: !selection?.arrowEnd })} title="Toggle arrowhead at the end">Arrow</button>
+              </Group>
+              <Group title="Presets">
+                <button className="ribbon-btn" disabled={!ln} onClick={() => onUpdateSelection({ stroke: '#00a651', dash: 'solid', arrowEnd: false })} title="CAT6 = green solid">CAT6</button>
+                <button className="ribbon-btn" disabled={!ln} onClick={() => onUpdateSelection({ stroke: '#f28c28', dash: 'dashed', arrowEnd: false })} title="Fiber = orange dashed">Fiber</button>
+                <button className="ribbon-btn" disabled={!ln} onClick={() => onUpdateSelection({ stroke: '#12539b', dash: 'dashed', arrowEnd: false })} title="BACnet = blue dashed">BACnet</button>
+                <button className="ribbon-btn" disabled={!ln} onClick={() => onUpdateSelection({ stroke: '#888888', dash: 'dashed', arrowEnd: false })} title="Reference = gray dashed">Ref</button>
+              </Group>
+            </>
+          );
+        })()}
 
         {tab === 'View' && (
           <>

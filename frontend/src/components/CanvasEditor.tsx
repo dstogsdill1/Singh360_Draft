@@ -21,6 +21,13 @@ const SNAP = 16;
 function summarize(obj: FabricObject): CanvasSelection {
   const anyObj = obj as unknown as Record<string, unknown>;
   const isText = obj.type === 'textbox' || obj.type === 'text' || 'fontSize' in obj;
+  const isConnector = obj.type === 'Connector' || 'arrowEnd' in obj;
+  const isImage = obj.type === 'image';
+  const dashArr = anyObj.strokeDashArray as number[] | undefined | null;
+  const dash = !dashArr || dashArr.length === 0 ? 'solid'
+    : dashArr.length === 2 && dashArr[0] <= 3 ? 'dotted'
+    : dashArr.length >= 4 ? 'dash-dot'
+    : 'dashed';
   return {
     type: (obj.type as string) || 'object',
     name: typeof anyObj.objName === 'string' ? (anyObj.objName as string) : undefined,
@@ -34,6 +41,11 @@ function summarize(obj: FabricObject): CanvasSelection {
     underline: anyObj.underline === true,
     textAlign: typeof anyObj.textAlign === 'string' ? (anyObj.textAlign as string) : undefined,
     isText,
+    isConnector,
+    isImage,
+    dash: isConnector ? dash : undefined,
+    arrowStart: anyObj.arrowStart === true,
+    arrowEnd: anyObj.arrowEnd === true,
     x: Math.round(obj.left ?? 0),
     y: Math.round(obj.top ?? 0),
     width: Math.round((obj.width ?? 0) * (obj.scaleX ?? 1)),
@@ -523,31 +535,40 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         const o = c?.getActiveObject();
         if (!c || !o) return;
+        const anyO = o as unknown as Record<string, unknown>;
         if (patch.fill !== undefined) o.set('fill', patch.fill);
         if (patch.stroke !== undefined) o.set('stroke', patch.stroke);
         if (patch.strokeWidth !== undefined) o.set('strokeWidth', patch.strokeWidth);
         if (patch.opacity !== undefined) o.set('opacity', patch.opacity);
-        if (patch.name !== undefined) (o as unknown as Record<string, unknown>).objName = patch.name;
+        if (patch.name !== undefined) anyO.objName = patch.name;
         if (patch.x !== undefined) o.set('left', patch.x);
         if (patch.y !== undefined) o.set('top', patch.y);
         if (patch.angle !== undefined) o.set('angle', patch.angle);
         if (patch.width !== undefined && o.width) o.set('scaleX', patch.width / o.width);
         if (patch.height !== undefined && o.height) o.set('scaleY', patch.height / o.height);
-        if (patch.fontSize !== undefined && 'fontSize' in o) {
-          (o as unknown as Record<string, unknown>).fontSize = patch.fontSize;
+        // Text props — use .set() so Fabric recomputes glyph metrics + re-renders.
+        let textChanged = false;
+        if (patch.fontSize !== undefined && 'fontSize' in o) { o.set('fontSize', patch.fontSize); textChanged = true; }
+        if (patch.bold !== undefined && 'fontWeight' in o) { o.set('fontWeight', patch.bold ? 'bold' : 'normal'); textChanged = true; }
+        if (patch.italic !== undefined && 'fontStyle' in o) { o.set('fontStyle', patch.italic ? 'italic' : 'normal'); textChanged = true; }
+        if (patch.underline !== undefined && 'underline' in o) { o.set('underline', patch.underline); textChanged = true; }
+        if (patch.textAlign !== undefined && 'textAlign' in o) { o.set('textAlign', patch.textAlign); textChanged = true; }
+        if (textChanged && typeof anyO.initDimensions === 'function') {
+          (anyO.initDimensions as () => void)();
+          o.set('dirty', true);
         }
-        if (patch.bold !== undefined && 'fontWeight' in o) {
-          (o as unknown as Record<string, unknown>).fontWeight = patch.bold ? 'bold' : 'normal';
+        // Connector / line style props.
+        if (patch.dash !== undefined) {
+          const map: Record<string, number[] | undefined> = {
+            solid: undefined,
+            dashed: [10, 6],
+            dotted: [2, 5],
+            'dash-dot': [12, 5, 2, 5],
+          };
+          o.set('strokeDashArray', map[patch.dash] ?? undefined);
         }
-        if (patch.italic !== undefined && 'fontStyle' in o) {
-          (o as unknown as Record<string, unknown>).fontStyle = patch.italic ? 'italic' : 'normal';
-        }
-        if (patch.underline !== undefined && 'underline' in o) {
-          (o as unknown as Record<string, unknown>).underline = patch.underline;
-        }
-        if (patch.textAlign !== undefined && 'textAlign' in o) {
-          (o as unknown as Record<string, unknown>).textAlign = patch.textAlign;
-        }
+        if (patch.arrowEnd !== undefined && 'arrowEnd' in o) anyO.arrowEnd = patch.arrowEnd;
+        if (patch.arrowStart !== undefined && 'arrowStart' in o) anyO.arrowStart = patch.arrowStart;
         if (patch.locked !== undefined) {
           o.set({
             lockMovementX: patch.locked,
@@ -557,6 +578,7 @@ export default function CanvasEditor({
             lockRotation: patch.locked,
           });
         }
+        o.set('dirty', true);
         o.setCoords();
         c.requestRenderAll();
         onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);

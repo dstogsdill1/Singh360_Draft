@@ -20,7 +20,7 @@ interface Props {
 export const COMPONENT_DRAG_TYPE = 'application/x-singh360-component';
 
 // Categories that should NOT get an auto label by default (logos/symbols/legends).
-const NO_LABEL_CATS = new Set(['logo', 'symbol', 'legend', 'reference-page']);
+const NO_LABEL_CATS = new Set(['logos', 'logo', 'symbols', 'symbol', 'legends', 'legend', 'reference-page']);
 
 function labelFor(c: LibraryComponent): string | null {
   const cat = (c.category || '').toLowerCase();
@@ -28,11 +28,19 @@ function labelFor(c: LibraryComponent): string | null {
   return c.partNumber || c.shortName || c.displayName || null;
 }
 
-// Canonical categories the user can recategorize into.
+// Canonical categories (must match core/library_taxonomy.py).
 const CANON_CATS = [
-  'controller', 'electrical', 'network', 'panel', 'sensor', 'alarm', 'hvac',
-  'refrigeration', 'equipment', 'logo', 'legend', 'symbol', 'reference-page', 'uncategorized',
+  'controllers', 'expansion', 'panels', 'network', 'electrical', 'sensors', 'alarms',
+  'refrigeration', 'lighting', 'symbols', 'legends', 'logos', 'reference-page', 'review', 'uncategorized',
 ];
+const CAT_LABELS: Record<string, string> = {
+  controllers: 'Controllers', expansion: 'Expansion Modules', panels: 'Panels / Enclosures',
+  network: 'Network / Data', electrical: 'Electrical / Power', sensors: 'Sensors / Transducers',
+  alarms: 'Alarms / Safety', refrigeration: 'Refrigeration', lighting: 'Lighting',
+  symbols: 'Symbols / Markers', legends: 'Legends', logos: 'Logos',
+  'reference-page': 'Reference Pages', review: 'Needs Review', uncategorized: 'Uncategorized',
+};
+const catLabel = (id: string) => CAT_LABELS[id] ?? id;
 
 export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const [data, setData] = useState<LibraryData | null>(null);
@@ -179,7 +187,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         <select className="lib-cat" value={category} onChange={(e) => setCategory(e.target.value)} title="Filter by category">
           <option value="all">All ({visible.length})</option>
           {cats.map((c) => (
-            <option key={c.id} value={c.id}>{c.id} ({c.count})</option>
+            <option key={c.id} value={c.id}>{catLabel(c.id)} ({c.count})</option>
           ))}
         </select>
       </div>
@@ -227,7 +235,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
                   onChange={(e) => setEditName(e.target.value)}
                 />
                 <select className="lib-edit-cat" value={editCat} onChange={(e) => setEditCat(e.target.value)} title="Category">
-                  {CANON_CATS.map((k) => <option key={k} value={k}>{k}</option>)}
+                  {CANON_CATS.map((k) => <option key={k} value={k}>{catLabel(k)}</option>)}
                 </select>
                 <div className="lib-actions">
                   <button className="lib-btn" onClick={() => void saveEdit(c)}>Save</button>
