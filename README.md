@@ -272,7 +272,47 @@ web/index.html  --FormData(POST /api/generate)-->  server.py (Flask)
 > `GET /api/download/<job>/<file>` · `GET /api/download/<job>.zip`. The server
 > binds `127.0.0.1:8765` (local only).
 
-### Live HTML Engineering Document Editor (`/editor`)
+### Singh360 Draft — Drawing Package Editor (`/app`)
+
+The modular React editor at **`/app`** is the source-of-truth editor. It imports
+a workbook, generates output pages from `00_INDEX`, supports include/exclude,
+page title/code/type editing, autosave, and 17x11 PDF export that renders the
+same components as the editor.
+
+#### Recommended local run (Windows PowerShell)
+
+```powershell
+cd frontend
+npm install
+npm run build
+cd ..
+$env:SINGH360_PORT=8766
+python server.py
+```
+
+Then open:
+
+- `http://127.0.0.1:8766/app`
+
+Notes:
+
+- Port `8765` is the default but may already be occupied locally. If startup
+  reports the port is in use, set `SINGH360_PORT=8766` (or any free port) and
+  re-run `python server.py`.
+- `/` redirects to `/app` when `frontend/dist/index.html` exists; otherwise it
+  shows build instructions.
+- `/editor` is a **legacy fallback only** — not the source-of-truth editor.
+
+#### Smoke checks
+
+```powershell
+python scripts/smoke_import_workbook.py "C:\path\to\workbook.xlsx"
+python scripts/smoke_routes.py
+```
+
+---
+
+### Live HTML Engineering Document Editor (`/editor`) — legacy fallback
 
 The repo now includes a browser-based living-document editor for text, BOM
 tables, and canvas markup (Fabric.js), with auto-save and PDF export.

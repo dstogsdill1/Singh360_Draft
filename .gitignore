@@ -55,6 +55,10 @@ node_modules/
 frontend/.vite/
 frontend/.cache/
 
+# TypeScript incremental build cache
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
+
 # Frontend production build output
 frontend/dist/
 

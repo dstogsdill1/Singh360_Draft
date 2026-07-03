@@ -8,8 +8,8 @@ interface Props {
 
 export default function WorkbookView({ worksheets, selectedWorksheetId, onSelectWorksheet }: Props) {
   return (
-    <div>
-      <h3 className="section-title">Source Tabs</h3>
+    <div className="source-tabs">
+      <div className="panel-section-head">Source Tabs</div>
       {worksheets.map((ws) => (
         <button
           key={ws.id}

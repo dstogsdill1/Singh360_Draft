@@ -5,6 +5,7 @@
   border: 2px solid #111;
   margin: 0 auto;
   position: relative;
+  box-shadow: 0 2px 0 #1c2025;
 }
 
 .sheet-inner {
@@ -23,6 +24,7 @@
   right: 8px;
   bottom: 150px;
   overflow: auto;
+  background: #fff;
 }
 
 .sheet-title-block {
@@ -34,13 +36,37 @@
   border: 2px solid #000;
   display: grid;
   grid-template-columns: 22% 20% 38% 20%;
+  background: #fff;
 }
 
 .tb-cell { border-right: 1px solid #000; padding: 6px; font-size: 12px; }
 .tb-cell:last-child { border-right: none; }
 .tb-title { font-size: 18px; font-weight: bold; letter-spacing: 0.04em; }
-.tb-mini { font-size: 11px; text-transform: uppercase; }
+.tb-mini { font-size: 11px; text-transform: uppercase; color: #333; }
+.tb-mini-spaced { margin-top: 8px; }
+.logo-img { max-height: 56px; max-width: 100%; object-fit: contain; }
 
-.grid-table { border-collapse: collapse; width: 100%; font-size: 12px; }
-.grid-table td { border: 1px solid #222; min-width: 80px; padding: 4px 6px; }
-.grid-table td[contenteditable='true']:focus { outline: 2px solid #1463a6; }
+.canvas-surface { border: 1px solid #111; }
+
+/* Data-grid worksheet table — contained + readable */
+.grid-table { border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+.grid-table td {
+  border: 1px solid #c9ccd0;
+  min-width: 90px;
+  max-width: 260px;
+  height: 22px;
+  padding: 3px 6px;
+  vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grid-table tr:first-child td { background: #f1f3f5; font-weight: 600; }
+.grid-table td[contenteditable='true']:focus {
+  outline: 2px solid #12539b;
+  outline-offset: -1px;
+  white-space: normal;
+  overflow: visible;
+  background: #fffef2;
+}
+

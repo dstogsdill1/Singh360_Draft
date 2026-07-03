@@ -1,19 +1,23 @@
-"""server.py — Flask backend for Singh360 Draft.
+"""server.py — Flask backend for Singh360 Draft (Drawing Package Editor).
 
-Serves the static web UI, ingests Excel workbooks, persists project state JSON,
-and routes PDF export (Playwright) for 11x17 engineering document packages.
+Serves the modular /app editor build, ingests Excel workbooks, persists project
+state JSON, and routes PDF export (Playwright) for 17x11 engineering document
+packages. The legacy /editor page is retained only as a fallback.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import socket
+import sys
 import traceback
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, redirect, request, send_file, send_from_directory
+from flask import Flask, Response, abort, jsonify, redirect, request, send_file, send_from_directory
 
 from core.csv_importer import import_csv_to_grid
 from core.export_pdf import export_pdf_via_playwright
@@ -30,10 +34,38 @@ DOCS_DIR = HERE / ".docs"
 DOCS_DIR.mkdir(exist_ok=True)
 
 PROJECT_ID_RE = re.compile(r"^[a-f0-9]{16}$")
-_SERVER_PORT = 8765
+_DEFAULT_PORT = 8765
+
+
+def _configured_port() -> int:
+    """Resolve the runtime port from SINGH360_PORT (default 8765)."""
+    raw = os.environ.get("SINGH360_PORT", "").strip()
+    if not raw:
+        return _DEFAULT_PORT
+    try:
+        port = int(raw)
+    except ValueError:
+        return _DEFAULT_PORT
+    return port if 1 <= port <= 65535 else _DEFAULT_PORT
+
+
+_SERVER_PORT = _configured_port()
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 MB
+
+
+_NO_CACHE_PATHS = {"/", "/app", "/editor"}
+
+
+@app.after_request
+def _apply_no_cache_headers(response: Response) -> Response:
+    """Apply no-cache headers to HTML shell routes so the editor never goes stale."""
+    if request.path in _NO_CACHE_PATHS:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # Use Python's standard logging — app.logger is a stdlib Logger instance.
 # Never call app.error(...); Flask has no such method.
@@ -140,6 +172,35 @@ def app_modular_assets(asset_path: str):
 @app.get("/api/health")
 def health():
     return jsonify({"ok": True})
+
+
+@app.get("/api/debug/routes")
+def debug_routes():
+    """Report runtime paths, port, and the full Flask URL map for diagnostics."""
+    dist_index = FRONTEND_DIST_DIR / "index.html"
+    url_map = sorted(
+        (
+            {
+                "rule": str(rule),
+                "methods": sorted(m for m in rule.methods if m not in {"HEAD", "OPTIONS"}),
+                "endpoint": rule.endpoint,
+            }
+            for rule in app.url_map.iter_rules()
+        ),
+        key=lambda r: r["rule"],
+    )
+    return jsonify(
+        {
+            "here": str(HERE),
+            "serverFile": str(Path(__file__).resolve()),
+            "frontendDist": str(FRONTEND_DIST_DIR),
+            "distIndexExists": dist_index.is_file(),
+            "pid": os.getpid(),
+            "pythonExecutable": sys.executable,
+            "configuredPort": _SERVER_PORT,
+            "urlMap": url_map,
+        }
+    )
 
 
 @app.get("/static/title_block.png")
@@ -460,7 +521,7 @@ def export_pdf(project_id: str):
         abort(404)
 
     pdf_path = DOCS_DIR / f"{project_id}.pdf"
-    url = f"http://127.0.0.1:{_SERVER_PORT}/editor?project={project_id}&print=1"
+    url = f"http://127.0.0.1:{_SERVER_PORT}/app?project={project_id}&print=1"
     ok, detail = export_pdf_via_playwright(url, pdf_path)
     if not ok:
         app.logger.error("Playwright export failed for %s: %s", project_id, detail)
@@ -478,6 +539,40 @@ def export_pdf(project_id: str):
 # Entry point
 # --------------------------------------------------------------------------
 
+def _port_in_use(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex((host, port)) == 0
+
+
+def _print_startup_banner() -> None:
+    dist_index = FRONTEND_DIST_DIR / "index.html"
+    print("=" * 68)
+    print("  Singh360 Draft — Drawing Package Editor")
+    print("=" * 68)
+    print(f"  Singh360 Draft URL : http://127.0.0.1:{_SERVER_PORT}/app")
+    print(f"  Legacy fallback    : http://127.0.0.1:{_SERVER_PORT}/editor")
+    print(f"  PID                : {os.getpid()}")
+    print(f"  Working directory  : {Path.cwd()}")
+    print(f"  server.py path     : {Path(__file__).resolve()}")
+    print(f"  FRONTEND_DIST_DIR  : {FRONTEND_DIST_DIR}")
+    print(f"  dist index exists  : {dist_index.is_file()}")
+    print("  URL map:")
+    for rule in sorted(app.url_map.iter_rules(), key=lambda r: str(r)):
+        methods = ",".join(sorted(m for m in rule.methods if m not in {"HEAD", "OPTIONS"}))
+        print(f"    {str(rule):45s} [{methods}]")
+    print("=" * 68)
+
+
 if __name__ == "__main__":
-    print(f"Singh360 Draft  ->  http://127.0.0.1:{_SERVER_PORT}  (Ctrl+C to stop)")
+    if _port_in_use("127.0.0.1", _SERVER_PORT):
+        print(f"Port {_SERVER_PORT} is already in use.")
+        print("Inspect the listener with this PowerShell command:")
+        print(f"  Get-NetTCPConnection -LocalPort {_SERVER_PORT} -State Listen")
+        print("Start on an alternate port instead:")
+        print("  $env:SINGH360_PORT=8766")
+        print("  python server.py")
+        sys.exit(1)
+
+    _print_startup_banner()
     app.run(host="127.0.0.1", port=_SERVER_PORT, debug=False)

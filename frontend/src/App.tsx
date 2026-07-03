@@ -4,32 +4,41 @@ import type { PageModel, ProjectModel } from './model/types';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
-import DocumentView from './components/DocumentView';
+import DocumentView, { type FitMode } from './components/DocumentView';
 import PropertiesPanel from './components/PropertiesPanel';
 import ExportPanel from './components/ExportPanel';
+import PrintView from './components/PrintView';
 
-function getProjectIdFromUrl() {
-  return new URLSearchParams(window.location.search).get('project');
+function getUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    projectId: params.get('project'),
+    print: params.get('print') === '1',
+  };
 }
 
 export default function App() {
+  const { projectId: initialProjectId, print: printMode } = getUrlParams();
+
   const [project, setProject] = useState<ProjectModel | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [selectedWorksheetId, setSelectedWorksheetId] = useState<string | undefined>(undefined);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [fitMode, setFitMode] = useState<FitMode>('width');
 
+  // Load an existing project when a project id is present in the URL.
   useEffect(() => {
-    const id = getProjectIdFromUrl();
-    if (!id) return;
-    void getProject(id).then((p) => {
+    if (!initialProjectId) return;
+    void getProject(initialProjectId).then((p) => {
       setProject(p);
       setActivePageId(p.pages?.[0]?.id ?? null);
       setSelectedWorksheetId(p.worksheets?.[0]?.id);
     });
-  }, []);
+  }, [initialProjectId]);
 
+  // Autosave (disabled in print mode).
   useEffect(() => {
-    if (!project) return;
+    if (!project || printMode) return;
     const t = setTimeout(async () => {
       try {
         setSaveStatus('saving');
@@ -40,12 +49,17 @@ export default function App() {
       }
     }, 600);
     return () => clearTimeout(t);
-  }, [project]);
+  }, [project, printMode]);
 
   const activePage = useMemo(() => {
     if (!project || !activePageId) return null;
     return project.pages.find((p) => p.id === activePageId) ?? null;
   }, [project, activePageId]);
+
+  // ── PRINT MODE (used by Playwright PDF export at /app?project=<id>&print=1) ──
+  if (printMode) {
+    return <PrintView project={project} />;
+  }
 
   const updatePages = async (pages: PageModel[]) => {
     if (!project) return;
@@ -63,13 +77,46 @@ export default function App() {
     window.history.replaceState({}, '', `?project=${id}`);
   };
 
+  const uploadButton = (
+    <label className="file-btn">
+      <span>Upload Workbook</span>
+      <input
+        title="Upload Workbook"
+        type="file"
+        accept=".xlsx"
+        onChange={(e) => e.target.files?.[0] && void onUploadWorkbook(e.target.files[0])}
+      />
+    </label>
+  );
+
+  const brand = (
+    <div className="toolbar-brand">
+      <span className="brand-main">Singh360 Draft</span>
+      <span className="brand-sub">Drawing Package Editor</span>
+    </div>
+  );
+
+  // ── Empty state (no project loaded yet) ──
   if (!project || !activePage) {
     return (
       <ProjectShell
-        toolbar={<><strong>Singh360 SmartDraw</strong></>}
-        left={<div className="panel-padding"><input title="Upload workbook" type="file" accept=".xlsx" onChange={(e) => e.target.files?.[0] && void onUploadWorkbook(e.target.files[0])} /></div>}
-        center={<div className="panel-intro">Upload SA31 workbook to begin.</div>}
-        right={<div />}
+        toolbar={
+          <>
+            {brand}
+            <div className="toolbar-actions">{uploadButton}</div>
+          </>
+        }
+        left={<div className="panel-section-head">Output Pages</div>}
+        center={
+          <div className="empty-stage">
+            <div className="empty-card">
+              <h2>No workbook loaded</h2>
+              <p>Choose a workbook (.xlsx) to generate output pages and begin editing your drawing package.</p>
+              {uploadButton}
+            </div>
+          </div>
+        }
+        right={<div className="props-group"><h3>Project Properties</h3></div>}
       />
     );
   }
@@ -78,21 +125,25 @@ export default function App() {
     <ProjectShell
       toolbar={
         <>
-          <strong>Singh360 SmartDraw</strong>
-          <input title="Upload workbook" type="file" accept=".xlsx" onChange={(e) => e.target.files?.[0] && void onUploadWorkbook(e.target.files[0])} />
-          <button onClick={() => void saveProject(project)}>Save Now</button>
-          <ExportPanel
-            onExportPdf={async () => {
-              const blob = await exportPdf(project.id);
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `${project.id}.pdf`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-          />
-          <span className="status-pill">{saveStatus}</span>
+          {brand}
+          <div className="toolbar-actions">
+            {uploadButton}
+            <button className="btn" onClick={() => void saveProject(project)}>Save Now</button>
+            <ExportPanel
+              onExportPdf={async () => {
+                const blob = await exportPdf(project.id);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${project.metadata.projectName || project.id}.pdf`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            />
+          </div>
+          <div className="toolbar-right">
+            <span className={`status-pill ${saveStatus}`}>{saveStatus}</span>
+          </div>
         </>
       }
       left={
@@ -106,6 +157,8 @@ export default function App() {
           project={project}
           activePage={activePage}
           worksheets={project.worksheets}
+          fitMode={fitMode}
+          onFitModeChange={setFitMode}
           onGridChange={(wsId, grid) => {
             setProject({
               ...project,
@@ -121,28 +174,35 @@ export default function App() {
         />
       }
       right={
-        <>
-          <div className="meta-grid">
-            <label>Project Name</label>
-            <input
-              title="Project Name"
-              placeholder="Project Name"
-              value={project.metadata.projectName || ''}
-              onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, projectName: e.target.value } })}
-            />
-            <label>Location</label>
-            <input
-              title="Location"
-              placeholder="Location"
-              value={project.metadata.location || ''}
-              onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, location: e.target.value } })}
-            />
+        <div className="props">
+          <div className="props-group">
+            <h3>Project Properties</h3>
+            <div className="field">
+              <label htmlFor="proj-name">Project Name</label>
+              <input
+                id="proj-name"
+                value={project.metadata.projectName || ''}
+                onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, projectName: e.target.value } })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="proj-loc">Location</label>
+              <input
+                id="proj-loc"
+                value={project.metadata.location || ''}
+                onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, location: e.target.value } })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="proj-file">File</label>
+              <input id="proj-file" value={project.metadata.sourceFile || ''} readOnly />
+            </div>
           </div>
           <PropertiesPanel
             page={activePage}
             onChange={(next) => setProject({ ...project, pages: project.pages.map((p) => (p.id === next.id ? next : p)) })}
           />
-        </>
+        </div>
       }
     />
   );
