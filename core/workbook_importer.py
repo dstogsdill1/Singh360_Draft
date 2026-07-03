@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.cell.cell import MergedCell
+from openpyxl.utils.cell import get_column_letter
 
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 
@@ -67,10 +69,14 @@ def _worksheet_payload(ws) -> dict[str, Any]:
         row_vals: list[str] = []
         for c in range(1, max_col + 1):
             cell = ws.cell(r, c)
+            col_letter = get_column_letter(c)
             value = _norm(cell.value)
             row_vals.append(value)
+            if isinstance(cell, MergedCell):
+                # Placeholder cell in a merged range — keep grid value, skip style/formula extraction.
+                continue
             if isinstance(cell.value, str) and cell.value.startswith("="):
-                formulas[f"{cell.column_letter}{r}"] = cell.value
+                formulas[f"{col_letter}{r}"] = cell.value
             if cell.has_style:
                 s = {
                     "bold": bool(getattr(cell.font, "bold", False)),
@@ -79,7 +85,7 @@ def _worksheet_payload(ws) -> dict[str, Any]:
                     "vAlign": getattr(cell.alignment, "vertical", None),
                 }
                 if any(v is not None and v is not False for v in s.values()):
-                    styles[f"{cell.column_letter}{r}"] = s
+                    styles[f"{col_letter}{r}"] = s
         grid.append(row_vals)
 
     while grid and not any(grid[-1]):

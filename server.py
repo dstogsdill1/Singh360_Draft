@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, request, send_file, send_from_directory
+from flask import Flask, abort, jsonify, redirect, request, send_file, send_from_directory
 
 from core.csv_importer import import_csv_to_grid
 from core.export_pdf import export_pdf_via_playwright
@@ -77,22 +77,56 @@ def _err(message: str, detail: str = "") -> dict:
 # Static GUI
 # --------------------------------------------------------------------------
 
+def _frontend_build_instructions_html() -> str:
+        return """
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Singh360 Modular Editor Build Required</title>
+        <style>
+            body { font-family: Arial, Helvetica, sans-serif; margin: 24px; background: #f5f7fa; color: #111; }
+            .box { max-width: 920px; background: #fff; border: 2px solid #111; padding: 16px; }
+            h1 { margin-top: 0; }
+            pre { background: #111; color: #fff; padding: 12px; overflow: auto; }
+            a { color: #0b3d91; }
+        </style>
+    </head>
+    <body>
+        <div class="box">
+            <h1>Modular Editor Build Required</h1>
+            <p>The modular editor build was not found at <code>frontend/dist/index.html</code>.</p>
+            <p>Run these commands in Windows PowerShell:</p>
+            <pre>cd frontend
+npm install
+npm run build
+cd ..
+python server.py</pre>
+            <p>Then open <a href="/app">/app</a>.</p>
+            <p>Legacy fallback editor remains available at <a href="/editor">/editor</a>.</p>
+        </div>
+    </body>
+</html>
+"""
+
+
 @app.get("/")
+def root_index():
+        if (FRONTEND_DIST_DIR / "index.html").is_file():
+                return redirect("/app", code=302)
+        return _frontend_build_instructions_html(), 503
+
+
 @app.get("/editor")
-def index():
-    return send_from_directory(WEB_DIR, "index.html")
+def legacy_editor_index():
+        return send_from_directory(WEB_DIR, "index.html")
 
 
 @app.get("/app")
 def app_modular_index():
     if (FRONTEND_DIST_DIR / "index.html").is_file():
         return send_from_directory(FRONTEND_DIST_DIR, "index.html")
-    return jsonify(
-        _err(
-            "Modular frontend is not built yet.",
-            "Run frontend build and open /app again; legacy editor remains at /editor.",
-        )
-    ), 503
+    return _frontend_build_instructions_html(), 503
 
 
 @app.get("/assets/<path:asset_path>")

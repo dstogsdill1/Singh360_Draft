@@ -761,7 +761,7 @@ async function uploadWorkbook() {
     const err = await res.json();
     console.error('[uploadWorkbook]', err);
     setStatus('Upload failed');
-    alert(err.error || 'Upload failed');
+    alert((err.error || 'Upload failed') + (err.detail ? '\n\n' + err.detail : ''));
     return;
   }
   const data = await res.json();
