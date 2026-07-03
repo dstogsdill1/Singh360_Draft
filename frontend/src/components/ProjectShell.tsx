@@ -1,19 +1,23 @@
 import type { ReactNode } from 'react';
 
 interface Props {
-  toolbar: ReactNode;
+  ribbon: ReactNode;
   left: ReactNode;
   center: ReactNode;
   right: ReactNode;
+  status?: ReactNode;
 }
 
-export default function ProjectShell({ toolbar, left, center, right }: Props) {
+export default function ProjectShell({ ribbon, left, center, right, status }: Props) {
   return (
     <div className="app-shell">
-      <div className="toolbar">{toolbar}</div>
-      <aside className="panel-left">{left}</aside>
-      <main className="panel-center">{center}</main>
-      <aside className="panel-right">{right}</aside>
+      {ribbon}
+      <div className="app-body">
+        <aside className="panel-left">{left}</aside>
+        <section className="editor-center">{center}</section>
+        <aside className="panel-right">{right}</aside>
+      </div>
+      {status ?? <div className="status-bar" />}
     </div>
   );
 }

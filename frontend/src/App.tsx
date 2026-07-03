@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createProjectFromWorkbook, exportPdf, getProject, savePages, saveProject } from './api/client';
 import type { PageModel, ProjectModel } from './model/types';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
-import DocumentView, { type FitMode } from './components/DocumentView';
+import DocumentView, { type FitMode, MAX_SCALE, MIN_SCALE } from './components/DocumentView';
 import PropertiesPanel from './components/PropertiesPanel';
-import ExportPanel from './components/ExportPanel';
 import PrintView from './components/PrintView';
+import Ribbon, { type ViewControls } from './components/Ribbon';
+import CollapsibleSection from './components/CollapsibleSection';
+import StatusBar from './components/StatusBar';
 
 function getUrlParams() {
   const params = new URLSearchParams(window.location.search);
@@ -17,6 +19,8 @@ function getUrlParams() {
   };
 }
 
+const clampScale = (v: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, v));
+
 export default function App() {
   const { projectId: initialProjectId, print: printMode } = getUrlParams();
 
@@ -24,9 +28,14 @@ export default function App() {
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [selectedWorksheetId, setSelectedWorksheetId] = useState<string | undefined>(undefined);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
-  const [fitMode, setFitMode] = useState<FitMode>('width');
 
-  // Load an existing project when a project id is present in the URL.
+  // Viewport view-state (single source of truth for ribbon + viewport toolbar).
+  const [fitMode, setFitMode] = useState<FitMode>('page');
+  const [actualZoom, setActualZoom] = useState(1);
+  const [effectiveScale, setEffectiveScale] = useState(0.5);
+  const [showGrid, setShowGrid] = useState(false);
+  const [snap, setSnap] = useState(false);
+
   useEffect(() => {
     if (!initialProjectId) return;
     void getProject(initialProjectId).then((p) => {
@@ -36,7 +45,6 @@ export default function App() {
     });
   }, [initialProjectId]);
 
-  // Autosave (disabled in print mode).
   useEffect(() => {
     if (!project || printMode) return;
     const t = setTimeout(async () => {
@@ -56,7 +64,31 @@ export default function App() {
     return project.pages.find((p) => p.id === activePageId) ?? null;
   }, [project, activePageId]);
 
-  // ── PRINT MODE (used by Playwright PDF export at /app?project=<id>&print=1) ──
+  const onScaleChange = useCallback((s: number) => setEffectiveScale(s), []);
+
+  const view: ViewControls = {
+    fitMode,
+    showGrid,
+    snap,
+    zoomPct: Math.round(effectiveScale * 100),
+    setFitMode,
+    setActual: () => {
+      setFitMode('actual');
+      setActualZoom(1);
+    },
+    zoomIn: () => {
+      setActualZoom(clampScale(effectiveScale + 0.1));
+      setFitMode('actual');
+    },
+    zoomOut: () => {
+      setActualZoom(clampScale(effectiveScale - 0.1));
+      setFitMode('actual');
+    },
+    toggleGrid: () => setShowGrid((g) => !g),
+    toggleSnap: () => setSnap((s) => !s),
+  };
+
+  // ── PRINT MODE (Playwright PDF export at /app?project=<id>&print=1) ──
   if (printMode) {
     return <PrintView project={project} />;
   }
@@ -77,42 +109,39 @@ export default function App() {
     window.history.replaceState({}, '', `?project=${id}`);
   };
 
-  const uploadButton = (
-    <label className="file-btn">
-      <span>Upload Workbook</span>
-      <input
-        title="Upload Workbook"
-        type="file"
-        accept=".xlsx"
-        onChange={(e) => e.target.files?.[0] && void onUploadWorkbook(e.target.files[0])}
-      />
-    </label>
-  );
+  const onExportPdf = async () => {
+    if (!project) return;
+    const blob = await exportPdf(project.id);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${project.metadata.projectName || project.id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  const brand = (
-    <div className="toolbar-brand">
-      <span className="brand-main">Singh360 Draft</span>
-      <span className="brand-sub">Drawing Package Editor</span>
-    </div>
+  const ribbon = (
+    <Ribbon
+      saveStatus={saveStatus}
+      hasProject={!!project}
+      view={view}
+      onUploadFile={(f) => void onUploadWorkbook(f)}
+      onSaveNow={() => project && void saveProject(project)}
+      onExportPdf={() => void onExportPdf()}
+    />
   );
 
   // ── Empty state (no project loaded yet) ──
   if (!project || !activePage) {
     return (
       <ProjectShell
-        toolbar={
-          <>
-            {brand}
-            <div className="toolbar-actions">{uploadButton}</div>
-          </>
-        }
-        left={<div className="panel-section-head">Output Pages</div>}
+        ribbon={ribbon}
+        left={<div className="nav-section-head">Output Pages</div>}
         center={
           <div className="empty-stage">
             <div className="empty-card">
               <h2>No workbook loaded</h2>
-              <p>Choose a workbook (.xlsx) to generate output pages and begin editing your drawing package.</p>
-              {uploadButton}
+              <p>Choose a workbook (.xlsx) from the File tab to generate output pages and begin editing your drawing package.</p>
             </div>
           </div>
         }
@@ -121,44 +150,31 @@ export default function App() {
     );
   }
 
+  const includedCount = project.pages.filter((p) => p.include).length;
+
   return (
     <ProjectShell
-      toolbar={
-        <>
-          {brand}
-          <div className="toolbar-actions">
-            {uploadButton}
-            <button className="btn" onClick={() => void saveProject(project)}>Save Now</button>
-            <ExportPanel
-              onExportPdf={async () => {
-                const blob = await exportPdf(project.id);
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${project.metadata.projectName || project.id}.pdf`;
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-            />
-          </div>
-          <div className="toolbar-right">
-            <span className={`status-pill ${saveStatus}`}>{saveStatus}</span>
-          </div>
-        </>
-      }
+      ribbon={ribbon}
       left={
         <>
-          <SheetManager pages={project.pages} activePageId={activePageId} onSelect={setActivePageId} onUpdate={(p) => void updatePages(p)} />
-          <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
+          <CollapsibleSection title="Output Pages">
+            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={setActivePageId} onUpdate={(p) => void updatePages(p)} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Source Tabs" defaultOpen={false}>
+            <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
+          </CollapsibleSection>
         </>
       }
       center={
         <DocumentView
           project={project}
+          pages={project.pages}
           activePage={activePage}
           worksheets={project.worksheets}
-          fitMode={fitMode}
-          onFitModeChange={setFitMode}
+          view={view}
+          actualZoom={actualZoom}
+          onSelectPage={setActivePageId}
+          onScaleChange={onScaleChange}
           onGridChange={(wsId, grid) => {
             setProject({
               ...project,
@@ -203,6 +219,15 @@ export default function App() {
             onChange={(next) => setProject({ ...project, pages: project.pages.map((p) => (p.id === next.id ? next : p)) })}
           />
         </div>
+      }
+      status={
+        <StatusBar
+          pageCount={project.pages.length}
+          includedCount={includedCount}
+          worksheetCount={project.worksheets.length}
+          activeLabel={`${activePage.sheetCode} ${activePage.sheetTitle}`}
+          zoomPct={Math.round(effectiveScale * 100)}
+        />
       }
     />
   );
