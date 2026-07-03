@@ -10,6 +10,7 @@ interface Props {
   activeTool: string;
   snap: boolean;
   overlayMode: boolean;
+  exporting?: boolean;
   onToolConsumed: () => void;
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
@@ -26,6 +27,7 @@ export default function PageRenderer({
   activeTool,
   snap,
   overlayMode,
+  exporting,
   onToolConsumed,
   onRegisterApi,
   onSelectionChange,
@@ -53,6 +55,7 @@ export default function PageRenderer({
       activeTool={activeTool}
       snap={snap}
       overlayMode={overlayMode}
+      exporting={exporting}
       onToolConsumed={onToolConsumed}
       onRegisterApi={onRegisterApi}
       onSelectionChange={onSelectionChange}

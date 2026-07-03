@@ -22,6 +22,7 @@ import PrintView from './components/PrintView';
 import Ribbon, { type ViewControls } from './components/Ribbon';
 import RenumberModal from './components/RenumberModal';
 import SheetContextMenu from './components/SheetContextMenu';
+import ExportModal from './components/ExportModal';
 import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 
@@ -82,6 +83,7 @@ export default function App() {
   const [overlayMode, setOverlayMode] = useState(false);
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [renumberOpen, setRenumberOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; pageId: string } | null>(null);
   const canvasApiRef = useRef<CanvasApi | null>(null);
@@ -478,9 +480,10 @@ export default function App() {
     }
   };
 
-  const onExportPdf = async () => {
+  const onExportPdfSized = async (width: number, height: number) => {
     if (!project) return;
-    const blob = await exportPdf(project.id);
+    setExportOpen(false);
+    const blob = await exportPdf(project.id, { width, height });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -581,8 +584,9 @@ export default function App() {
       }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
       onUploadCsv={(f) => void onUploadCsv(f)}
+      onInsertImage={(f) => void onDropImageFile(f)}
       onSaveNow={() => project && void saveProject(project)}
-      onExportPdf={() => void onExportPdf()}
+      onExportPdf={() => setExportOpen(true)}
       onExportPackage={() => void onExportPackage()}
       onRenumber={onRenumber}
     />
@@ -716,6 +720,9 @@ export default function App() {
     />
     {renumberOpen && (
       <RenumberModal pages={project.pages} onApply={applyRenumber} onCancel={() => setRenumberOpen(false)} />
+    )}
+    {exportOpen && (
+      <ExportModal onExport={(w, h) => void onExportPdfSized(w, h)} onCancel={() => setExportOpen(false)} />
     )}
     {ctxMenu && (
       <SheetContextMenu

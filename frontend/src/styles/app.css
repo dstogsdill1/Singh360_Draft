@@ -407,14 +407,17 @@ button, select, input, textarea { font: inherit; }
 /* ── PRINT MODE — used by /app?print=1 ── */
 .print-root { background: #fff; }
 .print-page {
-  width: 1632px;
-  height: 1056px;
   margin: 0 auto;
   page-break-after: always;
   break-after: page;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
 }
 .print-page:last-child { page-break-after: auto; break-after: auto; }
+.print-sheet-fit { transform-origin: center center; flex: none; }
 
 @media print {
   html, body { height: auto; overflow: visible; }
@@ -502,3 +505,10 @@ button, select, input, textarea { font: inherit; }
 .lib-btn:disabled { opacity: 0.5; cursor: default; }
 .lib-btn.danger { color: var(--bad); border-color: #e2b6b6; }
 .lib-btn.danger:hover { background: #fbeaea; }
+
+/* -- COMPONENT LIBRARY: edit + retired -- */
+.lib-showretired { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ink-soft); padding: 0 8px 6px; }
+.lib-card.retired { opacity: 0.6; }
+.lib-edit { grid-column: 2; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lib-edit-name { font-size: 12px; padding: 2px 4px; border: 1px solid var(--accent); border-radius: 3px; }
+.lib-edit-cat { font-size: 11px; padding: 2px 4px; border: 1px solid var(--panel-line); border-radius: 3px; }

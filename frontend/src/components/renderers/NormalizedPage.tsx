@@ -13,6 +13,7 @@ interface Props {
   activeTool: string;
   snap: boolean;
   overlayMode: boolean;
+  exporting?: boolean;
   onToolConsumed: () => void;
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
@@ -35,6 +36,7 @@ export default function NormalizedPage({
   activeTool,
   snap,
   overlayMode,
+  exporting,
   onToolConsumed,
   onRegisterApi,
   onSelectionChange,
@@ -44,19 +46,31 @@ export default function NormalizedPage({
   const blocks = page.blocks ?? [];
   const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
   const overlayInteractive = overlayMode || activeTool !== 'select';
+  const hasOverlay = (page.canvasObjects?.length ?? 0) > 0;
 
   const base = (() => {
     if (isImageType) {
       const imgBlocks = blocks.filter((b) => b.type === 'imagePlaceholder' || b.type === 'underlayPlaceholder');
+      if (imgBlocks.length) {
+        return (
+          <div className="np np-image-base">
+            {imgBlocks.map((b) => <ImagePlaceholderRenderer key={b.id} block={b} />)}
+          </div>
+        );
+      }
+      // No base image block. If an overlay image/PDF is present, or we're
+      // exporting, render nothing (the overlay shows through, no placeholder).
+      if (exporting || hasOverlay) {
+        return <div className="np np-image-base" />;
+      }
+      // Editor-only drop zone hint (never exported).
       return (
         <div className="np np-image-base">
-          {imgBlocks.length ? (
-            imgBlocks.map((b) => <ImagePlaceholderRenderer key={b.id} block={b} />)
-          ) : (
-            <div className="np-canvas-hint">
-              Image / Layout page — paste a screenshot (Ctrl+V), drag an image here, or use the Insert tab.
-            </div>
-          )}
+          <div className="np-dropzone" data-noexport="1">
+            <div className="np-dropzone-icon">▧</div>
+            <div className="np-dropzone-text">Drop image, PDF, or screenshot here</div>
+            <div className="np-dropzone-sub">or use Insert ▸ Image, paste (Ctrl+V), or drag a Component</div>
+          </div>
         </div>
       );
     }

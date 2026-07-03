@@ -38,8 +38,12 @@ export async function savePages(projectId: string, pages: PageModel[]): Promise<
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function exportPdf(projectId: string): Promise<Blob> {
-  const res = await fetch(`/api/projects/${projectId}/export/pdf`, { method: 'POST' });
+export async function exportPdf(projectId: string, paper?: { width: number; height: number }): Promise<Blob> {
+  const res = await fetch(`/api/projects/${projectId}/export/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(paper ?? {}),
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.blob();
 }
@@ -137,6 +141,21 @@ export async function importLibrarySeed(): Promise<{ ok: boolean; componentCount
 export async function retireLibraryComponent(id: string): Promise<void> {
   const res = await fetch(`/api/library/components/${id}/retire`, { method: 'POST' });
   if (!res.ok) throw new Error(await res.text());
+}
+
+export async function restoreLibraryComponent(id: string): Promise<void> {
+  const res = await fetch(`/api/library/components/${id}/restore`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function updateLibraryComponent(id: string, patch: Partial<LibraryComponent>): Promise<LibraryComponent> {
+  const res = await fetch(`/api/library/components/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()).component;
 }
 
 export async function deleteLibraryComponent(id: string): Promise<void> {

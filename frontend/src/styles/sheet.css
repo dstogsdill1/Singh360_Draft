@@ -178,3 +178,22 @@
   background: #fffef2;
 }
 
+
+/* -- IMAGE / LAYOUT DROP ZONE (editor-only; never exported) -- */
+.np-dropzone {
+  height: 100%;
+  min-height: 480px;
+  margin: 24px;
+  border: 3px dashed #c2ccd6;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #8894a0;
+  background: repeating-linear-gradient(45deg, #fafbfc, #fafbfc 12px, #f3f5f8 12px, #f3f5f8 24px);
+}
+.np-dropzone-icon { font-size: 46px; color: #b3bdc7; }
+.np-dropzone-text { font-size: 17px; font-weight: 600; color: #6b7682; }
+.np-dropzone-sub { font-size: 12px; color: #97a1ab; }

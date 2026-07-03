@@ -105,6 +105,32 @@ class LibraryStore:
             self.save(data)
         return found
 
+    def restore_component(self, comp_id: str) -> bool:
+        data = self.load()
+        found = False
+        for c in data.get("components", []):
+            if c.get("id") == comp_id:
+                c["status"] = "approved"
+                found = True
+                break
+        if found:
+            self.save(data)
+        return found
+
+    ALLOWED_FIELDS = {"displayName", "shortName", "category", "partNumber", "aliases", "tags", "notes",
+                      "defaultLabel", "labelPosition", "labelLinked", "status"}
+
+    def update_component(self, comp_id: str, patch: dict) -> dict | None:
+        data = self.load()
+        for c in data.get("components", []):
+            if c.get("id") == comp_id:
+                for k, v in patch.items():
+                    if k in self.ALLOWED_FIELDS:
+                        c[k] = v
+                self.save(data)
+                return c
+        return None
+
     def delete_component(self, comp_id: str) -> bool:
         """Remove a component entry from the index. Does NOT delete assets on disk."""
         data = self.load()

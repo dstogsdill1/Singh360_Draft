@@ -605,6 +605,28 @@ def retire_library_component(comp_id: str):
     return jsonify({"ok": True, "id": comp_id, "status": "retired"})
 
 
+@app.post("/api/library/components/<comp_id>/restore")
+def restore_library_component(comp_id: str):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", comp_id):
+        abort(404)
+    if not library.restore_component(comp_id):
+        return jsonify(_err("Component not found.")), 404
+    return jsonify({"ok": True, "id": comp_id, "status": "approved"})
+
+
+@app.patch("/api/library/components/<comp_id>")
+def patch_library_component(comp_id: str):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", comp_id):
+        abort(404)
+    patch = request.get_json(silent=True) or {}
+    if not isinstance(patch, dict):
+        return jsonify(_err("Body must be a JSON object.")), 400
+    updated = library.update_component(comp_id, patch)
+    if updated is None:
+        return jsonify(_err("Component not found.")), 404
+    return jsonify({"ok": True, "component": updated})
+
+
 @app.delete("/api/library/components/<comp_id>")
 def delete_library_component(comp_id: str):
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", comp_id):
@@ -709,9 +731,19 @@ def export_pdf(project_id: str):
     if doc is None:
         abort(404)
 
+    body = request.get_json(silent=True) or {}
+    try:
+        width_in = float(body.get("width", 17.0))
+        height_in = float(body.get("height", 11.0))
+    except (TypeError, ValueError):
+        width_in, height_in = 17.0, 11.0
+    # Clamp to sane paper bounds (inches).
+    width_in = max(3.0, min(60.0, width_in))
+    height_in = max(3.0, min(60.0, height_in))
+
     pdf_path = store.exports_pdf_dir(project_id, doc) / f"{project_id}.pdf"
-    url = f"http://127.0.0.1:{_SERVER_PORT}/app?project={project_id}&print=1"
-    ok, detail = export_pdf_via_playwright(url, pdf_path)
+    url = f"http://127.0.0.1:{_SERVER_PORT}/app?project={project_id}&print=1&pw={width_in}&ph={height_in}"
+    ok, detail = export_pdf_via_playwright(url, pdf_path, width_in=width_in, height_in=height_in)
     if not ok:
         app.logger.error("Playwright export failed for %s: %s", project_id, detail)
         return jsonify(_err("PDF export failed.", detail)), 500

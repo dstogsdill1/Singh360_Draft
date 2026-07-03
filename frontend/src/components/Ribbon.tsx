@@ -45,6 +45,7 @@ interface Props {
   };
   onUploadFile: (file: File) => void;
   onUploadCsv: (file: File) => void;
+  onInsertImage: (file: File) => void;
   onSaveNow: () => void;
   onExportPdf: () => void;
   onExportPackage: () => void;
@@ -83,6 +84,7 @@ export default function Ribbon({
   canvas,
   onUploadFile,
   onUploadCsv,
+  onInsertImage,
   onSaveNow,
   onExportPdf,
   onExportPackage,
@@ -185,6 +187,16 @@ export default function Ribbon({
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.addArrow} title="Add an arrow to the overlay">Arrow</button>
             </Group>
             <Group title="Objects">
+              <label className={`ribbon-btn file-ribbon-btn ${cx ? '' : 'disabled'}`} title="Insert an image (PNG/JPG/WEBP/SVG) on the active page at full resolution">
+                Image
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  title="Insert Image"
+                  disabled={!cx}
+                  onChange={(e) => { if (e.target.files?.[0]) { onInsertImage(e.target.files[0]); e.currentTarget.value = ''; } }}
+                />
+              </label>
               <PlaceholderBtn label="Callout" />
               <PlaceholderBtn label="Table" />
             </Group>

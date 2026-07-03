@@ -5,6 +5,8 @@ import {
   libraryAssetUrl,
   deleteLibraryComponent,
   retireLibraryComponent,
+  restoreLibraryComponent,
+  updateLibraryComponent,
   type LibraryComponent,
   type LibraryData,
 } from '../api/client';
@@ -16,11 +18,21 @@ interface Props {
 
 export const COMPONENT_DRAG_TYPE = 'application/x-singh360-component';
 
+// Canonical categories the user can recategorize into.
+const CANON_CATS = [
+  'controller', 'electrical', 'network', 'panel', 'sensor', 'alarm', 'hvac',
+  'refrigeration', 'equipment', 'logo', 'legend', 'symbol', 'reference-page', 'uncategorized',
+];
+
 export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const [data, setData] = useState<LibraryData | null>(null);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
+  const [showRetired, setShowRetired] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editCat, setEditCat] = useState('');
   const [error, setError] = useState('');
 
   const refresh = async () => {
@@ -46,11 +58,17 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   };
 
   const components = data?.components ?? [];
+  const isRetired = (c: LibraryComponent) => (c.status || '').startsWith('retired');
+  const isReference = (c: LibraryComponent) => (c.category || '').toLowerCase() === 'reference-page';
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return components.filter((c) => {
-      if ((c.status || '').startsWith('retired')) return false;
-      if (category !== 'all' && (c.category || 'uncategorized').toLowerCase() !== category) return false;
+      if (isRetired(c) && !showRetired) return false;
+      const cat = (c.category || 'uncategorized').toLowerCase();
+      // Reference pages are hidden from the default "all" view (Phase A).
+      if (category === 'all' && cat === 'reference-page') return false;
+      if (category !== 'all' && cat !== category) return false;
       if (!q) return true;
       const hay = [c.displayName, c.shortName, c.partNumber, c.category, ...(c.aliases ?? []), ...(c.tags ?? [])]
         .filter(Boolean)
@@ -58,11 +76,26 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [components, query, category]);
+  }, [components, query, category, showRetired]);
 
   const insert = (c: LibraryComponent) => {
     if (!c.assetPath) return;
     onInsert(c.displayName, libraryAssetUrl(c.assetPath));
+  };
+
+  const beginEdit = (c: LibraryComponent) => {
+    setEditId(c.id);
+    setEditName(c.displayName);
+    setEditCat((c.category || 'uncategorized').toLowerCase());
+  };
+  const saveEdit = async (c: LibraryComponent) => {
+    try {
+      await updateLibraryComponent(c.id, { displayName: editName.trim() || c.displayName, category: editCat });
+      setEditId(null);
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    }
   };
 
   const removeItem = async (c: LibraryComponent) => {
@@ -81,6 +114,14 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const retireItem = async (c: LibraryComponent) => {
     try {
       await retireLibraryComponent(c.id);
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+  const restoreItem = async (c: LibraryComponent) => {
+    try {
+      await restoreLibraryComponent(c.id);
       await refresh();
     } catch (e) {
       setError(String(e));
@@ -115,19 +156,22 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
           aria-label="Search components"
         />
         <select className="lib-cat" value={category} onChange={(e) => setCategory(e.target.value)} title="Filter by category">
-          <option value="all">All categories ({components.length})</option>
+          <option value="all">All ({visible.length})</option>
           {cats.map((c) => (
             <option key={c.id} value={c.id}>{c.id} ({c.count})</option>
           ))}
         </select>
       </div>
+      <label className="lib-showretired" title="Show retired components">
+        <input type="checkbox" checked={showRetired} onChange={(e) => setShowRetired(e.target.checked)} /> Show retired
+      </label>
 
       <div className="lib-grid">
         {visible.map((c) => (
           <div
             key={c.id}
-            className="lib-card"
-            draggable={canInsert}
+            className={`lib-card ${isRetired(c) ? 'retired' : ''}`}
+            draggable={canInsert && editId !== c.id}
             onDragStart={(e) => {
               if (!c.assetPath) return;
               e.dataTransfer.setData(
@@ -136,8 +180,8 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
               );
               e.dataTransfer.effectAllowed = 'copy';
             }}
-            onDoubleClick={() => canInsert && insert(c)}
-            title={`${c.displayName}${c.partNumber ? ` · ${c.partNumber}` : ''}`}
+            onDoubleClick={() => canInsert && editId !== c.id && insert(c)}
+            title={`${c.displayName}${c.partNumber ? ` · ${c.partNumber}` : ''}${isReference(c) ? ' · reference page' : ''}`}
           >
             <div className="lib-thumb">
               {c.thumbnailPath ? (
@@ -146,15 +190,41 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
                 <span className="lib-thumb-ph">▨</span>
               )}
             </div>
-            <div className="lib-meta">
-              <div className="lib-name">{c.shortName || c.displayName}</div>
-              <div className="lib-sub">{c.partNumber || c.category}</div>
-            </div>
-            <div className="lib-actions">
-              <button className="lib-btn" disabled={!canInsert} onClick={() => insert(c)} title="Insert on active page">Insert</button>
-              <button className="lib-btn" onClick={() => void retireItem(c)} title="Retire (hide from search, keep in old projects)">Retire</button>
-              <button className="lib-btn danger" onClick={() => void removeItem(c)} title="Delete this library item (with confirmation)">✕</button>
-            </div>
+            {editId === c.id ? (
+              <div className="lib-edit">
+                <input
+                  className="lib-edit-name"
+                  value={editName}
+                  aria-label="Display name"
+                  placeholder="Display name"
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+                <select className="lib-edit-cat" value={editCat} onChange={(e) => setEditCat(e.target.value)} title="Category">
+                  {CANON_CATS.map((k) => <option key={k} value={k}>{k}</option>)}
+                </select>
+                <div className="lib-actions">
+                  <button className="lib-btn" onClick={() => void saveEdit(c)}>Save</button>
+                  <button className="lib-btn" onClick={() => setEditId(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="lib-meta">
+                  <div className="lib-name">{c.shortName || c.displayName}</div>
+                  <div className="lib-sub">{c.partNumber || c.category}{isRetired(c) ? ' · retired' : ''}</div>
+                </div>
+                <div className="lib-actions">
+                  <button className="lib-btn" disabled={!canInsert} onClick={() => insert(c)} title="Insert on active page">Insert</button>
+                  <button className="lib-btn" onClick={() => beginEdit(c)} title="Rename / recategorize">✎</button>
+                  {isRetired(c) ? (
+                    <button className="lib-btn" onClick={() => void restoreItem(c)} title="Restore this retired component">Restore</button>
+                  ) : (
+                    <button className="lib-btn" onClick={() => void retireItem(c)} title="Retire (hide from search, keep in old projects)">Retire</button>
+                  )}
+                  <button className="lib-btn danger" onClick={() => void removeItem(c)} title="Delete this library item (with confirmation)">✕</button>
+                </div>
+              </>
+            )}
           </div>
         ))}
         {!visible.length && <div className="lib-empty">No matches.</div>}
