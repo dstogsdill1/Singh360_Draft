@@ -114,6 +114,11 @@ export interface CanvasSelection {
   strokeWidth: number;
   opacity?: number;
   fontSize?: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  textAlign?: string;
+  isText?: boolean;
   x?: number;
   y?: number;
   width?: number;
@@ -129,6 +134,7 @@ export interface CanvasApi {
   addLine: () => void;
   addArrow: () => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
+  addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addPageTitle: (text: string) => void;
   addSectionHeader: (text: string) => void;
   addNote: (text: string) => void;

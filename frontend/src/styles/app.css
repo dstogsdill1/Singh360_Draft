@@ -512,3 +512,10 @@ button, select, input, textarea { font: inherit; }
 .lib-edit { grid-column: 2; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .lib-edit-name { font-size: 12px; padding: 2px 4px; border: 1px solid var(--accent); border-radius: 3px; }
 .lib-edit-cat { font-size: 11px; padding: 2px 4px; border: 1px solid var(--panel-line); border-radius: 3px; }
+
+/* -- RIBBON TEXT TOOLS -- */
+.ribbon-size { display: inline-flex; align-items: center; min-width: 24px; justify-content: center; font-size: 12px; color: #dfe3e8; padding: 0 4px; }
+.ribbon-color { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #c6ccd3; cursor: pointer; }
+.ribbon-color input[type="color"] { width: 22px; height: 20px; border: none; background: none; padding: 0; cursor: pointer; }
+
+.lib-toolbar { padding: 0 8px 6px; display: flex; gap: 6px; }

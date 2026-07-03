@@ -47,7 +47,7 @@ interface Props {
   onRenamePageTitle: (id: string, title: string) => void;
   onPageContextMenu: (id: string, x: number, y: number) => void;
   onDropImageFile: (file: File) => void;
-  onDropComponent: (url: string, name: string, clientX: number, clientY: number) => void;
+  onDropComponent: (url: string, name: string, label: string | null, clientX: number, clientY: number) => void;
   onScaleChange: (scale: number) => void;
   onGridChange: (worksheetId: string, grid: string[][]) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
@@ -102,7 +102,13 @@ export default function DocumentView({
     compute();
     const ro = new ResizeObserver(compute);
     ro.observe(el);
-    return () => ro.disconnect();
+    // Backup: also recompute on window resize (covers panel collapse/expand
+    // and window changes so the sheet never drifts out of frame).
+    window.addEventListener('resize', compute);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', compute);
+    };
   }, [view.fitMode]);
 
   const scale = view.fitMode === 'actual' ? clampScale(actualZoom) : fitScale;
@@ -137,8 +143,8 @@ export default function DocumentView({
           if (payload) {
             e.preventDefault();
             try {
-              const { url, name } = JSON.parse(payload) as { url: string; name: string };
-              onDropComponent(url, name, e.clientX, e.clientY);
+              const { url, name, label } = JSON.parse(payload) as { url: string; name: string; label: string | null };
+              onDropComponent(url, name, label ?? null, e.clientX, e.clientY);
             } catch {
               /* ignore malformed payload */
             }

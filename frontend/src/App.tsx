@@ -160,16 +160,16 @@ export default function App() {
   };
 
   // Insert a library component (image asset) onto the ACTIVE page only.
-  const onInsertComponent = (name: string, url: string) => {
+  const onInsertComponent = (name: string, url: string, label: string | null) => {
     if (!isCanvasContext()) return;
     setOverlayMode(true);
-    canvasApiRef.current?.addImage(url, name);
+    canvasApiRef.current?.addComponent(url, name, label);
   };
 
-  const onDropComponent = (url: string, name: string, clientX: number, clientY: number) => {
+  const onDropComponent = (url: string, name: string, label: string | null, clientX: number, clientY: number) => {
     if (!isCanvasContext()) return;
     setOverlayMode(true);
-    canvasApiRef.current?.addImage(url, name, { clientX, clientY });
+    canvasApiRef.current?.addComponent(url, name, label, { clientX, clientY });
   };
 
   // Explicit "Paste Image" via the app context menu. Uses the async Clipboard
@@ -589,6 +589,8 @@ export default function App() {
       onExportPdf={() => setExportOpen(true)}
       onExportPackage={() => void onExportPackage()}
       onRenumber={onRenumber}
+      selection={selection}
+      onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
     />
   );
 

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { FitMode } from './DocumentView';
+import type { CanvasSelection } from '../model/types';
 
 export interface ViewControls {
   fitMode: FitMode;
@@ -50,10 +51,12 @@ interface Props {
   onExportPdf: () => void;
   onExportPackage: () => void;
   onRenumber: () => void;
+  selection: CanvasSelection | null;
+  onUpdateSelection: (patch: Partial<CanvasSelection>) => void;
 }
 
-type RibbonTab = 'File' | 'Home' | 'Insert' | 'Draw' | 'Arrange' | 'View' | 'Export';
-const TABS: RibbonTab[] = ['File', 'Home', 'Insert', 'Draw', 'Arrange', 'View', 'Export'];
+type RibbonTab = 'File' | 'Home' | 'Insert' | 'Draw' | 'Text' | 'Arrange' | 'View' | 'Export';
+const TABS: RibbonTab[] = ['File', 'Home', 'Insert', 'Draw', 'Text', 'Arrange', 'View', 'Export'];
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -89,6 +92,8 @@ export default function Ribbon({
   onExportPdf,
   onExportPackage,
   onRenumber,
+  selection,
+  onUpdateSelection,
 }: Props) {
   const [tab, setTab] = useState<RibbonTab>('File');
   const cx = canvasEnabled;
@@ -207,6 +212,38 @@ export default function Ribbon({
             </Group>
           </>
         )}
+
+        {tab === 'Text' && (() => {
+          const t = selection?.isText ?? false;
+          const fs = selection?.fontSize ?? 20;
+          const col = typeof selection?.fill === 'string' && selection.fill.startsWith('#') ? selection.fill : '#111111';
+          return (
+            <>
+              <Group title="Font">
+                <button className={`ribbon-btn ${selection?.bold ? 'active' : ''}`} disabled={!t} onClick={() => onUpdateSelection({ bold: !selection?.bold })} title="Bold"><b>B</b></button>
+                <button className={`ribbon-btn ${selection?.italic ? 'active' : ''}`} disabled={!t} onClick={() => onUpdateSelection({ italic: !selection?.italic })} title="Italic"><i>I</i></button>
+                <button className={`ribbon-btn ${selection?.underline ? 'active' : ''}`} disabled={!t} onClick={() => onUpdateSelection({ underline: !selection?.underline })} title="Underline"><u>U</u></button>
+              </Group>
+              <Group title="Size">
+                <button className="ribbon-btn" disabled={!t} onClick={() => onUpdateSelection({ fontSize: Math.max(6, fs - 2) })} title="Decrease font size">A−</button>
+                <span className="ribbon-size">{t ? fs : '—'}</span>
+                <button className="ribbon-btn" disabled={!t} onClick={() => onUpdateSelection({ fontSize: fs + 2 })} title="Increase font size">A+</button>
+              </Group>
+              <Group title="Align">
+                <button className={`ribbon-btn ${selection?.textAlign === 'left' ? 'active' : ''}`} disabled={!t} onClick={() => onUpdateSelection({ textAlign: 'left' })} title="Align left">L</button>
+                <button className={`ribbon-btn ${selection?.textAlign === 'center' ? 'active' : ''}`} disabled={!t} onClick={() => onUpdateSelection({ textAlign: 'center' })} title="Align center">C</button>
+                <button className={`ribbon-btn ${selection?.textAlign === 'right' ? 'active' : ''}`} disabled={!t} onClick={() => onUpdateSelection({ textAlign: 'right' })} title="Align right">R</button>
+              </Group>
+              <Group title="Color">
+                <label className="ribbon-color" title="Text color">
+                  <input type="color" disabled={!t} value={col} onChange={(e) => onUpdateSelection({ fill: e.target.value })} />
+                  Color
+                </label>
+                <button className="ribbon-btn" disabled={!t} onClick={() => onUpdateSelection({ bold: false, italic: false, underline: false })} title="Clear formatting">Clear</button>
+              </Group>
+            </>
+          );
+        })()}
 
         {tab === 'Arrange' && (
           <>

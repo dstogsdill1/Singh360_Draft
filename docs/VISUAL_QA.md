@@ -90,3 +90,20 @@ python server.py
 - Asset Manager list with rename-file / insert-on-page / delete (Phase N): folder paths are shown; full list UI is "Coming soon".
 - Right-click context menu paste: use Ctrl+V (browser clipboard-image limitation).
 - Align / distribute buttons (Arrange tab): "Coming soon".
+
+## Milestone 3B punch list — editor polish
+
+- [ ] Export ? paper size modal: 11×17 default, Letter, ANSI B–E, Arch B–E, Custom + orientation; title block not clipped.
+- [ ] Insert ? Image: pick a PNG/JPG (e.g. H-E-B logo) on the cover; full-res, resizable; drag to center (snap guide appears).
+- [ ] Snap guides: drag an object near page center ? pink center guide appears and snaps; align two objects ? guide appears.
+- [ ] Component Library: "Auto-categorize" button re-buckets by part name; ? edit renames/recategorizes and persists; "Show retired" + Restore; "Insert with label" adds an editable label for equipment (off for logos/symbols).
+- [ ] Drag a component onto a page ? image + label land on the ACTIVE page only; switch pages ? it does not leak.
+- [ ] Text tab: select a text box ? Bold / Italic / Underline / A- A+ / Align L·C·R / Color all work; save/reload/export.
+- [ ] Image/Layout empty page shows a drop zone in the editor but exports with NO placeholder text.
+- [ ] Toggle both side panels ? sheet stays in frame, Fit Page recomputes.
+
+### Known deferred (3B)
+- Insert ? PDF page render (needs PyMuPDF/PDF.js) — not implemented; use Insert ? Image of a schematic crop for now.
+- Continuation auto-fit/recompose — merge / make-independent exist; automatic shrink-to-fit does not.
+- Component label is a separate object (not grouped/linked) — editable/removable independently.
+- Auto-categorize cannot fix wrong extraction NAMES (e.g. a contactor named "PR0650"); rename via ?.

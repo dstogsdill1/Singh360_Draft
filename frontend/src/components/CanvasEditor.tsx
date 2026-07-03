@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Canvas, Rect, Circle, Textbox, Group, ActiveSelection, FabricImage, type FabricObject } from 'fabric';
+import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, type FabricObject } from 'fabric';
 import type { CanvasApi, CanvasSelection } from '../model/types';
 import { Connector } from './connector';
 
@@ -20,6 +20,7 @@ const SNAP = 16;
 
 function summarize(obj: FabricObject): CanvasSelection {
   const anyObj = obj as unknown as Record<string, unknown>;
+  const isText = obj.type === 'textbox' || obj.type === 'text' || 'fontSize' in obj;
   return {
     type: (obj.type as string) || 'object',
     name: typeof anyObj.objName === 'string' ? (anyObj.objName as string) : undefined,
@@ -28,6 +29,11 @@ function summarize(obj: FabricObject): CanvasSelection {
     strokeWidth: (anyObj.strokeWidth as number) ?? 1,
     opacity: typeof anyObj.opacity === 'number' ? (anyObj.opacity as number) : 1,
     fontSize: typeof anyObj.fontSize === 'number' ? (anyObj.fontSize as number) : undefined,
+    bold: anyObj.fontWeight === 'bold' || anyObj.fontWeight === 700,
+    italic: anyObj.fontStyle === 'italic',
+    underline: anyObj.underline === true,
+    textAlign: typeof anyObj.textAlign === 'string' ? (anyObj.textAlign as string) : undefined,
+    isText,
     x: Math.round(obj.left ?? 0),
     y: Math.round(obj.top ?? 0),
     width: Math.round((obj.width ?? 0) * (obj.scaleX ?? 1)),
@@ -108,6 +114,8 @@ export default function CanvasEditor({
   const restoringRef = useRef(false);
   // Connector currently being drawn via drag-to-create.
   const creatingRef = useRef<Connector | null>(null);
+  // Transient alignment guide lines (never serialized/exported).
+  const guidesRef = useRef<FabricObject[]>([]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -135,6 +143,8 @@ export default function CanvasEditor({
       persist();
       pushHistory();
     };
+    const isGuideObj = (o: FabricObject | undefined | null) =>
+      !!o && (o as unknown as Record<string, unknown>).excludeFromExport === true;
 
     if (serialized.length) {
       void canvas.loadFromJSON({ version: '6', objects: serialized }).then(() => {
@@ -148,8 +158,8 @@ export default function CanvasEditor({
     }
 
     canvas.on('object:modified', onChanged);
-    canvas.on('object:added', onChanged);
-    canvas.on('object:removed', onChanged);
+    canvas.on('object:added', (e) => { if (isGuideObj(e?.target)) return; onChanged(); });
+    canvas.on('object:removed', (e) => { if (isGuideObj(e?.target)) return; onChanged(); });
     canvas.on('selection:created', () => {
       const o = canvas.getActiveObject();
       if (o) onSelRef.current(summarize(o));
@@ -159,24 +169,76 @@ export default function CanvasEditor({
       if (o) onSelRef.current(summarize(o));
     });
     canvas.on('selection:cleared', () => onSelRef.current(null));
+
+    const clearGuides = () => {
+      if (!guidesRef.current.length) return;
+      guidesRef.current.forEach((g) => canvas.remove(g));
+      guidesRef.current = [];
+    };
+    const addVGuide = (x: number) => {
+      const ln = new Line([x, 0, x, CANVAS_H], { stroke: '#e5006d', strokeWidth: 1, selectable: false, evented: false });
+      (ln as unknown as Record<string, unknown>).excludeFromExport = true;
+      guidesRef.current.push(ln);
+      canvas.add(ln);
+    };
+    const addHGuide = (y: number) => {
+      const ln = new Line([0, y, CANVAS_W, y], { stroke: '#e5006d', strokeWidth: 1, selectable: false, evented: false });
+      (ln as unknown as Record<string, unknown>).excludeFromExport = true;
+      guidesRef.current.push(ln);
+      canvas.add(ln);
+    };
+
     canvas.on('object:moving', (e) => {
       const t = e.target;
       if (!t) return;
-      // Center snap: snap object center to the canvas centre when close.
-      const cx = (t.left ?? 0) + ((t.width ?? 0) * (t.scaleX ?? 1)) / 2;
-      const cy = (t.top ?? 0) + ((t.height ?? 0) * (t.scaleY ?? 1)) / 2;
-      const midX = CANVAS_W / 2;
-      const midY = CANVAS_H / 2;
-      if (Math.abs(cx - midX) < 8) t.set({ left: midX - ((t.width ?? 0) * (t.scaleX ?? 1)) / 2 });
-      if (Math.abs(cy - midY) < 8) t.set({ top: midY - ((t.height ?? 0) * (t.scaleY ?? 1)) / 2 });
-      // Grid snap (when Snap is on).
-      if (snapRef.current) {
+      clearGuides();
+      const w = (t.width ?? 0) * (t.scaleX ?? 1);
+      const h = (t.height ?? 0) * (t.scaleY ?? 1);
+      const cx = (t.left ?? 0) + w / 2;
+      const cy = (t.top ?? 0) + h / 2;
+      const TH = 8;
+
+      // Candidate X/Y alignment lines: page center + other objects' centers/edges.
+      const xs: number[] = [CANVAS_W / 2];
+      const ys: number[] = [CANVAS_H / 2];
+      canvas.getObjects().forEach((o) => {
+        if (o === t || guidesRef.current.includes(o)) return;
+        const ow = (o.width ?? 0) * (o.scaleX ?? 1);
+        const oh = (o.height ?? 0) * (o.scaleY ?? 1);
+        const ol = o.left ?? 0;
+        const ot = o.top ?? 0;
+        xs.push(ol + ow / 2, ol, ol + ow);
+        ys.push(ot + oh / 2, ot, ot + oh);
+      });
+
+      // Snap X: align this object's center to the closest candidate.
+      let bestX: number | null = null;
+      for (const x of xs) {
+        if (Math.abs(cx - x) < TH) { bestX = x; break; }
+      }
+      if (bestX !== null) {
+        t.set({ left: bestX - w / 2 });
+        addVGuide(bestX);
+      }
+      let bestY: number | null = null;
+      for (const y of ys) {
+        if (Math.abs(cy - y) < TH) { bestY = y; break; }
+      }
+      if (bestY !== null) {
+        t.set({ top: bestY - h / 2 });
+        addHGuide(bestY);
+      }
+
+      // Grid snap (when Snap is on) — applied after alignment snap.
+      if (snapRef.current && bestX === null && bestY === null) {
         t.set({
           left: Math.round((t.left ?? 0) / SNAP) * SNAP,
           top: Math.round((t.top ?? 0) / SNAP) * SNAP,
         });
       }
+      canvas.requestRenderAll();
     });
+    canvas.on('mouse:up', () => { clearGuides(); canvas.requestRenderAll(); });
     canvas.on('mouse:down', (opt) => {
       const tool = toolRef.current;
       if (tool === 'select' || opt.target) return;
@@ -350,6 +412,45 @@ export default function CanvasEditor({
           c.requestRenderAll();
         });
       },
+      addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        void FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
+          const maxW = CANVAS_W * 0.35;
+          const maxH = CANVAS_H * 0.35;
+          const iw = img.width || 1;
+          const ih = img.height || 1;
+          const scale = Math.min(1, maxW / iw, maxH / ih);
+          let left = (CANVAS_W - iw * scale) / 2;
+          let top = (CANVAS_H - ih * scale) / 2;
+          const el = canvasRef.current;
+          if (at && el) {
+            const rect = el.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              left = ((at.clientX - rect.left) / rect.width) * CANVAS_W - (iw * scale) / 2;
+              top = ((at.clientY - rect.top) / rect.height) * CANVAS_H - (ih * scale) / 2;
+            }
+          }
+          img.set({ left, top, scaleX: scale, scaleY: scale });
+          (img as unknown as Record<string, unknown>).objName = name;
+          c.add(img);
+          if (label) {
+            const lbl = new Textbox(label, {
+              left,
+              top: top + ih * scale + 6,
+              width: Math.max(120, iw * scale),
+              fontSize: 14,
+              fontFamily: 'Arial',
+              textAlign: 'center',
+              fill: '#111',
+            });
+            (lbl as unknown as Record<string, unknown>).objName = `${name} Label`;
+            c.add(lbl);
+          }
+          c.setActiveObject(img);
+          c.requestRenderAll();
+        });
+      },
       deleteSelected: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
@@ -434,6 +535,18 @@ export default function CanvasEditor({
         if (patch.height !== undefined && o.height) o.set('scaleY', patch.height / o.height);
         if (patch.fontSize !== undefined && 'fontSize' in o) {
           (o as unknown as Record<string, unknown>).fontSize = patch.fontSize;
+        }
+        if (patch.bold !== undefined && 'fontWeight' in o) {
+          (o as unknown as Record<string, unknown>).fontWeight = patch.bold ? 'bold' : 'normal';
+        }
+        if (patch.italic !== undefined && 'fontStyle' in o) {
+          (o as unknown as Record<string, unknown>).fontStyle = patch.italic ? 'italic' : 'normal';
+        }
+        if (patch.underline !== undefined && 'underline' in o) {
+          (o as unknown as Record<string, unknown>).underline = patch.underline;
+        }
+        if (patch.textAlign !== undefined && 'textAlign' in o) {
+          (o as unknown as Record<string, unknown>).textAlign = patch.textAlign;
         }
         if (patch.locked !== undefined) {
           o.set({

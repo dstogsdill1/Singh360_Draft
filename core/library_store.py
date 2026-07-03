@@ -140,3 +140,42 @@ class LibraryStore:
             return False
         self.save(data)
         return True
+
+    # Keyword → category rules, evaluated in order (first match wins).
+    CATEGORY_RULES = [
+        ("controller", ["pr0650", "pr0680", "pr0751", "pr0660", "pr0661", "pr0662", "pr0663",
+                         "controller", "programmable", "stepper", " cpc", "emerson"]),
+        ("electrical", ["contactor", "relay", "power supply", "breaker", "power monitor",
+                        "powerscout", "wattnode", "dent", "transformer"]),
+        ("network", ["data manager", "orbit", "touchxl", "idf", "mdf", "bacnet router",
+                     "switch stack", "ethernet switch", "network switch"]),
+        ("panel", ["lcp", "wicp", "pmp", " dle", " ccg", "enclosure", "control box", "control panel"]),
+        ("sensor", ["temperature sensor", "temp sensor", "light level", "room temp",
+                    "leak sensor", "transducer", "humidity sensor"]),
+        ("alarm", ["alarm", "horn", "strobe", "entrapment", "beacon"]),
+        ("logo", ["logo", "h-e-b", "heb ", "singh360"]),
+        ("legend", ["legend"]),
+        ("reference-page", ["blueprint", "reference page", "floor plan", "floorplan", "elevation"]),
+    ]
+
+    def auto_categorize(self) -> dict:
+        """Re-assign component categories using keyword rules. Conservative:
+        matches on displayName/shortName/partNumber only (extraction tags are too
+        noisy), and only changes a category when a rule clearly matches."""
+        data = self.load()
+        changed = 0
+        for c in data.get("components", []):
+            hay = " ".join([
+                str(c.get("displayName", "")),
+                str(c.get("shortName", "")),
+                str(c.get("partNumber", "")),
+            ]).lower()
+            for cat, keys in self.CATEGORY_RULES:
+                if any(k in hay for k in keys):
+                    if (c.get("category") or "").lower() != cat:
+                        c["category"] = cat
+                        changed += 1
+                    break
+        if changed:
+            self.save(data)
+        return {"ok": True, "changed": changed, "total": len(data.get("components", []))}

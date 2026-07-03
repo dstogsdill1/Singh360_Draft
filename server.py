@@ -588,6 +588,15 @@ def import_library_seed():
     return jsonify(result if result.get("ok") else _err(result.get("error", "Seed import failed"))), (200 if result.get("ok") else 400)
 
 
+@app.post("/api/library/auto-categorize")
+def auto_categorize_library():
+    try:
+        return jsonify(library.auto_categorize())
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Auto-categorize failed: %s", exc)
+        return jsonify(_err("Auto-categorize failed.", str(exc))), 500
+
+
 @app.get("/api/library/assets/<path:rel>")
 def get_library_asset(rel: str):
     target = library.asset_path(rel)

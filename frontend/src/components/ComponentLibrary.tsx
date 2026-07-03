@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   getLibrary,
   importLibrarySeed,
+  autoCategorizeLibrary,
   libraryAssetUrl,
   deleteLibraryComponent,
   retireLibraryComponent,
@@ -12,11 +13,20 @@ import {
 } from '../api/client';
 
 interface Props {
-  onInsert: (name: string, url: string) => void;
+  onInsert: (name: string, url: string, label: string | null) => void;
   canInsert: boolean;
 }
 
 export const COMPONENT_DRAG_TYPE = 'application/x-singh360-component';
+
+// Categories that should NOT get an auto label by default (logos/symbols/legends).
+const NO_LABEL_CATS = new Set(['logo', 'symbol', 'legend', 'reference-page']);
+
+function labelFor(c: LibraryComponent): string | null {
+  const cat = (c.category || '').toLowerCase();
+  if (NO_LABEL_CATS.has(cat)) return null;
+  return c.partNumber || c.shortName || c.displayName || null;
+}
 
 // Canonical categories the user can recategorize into.
 const CANON_CATS = [
@@ -30,6 +40,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [showRetired, setShowRetired] = useState(false);
+  const [insertWithLabel, setInsertWithLabel] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editCat, setEditCat] = useState('');
@@ -57,6 +68,16 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     await refresh();
   };
 
+  const doAutoCategorize = async () => {
+    try {
+      const res = await autoCategorizeLibrary();
+      await refresh();
+      window.alert(`Auto-categorized ${res.changed} of ${res.total} components. Review and fine-tune with the ✎ edit button.`);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   const components = data?.components ?? [];
   const isRetired = (c: LibraryComponent) => (c.status || '').startsWith('retired');
   const isReference = (c: LibraryComponent) => (c.category || '').toLowerCase() === 'reference-page';
@@ -80,7 +101,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
 
   const insert = (c: LibraryComponent) => {
     if (!c.assetPath) return;
-    onInsert(c.displayName, libraryAssetUrl(c.assetPath));
+    onInsert(c.displayName, libraryAssetUrl(c.assetPath), insertWithLabel ? labelFor(c) : null);
   };
 
   const beginEdit = (c: LibraryComponent) => {
@@ -165,6 +186,12 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
       <label className="lib-showretired" title="Show retired components">
         <input type="checkbox" checked={showRetired} onChange={(e) => setShowRetired(e.target.checked)} /> Show retired
       </label>
+      <label className="lib-showretired" title="Insert equipment/components with an editable text label (off for logos/symbols)">
+        <input type="checkbox" checked={insertWithLabel} onChange={(e) => setInsertWithLabel(e.target.checked)} /> Insert with label
+      </label>
+      <div className="lib-toolbar">
+        <button className="lib-btn" onClick={() => void doAutoCategorize()} title="Auto-assign categories from part names/keywords (review afterwards)">Auto-categorize</button>
+      </div>
 
       <div className="lib-grid">
         {visible.map((c) => (
@@ -176,7 +203,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
               if (!c.assetPath) return;
               e.dataTransfer.setData(
                 COMPONENT_DRAG_TYPE,
-                JSON.stringify({ name: c.displayName, url: libraryAssetUrl(c.assetPath) }),
+                JSON.stringify({ name: c.displayName, url: libraryAssetUrl(c.assetPath), label: insertWithLabel ? labelFor(c) : null }),
               );
               e.dataTransfer.effectAllowed = 'copy';
             }}

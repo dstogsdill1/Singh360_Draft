@@ -138,6 +138,12 @@ export async function importLibrarySeed(): Promise<{ ok: boolean; componentCount
   return res.json();
 }
 
+export async function autoCategorizeLibrary(): Promise<{ ok: boolean; changed: number; total: number }> {
+  const res = await fetch('/api/library/auto-categorize', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function retireLibraryComponent(id: string): Promise<void> {
   const res = await fetch(`/api/library/components/${id}/retire`, { method: 'POST' });
   if (!res.ok) throw new Error(await res.text());
