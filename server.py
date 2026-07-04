@@ -932,6 +932,26 @@ def get_library_asset(rel: str):
     return send_file(target)
 
 
+@app.get("/api/library/asset/<comp_id>")
+def get_library_component_asset(comp_id: str):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", comp_id):
+        abort(404)
+    p = library.get_component_asset_path(comp_id)
+    if p is None:
+        abort(404)
+    return send_file(p)
+
+
+@app.get("/api/library/thumbnail/<comp_id>")
+def get_library_component_thumbnail(comp_id: str):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", comp_id):
+        abort(404)
+    p = library.get_component_thumbnail_path(comp_id)
+    if p is None:
+        abort(404)
+    return send_file(p)
+
+
 @app.post("/api/library/components/<comp_id>/retire")
 def retire_library_component(comp_id: str):
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", comp_id):

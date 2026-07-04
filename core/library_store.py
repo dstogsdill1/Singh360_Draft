@@ -120,10 +120,9 @@ class LibraryStore:
             cfg = json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
         except Exception:  # noqa: BLE001
             cfg = {}
-        if "libraryRoot" not in cfg:
-            cfg["libraryRoot"] = str(self.default_master_root)
-        if "mode" not in cfg:
-            cfg["mode"] = "folder-master"
+        # Emergency rule: single live root only (.docs/library/assets/components).
+        cfg["libraryRoot"] = str(self.default_master_root)
+        cfg["mode"] = "folder-master"
         if "lastRefreshedAt" not in cfg:
             cfg["lastRefreshedAt"] = None
         return cfg
@@ -136,13 +135,48 @@ class LibraryStore:
         return str(self._read_config().get("libraryRoot") or self.default_master_root)
 
     def set_master_root(self, root_path: str | Path) -> dict:
-        p = Path(root_path).expanduser().resolve()
-        if not p.exists() or not p.is_dir():
-            return {"ok": False, "error": f"Invalid library root: {p}"}
         cfg = self._read_config()
-        cfg["libraryRoot"] = str(p)
+        cfg["libraryRoot"] = str(self.default_master_root)
         self._write_config(cfg)
-        return {"ok": True, "libraryRoot": str(p), "mode": cfg.get("mode", "folder-master")}
+        return {"ok": True, "libraryRoot": str(self.default_master_root), "mode": cfg.get("mode", "folder-master")}
+
+    def get_component_asset_path(self, comp_id: str) -> Path | None:
+        c = self.get_component(comp_id)
+        if not c:
+            return None
+        # PDF-backed items use rendered image for insert/export/preview.
+        rendered = str(c.get("renderedImagePath") or "")
+        if rendered:
+            p = self.asset_path(rendered)
+            if p:
+                return p
+        return self.asset_path(str(c.get("assetPath") or ""))
+
+    def get_component_thumbnail_path(self, comp_id: str) -> Path | None:
+        c = self.get_component(comp_id)
+        if not c:
+            return None
+        tp = str(c.get("thumbnailPath") or "")
+        p = self.asset_path(tp) if tp else None
+        if p:
+            return p
+        # Attempt to generate thumbnail on demand as fallback.
+        ap = self.get_component_asset_path(comp_id)
+        if not ap:
+            return None
+        cat = self._category_folder_name(str(c.get("category") or "review"))
+        t_rel, t_abs = self._thumbnail_dest_for(cat, ap.stem)
+        self._build_thumbnail(ap, t_abs)
+        if t_abs.exists():
+            c["thumbnailPath"] = t_rel
+            data = self.load()
+            for x in data.get("components", []):
+                if x.get("id") == comp_id:
+                    x["thumbnailPath"] = t_rel
+                    break
+            self.save(data)
+            return t_abs
+        return None
 
     def _set_last_refreshed(self) -> None:
         cfg = self._read_config()
@@ -1149,6 +1183,8 @@ class LibraryStore:
         src_root = Path(folder_path).expanduser().resolve()
         if not src_root.exists() or not src_root.is_dir():
             return {"ok": False, "error": f"Folder not found or not a directory: {src_root}"}
+        live_components_root = (self.dir / "assets" / "components").resolve()
+        source_is_live_components = src_root == live_components_root
 
         data = self.load()
 
@@ -1303,11 +1339,15 @@ class LibraryStore:
                     comp_abs = actual_image_src
                     rel_asset = rendered_rel
                 else:
-                    comp_name = f"{src.stem}_{uuid.uuid4().hex[:8]}{src.suffix.lower()}"
-                    comp_abs = self.dir / "assets" / "components" / cat_folder / comp_name
-                    comp_abs.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(src, comp_abs)
-                    rel_asset = f"library/assets/components/{cat_folder}/{comp_name}"
+                    if source_is_live_components:
+                        comp_abs = src
+                        rel_asset = f"library/{src.relative_to(self.dir).as_posix()}"
+                    else:
+                        comp_name = f"{src.stem}_{uuid.uuid4().hex[:8]}{src.suffix.lower()}"
+                        comp_abs = self.dir / "assets" / "components" / cat_folder / comp_name
+                        comp_abs.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src, comp_abs)
+                        rel_asset = f"library/assets/components/{cat_folder}/{comp_name}"
 
                 thumb_rel, thumb_abs = self._thumbnail_dest_for(category, Path(rel_asset).stem)
                 self._build_thumbnail(comp_abs, thumb_abs)

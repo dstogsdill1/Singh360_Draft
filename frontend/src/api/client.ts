@@ -275,6 +275,14 @@ export function libraryAssetUrl(path: string): string {
   return `/api/library/assets/${path.replace(/^\/+/, '')}`;
 }
 
+export function libraryComponentAssetUrl(id: string): string {
+  return `/api/library/asset/${encodeURIComponent(id)}`;
+}
+
+export function libraryComponentThumbnailUrl(id: string): string {
+  return `/api/library/thumbnail/${encodeURIComponent(id)}`;
+}
+
 export async function getLibrary(): Promise<LibraryData> {
   const res = await fetch('/api/library');
   if (!res.ok) throw new Error(await res.text());

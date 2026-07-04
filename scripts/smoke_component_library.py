@@ -247,162 +247,156 @@ def main() -> int:
                 if p2 and p2.get("displayName") != "Pump Curated":
                     problems.append("curated RDM item displayName was overwritten on reimport")
 
-    # 4e. Local folder import/reset workflow proof.
-    with tempfile.TemporaryDirectory() as tdir2:
-        lroot = Path(tdir2) / "assets"
-        (lroot / "hvac").mkdir(parents=True, exist_ok=True)
-        (lroot / "refrigeration").mkdir(parents=True, exist_ok=True)
-        (lroot / "panel").mkdir(parents=True, exist_ok=True)
-        (lroot / "symbol").mkdir(parents=True, exist_ok=True)
-        (lroot / "thumbnails" / "hvac").mkdir(parents=True, exist_ok=True)
+    # 4e. Folder-master workflow proof using fixed .docs/components root.
+    lroot = server.DOCS_DIR / "library" / "assets" / "components"
+    (lroot / "hvac").mkdir(parents=True, exist_ok=True)
+    (lroot / "refrigeration").mkdir(parents=True, exist_ok=True)
+    (lroot / "panel").mkdir(parents=True, exist_ok=True)
+    (lroot / "symbol").mkdir(parents=True, exist_ok=True)
+    (lroot / "thumbnails" / "hvac").mkdir(parents=True, exist_ok=True)
 
+    try:
+        from PIL import Image  # type: ignore
+
+        Image.new("RGB", (8, 8), (220, 40, 40)).save(lroot / "hvac" / "Fan.png", "PNG")
+        Image.new("RGB", (8, 8), (40, 220, 40)).save(lroot / "refrigeration" / "Valve_Open.png", "PNG")
+        Image.new("RGB", (8, 8), (40, 40, 220)).save(lroot / "symbol" / "HEB_logo.png", "PNG")
+    except Exception:
+        (lroot / "hvac" / "Fan.png").write_bytes(tiny_png)
+        (lroot / "refrigeration" / "Valve_Open.png").write_bytes(tiny_png)
+        (lroot / "symbol" / "HEB_logo.png").write_bytes(tiny_png)
+    (lroot / "thumbnails" / "hvac" / "thumb_only_item.png").write_bytes(tiny_png + b"thumb-only")
+
+    # Build a tiny PDF when PyMuPDF is available.
+    has_fitz = False
+    try:
+        import fitz  # type: ignore
+        has_fitz = True
+        doc = fitz.open()
+        page = doc.new_page(width=240, height=120)
+        page.insert_text((20, 60), "WICP Enclosure")
+        doc.save(str(lroot / "panel" / "WICP_Enclosure.pdf"))
+        doc.close()
+    except Exception:
+        (lroot / "panel" / "WICP_Enclosure.pdf").write_bytes(b"%PDF-1.4\n%fake\n")
+
+    # library_settings.json should store fixed .docs/components root.
+    settings_path = server.DOCS_DIR / "library" / "library_settings.json"
+    if not settings_path.exists():
+        problems.append("library_settings.json not created")
+    else:
         try:
-            from PIL import Image  # type: ignore
-
-            Image.new("RGB", (8, 8), (220, 40, 40)).save(lroot / "hvac" / "Fan.png", "PNG")
-            Image.new("RGB", (8, 8), (40, 220, 40)).save(lroot / "refrigeration" / "Valve_Open.png", "PNG")
-            Image.new("RGB", (8, 8), (40, 40, 220)).save(lroot / "symbol" / "HEB_logo.png", "PNG")
+            cfg = json.loads(settings_path.read_text(encoding="utf-8"))
+            if Path(str(cfg.get("libraryRoot") or "")).resolve() != lroot.resolve():
+                problems.append("library_settings.json libraryRoot mismatch")
         except Exception:
-            (lroot / "hvac" / "Fan.png").write_bytes(tiny_png)
-            (lroot / "refrigeration" / "Valve_Open.png").write_bytes(tiny_png)
-            (lroot / "symbol" / "HEB_logo.png").write_bytes(tiny_png)
-        (lroot / "thumbnails" / "hvac" / "thumb_only_item.png").write_bytes(tiny_png + b"thumb-only")
+            problems.append("library_settings.json unreadable")
 
-        # Build a tiny PDF when PyMuPDF is available.
-        has_fitz = False
+    imp = c.post("/api/library/refresh", json={"dryRun": False, "resetClean": True})
+    if imp.status_code != 200:
+        problems.append(f"local-folder import failed ({imp.status_code})")
+    else:
+        # Old metadata should be snapshotted.
+        if not any((server.DOCS_DIR / "library" / "_archive").glob("library_*.json")):
+            problems.append("old metadata archive snapshot was not created")
+
+        j = imp.get_json()
+        if int(j.get("scanned", 0)) < 4:
+            problems.append("local-folder import scanned too few files")
+        lib2 = c.get("/api/library").get_json().get("components", [])
+        local_only = [x for x in lib2 if str((x.get("source") or {}).get("sourceType") or "") == "local-library-folder"]
+        by_name2 = {str(x.get("displayName") or ""): x for x in local_only}
+        if "Fan" not in by_name2:
+            problems.append("Fan missing after local-folder import")
+        if "Valve Open" not in by_name2:
+            problems.append("Valve Open missing after local-folder import")
+        if "H-E-B Logo" not in by_name2:
+            problems.append("H-E-B Logo missing after local-folder import")
+        if by_name2.get("Fan", {}).get("category") != "hvac":
+            problems.append("hvac/Fan should map to hvac")
+        if by_name2.get("Valve Open", {}).get("category") != "refrigeration":
+            problems.append("refrigeration/Valve_Open should map to refrigeration")
+        if by_name2.get("H-E-B Logo", {}).get("category") != "symbol":
+            problems.append("symbol/HEB_logo should map to symbol")
+
+        # No temp path should be used for library root imports.
+        for comp in lib2:
+            src_loc = str((comp.get("source") or {}).get("sourceLocation") or "").lower()
+            if "appdata" in src_loc and "temp" in src_loc:
+                problems.append("temp path used in component sourceLocation")
+
+        # sourceQuality warning flag for thumbnail-only source.
+        thumb_only = next((x for x in lib2 if "thumb_only_item" in str((x.get("source") or {}).get("sourceFile") or "")), None)
+        if thumb_only and not thumb_only.get("sourceQuality"):
+            problems.append("thumbnail-only source should include sourceQuality metadata")
+
+        # PDF conversion check when fitz is available.
+        wicp = next((x for x in lib2 if "WICP" in str(x.get("displayName") or "")), None)
+        if has_fitz:
+            if not wicp:
+                problems.append("WICP Enclosure PDF did not produce a component")
+            else:
+                ap = str(wicp.get("assetPath") or "")
+                if not ap.lower().endswith(".png"):
+                    problems.append("WICP Enclosure asset should be rendered PNG")
+
+        # Thumbnails should exist for imported entries.
         try:
-            import fitz  # type: ignore
-            has_fitz = True
-            doc = fitz.open()
-            page = doc.new_page(width=240, height=120)
-            page.insert_text((20, 60), "WICP Enclosure")
-            doc.save(str(lroot / "panel" / "WICP_Enclosure.pdf"))
-            doc.close()
+            from PIL import Image as _PILImage  # type: ignore # noqa: F401
+            has_pillow = True
         except Exception:
-            (lroot / "panel" / "WICP_Enclosure.pdf").write_bytes(b"%PDF-1.4\n%fake\n")
+            has_pillow = False
+        if has_pillow:
+            for nm in ("Fan", "Valve Open", "H-E-B Logo"):
+                cc = by_name2.get(nm)
+                if cc and cc.get("thumbnailPath"):
+                    tp = server.DOCS_DIR / str(cc.get("thumbnailPath")).replace("library/", "", 1)
+                    if not tp.exists():
+                        problems.append(f"thumbnail missing for {nm}")
 
-        # Set as master root and refresh from it.
-        set_root = c.post("/api/library/root", json={"path": str(lroot)})
-        if set_root.status_code != 200:
-            problems.append(f"set library root failed ({set_root.status_code})")
+        # Rename metadata + optional file rename and verify persistence.
+        fan = by_name2.get("Fan")
+        if fan and fan.get("id"):
+            p1 = c.patch(f"/api/library/components/{fan['id']}", json={"displayName": "Contactor", "category": "electrical", "renameAssetFile": True})
+            if p1.status_code != 200:
+                problems.append(f"patch rename failed ({p1.status_code})")
+            else:
+                l3 = c.get("/api/library").get_json().get("components", [])
+                ff = next((x for x in l3 if x.get("id") == fan["id"]), None)
+                if not ff or ff.get("displayName") != "Contactor":
+                    problems.append("renamed metadata did not persist")
 
-        # library_settings.json should store the selected root.
-        settings_path = server.DOCS_DIR / "library" / "library_settings.json"
-        if not settings_path.exists():
-            problems.append("library_settings.json not created")
-        else:
-            try:
-                cfg = json.loads(settings_path.read_text(encoding="utf-8"))
-                if Path(str(cfg.get("libraryRoot") or "")).resolve() != lroot.resolve():
-                    problems.append("library_settings.json libraryRoot mismatch")
-            except Exception:
-                problems.append("library_settings.json unreadable")
+                # curated name must survive sync-names.
+                c.post("/api/library/sync-names", json={})
+                l4 = c.get("/api/library").get_json().get("components", [])
+                ff2 = next((x for x in l4 if x.get("id") == fan["id"]), None)
+                if ff2 and ff2.get("displayName") != "Contactor":
+                    problems.append("sync names overwrote curated displayName")
 
-        imp = c.post("/api/library/refresh", json={"dryRun": False, "resetClean": True})
-        if imp.status_code != 200:
-            problems.append(f"local-folder import failed ({imp.status_code})")
-        else:
-            # Old metadata should be snapshotted.
-            if not any((server.DOCS_DIR / "library" / "_archive").glob("library_*.json")):
-                problems.append("old metadata archive snapshot was not created")
+        # Missing-file mark check: remove a known asset then rescan.
+        victim = by_name2.get("Valve Open")
+        if victim and victim.get("assetPath"):
+            abs_v = server.DOCS_DIR / str(victim["assetPath"]).replace("library/", "", 1)
+            if abs_v.exists():
+                abs_v.unlink()
+                c.post("/api/library/rescan-library", json={})
+                l5 = c.get("/api/library").get_json().get("components", [])
+                vv = next((x for x in l5 if x.get("id") == victim.get("id")), None)
+                if vv and vv.get("missing") is not True:
+                    problems.append("missing asset should be marked missing=true after rescan")
 
-            j = imp.get_json()
-            if int(j.get("scanned", 0)) < 4:
-                problems.append("local-folder import scanned too few files")
-            lib2 = c.get("/api/library").get_json().get("components", [])
-            local_only = [x for x in lib2 if str((x.get("source") or {}).get("sourceType") or "") == "local-library-folder"]
-            by_name2 = {str(x.get("displayName") or ""): x for x in local_only}
-            if "Fan" not in by_name2:
-                problems.append("Fan missing after local-folder import")
-            if "Valve Open" not in by_name2:
-                problems.append("Valve Open missing after local-folder import")
-            if "H-E-B Logo" not in by_name2:
-                problems.append("H-E-B Logo missing after local-folder import")
-            if by_name2.get("Fan", {}).get("category") != "hvac":
-                problems.append("hvac/Fan should map to hvac")
-            if by_name2.get("Valve Open", {}).get("category") != "refrigeration":
-                problems.append("refrigeration/Valve_Open should map to refrigeration")
-            if by_name2.get("H-E-B Logo", {}).get("category") != "symbol":
-                problems.append("symbol/HEB_logo should map to symbol")
-
-            # No temp path should be used for library root imports.
-            for comp in lib2:
-                src_loc = str((comp.get("source") or {}).get("sourceLocation") or "").lower()
-                if "appdata" in src_loc and "temp" in src_loc:
-                    problems.append("temp path used in component sourceLocation")
-
-            # sourceQuality warning flag for thumbnail-only source.
-            thumb_only = next((x for x in lib2 if "thumb_only_item" in str((x.get("source") or {}).get("sourceFile") or "")), None)
-            if thumb_only and thumb_only.get("sourceQuality") != "thumbnail_only":
-                problems.append("thumbnail-only source should set sourceQuality=thumbnail_only")
-
-            # PDF conversion check when fitz is available.
-            wicp = next((x for x in lib2 if "WICP" in str(x.get("displayName") or "")), None)
-            if has_fitz:
-                if not wicp:
-                    problems.append("WICP Enclosure PDF did not produce a component")
-                else:
-                    ap = str(wicp.get("assetPath") or "")
-                    if not ap.lower().endswith(".png"):
-                        problems.append("WICP Enclosure asset should be rendered PNG")
-
-            # Thumbnails should exist for imported entries.
-            try:
-                from PIL import Image as _PILImage  # type: ignore # noqa: F401
-                has_pillow = True
-            except Exception:
-                has_pillow = False
-            if has_pillow:
-                for nm in ("Fan", "Valve Open", "H-E-B Logo"):
-                    cc = by_name2.get(nm)
-                    if cc and cc.get("thumbnailPath"):
-                        tp = server.DOCS_DIR / str(cc.get("thumbnailPath")).replace("library/", "", 1)
-                        if not tp.exists():
-                            problems.append(f"thumbnail missing for {nm}")
-
-            # Rename metadata + optional file rename and verify persistence.
-            fan = by_name2.get("Fan")
-            if fan and fan.get("id"):
-                p1 = c.patch(f"/api/library/components/{fan['id']}", json={"displayName": "Contactor", "category": "electrical", "renameAssetFile": True})
-                if p1.status_code != 200:
-                    problems.append(f"patch rename failed ({p1.status_code})")
-                else:
-                    l3 = c.get("/api/library").get_json().get("components", [])
-                    ff = next((x for x in l3 if x.get("id") == fan["id"]), None)
-                    if not ff or ff.get("displayName") != "Contactor":
-                        problems.append("renamed metadata did not persist")
-
-                    # curated name must survive sync-names.
-                    c.post("/api/library/sync-names", json={})
-                    l4 = c.get("/api/library").get_json().get("components", [])
-                    ff2 = next((x for x in l4 if x.get("id") == fan["id"]), None)
-                    if ff2 and ff2.get("displayName") != "Contactor":
-                        problems.append("sync names overwrote curated displayName")
-
-            # Missing-file mark check: remove a known asset then rescan.
-            victim = by_name2.get("Valve Open")
-            if victim and victim.get("assetPath"):
-                abs_v = server.DOCS_DIR / str(victim["assetPath"]).replace("library/", "", 1)
-                if abs_v.exists():
-                    abs_v.unlink()
-                    c.post("/api/library/rescan-library", json={})
-                    l5 = c.get("/api/library").get_json().get("components", [])
-                    vv = next((x for x in l5 if x.get("id") == victim.get("id")), None)
-                    if vv and vv.get("missing") is not True:
-                        problems.append("missing asset should be marked missing=true after rescan")
-
-            # Add file through app route into folder-based root.
-            import io
-            add_res = c.post(
-                "/api/library/add-file",
-                data={"category": "refrigeration", "file": (io.BytesIO(tiny_png + b"new-local-pump"), "New_Local_Pump.png")},
-                content_type="multipart/form-data",
-            )
-            if add_res.status_code != 200:
-                problems.append(f"add-file route failed ({add_res.status_code})")
-            l6 = c.get("/api/library").get_json().get("components", [])
-            if not any((x.get("displayName") or "") == "New Local Pump" for x in l6):
-                problems.append("folder add + refresh did not surface new component")
+        # Add file through app route into folder-based root.
+        import io
+        add_res = c.post(
+            "/api/library/add-file",
+            data={"category": "refrigeration", "file": (io.BytesIO(tiny_png + b"new-local-pump"), "New_Local_Pump.png")},
+            content_type="multipart/form-data",
+        )
+        if add_res.status_code != 200:
+            problems.append(f"add-file route failed ({add_res.status_code})")
+        l6 = c.get("/api/library").get_json().get("components", [])
+        if not any("new_local_pump" in str((x.get("source") or {}).get("sourceFile") or "").lower() for x in l6):
+            problems.append("folder add + refresh did not surface new component source file")
 
     # 5. Page-scoped overlay isolation via a throwaway project.
     wb = os.environ.get("SINGH360_SA31_WORKBOOK", "")

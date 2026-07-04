@@ -1,9 +1,9 @@
 """scripts/refresh_folder_library.py — refresh the folder-based master component library.
 
 Usage:
-    python scripts/refresh_folder_library.py "C:\\path\\to\\library\\assets" --dry-run
-    python scripts/refresh_folder_library.py "C:\\path\\to\\library\\assets" --apply
-    python scripts/refresh_folder_library.py "C:\\path\\to\\library\\assets" --rebuild-thumbnails
+    python scripts/refresh_folder_library.py --apply
+    python scripts/refresh_folder_library.py --rebuild-thumbnails
+    python scripts/refresh_folder_library.py "C:\\path\\to\\library\\assets\\components" --apply
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from core.library_store import LibraryStore  # noqa: E402
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Refresh folder-based master component library")
-    ap.add_argument("path", help="Master library root (assets folder)")
+    ap.add_argument("path", nargs="?", help="Master library root (defaults to .docs/library/assets/components)")
     ap.add_argument("--dry-run", action="store_true", help="Preview only")
     ap.add_argument("--apply", action="store_true", help="Apply refresh")
     ap.add_argument("--rebuild-thumbnails", action="store_true", help="Rebuild thumbnails after refresh")
@@ -32,7 +32,8 @@ def main() -> int:
         return 2
 
     store = LibraryStore(ROOT / ".docs", ROOT)
-    set_res = store.set_master_root(args.path)
+    root_path = args.path or str((ROOT / ".docs" / "library" / "assets" / "components").resolve())
+    set_res = store.set_master_root(root_path)
     if not set_res.get("ok"):
         print(f"ERROR: {set_res.get('error', 'Failed to set root')}")
         return 1

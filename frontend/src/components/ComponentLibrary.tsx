@@ -5,12 +5,11 @@ import {
   bulkUpdateLibraryComponents,
   getLibrary,
   getLibraryRoot,
-  importLocalLibraryFolder,
+  libraryComponentAssetUrl,
+  libraryComponentThumbnailUrl,
   refreshLibraryFromRoot,
   rebuildLibraryThumbnails,
-  setLibraryRoot,
   syncLibraryNamesFromFiles,
-  libraryAssetUrl,
   deleteLibraryComponent,
   retireLibraryComponent,
   restoreLibraryComponent,
@@ -116,32 +115,6 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     }
   };
 
-  const doChangeRoot = async () => {
-    const p = window.prompt('Library Root path:', libraryRoot || '');
-    if (!p || !p.trim()) return;
-    try {
-      await setLibraryRoot(p.trim());
-      setLibraryRootState(p.trim());
-      window.alert('Library root updated. Click Refresh Library to sync.');
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
-  const doResetFromFolder = async () => {
-    const p = window.prompt('Import / Reset from local folder path:', libraryRoot || '');
-    if (!p || !p.trim()) return;
-    try {
-      await setLibraryRoot(p.trim());
-      setLibraryRootState(p.trim());
-      const dry = window.confirm('Run DRY RUN first?\n\nOK = dry-run preview\nCancel = apply now');
-      const res = await importLocalLibraryFolder({ path: p.trim(), dryRun: dry, resetClean: true, sourceName: 'Master Library Root' });
-      if (!dry) await refresh();
-      window.alert(`Reset import ${dry ? 'dry-run ' : ''}complete. scanned=${res.scanned}, added=${res.added}, updated=${res.updated}, skipped=${res.skippedDuplicates}, pdf=${res.pdfConverted}, archived=${res.archivedOldEntries}`);
-    } catch (e) {
-      setError(String(e));
-    }
-  };
 
   const doSyncNames = async () => {
     try {
@@ -257,8 +230,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   }, [components, query, category, sourceFilter, showRetired, showCandidates, showNeedsReview, showReferencePages, showDuplicates]);
 
   const insert = (c: LibraryComponent) => {
-    if (!c.assetPath) return;
-    onInsert(c.displayName, libraryAssetUrl(c.assetPath), insertWithLabel ? labelFor(c) : null);
+    onInsert(c.displayName, libraryComponentAssetUrl(c.id), insertWithLabel ? labelFor(c) : null);
   };
 
   const beginEdit = (c: LibraryComponent) => {
@@ -347,7 +319,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     return (
       <div className="lib-empty">
         <p>No components yet.</p>
-        <button className="btn btn-primary" onClick={() => void doResetFromFolder()}>Import / Reset From Folder</button>
+        <button className="btn btn-primary" onClick={() => void doRescanLibrary()}>Refresh Library</button>
         {error && <p className="lib-error">{error}</p>}
       </div>
     );
@@ -389,14 +361,11 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         </select>
       </div>
       <div className="lib-paths">
-        <div>Library Root: {libraryRoot || data?.paths?.libraryRoot || '(unset)'}</div>
-        <div>Metadata Store: {data?.paths?.root || '(unknown)'}</div>
+        <div title={libraryRoot || data?.paths?.libraryRoot || ''}>Library Root: .docs\library\assets\components</div>
       </div>
       <div className="lib-toolbar">
-        <button className="lib-btn" onClick={() => void doChangeRoot()} title="Set master library root folder path">Change Root</button>
         <button className="lib-btn" onClick={() => void doRescanLibrary()} title="Refresh from current master library root">Refresh Library</button>
         <button className="lib-btn" onClick={() => void doRebuildThumbs()} title="Rebuild thumbnails from source assets">Rebuild Thumbnails</button>
-        <button className="lib-btn" onClick={() => void doResetFromFolder()} title="Import / Reset from a local library folder">Reset From Folder</button>
         <label className="lib-btn file-ribbon-btn" title="Add file into a category folder under current library root">
           Add Files
           <input
@@ -461,7 +430,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
               if (!c.assetPath) return;
               e.dataTransfer.setData(
                 COMPONENT_DRAG_TYPE,
-                JSON.stringify({ name: c.displayName, url: libraryAssetUrl(c.assetPath), label: insertWithLabel ? labelFor(c) : null }),
+                JSON.stringify({ name: c.displayName, url: libraryComponentAssetUrl(c.id), label: insertWithLabel ? labelFor(c) : null }),
               );
               e.dataTransfer.effectAllowed = 'copy';
             }}
@@ -480,7 +449,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
             <div className="lib-thumb">
               {c.thumbnailPath && !thumbFailed[c.id] ? (
                 <img
-                  src={libraryAssetUrl(c.thumbnailPath)}
+                  src={libraryComponentThumbnailUrl(c.id)}
                   alt={c.displayName}
                   loading="lazy"
                   onError={() => setThumbFailed((prev) => ({ ...prev, [c.id]: true }))}
