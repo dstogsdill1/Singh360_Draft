@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import socket
 import sys
 import traceback
@@ -837,6 +838,28 @@ def rebuild_library_thumbnails():
         return jsonify(_err("Rebuild thumbnails failed.", str(exc))), 500
 
 
+@app.post("/api/library/cleanup-duplicates")
+def cleanup_library_duplicates():
+    body = request.get_json(silent=True) or {}
+    dry_run = bool(body.get("dryRun", True))
+    archive_duplicates = bool(body.get("archiveDuplicates", False))
+    dedupe_category = body.get("dedupeCategory")
+    dedupe_all = bool(body.get("dedupeAll", True))
+    try:
+        result = library.cleanup_duplicates(
+            dry_run=dry_run,
+            archive_duplicates=archive_duplicates,
+            dedupe_category=dedupe_category if isinstance(dedupe_category, str) and dedupe_category.strip() else None,
+            dedupe_all=dedupe_all,
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Cleanup duplicates failed: %s", exc)
+        return jsonify(_err("Cleanup duplicates failed.", str(exc))), 500
+    if not result.get("ok"):
+        return jsonify(_err(result.get("error", "Cleanup duplicates failed"))), 400
+    return jsonify(result)
+
+
 @app.post("/api/library/archive-dirty")
 def archive_dirty_library_assets():
     try:
@@ -906,6 +929,7 @@ def add_library_file_to_root():
     if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".pdf"}:
         return jsonify(_err("Unsupported file type.")), 400
     category = (request.form.get("category") or "custom").strip().lower()
+    conflict_mode = (request.form.get("conflictMode") or "rename").strip().lower()
     root = Path(library.get_master_root())
     if not root.exists() or not root.is_dir():
         return jsonify(_err("Library root is not valid. Set Library Root first.")), 400
@@ -913,10 +937,32 @@ def add_library_file_to_root():
     cat_dir.mkdir(parents=True, exist_ok=True)
     fname = Path(upload.filename).name
     dst = cat_dir / fname
-    if dst.exists():
-        dst = cat_dir / f"{dst.stem}_{uuid.uuid4().hex[:6]}{dst.suffix.lower()}"
+    # Duplicate prevention by hash.
+    temp_name = f"temp_add_{uuid.uuid4().hex[:10]}{ext}"
+    temp_path = DOCS_DIR / temp_name
     try:
-        upload.save(dst)
+        upload.save(temp_path)
+        dup = library.find_existing_by_hash(temp_path)
+        if dup is not None:
+            temp_path.unlink(missing_ok=True)
+            return jsonify({
+                "ok": True,
+                "duplicate": True,
+                "message": f"Already exists as {dup.get('displayName')} in {dup.get('category')}",
+                "component": dup,
+            })
+        if dst.exists():
+            if conflict_mode == "skip":
+                temp_path.unlink(missing_ok=True)
+                return jsonify({"ok": True, "skipped": True, "message": "File exists; skipped."})
+            if conflict_mode == "replace":
+                shutil.copy2(temp_path, dst)
+            else:
+                dst = cat_dir / f"{dst.stem}_{uuid.uuid4().hex[:6]}{dst.suffix.lower()}"
+                shutil.copy2(temp_path, dst)
+        else:
+            shutil.copy2(temp_path, dst)
+        temp_path.unlink(missing_ok=True)
         result = library.refresh_from_master_root(dry_run=False, reset_clean=False)
     except Exception as exc:  # noqa: BLE001
         app.logger.error("Add file to library root failed: %s", exc)

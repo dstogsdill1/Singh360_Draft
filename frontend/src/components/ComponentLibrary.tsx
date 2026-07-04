@@ -3,6 +3,7 @@ import {
   addLibraryFileToRoot,
   archiveDirtyExtractedAssets,
   bulkUpdateLibraryComponents,
+  cleanupLibraryDuplicates,
   getLibrary,
   getLibraryRoot,
   libraryComponentAssetUrl,
@@ -136,6 +137,19 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     }
   };
 
+  const doCleanupDuplicates = async () => {
+    try {
+      const dry = await cleanupLibraryDuplicates({ dryRun: true, dedupeAll: true });
+      const ok = window.confirm(`Duplicate groups found: ${dry.groups}\nNear groups: ${dry.nearGroups}\n\nArchive exact duplicates now?`);
+      if (!ok) return;
+      const run = await cleanupLibraryDuplicates({ dryRun: false, archiveDuplicates: true, dedupeAll: true });
+      await refresh();
+      window.alert(`Duplicate cleanup complete. groups=${run.groups}, archived=${run.archived}`);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   const doArchiveDirty = async () => {
     const ok = window.confirm('Archive dirty extracted candidates?\n\nThis marks non-curated needs-review/duplicate/candidate entries as retired (no file deletion).');
     if (!ok) return;
@@ -152,7 +166,11 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     try {
       const chosen = window.prompt('Category folder for this file (e.g. refrigeration, hvac, logos):', category === 'all' ? 'custom' : category);
       if (!chosen) return;
-      await addLibraryFileToRoot(file, chosen.trim().toLowerCase());
+      const mode = window.prompt('If same filename exists: rename / replace / skip', 'rename') || 'rename';
+      const res = await addLibraryFileToRoot(file, chosen.trim().toLowerCase(), mode.trim().toLowerCase());
+      if ((res as any).duplicate) {
+        window.alert((res as any).message || 'Already exists.');
+      }
       await refresh();
     } catch (e) {
       setError(String(e));
@@ -366,6 +384,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
       <div className="lib-toolbar">
         <button className="lib-btn" onClick={() => void doRescanLibrary()} title="Refresh from current master library root">Refresh Library</button>
         <button className="lib-btn" onClick={() => void doRebuildThumbs()} title="Rebuild thumbnails from source assets">Rebuild Thumbnails</button>
+        <button className="lib-btn" onClick={() => void doCleanupDuplicates()} title="Detect/archive duplicate component files">Cleanup Duplicates</button>
         <label className="lib-btn file-ribbon-btn" title="Add file into a category folder under current library root">
           Add Files
           <input

@@ -398,6 +398,37 @@ def main() -> int:
         if not any("new_local_pump" in str((x.get("source") or {}).get("sourceFile") or "").lower() for x in l6):
             problems.append("folder add + refresh did not surface new component source file")
 
+        # Thumbnail API URLs should resolve by component id.
+        for nm in ("Fan", "Valve Open", "H-E-B Logo"):
+            cc = by_name2.get(nm)
+            if cc and cc.get("id"):
+                tr = c.get(f"/api/library/thumbnail/{cc['id']}")
+                if tr.status_code not in {200, 404}:
+                    problems.append(f"thumbnail API bad status for {nm}: {tr.status_code}")
+
+        # Refresh should be stable (no count growth on second refresh).
+        r1 = c.post("/api/library/refresh", json={"dryRun": False, "resetClean": False})
+        r2 = c.post("/api/library/refresh", json={"dryRun": False, "resetClean": False})
+        if r1.status_code == 200 and r2.status_code == 200:
+            j1 = r1.get_json()
+            j2 = r2.get_json()
+            if int(j2.get("added", 0)) > int(j1.get("added", 0)) + 5:
+                problems.append("refresh count instability detected")
+
+        # Rebuild thumbnails must not change source component count.
+        before_components = len(c.get("/api/library").get_json().get("components", []))
+        rb = c.post("/api/library/rebuild-thumbnails", json={})
+        after_components = len(c.get("/api/library").get_json().get("components", []))
+        if rb.status_code != 200:
+            problems.append(f"rebuild-thumbnails failed ({rb.status_code})")
+        if before_components != after_components:
+            problems.append("rebuild-thumbnails changed component count")
+
+        # Duplicate cleanup dry-run should execute.
+        cd = c.post("/api/library/cleanup-duplicates", json={"dryRun": True, "dedupeAll": True})
+        if cd.status_code != 200:
+            problems.append(f"cleanup-duplicates dry-run failed ({cd.status_code})")
+
     # 5. Page-scoped overlay isolation via a throwaway project.
     wb = os.environ.get("SINGH360_SA31_WORKBOOK", "")
     if not wb:

@@ -35,6 +35,13 @@ STATUSES = {
     "retired",
 }
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
+PDF_EXT = {".pdf"}
+SUPPORTED_COMPONENT_EXTS = IMAGE_EXTS | PDF_EXT
+
+IGNORED_CATEGORY_DIRS = {
+    "thumbnails", "rendered", "originals", "_archive", "processed", "inbox", "temp", "tmp",
+    "exports", "reference_pages", "library",
+}
 
 RDM_TAGS = ["rdm", "rdm-layout-editor", "official-rdm-library"]
 
@@ -898,6 +905,42 @@ class LibraryStore:
         except Exception as exc:  # noqa: BLE001
             return False, str(exc)
 
+    def _iter_component_source_files(self, src_root: Path) -> list[tuple[str, Path, str]]:
+        """Return [(category, file_path, rel_path)] from direct category folders only."""
+        out: list[tuple[str, Path, str]] = []
+        if not src_root.exists() or not src_root.is_dir():
+            return out
+        for cat_dir in sorted(src_root.iterdir()):
+            if not cat_dir.is_dir():
+                continue
+            name = cat_dir.name
+            if name.startswith("."):
+                continue
+            if name.lower() in IGNORED_CATEGORY_DIRS:
+                continue
+            # Direct files only (no recursive scan to avoid self-import loops).
+            for p in sorted(cat_dir.iterdir()):
+                if not p.is_file():
+                    continue
+                if p.suffix.lower() not in SUPPORTED_COMPONENT_EXTS:
+                    continue
+                rel = f"{name}/{p.name}".replace("\\", "/")
+                out.append((name, p, rel))
+        return out
+
+    def _existing_components_by_source(self, data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
+        by_source: dict[str, dict] = {}
+        by_sha_pool: dict[str, list[dict]] = {}
+        for c in data.get("components", []):
+            src = c.get("source") or {}
+            src_key = f"{src.get('sourceLocation', '')}/{src.get('sourceFile', '')}".strip("/")
+            if src_key:
+                by_source[src_key] = c
+            sha0 = str(c.get("sha256") or "")
+            if sha0:
+                by_sha_pool.setdefault(sha0, []).append(c)
+        return by_source, by_sha_pool
+
     def _rdm_classify(self, src_folder: str, stem: str) -> tuple[str, str, list[str], bool]:
         """Return (category, display_name, tags, high_confidence)."""
         f = (src_folder or "").strip().lower()
@@ -1201,23 +1244,10 @@ class LibraryStore:
                     kept.append(c)
             data["components"] = kept
 
-        # Build a set of non-thumbnail stems to detect thumbnail-only assets.
-        non_thumb_stems: set[str] = set()
-        all_files = [p for p in src_root.rglob("*") if p.is_file()]
-        for p in all_files:
-            if p.suffix.lower() in IMAGE_EXTS | {".pdf"} and not self._is_thumbnail_source_path(p):
-                non_thumb_stems.add(p.stem.lower())
+        source_files = self._iter_component_source_files(src_root)
+        non_thumb_stems: set[str] = {p.stem.lower() for _, p, _ in source_files if not self._is_thumbnail_source_path(p)}
 
-        existing_by_source: dict[str, dict] = {}
-        by_sha_pool: dict[str, list[dict]] = {}
-        for c in data.get("components", []):
-            src = c.get("source") or {}
-            src_key = f"{src.get('sourceLocation', '')}/{src.get('sourceFile', '')}".strip("/")
-            if src_key:
-                existing_by_source[src_key] = c
-            sha0 = str(c.get("sha256") or "")
-            if sha0:
-                by_sha_pool.setdefault(sha0, []).append(c)
+        existing_by_source, by_sha_pool = self._existing_components_by_source(data)
         touched_ids: set[str] = set()
         scanned = 0
         added = 0
@@ -1229,19 +1259,11 @@ class LibraryStore:
         cat_counts: dict[str, int] = {}
         preview: list[dict] = []
 
-        for src in sorted(all_files):
+        for folder_hint, src, rel_str in source_files:
             ext = src.suffix.lower()
-            if ext not in IMAGE_EXTS and ext != ".pdf":
-                continue
             scanned += 1
-            rel = src.relative_to(src_root)
-            rel_str = rel.as_posix()
-            source_key = f"{str(rel.parent).replace('\\', '/')}/{src.name}".strip("/")
-            folder_hint = rel.parts[0] if rel.parts else "custom"
-            if rel.parts and rel.parts[0].lower() in {"assets", "components", "thumbnails", "originals"} and len(rel.parts) > 1:
-                folder_hint = rel.parts[1]
-            if rel.parts and rel.parts[0].lower() == "assets" and len(rel.parts) > 2 and rel.parts[1].lower() in {"components", "thumbnails"}:
-                folder_hint = rel.parts[2]
+            source_key = rel_str
+            rel_parent = Path(rel_str).parent.as_posix()
             category = self._canon_category_from_folder(folder_hint)
             display_name = self._clean_display_from_filename(src.name)
             source_quality = "thumbnail_only" if (self._is_thumbnail_source_path(src) and src.stem.lower() not in non_thumb_stems) else "full"
@@ -1303,7 +1325,7 @@ class LibraryStore:
                     existing["source"] = {
                         "sourceType": "local-library-folder",
                         "sourceFile": src.name,
-                        "sourceLocation": str(rel.parent).replace("\\", "/"),
+                        "sourceLocation": rel_parent,
                         "sourceName": source_name,
                     }
                     existing["category"] = category
@@ -1369,7 +1391,7 @@ class LibraryStore:
                     "source": {
                         "sourceType": "local-library-folder",
                         "sourceFile": src.name,
-                        "sourceLocation": str(rel.parent).replace("\\", "/"),
+                        "sourceLocation": rel_parent,
                         "sourceName": source_name,
                     },
                     "sha256": sha,
@@ -1488,6 +1510,130 @@ class LibraryStore:
         if changed:
             self.save(data)
         return {"ok": True, "archived": changed}
+
+    def find_existing_by_hash(self, file_path: Path) -> dict | None:
+        try:
+            sha = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        except Exception:  # noqa: BLE001
+            return None
+        data = self.load()
+        for c in data.get("components", []):
+            if str(c.get("sha256") or "") == sha and not c.get("missing"):
+                return c
+        return None
+
+    def cleanup_duplicates(
+        self,
+        *,
+        dry_run: bool = True,
+        archive_duplicates: bool = False,
+        dedupe_category: str | None = None,
+        dedupe_all: bool = False,
+    ) -> dict:
+        """Detect/archive duplicate source files in direct category folders.
+
+        Exact duplicates grouped by SHA256. Near-duplicate groups are reported only.
+        """
+        self.ensure()
+        root = Path(self.get_master_root()).resolve()
+        if not root.exists() or not root.is_dir():
+            return {"ok": False, "error": f"Invalid components root: {root}"}
+
+        source_files = self._iter_component_source_files(root)
+        if dedupe_category:
+            source_files = [x for x in source_files if x[0].lower() == dedupe_category.lower()]
+
+        by_sha: dict[str, list[tuple[str, Path, str]]] = {}
+        for cat, p, rel in source_files:
+            try:
+                sha = hashlib.sha256(p.read_bytes()).hexdigest()
+            except Exception:  # noqa: BLE001
+                continue
+            by_sha.setdefault(sha, []).append((cat, p, rel))
+
+        duplicate_groups = [grp for grp in by_sha.values() if len(grp) > 1]
+        archived_count = 0
+        kept_count = 0
+        archived_files: list[str] = []
+        kept_files: list[str] = []
+        near_groups = 0
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        archive_root = self.dir / "_archive" / f"duplicates_{ts}"
+
+        def score_file(pp: Path) -> tuple[int, int, int, int, str]:
+            name = pp.stem.lower()
+            readable_bonus = 1 if not re.search(r"_[0-9a-f]{6,}", name) else 0
+            short_bonus = -len(pp.name)
+            w = h = 0
+            if Image is not None and pp.suffix.lower() != ".svg":
+                try:
+                    with Image.open(pp) as im:
+                        w, h = im.size
+                except Exception:  # noqa: BLE001
+                    pass
+            res = w * h
+            return (readable_bonus, short_bonus, res, pp.stat().st_size if pp.exists() else 0, pp.name)
+
+        for grp in duplicate_groups:
+            grp_sorted = sorted(grp, key=lambda t: score_file(t[1]), reverse=True)
+            keeper = grp_sorted[0]
+            kept_count += 1
+            kept_files.append(str(keeper[1]))
+            for dup in grp_sorted[1:]:
+                if dry_run:
+                    archived_count += 1
+                    archived_files.append(str(dup[1]))
+                    continue
+                if archive_duplicates:
+                    cat, p, _ = dup
+                    dst = archive_root / cat / p.name
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    if dst.exists():
+                        dst = dst.with_name(f"{dst.stem}_{uuid.uuid4().hex[:6]}{dst.suffix.lower()}")
+                    try:
+                        shutil.move(str(p), str(dst))
+                        archived_count += 1
+                        archived_files.append(str(dst))
+                    except Exception:  # noqa: BLE001
+                        pass
+
+        # Optional near-duplicate reporting (non-destructive).
+        if Image is not None:
+            p_hash_items: list[tuple[str, Path, str]] = []
+            for _, p, rel in source_files:
+                if p.suffix.lower() == ".svg":
+                    continue
+                try:
+                    with Image.open(p) as im:
+                        ph = self._average_hash(im)
+                    p_hash_items.append((ph, p, rel))
+                except Exception:  # noqa: BLE001
+                    continue
+            for i in range(len(p_hash_items)):
+                a, _, _ = p_hash_items[i]
+                for j in range(i + 1, len(p_hash_items)):
+                    b, _, _ = p_hash_items[j]
+                    if self._hamming(a, b) <= 4:
+                        near_groups += 1
+
+        # Rebuild metadata after archiving duplicates.
+        if archive_duplicates and not dry_run:
+            self.refresh_from_master_root(dry_run=False, reset_clean=True)
+
+        return {
+            "ok": True,
+            "root": str(root),
+            "dryRun": dry_run,
+            "archiveDuplicates": archive_duplicates,
+            "groups": len(duplicate_groups),
+            "nearGroups": near_groups,
+            "kept": kept_count,
+            "archived": archived_count,
+            "archivePath": str(archive_root) if archive_duplicates and not dry_run else "",
+            "keptFiles": kept_files[:200],
+            "archivedFiles": archived_files[:500],
+        }
 
     def rescan_inbox(self) -> dict:
         inbox = self.dir / "inbox"

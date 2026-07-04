@@ -375,6 +375,28 @@ export async function rebuildLibraryThumbnails(): Promise<{ ok: boolean; rebuilt
   return res.json();
 }
 
+export async function cleanupLibraryDuplicates(opts?: {
+  dryRun?: boolean;
+  archiveDuplicates?: boolean;
+  dedupeCategory?: string;
+  dedupeAll?: boolean;
+}): Promise<{
+  ok: boolean;
+  groups: number;
+  nearGroups: number;
+  kept: number;
+  archived: number;
+  archivePath?: string;
+}> {
+  const res = await fetch('/api/library/cleanup-duplicates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts || {}),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function archiveDirtyExtractedAssets(): Promise<{ ok: boolean; archived: number }> {
   const res = await fetch('/api/library/archive-dirty', { method: 'POST' });
   if (!res.ok) throw new Error(await res.text());
@@ -466,10 +488,11 @@ export async function addLibraryComponentFile(
   return res.json();
 }
 
-export async function addLibraryFileToRoot(file: File, category: string): Promise<{ ok: boolean; savedTo: string }> {
+export async function addLibraryFileToRoot(file: File, category: string, conflictMode: string = 'rename'): Promise<{ ok: boolean; savedTo?: string; duplicate?: boolean; message?: string }> {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('category', category);
+  fd.append('conflictMode', conflictMode);
   const res = await fetch('/api/library/add-file', { method: 'POST', body: fd });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
