@@ -570,6 +570,20 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 .lib-meta { min-width: 0; }
 .lib-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-sub { font-size: 10px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-badges { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; }
+.lib-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 10px;
+  border: 1px solid #c8d0d8;
+  background: #edf2f7;
+  color: #334;
+}
+.lib-badge.ok { background: #d1e7dd; border-color: #a3cfbb; color: #0f5132; }
+.lib-badge.warn { background: #fff3cd; border-color: #ffe69c; color: #7a5a00; }
 .lib-actions { grid-column: 2; display: flex; gap: 4px; align-items: center; }
 .lib-btn { font-size: 10px; padding: 1px 6px; border: 1px solid var(--panel-line); background: #fff; border-radius: 3px; cursor: pointer; }
 .lib-btn:hover:not(:disabled) { background: #eef2f6; }

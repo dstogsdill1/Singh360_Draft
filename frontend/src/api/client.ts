@@ -251,6 +251,12 @@ export interface LibraryComponent {
   height?: number;
   aspectRatio?: number;
   fileSize?: number;
+  source?: {
+    sourceType?: string;
+    sourceFile?: string;
+    sourceLocation?: string;
+    sourceName?: string;
+  };
 }
 
 export interface LibraryData {
@@ -291,6 +297,35 @@ export async function importLibrarySeed(): Promise<{ ok: boolean; componentCount
 
 export async function autoCategorizeLibrary(): Promise<{ ok: boolean; changed: number; total: number }> {
   const res = await fetch('/api/library/auto-categorize', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export interface RdmImportResult {
+  ok: boolean;
+  scanned: number;
+  added: number;
+  skippedDuplicates: number;
+  updated: number;
+  needsReview: number;
+  categories: Record<string, number>;
+  errors: string[];
+  dryRun?: boolean;
+  preview?: Array<{ file: string; category: string; displayName: string; action: string }>;
+}
+
+export async function importRdmLibraryFolder(opts: {
+  path: string;
+  dryRun?: boolean;
+  sourceName?: string;
+  resetRdmImport?: boolean;
+  noAutoApprove?: boolean;
+}): Promise<RdmImportResult> {
+  const res = await fetch('/api/library/import-rdm-folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

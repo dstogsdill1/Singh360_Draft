@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import sys
 import uuid
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -148,6 +149,64 @@ def main() -> int:
         print(f"rescan-inbox: added={info.get('added')} duplicates={info.get('duplicates')}")
         if int(info.get("added", 0)) < 1:
             problems.append("inbox file was not imported as a candidate")
+
+    # 4d. RDM folder import proof (fake local folder, deterministic names).
+    tiny_png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000a49444154789c6360000000020001e221bc330000000049454e44ae426082"
+    )
+    with tempfile.TemporaryDirectory() as tdir:
+        rroot = Path(tdir) / "Images"
+        (rroot / "Refrigeration").mkdir(parents=True, exist_ok=True)
+        (rroot / "Light").mkdir(parents=True, exist_ok=True)
+        # Ensure distinct bytes per file so SHA dedupe doesn't collapse them.
+        (rroot / "Refrigeration" / "pump.png").write_bytes(tiny_png + b"pump")
+        (rroot / "Refrigeration" / "traffic lights on.jpg").write_bytes(tiny_png + b"traffic-on")
+        (rroot / "Refrigeration" / "rdm intuitiveplant.png").write_bytes(tiny_png + b"intuitiveplant")
+        (rroot / "Light" / "light sensor.png").write_bytes(tiny_png + b"light-sensor")
+
+        rdm1 = c.post("/api/library/import-rdm-folder", json={"path": str(rroot), "dryRun": False})
+        if rdm1.status_code != 200:
+            problems.append(f"RDM import failed ({rdm1.status_code})")
+        else:
+            r1 = rdm1.get_json()
+            if int(r1.get("added", 0)) < 1:
+                problems.append("RDM import added no components")
+            l1 = c.get("/api/library").get_json().get("components", [])
+            by_name = {str(x.get("displayName") or ""): x for x in l1}
+            for nm in ("Pump", "Traffic Lights On", "RDM IntuitivePlant Controller", "Light Sensor"):
+                if nm not in by_name:
+                    problems.append(f"RDM display name missing: {nm}")
+            if by_name.get("Pump", {}).get("category") != "refrigeration":
+                problems.append("RDM Pump category should be refrigeration")
+            if by_name.get("Traffic Lights On", {}).get("category") != "alarms":
+                problems.append("Traffic Lights On category should be alarms")
+            if by_name.get("RDM IntuitivePlant Controller", {}).get("category") != "controllers":
+                problems.append("RDM IntuitivePlant category should be controllers")
+            if by_name.get("Light Sensor", {}).get("category") != "lighting":
+                problems.append("Light Sensor category should be lighting")
+
+            # Curated item must not be overwritten by reimport.
+            pump = by_name.get("Pump")
+            if pump and pump.get("id"):
+                c.patch(f"/api/library/components/{pump['id']}", json={"displayName": "Pump Curated", "category": "electrical", "status": "approved"})
+
+            before_count = len(l1)
+            rdm2 = c.post("/api/library/import-rdm-folder", json={"path": str(rroot), "dryRun": False})
+            if rdm2.status_code != 200:
+                problems.append(f"RDM reimport failed ({rdm2.status_code})")
+            else:
+                r2 = rdm2.get_json()
+                if int(r2.get("added", 0)) != 0:
+                    problems.append("RDM reimport should not add duplicate components")
+                l2 = c.get("/api/library").get_json().get("components", [])
+                # Count should not double.
+                if len(l2) > before_count + 1:
+                    problems.append("RDM reimport unexpectedly increased count")
+                # Curated value should persist.
+                p2 = next((x for x in l2 if x.get("id") == pump.get("id")), None) if pump else None
+                if p2 and p2.get("displayName") != "Pump Curated":
+                    problems.append("curated RDM item displayName was overwritten on reimport")
 
     # 5. Page-scoped overlay isolation via a throwaway project.
     wb = os.environ.get("SINGH360_SA31_WORKBOOK", "")

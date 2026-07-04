@@ -741,6 +741,33 @@ def rescan_library_assets():
         return jsonify(_err("Library rescan failed.", str(exc))), 500
 
 
+@app.post("/api/library/import-rdm-folder")
+def import_rdm_library_folder():
+    """Import official RDM Layout Editor image folder into local .docs library."""
+    body = request.get_json(silent=True) or {}
+    folder = str(body.get("path") or "").strip()
+    if not folder:
+        return jsonify(_err("Path is required.")), 400
+    dry_run = bool(body.get("dryRun", False))
+    source_name = str(body.get("sourceName") or "RDM Layout Editor 3").strip() or "RDM Layout Editor 3"
+    no_auto = bool(body.get("noAutoApprove", False))
+    reset_rdm = bool(body.get("resetRdmImport", False))
+    try:
+        result = library.import_rdm_folder(
+            folder,
+            dry_run=dry_run,
+            source_name=source_name,
+            auto_approve=not no_auto,
+            reset_rdm_import=reset_rdm,
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("RDM folder import failed: %s", exc)
+        return jsonify(_err("RDM folder import failed.", str(exc))), 500
+    if not result.get("ok"):
+        return jsonify(_err(result.get("error", "RDM import failed"))), 400
+    return jsonify(result)
+
+
 @app.post("/api/library/components/bulk")
 def bulk_update_library_components():
     body = request.get_json(silent=True) or {}

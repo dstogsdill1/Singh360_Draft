@@ -5,6 +5,7 @@ import {
   getLibrary,
   importLibrarySeed,
   autoCategorizeLibrary,
+  importRdmLibraryFolder,
   rescanLibraryAssets,
   rescanLibraryInbox,
   libraryAssetUrl,
@@ -52,6 +53,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'rdm' | 'custom' | 'extracted' | 'workbook' | 'reference'>('all');
   const [showRetired, setShowRetired] = useState(false);
   const [showCandidates, setShowCandidates] = useState(false);
   const [showNeedsReview, setShowNeedsReview] = useState(false);
@@ -125,6 +127,30 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     }
   };
 
+  const doImportRdmFolder = async () => {
+    const p = window.prompt(
+      'RDM library folder path:',
+      'C:\\Program Files (x86)\\RDM Layout Editor 3\\Images',
+    );
+    if (!p || !p.trim()) return;
+    try {
+      const dry = window.confirm('Run DRY RUN first?\n\nOK = dry-run preview\nCancel = import now');
+      const res = await importRdmLibraryFolder({ path: p.trim(), dryRun: dry });
+      if (dry) {
+        const rows = (res.preview || []).slice(0, 25).map((x) => `- ${x.action}: ${x.displayName} [${x.category}] (${x.file})`);
+        window.alert(
+          `RDM dry-run complete.\n\nscanned=${res.scanned} added=${res.added} dup=${res.skippedDuplicates} updated=${res.updated} review=${res.needsReview}`
+          + (rows.length ? `\n\nSample:\n${rows.join('\n')}` : ''),
+        );
+      } else {
+        await refresh();
+        window.alert(`RDM import complete. scanned=${res.scanned}, added=${res.added}, duplicates=${res.skippedDuplicates}, updated=${res.updated}, needsReview=${res.needsReview}`);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   const doAddFiles = async (file: File) => {
     try {
       await addLibraryComponentFile(file, {
@@ -153,10 +179,40 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     return showNeedsReview;
   };
 
+  const sourceVisible = (c: LibraryComponent): boolean => {
+    if (sourceFilter === 'all') return true;
+    const st = String(c.source?.sourceType || '').toLowerCase();
+    const ap = String(c.assetPath || '').toLowerCase();
+    if (sourceFilter === 'rdm') return st === 'rdm-layout-editor' || ap.includes('/rdm_layout_editor/');
+    if (sourceFilter === 'custom') return ap.includes('/components/custom/') || st === 'inbox';
+    if (sourceFilter === 'workbook') return ap.includes('/workbook_images/') || st === 'workbook';
+    if (sourceFilter === 'reference') return ap.includes('/reference_pages/') || (c.category || '').toLowerCase() === 'reference-page';
+    if (sourceFilter === 'extracted') return !(st === 'rdm-layout-editor' || ap.includes('/components/custom/') || ap.includes('/workbook_images/') || ap.includes('/reference_pages/'));
+    return true;
+  };
+
+  const priority = (c: LibraryComponent): number => {
+    const st = String(c.status || '').toLowerCase();
+    const src = String(c.source?.sourceType || '').toLowerCase();
+    const ap = String(c.assetPath || '').toLowerCase();
+    const isRdm = src === 'rdm-layout-editor' || ap.includes('/rdm_layout_editor/');
+    const isCustom = ap.includes('/components/custom/');
+    if (st === 'approved' && isCustom) return 0;
+    if (st === 'approved' && isRdm) return 1;
+    if (st === 'approved') return 2;
+    if (st === 'candidate') return 3;
+    if (st === 'needs_review') return 4;
+    if (st === 'duplicate') return 5;
+    if (st === 'reference_page') return 6;
+    if (st === 'retired') return 7;
+    return 99;
+  };
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return components.filter((c) => {
       if (!statusVisible(c)) return false;
+      if (!sourceVisible(c)) return false;
       const cat = (c.category || 'uncategorized').toLowerCase();
       if (category !== 'all' && cat !== category) return false;
       if (!q) return true;
@@ -165,8 +221,13 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         .join(' ')
         .toLowerCase();
       return hay.includes(q);
+    }).sort((a, b) => {
+      const pa = priority(a);
+      const pb = priority(b);
+      if (pa !== pb) return pa - pb;
+      return String(a.displayName || '').localeCompare(String(b.displayName || ''));
     });
-  }, [components, query, category, showRetired, showCandidates, showNeedsReview, showReferencePages, showDuplicates]);
+  }, [components, query, category, sourceFilter, showRetired, showCandidates, showNeedsReview, showReferencePages, showDuplicates]);
 
   const insert = (c: LibraryComponent) => {
     if (!c.assetPath) return;
@@ -297,6 +358,14 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
             <option key={c.id} value={c.id}>{catLabel(c.id)} ({c.count})</option>
           ))}
         </select>
+        <select className="lib-cat" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as never)} title="Filter by source">
+          <option value="all">Source: All</option>
+          <option value="rdm">RDM Layout Editor</option>
+          <option value="custom">Custom</option>
+          <option value="extracted">Extracted</option>
+          <option value="workbook">Workbook</option>
+          <option value="reference">Reference</option>
+        </select>
       </div>
       <label className="lib-showretired" title="Show retired components">
         <input type="checkbox" checked={showRetired} onChange={(e) => setShowRetired(e.target.checked)} /> Show retired
@@ -318,6 +387,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
       </label>
       <div className="lib-toolbar">
         <button className="lib-btn" onClick={() => void doAutoCategorize()} title="Auto-assign categories from part names/keywords (review afterwards)">Auto-categorize</button>
+        <button className="lib-btn" onClick={() => void doImportRdmFolder()} title="Import official RDM Layout Editor image folder (local path)">Import RDM Folder</button>
         <button className="lib-btn" onClick={() => void doRescanInbox()} title="Scan .docs/library/inbox and import files as Needs Review candidates">Rescan Inbox</button>
         <button className="lib-btn" onClick={() => void doRescanLibrary()} title="Scan custom component/reference folders for manually-added files">Rescan Library</button>
         <label className="lib-btn file-ribbon-btn" title="Upload a new image into the library (starts as Needs Review)">
@@ -414,6 +484,14 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
                     {isRetired(c) ? ' · retired' : ''}
                     {c.status ? ` · ${c.status}` : ''}
                     {c.duplicateGroupId ? ` · ${c.duplicateGroupId}` : ''}
+                  </div>
+                  <div className="lib-badges">
+                    {(String(c.source?.sourceType || '').toLowerCase() === 'rdm-layout-editor' || String(c.assetPath || '').toLowerCase().includes('/rdm_layout_editor/')) && <span className="lib-badge">RDM</span>}
+                    {String(c.assetPath || '').toLowerCase().includes('/components/custom/') && <span className="lib-badge">Custom</span>}
+                    {c.status === 'needs_review' && <span className="lib-badge warn">Needs Review</span>}
+                    {c.status === 'approved' && <span className="lib-badge ok">Approved</span>}
+                    {c.status === 'duplicate' && <span className="lib-badge">Duplicate</span>}
+                    {c.status === 'reference_page' && <span className="lib-badge">Reference</span>}
                   </div>
                 </div>
                 <div className="lib-actions">

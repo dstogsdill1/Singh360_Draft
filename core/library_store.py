@@ -30,6 +30,8 @@ STATUSES = {
 }
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
 
+RDM_TAGS = ["rdm", "rdm-layout-editor", "official-rdm-library"]
+
 
 class LibraryStore:
     def __init__(self, docs_dir: Path, repo_root: Path) -> None:
@@ -253,6 +255,15 @@ class LibraryStore:
             self._normalize_status(c)
             self._compute_hashes(c)
             if c.get("curated") is True:
+                continue
+            source_type = str((c.get("source") or {}).get("sourceType") or "").lower()
+            # Keep explicit RDM import mappings stable unless user curates later.
+            if source_type == "rdm-layout-editor":
+                if not c.get("defaultLabel"):
+                    c["defaultLabel"] = c.get("partNumber") or c.get("shortName") or c.get("displayName")
+                c["insertWithLabel"] = c.get("insertWithLabel", True)
+                if str(c.get("status") or "") not in STATUSES:
+                    c["status"] = "needs_review"
                 continue
             full_hay = self._component_haystack(c)
             aspect = c.get("aspectRatio")
@@ -558,7 +569,7 @@ class LibraryStore:
         self._compute_hashes(comp)
         # Generate thumbnail when PIL is available.
         ap = self.asset_path(rel_asset)
-        tp = self.asset_path(thumb_rel)
+        tp = self.dir / thumb_rel.replace("library/", "", 1)
         if ap and tp and Image is not None and ap.suffix.lower() != ".svg":
             try:
                 tp.parent.mkdir(parents=True, exist_ok=True)
@@ -588,6 +599,302 @@ class LibraryStore:
             dst = dst.with_name(f"{dst.stem}_{uuid.uuid4().hex[:6]}{dst.suffix.lower()}")
         shutil.copy2(src, dst)
         return dst
+
+    def _copy_to_rdm_components(self, src: Path, rel_folder: Path) -> Path:
+        dst = self.dir / "assets" / "components" / "rdm_layout_editor" / rel_folder / src.name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        # Avoid collisions while preserving folder structure.
+        if dst.exists():
+            dst = dst.with_name(f"{dst.stem}_{uuid.uuid4().hex[:6]}{dst.suffix.lower()}")
+        shutil.copy2(src, dst)
+        return dst
+
+    def _safe_title(self, name: str) -> str:
+        s = re.sub(r"[_\-]+", " ", (name or "").strip())
+        s = re.sub(r"\s+", " ", s)
+        # Preserve PR part codes and mixed alnum chunks.
+        out = []
+        for tok in s.split(" "):
+            up = tok.upper()
+            if re.fullmatch(r"PR\d{3,5}", up):
+                out.append(up)
+            elif re.fullmatch(r"[A-Za-z]*\d+[A-Za-z0-9]*", tok):
+                out.append(tok)
+            else:
+                out.append(tok.capitalize())
+        return " ".join(out).strip() or "Needs Review"
+
+    def _rdm_classify(self, src_folder: str, stem: str) -> tuple[str, str, list[str], bool]:
+        """Return (category, display_name, tags, high_confidence)."""
+        f = (src_folder or "").strip().lower()
+        n = (stem or "").strip().lower()
+        display = self._safe_title(stem)
+
+        # Folder-led defaults.
+        if f == "refrigeration":
+            category = "refrigeration"
+        elif f == "light":
+            category = "lighting"
+        elif f == "ahu":
+            category = "sensors"
+        elif f == "pipes":
+            category = "symbols"
+        elif f == "tank":
+            category = "refrigeration"
+        else:
+            category = "review"
+
+        high = category != "review"
+        tags = [*RDM_TAGS]
+
+        # Filename overrides.
+        if "traffic lights off" in n:
+            category, display, high = "alarms", "Traffic Lights Off", True
+            tags.append("traffic")
+        elif "traffic lights on" in n:
+            category, display, high = "alarms", "Traffic Lights On", True
+            tags.append("traffic")
+        elif "red strobe" in n or "red alarm" in n:
+            category, display, high = "alarms", "Red Strobe", True
+        elif "amber strobe" in n or "amber alarm" in n:
+            category, display, high = "alarms", "Amber Strobe", True
+        elif "pump" in n:
+            category, display, high = "refrigeration", "Pump", True
+        elif "compressor" in n:
+            category, display, high = "refrigeration", "Compressor", True
+        elif "valve open" in n:
+            category, display, high = "refrigeration", "Valve Open", True
+        elif "valve closed" in n:
+            category, display, high = "refrigeration", "Valve Closed", True
+        elif "coldroom" in n:
+            category, display, high = "refrigeration", "Coldroom", True
+        elif "vessel" in n:
+            category, display, high = "refrigeration", "Vessel", True
+        elif "data manager" in n or re.search(r"\bdmt\b", n) or re.search(r"\bdm\b", n):
+            category, display, high = "network", "Data Manager", True
+        elif "intuitiveplant" in n:
+            category, display, high = "controllers", "RDM IntuitivePlant Controller", True
+        elif re.search(r"\bpr\d{3,5}\b", n):
+            pn = re.search(r"\bpr\d{3,5}\b", n)
+            part = pn.group(0).upper() if pn else ""
+            tail = n.replace(part.lower(), "").strip()
+            tail_disp = self._safe_title(tail) if tail else ""
+            display = f"{part}{(' ' + tail_disp) if tail_disp else ''}".strip()
+            category, high = "controllers", True
+        elif "mercury switch" in n:
+            category, display, high = "controllers", "Mercury Switch", True
+        elif "mercury" in n:
+            category, display, high = "controllers", self._safe_title(stem if "2" in n else "Mercury Controller"), True
+
+        tags.append((src_folder or "other").strip().lower() or "other")
+        # normalize + dedupe tags
+        norm_tags = []
+        seen = set()
+        for t in tags:
+            tv = re.sub(r"\s+", "-", t.strip().lower())
+            if tv and tv not in seen:
+                seen.add(tv)
+                norm_tags.append(tv)
+        return category, display, norm_tags, high
+
+    def _is_forbidden_rdm_root(self, p: Path) -> bool:
+        s = str(p.resolve())
+        low = s.lower().rstrip("\\/")
+        # Block broad roots.
+        if re.fullmatch(r"[a-z]:", low):
+            return True
+        if low in {r"c:\windows", r"c:\program files", r"c:\program files (x86)"}:
+            return True
+        return False
+
+    def import_rdm_folder(
+        self,
+        folder_path: str | Path,
+        *,
+        dry_run: bool = False,
+        source_name: str = "RDM Layout Editor 3",
+        auto_approve: bool = True,
+        reset_rdm_import: bool = False,
+    ) -> dict:
+        """Import official RDM image library folder into local .docs library.
+
+        Reads files recursively from the provided folder (no writes there), copies
+        assets to .docs/library/assets/components/rdm_layout_editor/, builds
+        thumbnails, and upserts components with dedupe + curated-safe updates.
+        """
+        self.ensure()
+        src_root = Path(folder_path).expanduser().resolve()
+        if not src_root.exists() or not src_root.is_dir():
+            return {"ok": False, "error": f"RDM folder not found or not a directory: {src_root}"}
+        if self._is_forbidden_rdm_root(src_root):
+            return {"ok": False, "error": f"Refusing unsafe broad/system path: {src_root}"}
+
+        data = self.load()
+
+        if reset_rdm_import and not dry_run:
+            kept = []
+            for c in data.get("components", []):
+                st = str((c.get("source") or {}).get("sourceType") or "").lower()
+                if st == "rdm-layout-editor":
+                    continue
+                kept.append(c)
+            data["components"] = kept
+
+        # Existing hashes for dedupe checks.
+        by_sha = {str(c.get("sha256") or ""): c for c in data.get("components", []) if c.get("sha256")}
+        ph_pool = [(str(c.get("perceptualHash") or ""), c) for c in data.get("components", []) if c.get("perceptualHash")]
+
+        scanned = 0
+        added = 0
+        skipped_duplicates = 0
+        updated = 0
+        needs_review = 0
+        errors: list[str] = []
+        cat_counts: dict[str, int] = {}
+        dry_preview: list[dict] = []
+
+        for p in sorted(src_root.rglob("*")):
+            if p.is_dir() or p.suffix.lower() not in IMAGE_EXTS:
+                continue
+            scanned += 1
+            rel = p.relative_to(src_root)
+            folder_name = rel.parts[0] if rel.parts else "Other"
+            category, display_name, tags, high = self._rdm_classify(folder_name, p.stem)
+            cat_counts[category] = cat_counts.get(category, 0) + 1
+
+            try:
+                sha = hashlib.sha256(p.read_bytes()).hexdigest()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{p}: {exc}")
+                continue
+
+            # Exact duplicate skip/update.
+            existing = by_sha.get(sha)
+            if existing is not None:
+                skipped_duplicates += 1
+                # If not curated, keep metadata fresher for source/tags/category.
+                if existing.get("curated") is not True:
+                    existing["source"] = {
+                        "sourceType": "rdm-layout-editor",
+                        "sourceFile": p.name,
+                        "sourceLocation": str(rel.parent).replace("\\", "/"),
+                        "sourceName": source_name,
+                    }
+                    existing["tags"] = sorted({*(existing.get("tags") or []), *tags})
+                    existing["category"] = category
+                    existing["displayName"] = display_name
+                    existing["defaultLabel"] = display_name
+                    if auto_approve and high:
+                        existing["status"] = "approved"
+                    updated += 1
+                if dry_run:
+                    dry_preview.append({
+                        "file": str(rel).replace("\\", "/"),
+                        "category": category,
+                        "displayName": display_name,
+                        "action": "skip-duplicate",
+                    })
+                continue
+
+            # Near-duplicate by perceptual hash.
+            w, h, fsize, ph = self._image_meta(p)
+            near_dup = False
+            if ph:
+                for eph, _ in ph_pool:
+                    if eph and self._hamming(ph, eph) <= 4:
+                        near_dup = True
+                        break
+            if near_dup:
+                skipped_duplicates += 1
+                if dry_run:
+                    dry_preview.append({
+                        "file": str(rel).replace("\\", "/"),
+                        "category": category,
+                        "displayName": display_name,
+                        "action": "skip-near-duplicate",
+                    })
+                continue
+
+            if dry_run:
+                dry_preview.append({
+                    "file": str(rel).replace("\\", "/"),
+                    "category": category,
+                    "displayName": display_name,
+                    "action": "add",
+                })
+                continue
+
+            try:
+                copied = self._copy_to_rdm_components(p, rel.parent)
+                rel_asset = f"library/{copied.relative_to(self.dir).as_posix()}"
+                thumb_name = f"rdm_{uuid.uuid4().hex[:12]}.jpg"
+                thumb_rel = f"library/assets/thumbnails/rdm_layout_editor/{thumb_name}"
+
+                comp = {
+                    "id": f"rdm_{uuid.uuid4().hex[:10]}",
+                    "displayName": display_name,
+                    "shortName": display_name,
+                    "category": category,
+                    "aliases": [],
+                    "tags": tags,
+                    "assetKind": "image",
+                    "assetPath": rel_asset,
+                    "thumbnailPath": thumb_rel,
+                    "status": "approved" if (auto_approve and high) else "needs_review",
+                    "insertWithLabel": True,
+                    "defaultLabel": display_name,
+                    "source": {
+                        "sourceType": "rdm-layout-editor",
+                        "sourceFile": p.name,
+                        "sourceLocation": str(rel.parent).replace("\\", "/"),
+                        "sourceName": source_name,
+                    },
+                    "width": w or None,
+                    "height": h or None,
+                    "fileSize": fsize,
+                    "sha256": sha,
+                    "perceptualHash": ph,
+                }
+
+                # Thumbnail generation.
+                ap = self.asset_path(rel_asset)
+                tp = self.dir / thumb_rel.replace("library/", "", 1)
+                if ap and tp and Image is not None and ap.suffix.lower() != ".svg":
+                    try:
+                        tp.parent.mkdir(parents=True, exist_ok=True)
+                        with Image.open(ap) as im:
+                            im.thumbnail((256, 256))
+                            im.convert("RGB").save(tp, "JPEG", quality=86)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                data.setdefault("components", []).append(comp)
+                by_sha[sha] = comp
+                if ph:
+                    ph_pool.append((ph, comp))
+                if comp["status"] == "needs_review":
+                    needs_review += 1
+                added += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{p}: {exc}")
+
+        if not dry_run:
+            self._curate_components(data)
+            self._dedupe_components(data)
+            self.save(data)
+
+        return {
+            "ok": True,
+            "scanned": scanned,
+            "added": added,
+            "skippedDuplicates": skipped_duplicates,
+            "updated": updated,
+            "needsReview": needs_review,
+            "categories": cat_counts,
+            "errors": errors,
+            "dryRun": dry_run,
+            "preview": dry_preview[:300],
+        }
 
     def rescan_inbox(self) -> dict:
         inbox = self.dir / "inbox"
