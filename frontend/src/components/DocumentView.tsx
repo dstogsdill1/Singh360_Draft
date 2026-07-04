@@ -162,7 +162,7 @@ export default function DocumentView({
             className={`sheet-scale ${view.showGrid ? 'show-grid' : ''}`}
             style={{ transform: `scale(${scale})`, width: SHEET_W, height: SHEET_H }}
           >
-            <SheetFrame titleBlock={<TitleBlock project={project} page={activePage} />}>
+            <SheetFrame titleBlock={<TitleBlock project={project} page={activePage} />} sourceView={viewMode === 'source'}>
               <PageRenderer
                 page={activePage}
                 worksheet={worksheet}

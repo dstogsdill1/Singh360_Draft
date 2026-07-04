@@ -11,6 +11,8 @@ interface Props {
   projectFolder?: string;
   onRenameProject?: (name: string) => void;
   overflowWarning?: boolean;
+  onMergeIntoPrevious?: () => void;
+  onMakeIndependent?: () => void;
 }
 
 export default function PropertiesPanel({
@@ -22,6 +24,8 @@ export default function PropertiesPanel({
   projectFolder,
   onRenameProject,
   overflowWarning,
+  onMergeIntoPrevious,
+  onMakeIndependent,
 }: Props) {
   const [renameValue, setRenameValue] = useState('');
   return (
@@ -74,6 +78,23 @@ export default function PropertiesPanel({
         <div className="props-group props-warning">
           <h3>⚠ Layout Warning</h3>
           <p className="props-note">Content exceeds printable area. Consider recomposing, scaling, or splitting this page.</p>
+        </div>
+      )}
+
+      {page.continuationOf && (
+        <div className="props-group props-warning">
+          <h3>↳ Continuation Page</h3>
+          <p className="props-note">This sheet is a continuation of a previous page.</p>
+          {onMergeIntoPrevious && (
+            <button className="props-btn" onClick={onMergeIntoPrevious} title="Move this page's blocks back into the previous page and remove this continuation">
+              Merge Into Previous
+            </button>
+          )}
+          {onMakeIndependent && (
+            <button className="props-btn" onClick={onMakeIndependent} title="Break the link to the base page so this page becomes a standalone sheet">
+              Make Independent Sheet
+            </button>
+          )}
         </div>
       )}
 

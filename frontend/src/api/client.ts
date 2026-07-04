@@ -31,6 +31,12 @@ export async function archiveDuplicateFolders(id: string): Promise<string[]> {
   return json.archived ?? [];
 }
 
+export async function archiveProject(id: string): Promise<{ archivedTo: string }> {
+  const res = await fetch(`/api/projects/${id}/archive`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export interface WorkspaceResetOptions {
   archiveProjects?: boolean;
   archiveExports?: boolean;

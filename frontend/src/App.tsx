@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  archiveProject,
   attachCsv,
   createProjectFromWorkbook,
   exportPackage,
@@ -597,6 +598,21 @@ export default function App() {
     }
   };
 
+  const onArchiveCurrentProject = async () => {
+    if (!project) return;
+    const name = project.projectDisplayName || (project.metadata as Record<string, string>)?.projectName || project.id;
+    if (!window.confirm(`Archive project "${name}"?\n\nThis moves the project to .docs/_archive/ and returns you to the landing screen. Nothing is permanently deleted.`)) return;
+    try {
+      const res = await archiveProject(project.id);
+      window.alert(`Project archived to:\n${res.archivedTo}`);
+      setProject(null);
+      setActivePageId(null);
+      window.history.replaceState({}, '', '/app');
+    } catch (err) {
+      window.alert(`Archive failed: ${String(err)}`);
+    }
+  };
+
   const onUploadCsv = async (file: File) => {
     if (!project) return;
     try {
@@ -749,6 +765,7 @@ export default function App() {
       onOpenProject={() => setOpenProjectOpen(true)}
       onCleanWorkspace={() => setCleanWorkspaceOpen(true)}
       onImportWorksheet={() => setImportWsOpen({ afterPageId: activePageId ?? undefined })}
+      onArchiveCurrentProject={() => void onArchiveCurrentProject()}
       theme={theme}
       onSetTheme={setThemeState}
       selection={selection}
@@ -947,6 +964,8 @@ export default function App() {
             projectFolder={project.projectFolder}
             onRenameProject={(name) => void onRenameProject(name)}
             overflowWarning={Array.isArray(activePage.layoutWarnings) && activePage.layoutWarnings.length > 0}
+            onMergeIntoPrevious={activePage.continuationOf ? () => mergeContinuationIntoPrevious(activePage.id) : undefined}
+            onMakeIndependent={activePage.continuationOf ? () => makeIndependent(activePage.id) : undefined}
           />
         </div>
       }

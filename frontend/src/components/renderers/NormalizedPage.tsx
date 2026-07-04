@@ -4,6 +4,7 @@ import TablePageRenderer from './TablePageRenderer';
 import MatrixPageRenderer from './MatrixPageRenderer';
 import CoverPageRenderer from './CoverPageRenderer';
 import ImagePlaceholderRenderer from './ImagePlaceholderRenderer';
+import GeneratedIndexRenderer from './GeneratedIndexRenderer';
 import CanvasEditor from '../CanvasEditor';
 
 interface Props {
@@ -45,10 +46,16 @@ export default function NormalizedPage({
 }: Props) {
   const blocks = page.blocks ?? [];
   const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
+  const isIndexPage = page.pageType === 'index';
   const overlayInteractive = overlayMode || activeTool !== 'select';
   const hasOverlay = (page.canvasObjects?.length ?? 0) > 0;
 
   const base = (() => {
+    // Generated sheet index / TOC — live-computed from current project pages.
+    if (isIndexPage) {
+      return <GeneratedIndexRenderer project={project} page={page} />;
+    }
+
     if (isImageType) {
       const imgBlocks = blocks.filter((b) => b.type === 'imagePlaceholder' || b.type === 'underlayPlaceholder');
       if (imgBlocks.length) {

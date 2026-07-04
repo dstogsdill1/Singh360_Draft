@@ -1103,6 +1103,30 @@ def archive_duplicate_folders(project_id: str):
         app.logger.error("Archive dup folders failed for %s: %s", project_id, exc)
         return jsonify(_err("Failed to archive duplicate folders.", str(exc))), 500
     return jsonify({"ok": True, "id": project_id, "archived": moved})
+
+
+@app.post("/api/projects/<project_id>/archive")
+def archive_project(project_id: str):
+    """Archive (not delete) the whole project folder to .docs/_archive/<ts>/projects/."""
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    from datetime import datetime
+
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    archive_root = DOCS_DIR / "_archive" / ts / "projects"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    project_dir = store.find_dir(project_id)
+    if not project_dir:
+        return jsonify(_err("Project folder not found.")), 404
+    dest = archive_root / project_dir.name
+    try:
+        import shutil
+        shutil.move(str(project_dir), str(dest))
+    except Exception as exc:
+        app.logger.error("archive_project failed for %s: %s", project_id, exc)
+        return jsonify(_err("Failed to archive project.", str(exc))), 500
+    return jsonify({"ok": True, "id": project_id, "archivedTo": str(dest)})
 def export_package(project_id: str):
     """Build a ZIP package: project.json + sources + assets + latest PDF + manifest."""
     import io

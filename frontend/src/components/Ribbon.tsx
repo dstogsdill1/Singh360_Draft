@@ -60,6 +60,7 @@ interface Props {
   onOpenProject: () => void;
   onCleanWorkspace: () => void;
   onImportWorksheet: () => void;
+  onArchiveCurrentProject: () => void;
   renumberBadge?: boolean;
   theme: 'dark' | 'light';
   onSetTheme: (t: 'dark' | 'light') => void;
@@ -109,6 +110,7 @@ export default function Ribbon({
   onOpenProject,
   onCleanWorkspace,
   onImportWorksheet,
+  onArchiveCurrentProject,
   renumberBadge,
   theme,
   onSetTheme,
@@ -192,6 +194,7 @@ export default function Ribbon({
             </Group>
             <Group title="Maintenance">
               <button className="ribbon-btn" onClick={onCleanWorkspace} title="Archive old projects/exports to start fresh (never deletes; library preserved)">Clean Workspace</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onArchiveCurrentProject} title="Archive the currently open project and return to the landing screen">Archive Project</button>
             </Group>
             <Group title="Output">
               <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf} title="Choose paper size and export a PDF">Export PDF</button>

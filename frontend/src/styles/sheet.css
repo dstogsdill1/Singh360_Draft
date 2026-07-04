@@ -27,6 +27,13 @@
   background: #fff;
 }
 
+/* Source view is the only context where .sheet-body is allowed to scroll.
+   All normalized drawing views use overflow: hidden (the default). */
+.sheet-body-source {
+  overflow: auto !important;
+  max-height: none !important;
+}
+
 /* ── TITLE BLOCK (issued-drawing quality) ── */
 .sheet-title-block {
   position: absolute;
@@ -75,8 +82,53 @@
 .tb-v3 .tb-page-label { font-weight: 700; }
 
 /* ── NORMALIZED PAGE BLOCKS ── */
-.np { padding: 40px 48px; color: #111; font-size: 14px; line-height: 1.5; }
+.np {
+  padding: 40px 48px;
+  color: #111;
+  font-size: 14px;
+  line-height: 1.5;
+  /* Hard no-scroll: normalized drawing content never scrolls inside the sheet. */
+  overflow: hidden;
+  max-height: 866px;
+  box-sizing: border-box;
+}
 .np-empty { padding: 48px; color: #888; }
+
+/* ── GENERATED SHEET INDEX / TOC ── */
+.np-index {
+  padding: 36px 48px;
+  overflow: hidden;
+  box-sizing: border-box;
+  max-height: 866px;
+}
+.np-index-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+.np-index-table th {
+  background: #24282e;
+  color: #fff;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 8px;
+  border: 1px solid #111;
+  text-align: left;
+}
+.np-index-table td {
+  border: 1px solid #c2c7cd;
+  padding: 5px 8px;
+  vertical-align: middle;
+}
+.np-index-table tbody tr:nth-child(even) td { background: #f4f6f8; }
+.np-index-table .ni-code { width: 96px; font-weight: 700; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+.np-index-table .ni-title { width: auto; }
+.np-index-table .ni-pg { width: 48px; text-align: center; }
+.np-index-table .ni-fam { width: 200px; font-size: 11px; color: #4a525b; }
+.np-index-table tr.ni-cont td { background: #f8fafc; color: #6b7682; }
+.ni-cont-mark { font-size: 10px; color: #a5661a; font-weight: 600; letter-spacing: 0.04em; }
 .np-title { font-size: 30px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 16px; border-bottom: 2px solid #111; padding-bottom: 8px; }
 .np-subtitle { font-size: 18px; font-weight: 600; color: #333; margin-bottom: 12px; }
 .np-heading { font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #12539b; margin: 18px 0 6px; border-bottom: 1px solid #cdd4db; padding-bottom: 3px; }
@@ -126,7 +178,16 @@
 
 /* ── UNIVERSAL PAGE OVERLAY (base + editable canvas) ── */
 .np-page-root { position: relative; min-height: 100%; height: 100%; }
-.np-base-layer { position: relative; z-index: 1; height: 100%; overflow: auto; }
+/* Never allow the normalized base layer to create an internal scrollbar.
+   Drawing sheets are fixed-size; content that overflows is a layout warning,
+   not a scroll area.  Source view (RawGridRenderer) is exempt. */
+.np-base-layer {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow: hidden;
+  max-height: 866px;
+}
 .np-base-layer.passthrough { pointer-events: none; }
 .np-image-base { height: 100%; }
 .np-overlay-layer {
