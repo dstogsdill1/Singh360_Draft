@@ -3,6 +3,7 @@
 Usage:
     python scripts/refresh_folder_library.py "C:\\path\\to\\library\\assets" --dry-run
     python scripts/refresh_folder_library.py "C:\\path\\to\\library\\assets" --apply
+    python scripts/refresh_folder_library.py "C:\\path\\to\\library\\assets" --rebuild-thumbnails
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ def main() -> int:
     ap.add_argument("path", help="Master library root (assets folder)")
     ap.add_argument("--dry-run", action="store_true", help="Preview only")
     ap.add_argument("--apply", action="store_true", help="Apply refresh")
+    ap.add_argument("--rebuild-thumbnails", action="store_true", help="Rebuild thumbnails after refresh")
     ap.add_argument("--reset-clean", action="store_true", help="Archive old non-curated entries before refresh")
     args = ap.parse_args()
 
@@ -58,6 +60,10 @@ def main() -> int:
         print(f"  errors: {len(errs)}")
         for e in errs[:20]:
             print(f"    - {e}")
+
+    if args.rebuild_thumbnails and not dry:
+        tr = store.rebuild_thumbnails()
+        print(f"thumbnails: rebuilt={tr.get('rebuilt', 0)} missingBefore={tr.get('missingBefore', 0)}")
     return 0
 
 

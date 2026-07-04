@@ -45,8 +45,8 @@ class LibraryStore:
         self.assets = self.dir / "assets"
         self.seed = repo_root / "Singh360_Component_Library_Seed" / "library"
         self.index_path = self.dir / "library.json"
-        self.config_path = self.dir / "config.json"
-        self.default_master_root = repo_root / "Singh360_Component_Library_Seed" / "library" / "assets"
+        self.config_path = self.dir / "library_settings.json"
+        self.default_master_root = docs_dir / "library" / "assets" / "components"
 
     # ---- filesystem helpers -------------------------------------------------
     def ensure(self) -> None:
@@ -88,6 +88,7 @@ class LibraryStore:
             "assets/originals/pdf",
             "assets/originals/svg",
             "assets/originals/source",
+            "assets/rendered",
             "staging",
             "inbox",
             "processed",
@@ -119,8 +120,12 @@ class LibraryStore:
             cfg = json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
         except Exception:  # noqa: BLE001
             cfg = {}
-        if "masterLibraryRoot" not in cfg:
-            cfg["masterLibraryRoot"] = str(self.default_master_root)
+        if "libraryRoot" not in cfg:
+            cfg["libraryRoot"] = str(self.default_master_root)
+        if "mode" not in cfg:
+            cfg["mode"] = "folder-master"
+        if "lastRefreshedAt" not in cfg:
+            cfg["lastRefreshedAt"] = None
         return cfg
 
     def _write_config(self, cfg: dict) -> None:
@@ -128,16 +133,30 @@ class LibraryStore:
         self.config_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def get_master_root(self) -> str:
-        return str(self._read_config().get("masterLibraryRoot") or self.default_master_root)
+        return str(self._read_config().get("libraryRoot") or self.default_master_root)
 
     def set_master_root(self, root_path: str | Path) -> dict:
         p = Path(root_path).expanduser().resolve()
         if not p.exists() or not p.is_dir():
             return {"ok": False, "error": f"Invalid library root: {p}"}
         cfg = self._read_config()
-        cfg["masterLibraryRoot"] = str(p)
+        cfg["libraryRoot"] = str(p)
         self._write_config(cfg)
-        return {"ok": True, "masterLibraryRoot": str(p)}
+        return {"ok": True, "libraryRoot": str(p), "mode": cfg.get("mode", "folder-master")}
+
+    def _set_last_refreshed(self) -> None:
+        cfg = self._read_config()
+        cfg["lastRefreshedAt"] = self._now_iso()
+        self._write_config(cfg)
+
+    def _archive_current_index_snapshot(self) -> Path | None:
+        if not self.index_path.exists():
+            return None
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        dst = self.dir / "_archive" / f"library_{ts}.json"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.index_path, dst)
+        return dst
 
     # ---- seed import --------------------------------------------------------
     def import_seed(self) -> dict:
@@ -442,7 +461,7 @@ class LibraryStore:
         }
         data["paths"] = {
             "root": str(self.dir),
-            "masterLibraryRoot": self.get_master_root(),
+            "libraryRoot": self.get_master_root(),
             "inbox": str(self.dir / "inbox"),
             "components": str(self.dir / "assets" / "components"),
             "referencePages": str(self.dir / "assets" / "reference_pages"),
@@ -1153,7 +1172,17 @@ class LibraryStore:
             if p.suffix.lower() in IMAGE_EXTS | {".pdf"} and not self._is_thumbnail_source_path(p):
                 non_thumb_stems.add(p.stem.lower())
 
-        by_sha = {str(c.get("sha256") or ""): c for c in data.get("components", []) if c.get("sha256")}
+        existing_by_source: dict[str, dict] = {}
+        by_sha_pool: dict[str, list[dict]] = {}
+        for c in data.get("components", []):
+            src = c.get("source") or {}
+            src_key = f"{src.get('sourceLocation', '')}/{src.get('sourceFile', '')}".strip("/")
+            if src_key:
+                existing_by_source[src_key] = c
+            sha0 = str(c.get("sha256") or "")
+            if sha0:
+                by_sha_pool.setdefault(sha0, []).append(c)
+        touched_ids: set[str] = set()
         scanned = 0
         added = 0
         updated = 0
@@ -1171,6 +1200,7 @@ class LibraryStore:
             scanned += 1
             rel = src.relative_to(src_root)
             rel_str = rel.as_posix()
+            source_key = f"{str(rel.parent).replace('\\', '/')}/{src.name}".strip("/")
             folder_hint = rel.parts[0] if rel.parts else "custom"
             if rel.parts and rel.parts[0].lower() in {"assets", "components", "thumbnails", "originals"} and len(rel.parts) > 1:
                 folder_hint = rel.parts[1]
@@ -1193,9 +1223,9 @@ class LibraryStore:
                 orig_pdf_name = f"{src.stem}_{uuid.uuid4().hex[:8]}.pdf"
                 orig_pdf_abs = self.dir / "assets" / "originals" / "pdf" / orig_pdf_name
                 rendered_name = f"{src.stem}_{uuid.uuid4().hex[:8]}.png"
-                rendered_abs = self.dir / "assets" / "components" / cat_folder / rendered_name
+                rendered_abs = self.dir / "assets" / "rendered" / rendered_name
                 original_pdf_rel = f"library/assets/originals/pdf/{orig_pdf_name}"
-                rendered_rel = f"library/assets/components/{cat_folder}/{rendered_name}"
+                rendered_rel = f"library/assets/rendered/{rendered_name}"
                 if not dry_run:
                     try:
                         orig_pdf_abs.parent.mkdir(parents=True, exist_ok=True)
@@ -1220,9 +1250,19 @@ class LibraryStore:
                 errors.append(f"{rel_str}: {exc}")
                 continue
 
-            existing = by_sha.get(sha)
+            existing = existing_by_source.get(source_key)
+            if existing is None:
+                # Fallback: same content hash can indicate moved/renamed file for existing local-folder item.
+                for cand in by_sha_pool.get(sha, []):
+                    if str(cand.get("id") or "") in touched_ids:
+                        continue
+                    csrc = cand.get("source") or {}
+                    if str(csrc.get("sourceType") or "") == "local-library-folder":
+                        existing = cand
+                        break
             if existing is not None:
                 skipped_duplicates += 1
+                touched_ids.add(str(existing.get("id") or ""))
                 if existing.get("curated") is not True:
                     existing["source"] = {
                         "sourceType": "local-library-folder",
@@ -1231,9 +1271,26 @@ class LibraryStore:
                         "sourceName": source_name,
                     }
                     existing["category"] = category
+                    existing["displayName"] = display_name
+                    existing["shortName"] = display_name
+                    existing["defaultLabel"] = existing.get("partNumber") or display_name
                     existing["tags"] = sorted({*(existing.get("tags") or []), "local", "library-sync"})
                     existing["sourceQuality"] = source_quality
+                    existing["status"] = "needs_review" if source_quality == "thumbnail_only" else "approved"
+                    existing["missing"] = False
+                    existing["assetPath"] = existing.get("assetPath")
+                    # Ensure thumbnail exists after refresh.
+                    apx = self._asset_abs(existing)
+                    if apx:
+                        if existing.get("thumbnailPath"):
+                            tpx = self.dir / str(existing.get("thumbnailPath")).replace("library/", "", 1)
+                        else:
+                            t_relx, tpx = self._thumbnail_dest_for(category, apx.stem)
+                            existing["thumbnailPath"] = t_relx
+                        self._build_thumbnail(apx, tpx)
                     updated += 1
+                else:
+                    existing["missing"] = False
                 continue
 
             if dry_run:
@@ -1256,7 +1313,7 @@ class LibraryStore:
                 self._build_thumbnail(comp_abs, thumb_abs)
 
                 comp = {
-                    "id": f"cmp_{sha[:12]}",
+                    "id": f"cmp_{hashlib.sha1(source_key.encode('utf-8')).hexdigest()[:12]}",
                     "displayName": display_name,
                     "shortName": display_name,
                     "category": category,
@@ -1286,10 +1343,23 @@ class LibraryStore:
 
                 self._compute_hashes(comp)
                 data.setdefault("components", []).append(comp)
-                by_sha[sha] = comp
+                by_sha_pool.setdefault(sha, []).append(comp)
+                existing_by_source[source_key] = comp
+                touched_ids.add(str(comp.get("id") or ""))
                 added += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"{rel_str}: {exc}")
+
+        # Mark entries not present in current root scan.
+        if not dry_run:
+            for c in data.get("components", []):
+                cid = str(c.get("id") or "")
+                if cid and cid in touched_ids:
+                    c["missing"] = False
+                    continue
+                c["missing"] = True
+                if c.get("curated") is not True:
+                    c["status"] = "retired"
 
         if not dry_run:
             self._curate_components(data)
@@ -1313,7 +1383,12 @@ class LibraryStore:
 
     def refresh_from_master_root(self, *, dry_run: bool = False, reset_clean: bool = False) -> dict:
         root = self.get_master_root()
-        return self.import_local_folder(root, dry_run=dry_run, reset_clean=reset_clean, source_name="Master Library Root")
+        if not dry_run:
+            self._archive_current_index_snapshot()
+        result = self.import_local_folder(root, dry_run=dry_run, reset_clean=reset_clean, source_name="Master Library Root")
+        if result.get("ok") and not dry_run:
+            self._set_last_refreshed()
+        return result
 
     def sync_names_from_files(self) -> dict:
         data = self.load()

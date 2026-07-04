@@ -13,6 +13,7 @@ Checks (deterministic, via the Flask test client — no live server needed):
 from __future__ import annotations
 
 import os
+import json
 import sys
 import uuid
 import tempfile
@@ -255,9 +256,16 @@ def main() -> int:
         (lroot / "symbol").mkdir(parents=True, exist_ok=True)
         (lroot / "thumbnails" / "hvac").mkdir(parents=True, exist_ok=True)
 
-        (lroot / "hvac" / "Fan.png").write_bytes(tiny_png + b"fan")
-        (lroot / "refrigeration" / "Valve_Open.png").write_bytes(tiny_png + b"valve-open")
-        (lroot / "symbol" / "HEB_logo.png").write_bytes(tiny_png + b"heb-logo")
+        try:
+            from PIL import Image  # type: ignore
+
+            Image.new("RGB", (8, 8), (220, 40, 40)).save(lroot / "hvac" / "Fan.png", "PNG")
+            Image.new("RGB", (8, 8), (40, 220, 40)).save(lroot / "refrigeration" / "Valve_Open.png", "PNG")
+            Image.new("RGB", (8, 8), (40, 40, 220)).save(lroot / "symbol" / "HEB_logo.png", "PNG")
+        except Exception:
+            (lroot / "hvac" / "Fan.png").write_bytes(tiny_png)
+            (lroot / "refrigeration" / "Valve_Open.png").write_bytes(tiny_png)
+            (lroot / "symbol" / "HEB_logo.png").write_bytes(tiny_png)
         (lroot / "thumbnails" / "hvac" / "thumb_only_item.png").write_bytes(tiny_png + b"thumb-only")
 
         # Build a tiny PDF when PyMuPDF is available.
@@ -278,15 +286,32 @@ def main() -> int:
         if set_root.status_code != 200:
             problems.append(f"set library root failed ({set_root.status_code})")
 
+        # library_settings.json should store the selected root.
+        settings_path = server.DOCS_DIR / "library" / "library_settings.json"
+        if not settings_path.exists():
+            problems.append("library_settings.json not created")
+        else:
+            try:
+                cfg = json.loads(settings_path.read_text(encoding="utf-8"))
+                if Path(str(cfg.get("libraryRoot") or "")).resolve() != lroot.resolve():
+                    problems.append("library_settings.json libraryRoot mismatch")
+            except Exception:
+                problems.append("library_settings.json unreadable")
+
         imp = c.post("/api/library/refresh", json={"dryRun": False, "resetClean": True})
         if imp.status_code != 200:
             problems.append(f"local-folder import failed ({imp.status_code})")
         else:
+            # Old metadata should be snapshotted.
+            if not any((server.DOCS_DIR / "library" / "_archive").glob("library_*.json")):
+                problems.append("old metadata archive snapshot was not created")
+
             j = imp.get_json()
             if int(j.get("scanned", 0)) < 4:
                 problems.append("local-folder import scanned too few files")
             lib2 = c.get("/api/library").get_json().get("components", [])
-            by_name2 = {str(x.get("displayName") or ""): x for x in lib2}
+            local_only = [x for x in lib2 if str((x.get("source") or {}).get("sourceType") or "") == "local-library-folder"]
+            by_name2 = {str(x.get("displayName") or ""): x for x in local_only}
             if "Fan" not in by_name2:
                 problems.append("Fan missing after local-folder import")
             if "Valve Open" not in by_name2:
@@ -299,6 +324,12 @@ def main() -> int:
                 problems.append("refrigeration/Valve_Open should map to refrigeration")
             if by_name2.get("H-E-B Logo", {}).get("category") != "symbol":
                 problems.append("symbol/HEB_logo should map to symbol")
+
+            # No temp path should be used for library root imports.
+            for comp in lib2:
+                src_loc = str((comp.get("source") or {}).get("sourceLocation") or "").lower()
+                if "appdata" in src_loc and "temp" in src_loc:
+                    problems.append("temp path used in component sourceLocation")
 
             # sourceQuality warning flag for thumbnail-only source.
             thumb_only = next((x for x in lib2 if "thumb_only_item" in str((x.get("source") or {}).get("sourceFile") or "")), None)
@@ -314,6 +345,20 @@ def main() -> int:
                     ap = str(wicp.get("assetPath") or "")
                     if not ap.lower().endswith(".png"):
                         problems.append("WICP Enclosure asset should be rendered PNG")
+
+            # Thumbnails should exist for imported entries.
+            try:
+                from PIL import Image as _PILImage  # type: ignore # noqa: F401
+                has_pillow = True
+            except Exception:
+                has_pillow = False
+            if has_pillow:
+                for nm in ("Fan", "Valve Open", "H-E-B Logo"):
+                    cc = by_name2.get(nm)
+                    if cc and cc.get("thumbnailPath"):
+                        tp = server.DOCS_DIR / str(cc.get("thumbnailPath")).replace("library/", "", 1)
+                        if not tp.exists():
+                            problems.append(f"thumbnail missing for {nm}")
 
             # Rename metadata + optional file rename and verify persistence.
             fan = by_name2.get("Fan")
@@ -347,9 +392,14 @@ def main() -> int:
                         problems.append("missing asset should be marked missing=true after rescan")
 
             # Add file through app route into folder-based root.
-            add_png = lroot / "refrigeration" / "New_Local_Pump.png"
-            add_png.write_bytes(tiny_png + b"new-local-pump")
-            c.post("/api/library/refresh", json={"dryRun": False, "resetClean": False})
+            import io
+            add_res = c.post(
+                "/api/library/add-file",
+                data={"category": "refrigeration", "file": (io.BytesIO(tiny_png + b"new-local-pump"), "New_Local_Pump.png")},
+                content_type="multipart/form-data",
+            )
+            if add_res.status_code != 200:
+                problems.append(f"add-file route failed ({add_res.status_code})")
             l6 = c.get("/api/library").get_json().get("components", [])
             if not any((x.get("displayName") or "") == "New Local Pump" for x in l6):
                 problems.append("folder add + refresh did not surface new component")

@@ -268,7 +268,7 @@ export interface LibraryData {
   connectorStyles: Array<Record<string, unknown>>;
   symbols: Array<Record<string, unknown>>;
   statusCounts?: Record<string, number>;
-  paths?: { root: string; masterLibraryRoot?: string; inbox: string; components: string; referencePages: string; thumbnails: string };
+  paths?: { root: string; libraryRoot?: string; inbox: string; components: string; referencePages: string; thumbnails: string };
 }
 
 export function libraryAssetUrl(path: string): string {
@@ -287,7 +287,7 @@ export async function getLibraryRoot(): Promise<{ ok: boolean; path: string }> {
   return res.json();
 }
 
-export async function setLibraryRoot(path: string): Promise<{ ok: boolean; masterLibraryRoot: string }> {
+export async function setLibraryRoot(path: string): Promise<{ ok: boolean; path: string; mode?: string }> {
   const res = await fetch('/api/library/root', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

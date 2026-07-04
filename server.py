@@ -718,7 +718,7 @@ def set_library_root():
     result = library.set_master_root(path)
     if not result.get("ok"):
         return jsonify(_err(result.get("error", "Failed to set library root."))), 400
-    return jsonify(result)
+    return jsonify({"ok": True, "path": result.get("libraryRoot", path), "mode": "folder-master"})
 
 
 @app.post("/api/library/refresh")

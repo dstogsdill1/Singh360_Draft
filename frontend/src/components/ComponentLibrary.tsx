@@ -86,6 +86,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const [editNotes, setEditNotes] = useState('');
   const [error, setError] = useState('');
   const [savedMsg, setSavedMsg] = useState('');
+  const [thumbFailed, setThumbFailed] = useState<Record<string, boolean>>({});
 
   const refresh = async () => {
     try {
@@ -93,6 +94,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
       setData(await getLibrary());
       const root = await getLibraryRoot();
       setLibraryRootState(root.path || '');
+      setThumbFailed({});
     } catch (e) {
       setError(String(e));
     } finally {
@@ -191,6 +193,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const statusVisible = (c: LibraryComponent): boolean => {
     const st = String(c.status || 'needs_review').toLowerCase();
     if (!showAdvanced) {
+      if (c.missing) return false;
       return st !== 'retired' && st !== 'reference_page' && st !== 'duplicate' && st !== 'candidate' && st !== 'needs_review';
     }
     if (st === 'approved') return true;
@@ -386,8 +389,8 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         </select>
       </div>
       <div className="lib-paths">
-        <div>Library Root: {libraryRoot || data?.paths?.masterLibraryRoot || '(unset)'}</div>
-        <div>Local Mirror: {data?.paths?.root || '(unknown)'}</div>
+        <div>Library Root: {libraryRoot || data?.paths?.libraryRoot || '(unset)'}</div>
+        <div>Metadata Store: {data?.paths?.root || '(unknown)'}</div>
       </div>
       <div className="lib-toolbar">
         <button className="lib-btn" onClick={() => void doChangeRoot()} title="Set master library root folder path">Change Root</button>
@@ -475,10 +478,15 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
               />
             </label>
             <div className="lib-thumb">
-              {c.thumbnailPath ? (
-                <img src={libraryAssetUrl(c.thumbnailPath)} alt={c.displayName} loading="lazy" />
+              {c.thumbnailPath && !thumbFailed[c.id] ? (
+                <img
+                  src={libraryAssetUrl(c.thumbnailPath)}
+                  alt={c.displayName}
+                  loading="lazy"
+                  onError={() => setThumbFailed((prev) => ({ ...prev, [c.id]: true }))}
+                />
               ) : (
-                <span className="lib-thumb-ph">▨</span>
+                <span className="lib-thumb-ph" title={c.displayName}>▨ {c.displayName}</span>
               )}
             </div>
             {editId === c.id ? (
@@ -521,32 +529,38 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
                   <div className="lib-sub">
                     {c.partNumber || c.category}
                     {isRetired(c) ? ' · retired' : ''}
-                    {c.status ? ` · ${c.status}` : ''}
-                    {c.duplicateGroupId ? ` · ${c.duplicateGroupId}` : ''}
+                    {showAdvanced && c.status ? ` · ${c.status}` : ''}
+                    {showAdvanced && c.duplicateGroupId ? ` · ${c.duplicateGroupId}` : ''}
                   </div>
                   {c.sourceQuality === 'thumbnail_only' && (
                     <div className="lib-sourcewarn" title="Thumbnail-only source can be low resolution for output">
                       This asset may be low resolution. Replace with original if available.
                     </div>
                   )}
-                  <div className="lib-badges">
-                    {(String(c.source?.sourceType || '').toLowerCase() === 'rdm-layout-editor' || String(c.assetPath || '').toLowerCase().includes('/rdm_layout_editor/')) && <span className="lib-badge">RDM</span>}
-                    {String(c.assetPath || '').toLowerCase().includes('/components/custom/') && <span className="lib-badge">Custom</span>}
-                    {c.status === 'needs_review' && <span className="lib-badge warn">Needs Review</span>}
-                    {c.status === 'approved' && <span className="lib-badge ok">Approved</span>}
-                    {c.status === 'duplicate' && <span className="lib-badge">Duplicate</span>}
-                    {c.status === 'reference_page' && <span className="lib-badge">Reference</span>}
-                  </div>
+                  {showAdvanced && (
+                    <div className="lib-badges">
+                      {(String(c.source?.sourceType || '').toLowerCase() === 'rdm-layout-editor' || String(c.assetPath || '').toLowerCase().includes('/rdm_layout_editor/')) && <span className="lib-badge">RDM</span>}
+                      {String(c.assetPath || '').toLowerCase().includes('/components/custom/') && <span className="lib-badge">Custom</span>}
+                      {c.status === 'needs_review' && <span className="lib-badge warn">Needs Review</span>}
+                      {c.status === 'approved' && <span className="lib-badge ok">Approved</span>}
+                      {c.status === 'duplicate' && <span className="lib-badge">Duplicate</span>}
+                      {c.status === 'reference_page' && <span className="lib-badge">Reference</span>}
+                    </div>
+                  )}
                 </div>
                 <div className="lib-actions">
                   <button className="lib-btn" disabled={!canInsert} onClick={() => insert(c)} title="Insert on active page">Insert</button>
                   <button className="lib-btn" onClick={() => beginEdit(c)} title="Rename / recategorize">✎</button>
-                  {isRetired(c) ? (
-                    <button className="lib-btn" onClick={() => void restoreItem(c)} title="Restore this retired component">Restore</button>
-                  ) : (
-                    <button className="lib-btn" onClick={() => void retireItem(c)} title="Retire (hide from search, keep in old projects)">Retire</button>
+                  {showAdvanced && (
+                    <>
+                      {isRetired(c) ? (
+                        <button className="lib-btn" onClick={() => void restoreItem(c)} title="Restore this retired component">Restore</button>
+                      ) : (
+                        <button className="lib-btn" onClick={() => void retireItem(c)} title="Retire (hide from search, keep in old projects)">Retire</button>
+                      )}
+                      <button className="lib-btn danger" onClick={() => void removeItem(c)} title="Delete this library item (with confirmation)">✕</button>
+                    </>
                   )}
-                  <button className="lib-btn danger" onClick={() => void removeItem(c)} title="Delete this library item (with confirmation)">✕</button>
                 </div>
               </>
             )}
