@@ -469,6 +469,26 @@ button, select, input, textarea { font: inherit; }
 .renumber-preview th, .renumber-preview td { border: 1px solid #d5dade; padding: 5px 8px; text-align: left; }
 .renumber-preview th { background: #f1f3f5; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 .renumber-preview tr.changed .new-code { color: var(--accent); font-weight: 700; }
+.renumber-preview td.fam-cell { color: var(--ink-soft); font-size: 11px; }
+
+/* -- OPEN PROJECT MODAL -- */
+.modal-wide { max-width: 900px; width: 90vw; }
+.op-recent { margin-bottom: 12px; }
+.op-recent-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); margin-bottom: 6px; }
+.op-recent-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.op-chip { border: 1px solid #cfd6dc; background: #f6f8fa; border-radius: 14px; padding: 4px 12px; font-size: 12px; cursor: pointer; color: var(--ink); }
+.op-chip:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.op-chip.current { border-color: var(--accent); font-weight: 600; }
+.op-search { width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid #cfd6dc; border-radius: 4px; font: inherit; margin-bottom: 10px; }
+.op-note { font-size: 12px; color: var(--ink-soft); padding: 8px 2px; }
+.op-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.op-table th, .op-table td { border-bottom: 1px solid #e3e7ea; padding: 6px 8px; text-align: left; vertical-align: middle; }
+.op-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+.op-table tr.current td { background: #eef4fb; }
+.op-table .op-id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: var(--ink-soft); }
+.op-table .op-open { padding: 3px 12px; font-size: 12px; }
+.op-dup { color: #b8860b; font-weight: 700; }
+.link-btn { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
 
 /* -- PAGE TAB INLINE RENAME -- */
 .pt-title-input {
@@ -493,6 +513,10 @@ button, select, input, textarea { font: inherit; }
 /* -- COMPONENT LIBRARY PANEL -- */
 .lib-empty { padding: 14px; font-size: 12px; color: var(--ink-soft); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .lib-error { color: var(--bad); font-size: 11px; }
+.lib-saved {
+  margin: 6px 10px; padding: 6px 10px; font-size: 12px; font-weight: 600;
+  color: #0f5132; background: #d1e7dd; border: 1px solid #a3cfbb; border-radius: 4px;
+}
 .lib-panel { display: flex; flex-direction: column; min-height: 0; }
 .lib-controls { display: flex; gap: 6px; padding: 8px; position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .lib-search { flex: 1; padding: 4px 8px; border: 1px solid var(--panel-line); border-radius: 3px; font-size: 12px; }

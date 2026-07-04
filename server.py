@@ -952,7 +952,32 @@ def rename_project(project_id: str):
     return jsonify({"ok": True, "id": project_id, "projectFolder": doc.get("projectFolder", ""), "projectDisplayName": doc.get("projectDisplayName", "")})
 
 
-@app.post("/api/projects/<project_id>/export/package")
+@app.get("/api/projects/<project_id>/duplicate-folders")
+def duplicate_folders(project_id: str):
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    dups = store.detect_duplicate_folders(project_id)
+    canonical = store.find_dir(project_id)
+    return jsonify({
+        "ok": True,
+        "id": project_id,
+        "canonicalFolder": str(canonical) if canonical else "",
+        "duplicateFolders": dups,
+    })
+
+
+@app.post("/api/projects/<project_id>/archive-duplicate-folders")
+def archive_duplicate_folders(project_id: str):
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    try:
+        moved = store.archive_duplicate_folders(project_id)
+    except Exception as exc:
+        app.logger.error("Archive dup folders failed for %s: %s", project_id, exc)
+        return jsonify(_err("Failed to archive duplicate folders.", str(exc))), 500
+    return jsonify({"ok": True, "id": project_id, "archived": moved})
 def export_package(project_id: str):
     """Build a ZIP package: project.json + sources + assets + latest PDF + manifest."""
     import io

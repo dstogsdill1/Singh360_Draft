@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, type FabricObject } from 'fabric';
 import type { CanvasApi, CanvasSelection } from '../model/types';
 import { Connector } from './connector';
+import { CONNECTOR_PRESETS, dashArray } from '../model/connectorPresets';
 
 interface Props {
   serialized: Record<string, unknown>[];
@@ -429,6 +430,47 @@ export default function CanvasEditor({
           c.setActiveObject(img);
           c.requestRenderAll();
         });
+      },
+      addLegend: (presetIds?: string[]) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const chosen = presetIds && presetIds.length
+          ? CONNECTOR_PRESETS.filter((p) => presetIds.includes(p.id))
+          : CONNECTOR_PRESETS;
+        const rowH = 26;
+        const padX = 14;
+        const padY = 14;
+        const sampleW = 54;
+        const titleH = 26;
+        const boxW = 240;
+        const boxH = titleH + padY + chosen.length * rowH + padY;
+        const parts: FabricObject[] = [];
+        // Frame + title.
+        parts.push(new Rect({ left: 0, top: 0, width: boxW, height: boxH, fill: '#ffffff', stroke: '#333', strokeWidth: 1.5, rx: 3, ry: 3 }));
+        parts.push(new Textbox('CONNECTOR LEGEND', {
+          left: padX, top: 6, width: boxW - padX * 2, fontSize: 13, fontWeight: 'bold',
+          fontFamily: 'Arial', fill: '#111', textAlign: 'left',
+        }));
+        chosen.forEach((p, i) => {
+          const cy = titleH + padY + i * rowH + rowH / 2;
+          const line = new Line([padX, cy, padX + sampleW, cy], {
+            stroke: p.stroke,
+            strokeWidth: p.strokeWidth,
+            strokeDashArray: dashArray(p.dash, p.strokeWidth),
+            strokeLineCap: 'round',
+          });
+          parts.push(line);
+          parts.push(new Textbox(p.label, {
+            left: padX + sampleW + 12, top: cy - 9, width: boxW - (padX + sampleW + 12) - padX,
+            fontSize: 13, fontFamily: 'Arial', fill: '#111', textAlign: 'left',
+          }));
+        });
+        const grp = new Group(parts, { left: CANVAS_W * 0.62, top: CANVAS_H * 0.12 });
+        (grp as unknown as Record<string, unknown>).objName = 'Connector Legend';
+        styleForSelection(grp);
+        c.add(grp);
+        c.setActiveObject(grp);
+        c.requestRenderAll();
       },
       deleteSelected: () => {
         const c = fabricRef.current;

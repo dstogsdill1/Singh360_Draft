@@ -21,6 +21,7 @@ import PropertiesPanel from './components/PropertiesPanel';
 import PrintView from './components/PrintView';
 import Ribbon, { type ViewControls } from './components/Ribbon';
 import RenumberModal from './components/RenumberModal';
+import OpenProjectModal from './components/OpenProjectModal';
 import SheetContextMenu from './components/SheetContextMenu';
 import ExportModal from './components/ExportModal';
 import PdfInsertModal from './components/PdfInsertModal';
@@ -84,6 +85,7 @@ export default function App() {
   const [overlayMode, setOverlayMode] = useState(false);
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [renumberOpen, setRenumberOpen] = useState(false);
+  const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [pdfInsertOpen, setPdfInsertOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
@@ -481,6 +483,21 @@ export default function App() {
     window.history.replaceState({}, '', `?project=${id}`);
   };
 
+  const openProjectById = async (id: string) => {
+    try {
+      const p = await getProject(id);
+      setProject(p);
+      setActivePageId(p.pages?.[0]?.id ?? null);
+      setSelectedWorksheetId(p.worksheets?.[0]?.id);
+      setSelection(null);
+      window.history.replaceState({}, '', `?project=${id}`);
+    } catch (err) {
+      console.error('open project failed', err);
+    } finally {
+      setOpenProjectOpen(false);
+    }
+  };
+
   const onUploadCsv = async (file: File) => {
     if (!project) return;
     try {
@@ -619,6 +636,7 @@ export default function App() {
         alignObjects: (d) => canvasApiRef.current?.alignObjects(d),
         distributeObjects: (d) => canvasApiRef.current?.distributeObjects(d),
         matchObjectSize: (w) => canvasApiRef.current?.matchObjectSize(w),
+        addLegend: (ids) => { setOverlayMode(true); canvasApiRef.current?.addLegend(ids); },
       }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
       onUploadCsv={(f) => void onUploadCsv(f)}
@@ -628,6 +646,7 @@ export default function App() {
       onExportPdf={() => setExportOpen(true)}
       onExportPackage={() => void onExportPackage()}
       onRenumber={onRenumber}
+      onOpenProject={() => setOpenProjectOpen(true)}
       selection={selection}
       onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
     />
@@ -636,6 +655,7 @@ export default function App() {
   // ── Empty state (no project loaded yet) ──
   if (!project || !activePage) {
     return (
+      <>
       <ProjectShell
         ribbon={ribbon}
         left={<div className="nav-section-head">Output Pages</div>}
@@ -643,12 +663,20 @@ export default function App() {
           <div className="empty-stage">
             <div className="empty-card">
               <h2>No workbook loaded</h2>
-              <p>Choose a workbook (.xlsx) from the File tab to generate output pages and begin editing your drawing package.</p>
+              <p>Choose a workbook (.xlsx) from the File tab to generate output pages and begin editing your drawing package, or <button className="link-btn" onClick={() => setOpenProjectOpen(true)}>open a saved project</button>.</p>
             </div>
           </div>
         }
         right={<div className="props-group"><h3>Project Properties</h3></div>}
       />
+      {openProjectOpen && (
+        <OpenProjectModal
+          currentId={project?.id}
+          onOpen={(id) => void openProjectById(id)}
+          onCancel={() => setOpenProjectOpen(false)}
+        />
+      )}
+      </>
     );
   }
 
@@ -814,6 +842,13 @@ export default function App() {
     />
     {renumberOpen && (
       <RenumberModal pages={project.pages} onApply={applyRenumber} onCancel={() => setRenumberOpen(false)} />
+    )}
+    {openProjectOpen && (
+      <OpenProjectModal
+        currentId={project.id}
+        onOpen={(id) => void openProjectById(id)}
+        onCancel={() => setOpenProjectOpen(false)}
+      />
     )}
     {exportOpen && (
       <ExportModal

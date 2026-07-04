@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { PageModel } from '../model/types';
+import { classifyPageFamily, generateEmsCodes } from '../model/emsNumbering';
 
 interface Props {
   pages: PageModel[];
@@ -7,7 +8,7 @@ interface Props {
   onCancel: () => void;
 }
 
-type Scheme = 'keep' | 'sequential' | 'prefix';
+type Scheme = 'keep' | 'sequential' | 'prefix' | 'ems';
 
 const CONT_SUFFIX = ['', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 
@@ -17,13 +18,16 @@ const CONT_SUFFIX = ['', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
  * their base page's code with a letter suffix (4.0 -> 4.0a, 4.0b).
  */
 export default function RenumberModal({ pages, onApply, onCancel }: Props) {
-  const [scheme, setScheme] = useState<Scheme>('sequential');
-  const [prefix, setPrefix] = useState('');
+  const [scheme, setScheme] = useState<Scheme>('ems');
+  const [prefix, setPrefix] = useState('EMS');
 
   const included = useMemo(() => pages.filter((p) => p.include), [pages]);
 
   // Compute proposed codes keyed by page id.
   const proposed = useMemo(() => {
+    if (scheme === 'ems') {
+      return generateEmsCodes(pages, (prefix || 'EMS').trim());
+    }
     const map = new Map<string, string>();
     // Base pages (non-continuation) get the running number; continuations inherit.
     const bases = included.filter((p) => !p.continuationOf);
@@ -54,7 +58,7 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
       }
     }
     return map;
-  }, [included, scheme, prefix]);
+  }, [pages, included, scheme, prefix]);
 
   const apply = () => {
     const updated = pages.map((p) => {
@@ -75,6 +79,19 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
 
         <div className="modal-body">
           <div className="renumber-options">
+            <label className={scheme === 'ems' ? 'active' : ''}>
+              <input type="radio" name="scheme" checked={scheme === 'ems'} onChange={() => { setScheme('ems'); setPrefix('EMS'); }} />
+              EMS front matter + family (0.0, 0.1… then 1.x, 2.x, 3.x)
+              <input
+                className="prefix-input"
+                type="text"
+                placeholder="EMS"
+                value={scheme === 'ems' ? prefix : ''}
+                disabled={scheme !== 'ems'}
+                onChange={(e) => setPrefix(e.target.value)}
+                title="Prefix (EMS, RDM, REF…)"
+              />
+            </label>
             <label className={scheme === 'keep' ? 'active' : ''}>
               <input type="radio" name="scheme" checked={scheme === 'keep'} onChange={() => setScheme('keep')} />
               Keep existing sheet codes
@@ -84,19 +101,19 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
               Sequential decimal (1.0, 2.0, 3.0…)
             </label>
             <label className={scheme === 'prefix' ? 'active' : ''}>
-              <input type="radio" name="scheme" checked={scheme === 'prefix'} onChange={() => setScheme('prefix')} />
+              <input type="radio" name="scheme" checked={scheme === 'prefix'} onChange={() => { setScheme('prefix'); if (prefix === 'EMS') setPrefix(''); }} />
               Prefix + sequential
               <input
                 className="prefix-input"
                 type="text"
                 placeholder="EMS"
-                value={prefix}
+                value={scheme === 'prefix' ? prefix : ''}
                 disabled={scheme !== 'prefix'}
                 onChange={(e) => setPrefix(e.target.value)}
               />
             </label>
             <p className="renumber-note">
-              Continuation pages inherit the base code with a suffix (4.0 → 4.0a, 4.0b). “Page X of Y” updates automatically and is independent of sheet codes.
+              EMS numbering puts cover/index/directory/guidelines/scope/responsibility/BOM on a 0-series, then classifies technical sheets into families (2.x network, 3.x refrigeration, 5.x lighting, 8.x schematics…). Continuation pages inherit the base code (0.4a, 3.1a). “Page X of Y” is separate and follows the tab order.
             </p>
           </div>
 
@@ -106,6 +123,7 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
                 <th>Old Code</th>
                 <th>New Code</th>
                 <th>Sheet Title</th>
+                <th>Page Family</th>
                 <th>Included</th>
               </tr>
             </thead>
@@ -113,11 +131,13 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
               {pages.map((p) => {
                 const next = proposed.get(p.id) ?? p.sheetCode;
                 const changed = p.include && next !== (p.sheetCode || '');
+                const fam = classifyPageFamily(p);
                 return (
                   <tr key={p.id} className={changed ? 'changed' : ''}>
                     <td>{p.displaySheetCode || p.sheetCode || '—'}</td>
                     <td className="new-code">{p.include ? (next || '—') : '—'}</td>
                     <td>{p.sheetTitle}{p.continuationOf ? ' — CONTINUED' : ''}</td>
+                    <td className="fam-cell">{fam.label}</td>
                     <td>{p.include ? 'Yes' : 'No'}</td>
                   </tr>
                 );

@@ -56,6 +56,13 @@ class ProjectStore:
                 return d
         return None
 
+    def find_all_dirs(self, project_id: str) -> list[Path]:
+        """All folders that belong to this project ID (canonical + stale dups)."""
+        return sorted(
+            (d for d in self.projects_dir.glob(f"*__{project_id}") if d.is_dir()),
+            key=lambda d: d.name.lower(),
+        )
+
     def _display_name(self, data: dict[str, Any], project_id: str) -> str:
         meta = data.get("metadata", {}) if isinstance(data.get("metadata"), dict) else {}
         return (
@@ -139,7 +146,13 @@ class ProjectStore:
         return project_dir / "project.json"
 
     def rename(self, project_id: str, new_name: str) -> Path:
-        """Rename the display name and move the folder to the new slug."""
+        """Rename the display name and move the folder to the new slug.
+
+        Consolidates onto a single canonical folder for this project ID. If a
+        folder with the target slug already exists for the SAME project ID it is
+        reused (never duplicated); any other stale folders for this ID are moved
+        aside to ``projects/_archive/`` rather than deleted.
+        """
         data = self.load(project_id)
         if data is None:
             raise FileNotFoundError(project_id)
@@ -147,15 +160,75 @@ class ProjectStore:
         meta["projectName"] = new_name
         data["projectDisplayName"] = new_name
 
-        old_dir = self.find_dir(project_id)
         new_slug = slugify(new_name)
         new_dir = self.projects_dir / f"{new_slug}__{project_id}"
-        if old_dir and old_dir.resolve() != new_dir.resolve() and not new_dir.exists():
-            old_dir.rename(new_dir)
+        existing = self.find_all_dirs(project_id)
+        # The folder currently holding the freshest project.json (the one we loaded).
+        source_dir = next((d for d in existing if (d / "project.json").is_file()), None)
+
+        if not new_dir.exists():
+            # Move the source folder to the new slug if we have one; else it will be created.
+            if source_dir is not None and source_dir.resolve() != new_dir.resolve():
+                source_dir.rename(new_dir)
+        else:
+            # Target slug already exists for this ID — reuse it. Copy over the
+            # freshest project.json if the source differs, then archive the source.
+            if source_dir is not None and source_dir.resolve() != new_dir.resolve():
+                (new_dir / "project.json").write_text(
+                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                self._archive_dir(source_dir)
+
+        # Archive any remaining stale duplicates for this ID.
+        for d in self.find_all_dirs(project_id):
+            if d.resolve() != new_dir.resolve():
+                self._archive_dir(d)
+
         return self.save(project_id, data)
+
+    # ── duplicate-folder hygiene ─────────────────────────────────────────
+    @property
+    def archive_dir(self) -> Path:
+        p = self.projects_dir / "_archive"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def _archive_dir(self, folder: Path) -> Path:
+        """Move a stale duplicate folder into projects/_archive/ (never delete)."""
+        dest = self.archive_dir / folder.name
+        n = 1
+        while dest.exists():
+            dest = self.archive_dir / f"{folder.name}.dup{n}"
+            n += 1
+        folder.rename(dest)
+        return dest
+
+    def detect_duplicate_folders(self, project_id: str) -> list[str]:
+        """Return non-canonical folder paths for this project ID (excess dups)."""
+        dirs = self.find_all_dirs(project_id)
+        if len(dirs) <= 1:
+            return []
+        canonical = self.find_dir(project_id)
+        return [str(d) for d in dirs if canonical and d.resolve() != canonical.resolve()]
+
+    def archive_duplicate_folders(self, project_id: str) -> list[str]:
+        """Archive all non-canonical folders for this project ID. Returns moved paths."""
+        canonical = self.find_dir(project_id)
+        moved: list[str] = []
+        for d in self.find_all_dirs(project_id):
+            if canonical and d.resolve() != canonical.resolve():
+                moved.append(str(self._archive_dir(d)))
+        return moved
 
     def list_projects(self) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
+        # Count folders per project ID so we can flag duplicates in the listing.
+        id_counts: dict[str, int] = {}
+        for d in self.projects_dir.glob("*__*"):
+            if d.is_dir():
+                pid = d.name.rsplit("__", 1)[-1]
+                id_counts[pid] = id_counts.get(pid, 0) + 1
+        seen: set[str] = set()
         for d in self.projects_dir.glob("*__*"):
             pj = d / "project.json"
             if not pj.is_file():
@@ -165,17 +238,30 @@ class ProjectStore:
             except (json.JSONDecodeError, OSError):
                 continue
             pid = d.name.rsplit("__", 1)[-1]
-            meta = data.get("metadata", {})
+            if pid in seen:
+                continue  # only list the canonical (first) folder per ID
+            seen.add(pid)
+            meta = data.get("metadata", {}) if isinstance(data.get("metadata"), dict) else {}
             out.append(
                 {
                     "id": pid,
                     "projectName": meta.get("projectName") or data.get("projectDisplayName") or "Untitled Project",
-                    "modified": data.get("modified", ""),
+                    "modified": data.get("modified", "") or data.get("lastSavedAt", ""),
+                    "lastSavedAt": data.get("lastSavedAt", ""),
                     "folder": str(d),
+                    "packageFile": data.get("drawingPackageFileName")
+                    or meta.get("drawingPackageFileName")
+                    or "",
+                    "sourceWorkbook": data.get("sourceWorkbookName")
+                    or meta.get("sourceFile")
+                    or "",
+                    "duplicateFolders": max(0, id_counts.get(pid, 1) - 1),
                 }
             )
         # legacy flat files
         for p in self.docs.glob("*.json"):
+            if p.stem in seen:
+                continue
             try:
                 data = json.loads(p.read_text("utf-8"))
             except (json.JSONDecodeError, OSError):
@@ -185,7 +271,12 @@ class ProjectStore:
                     "id": p.stem,
                     "projectName": data.get("metadata", {}).get("projectName") or "Untitled Project",
                     "modified": data.get("modified", ""),
+                    "lastSavedAt": data.get("lastSavedAt", ""),
                     "folder": str(self.docs),
+                    "packageFile": data.get("drawingPackageFileName", ""),
+                    "sourceWorkbook": data.get("sourceWorkbookName", ""),
+                    "duplicateFolders": 0,
                 }
             )
+        out.sort(key=lambda r: str(r.get("modified") or r.get("lastSavedAt") or ""), reverse=True)
         return out

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import type { FitMode } from './DocumentView';
 import type { CanvasSelection } from '../model/types';
+import { CONNECTOR_PRESETS } from '../model/connectorPresets';
 
 export interface ViewControls {
   fitMode: FitMode;
@@ -46,6 +47,7 @@ interface Props {
     alignObjects: (d: 'left'|'center'|'right'|'top'|'middle'|'bottom'|'page-center-h'|'page-center-v') => void;
     distributeObjects: (d: 'horizontal'|'vertical') => void;
     matchObjectSize: (w: 'width'|'height'|'both') => void;
+    addLegend: (presetIds?: string[]) => void;
   };
   onUploadFile: (file: File) => void;
   onUploadCsv: (file: File) => void;
@@ -55,6 +57,7 @@ interface Props {
   onExportPdf: () => void;
   onExportPackage: () => void;
   onRenumber: () => void;
+  onOpenProject: () => void;
   selection: CanvasSelection | null;
   onUpdateSelection: (patch: Partial<CanvasSelection>) => void;
 }
@@ -97,6 +100,7 @@ export default function Ribbon({
   onExportPdf,
   onExportPackage,
   onRenumber,
+  onOpenProject,
   selection,
   onUpdateSelection,
 }: Props) {
@@ -167,6 +171,7 @@ export default function Ribbon({
             <Group title="Workbook">{uploadBtn}</Group>
             <Group title="Data">{csvBtn}</Group>
             <Group title="Project">
+              <button className="ribbon-btn" onClick={onOpenProject} title="Browse and open a saved project">Open Project</button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow} title="Save the project now">Save Now</button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={onRenumber} title="Preview and apply new engineering sheet codes">Renumber Sheet Codes</button>
             </Group>
@@ -330,10 +335,20 @@ export default function Ribbon({
                 <button className={`ribbon-btn ${selection?.arrowEnd ? 'active' : ''}`} disabled={!ln} onClick={() => onUpdateSelection({ arrowEnd: !selection?.arrowEnd })} title="Toggle arrowhead at the end">Arrow</button>
               </Group>
               <Group title="Presets">
-                <button className="ribbon-btn" disabled={!ln} onClick={() => onUpdateSelection({ stroke: '#00a651', dash: 'solid', arrowEnd: false })} title="CAT6 = green solid">CAT6</button>
-                <button className="ribbon-btn" disabled={!ln} onClick={() => onUpdateSelection({ stroke: '#f28c28', dash: 'dashed', arrowEnd: false })} title="Fiber = orange dashed">Fiber</button>
-                <button className="ribbon-btn" disabled={!ln} onClick={() => onUpdateSelection({ stroke: '#12539b', dash: 'dashed', arrowEnd: false })} title="BACnet = blue dashed">BACnet</button>
-                <button className="ribbon-btn" disabled={!ln} onClick={() => onUpdateSelection({ stroke: '#888888', dash: 'dashed', arrowEnd: false })} title="Reference = gray dashed">Ref</button>
+                {CONNECTOR_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    className="ribbon-btn"
+                    disabled={!ln}
+                    onClick={() => onUpdateSelection({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowEnd: p.arrowEnd ?? false })}
+                    title={`${p.label} = ${p.stroke} ${p.dash} ${p.strokeWidth}px`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </Group>
+              <Group title="Legend">
+                <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.addLegend()} title="Insert an editable connector legend (grouped) using the presets">Insert Legend</button>
               </Group>
             </>
           );

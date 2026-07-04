@@ -113,6 +113,22 @@ def main() -> int:
             else:
                 if again.get("displayName") != "Contactor" or again.get("status") != "approved":
                     problems.append("patch changes did not persist")
+                if again.get("curated") is not True:
+                    problems.append("patched component should be marked curated=True")
+                # Phase D: auto-categorize must NOT overwrite curated edits.
+                ac = c.post("/api/library/auto-categorize")
+                if ac.status_code != 200:
+                    problems.append(f"auto-categorize failed ({ac.status_code})")
+                after_ac = c.get("/api/library").get_json()
+                curated = next((x for x in after_ac.get("components", []) if x.get("id") == rid), None)
+                if not curated:
+                    problems.append("curated component missing after auto-categorize")
+                elif (
+                    curated.get("displayName") != "Contactor"
+                    or (curated.get("category") or "").lower() != "electrical"
+                    or curated.get("status") != "approved"
+                ):
+                    problems.append("auto-categorize overwrote curated edits (Phase D violation)")
 
     # 4c. Inbox import proof (generate tiny PNG in inbox, rescan).
     inbox = server.DOCS_DIR / "library" / "inbox"

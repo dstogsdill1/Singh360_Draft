@@ -71,6 +71,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const [editInsertWithLabel, setEditInsertWithLabel] = useState(true);
   const [editNotes, setEditNotes] = useState('');
   const [error, setError] = useState('');
+  const [savedMsg, setSavedMsg] = useState('');
 
   const refresh = async () => {
     try {
@@ -187,22 +188,34 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   };
   const saveEdit = async (c: LibraryComponent) => {
     try {
+      const newCat = editCat.toLowerCase();
+      const newStatus = editStatus.toLowerCase();
       await updateLibraryComponent(c.id, {
         displayName: editName.trim() || c.displayName,
         shortName: editShort.trim() || undefined,
-        category: editCat,
+        category: newCat,
         partNumber: editPart.trim() || undefined,
         aliases: editAliases.split(',').map((x) => x.trim()).filter(Boolean),
         tags: editTags.split(',').map((x) => x.trim()).filter(Boolean),
         defaultLabel: editDefaultLabel.trim() || undefined,
-        status: editStatus,
+        status: newStatus,
         insertWithLabel: editInsertWithLabel,
         notes: editNotes.trim() || undefined,
       });
       setEditId(null);
+      // Keep the just-saved item visible: match the filter to its new category
+      // and make sure the status toggle for its new status is enabled.
+      if (category !== 'all' && category !== newCat) setCategory(newCat);
+      if (newStatus === 'candidate') setShowCandidates(true);
+      else if (newStatus === 'needs_review') setShowNeedsReview(true);
+      else if (newStatus === 'reference_page') setShowReferencePages(true);
+      else if (newStatus === 'duplicate') setShowDuplicates(true);
+      else if (newStatus === 'retired') setShowRetired(true);
       await refresh();
+      setSavedMsg(`Saved “${editName.trim() || c.displayName}” → ${catLabel(newCat)}`);
+      window.setTimeout(() => setSavedMsg(''), 3500);
     } catch (e) {
-      setError(String(e));
+      setError(`Save failed: ${String(e)}`);
     }
   };
 
@@ -419,6 +432,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         ))}
         {!visible.length && <div className="lib-empty">No matches.</div>}
       </div>
+      {savedMsg && <p className="lib-saved">{savedMsg}</p>}
       {error && <p className="lib-error">{error}</p>}
     </div>
   );

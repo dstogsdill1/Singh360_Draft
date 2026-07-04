@@ -1,9 +1,34 @@
 import type { ProjectModel, PageModel } from '../model/types';
 
-export async function listProjects(): Promise<Array<{ id: string; projectName: string }>> {
+export interface ProjectListItem {
+  id: string;
+  projectName: string;
+  modified?: string;
+  lastSavedAt?: string;
+  folder?: string;
+  packageFile?: string;
+  sourceWorkbook?: string;
+  duplicateFolders?: number;
+}
+
+export async function listProjects(): Promise<ProjectListItem[]> {
   const res = await fetch('/api/projects');
   const json = await res.json();
   return json.projects ?? [];
+}
+
+export async function getDuplicateFolders(id: string): Promise<{ canonicalFolder: string; duplicateFolders: string[] }> {
+  const res = await fetch(`/api/projects/${id}/duplicate-folders`);
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return { canonicalFolder: json.canonicalFolder ?? '', duplicateFolders: json.duplicateFolders ?? [] };
+}
+
+export async function archiveDuplicateFolders(id: string): Promise<string[]> {
+  const res = await fetch(`/api/projects/${id}/archive-duplicate-folders`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.archived ?? [];
 }
 
 export async function createProjectFromWorkbook(file: File): Promise<{ id: string }> {
