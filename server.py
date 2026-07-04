@@ -24,6 +24,7 @@ from core.csv_importer import build_csv_worksheet_and_pages, import_csv_to_grid
 from core.export_pdf import export_pdf_via_playwright
 from core.library_store import LibraryStore
 from core.page_composer import compose_pages
+from core.pdf_renderer import get_page_thumbnails, render_page_to_png, is_available as pdf_renderer_available
 from core.pdf_importer import import_pdf
 from core.project_model import ensure_project_shape, recalc_page_numbers
 from core.project_store import ProjectStore, slugify
@@ -758,6 +759,103 @@ def import_pdf_route():
         if temp_path.exists():
             temp_path.unlink()
     return jsonify({"ok": True, "source": meta})
+
+
+# --------------------------------------------------------------------------
+# PDF Page renderer (PyMuPDF backend — high-DPI per-page render + thumbnails)
+# --------------------------------------------------------------------------
+
+@app.post("/api/projects/<project_id>/pdf-thumbnails")
+def pdf_page_thumbnails(project_id: str):
+    """Upload a PDF and return base64 thumbnail images for each page so the
+    user can choose which page(s) to insert."""
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    if not pdf_renderer_available():
+        return jsonify(_err("PDF rendering not available.", "Install PyMuPDF (pip install pymupdf).")), 501
+    if "file" not in request.files:
+        return jsonify(_err("No PDF uploaded.")), 400
+    upload = request.files["file"]
+    if not upload.filename.lower().endswith(".pdf"):
+        return jsonify(_err("Only .pdf files are supported.")), 400
+
+    # Save PDF as a project source asset so we can render it later.
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", upload.filename)[:80] or "uploaded.pdf"
+    sources_dir = store.sources_dir(project_id, "pdf")
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = sources_dir / safe_name
+    upload.save(pdf_path)
+
+    thumbs = get_page_thumbnails(pdf_path)
+    return jsonify({
+        "ok": True,
+        "pdfFile": safe_name,
+        "pdfPath": f"sources/{safe_name}",
+        "pageCount": len(thumbs),
+        "pages": thumbs,
+    })
+
+
+@app.post("/api/projects/<project_id>/render-pdf-page")
+def render_pdf_page_route(project_id: str):
+    """Render a previously-uploaded PDF page to a high-resolution PNG and store
+    it as a project asset.  Returns the asset URL and metadata."""
+    _safe_id(project_id)
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    if not pdf_renderer_available():
+        return jsonify(_err("PDF rendering not available.", "Install PyMuPDF (pip install pymupdf).")), 501
+
+    body = request.get_json(silent=True) or {}
+    pdf_file = str(body.get("pdfFile") or "").strip()
+    if not pdf_file or not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", pdf_file):
+        return jsonify(_err("pdfFile is required and must be a safe filename.")), 400
+
+    page_index = int(body.get("pageIndex", 0))
+    quality = str(body.get("quality") or "high").lower()
+    dpi_map = {"standard": 150, "high": 200, "print": 300, "crisp": 300}
+    dpi = dpi_map.get(quality, 200)
+    crop = body.get("crop")  # optional {"x": 0, "y": 0, "w": 1, "h": 1}
+
+    sources_dir = store.sources_dir(project_id, "pdf")
+    pdf_path = (sources_dir / pdf_file).resolve()
+    # Path-traversal guard.
+    if sources_dir.resolve() not in pdf_path.parents and pdf_path != sources_dir.resolve():
+        abort(403)
+    if not pdf_path.is_file():
+        return jsonify(_err(f"PDF not found: {pdf_file}. Upload it first via /api/projects/<id>/pdf-thumbnails.")), 404
+
+    asset_id = uuid.uuid4().hex[:16]
+    assets_dir = store.assets_images_dir(project_id)
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    out_name = f"{asset_id}_pdf_p{page_index}.png"
+    out_path = assets_dir / out_name
+
+    result = render_page_to_png(pdf_path, page_index, out_path, dpi=dpi, crop=crop)
+    if not result.get("ok"):
+        return jsonify(_err("Render failed.", result.get("error", ""))), 500
+
+    asset_url = f"/api/assets/{project_id}/{out_name}"
+    return jsonify({
+        "ok": True,
+        "asset": {
+            "id": asset_id,
+            "name": out_name,
+            "url": asset_url,
+        },
+        "meta": {
+            "sourcePdf": pdf_file,
+            "pageIndex": page_index,
+            "quality": quality,
+            "renderDpi": result["renderDpi"],
+            "pageWidth": result["pageWidth"],
+            "pageHeight": result["pageHeight"],
+            "outputWidth": result["outputWidth"],
+            "outputHeight": result["outputHeight"],
+        },
+    })
 
 
 @app.post("/api/import/vsdx")

@@ -498,6 +498,93 @@ export default function CanvasEditor({
         const o = c?.getActiveObject();
         if (c && o) { c.sendObjectToBack(o); c.requestRenderAll(); }
       },
+      alignObjects: (direction) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const active = c.getActiveObject();
+        const objs = active?.type === 'activeselection'
+          ? (active as unknown as { getObjects: () => FabricObject[] }).getObjects()
+          : active ? [active] : [];
+        if (!objs.length) return;
+        const bbs = objs.map((o) => ({ o, b: o.getBoundingRect() }));
+        if (direction === 'page-center-h') {
+          objs.forEach((o) => { const b = o.getBoundingRect(); o.set('left', CANVAS_W / 2 - b.width / 2); o.setCoords(); });
+        } else if (direction === 'page-center-v') {
+          objs.forEach((o) => { const b = o.getBoundingRect(); o.set('top', CANVAS_H / 2 - b.height / 2); o.setCoords(); });
+        } else if (direction === 'left') {
+          const minL = Math.min(...bbs.map(({ b }) => b.left));
+          bbs.forEach(({ o, b }) => { o.set('left', minL + (o.left ?? 0) - b.left); o.setCoords(); });
+        } else if (direction === 'right') {
+          const maxR = Math.max(...bbs.map(({ b }) => b.left + b.width));
+          bbs.forEach(({ o, b }) => { o.set('left', (o.left ?? 0) + (maxR - (b.left + b.width))); o.setCoords(); });
+        } else if (direction === 'center') {
+          const minL = Math.min(...bbs.map(({ b }) => b.left));
+          const maxR = Math.max(...bbs.map(({ b }) => b.left + b.width));
+          const midX = (minL + maxR) / 2;
+          bbs.forEach(({ o, b }) => { o.set('left', (o.left ?? 0) + (midX - (b.left + b.width / 2))); o.setCoords(); });
+        } else if (direction === 'top') {
+          const minT = Math.min(...bbs.map(({ b }) => b.top));
+          bbs.forEach(({ o, b }) => { o.set('top', minT + (o.top ?? 0) - b.top); o.setCoords(); });
+        } else if (direction === 'bottom') {
+          const maxB = Math.max(...bbs.map(({ b }) => b.top + b.height));
+          bbs.forEach(({ o, b }) => { o.set('top', (o.top ?? 0) + (maxB - (b.top + b.height))); o.setCoords(); });
+        } else if (direction === 'middle') {
+          const minT = Math.min(...bbs.map(({ b }) => b.top));
+          const maxB = Math.max(...bbs.map(({ b }) => b.top + b.height));
+          const midY = (minT + maxB) / 2;
+          bbs.forEach(({ o, b }) => { o.set('top', (o.top ?? 0) + (midY - (b.top + b.height / 2))); o.setCoords(); });
+        }
+        c.requestRenderAll();
+        onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
+      },
+      distributeObjects: (direction) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const active = c.getActiveObject();
+        const objs = active?.type === 'activeselection'
+          ? (active as unknown as { getObjects: () => FabricObject[] }).getObjects()
+          : [];
+        if (objs.length < 3) return;
+        const sorted = direction === 'horizontal'
+          ? [...objs].sort((a, b) => (a.left ?? 0) - (b.left ?? 0))
+          : [...objs].sort((a, b) => (a.top ?? 0) - (b.top ?? 0));
+        const bbs = sorted.map((o) => ({ o, b: o.getBoundingRect() }));
+        if (direction === 'horizontal') {
+          const total = bbs.reduce((s, { b }) => s + b.width, 0);
+          const last = bbs[bbs.length - 1];
+          const span = (last.b.left + last.b.width) - bbs[0].b.left;
+          const gap = (span - total) / (bbs.length - 1);
+          let x = bbs[0].b.left;
+          bbs.forEach(({ o, b }) => { o.set('left', (o.left ?? 0) + (x - b.left)); o.setCoords(); x += b.width + gap; });
+        } else {
+          const total = bbs.reduce((s, { b }) => s + b.height, 0);
+          const last = bbs[bbs.length - 1];
+          const span = (last.b.top + last.b.height) - bbs[0].b.top;
+          const gap = (span - total) / (bbs.length - 1);
+          let y = bbs[0].b.top;
+          bbs.forEach(({ o, b }) => { o.set('top', (o.top ?? 0) + (y - b.top)); o.setCoords(); y += b.height + gap; });
+        }
+        c.requestRenderAll();
+        onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
+      },
+      matchObjectSize: (which) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const active = c.getActiveObject();
+        const objs = active?.type === 'activeselection'
+          ? (active as unknown as { getObjects: () => FabricObject[] }).getObjects()
+          : [];
+        if (objs.length < 2) return;
+        // Use the first selected object as the reference.
+        const ref = objs[0].getBoundingRect();
+        objs.slice(1).forEach((o) => {
+          if ((which === 'width' || which === 'both') && o.width) o.set('scaleX', ref.width / (o.width * (o.scaleX ?? 1)) * (o.scaleX ?? 1));
+          if ((which === 'height' || which === 'both') && o.height) o.set('scaleY', ref.height / (o.height * (o.scaleY ?? 1)) * (o.scaleY ?? 1));
+          o.setCoords();
+        });
+        c.requestRenderAll();
+        onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
+      },
       updateSelected: (patch) => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();

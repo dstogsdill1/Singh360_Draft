@@ -23,6 +23,7 @@ import Ribbon, { type ViewControls } from './components/Ribbon';
 import RenumberModal from './components/RenumberModal';
 import SheetContextMenu from './components/SheetContextMenu';
 import ExportModal from './components/ExportModal';
+import PdfInsertModal from './components/PdfInsertModal';
 import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 
@@ -84,6 +85,7 @@ export default function App() {
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [renumberOpen, setRenumberOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [pdfInsertOpen, setPdfInsertOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; pageId: string } | null>(null);
   const canvasApiRef = useRef<CanvasApi | null>(null);
@@ -614,10 +616,14 @@ export default function App() {
         sendBackward: () => canvasApiRef.current?.sendBackward(),
         bringToFront: () => canvasApiRef.current?.bringToFront(),
         sendToBack: () => canvasApiRef.current?.sendToBack(),
+        alignObjects: (d) => canvasApiRef.current?.alignObjects(d),
+        distributeObjects: (d) => canvasApiRef.current?.distributeObjects(d),
+        matchObjectSize: (w) => canvasApiRef.current?.matchObjectSize(w),
       }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
       onUploadCsv={(f) => void onUploadCsv(f)}
       onInsertImage={(f) => void onDropImageFile(f)}
+      onInsertPdfPage={() => setPdfInsertOpen(true)}
       onSaveNow={() => project && void saveProject(project)}
       onExportPdf={() => setExportOpen(true)}
       onExportPackage={() => void onExportPackage()}
@@ -815,6 +821,17 @@ export default function App() {
         packageName={project.metadata.drawingPackageFileName || project.projectDisplayName || project.metadata.projectName || ''}
         onExport={(w, h, rev) => void onExportPdfSized(w, h, rev)}
         onCancel={() => setExportOpen(false)}
+      />
+    )}
+    {pdfInsertOpen && (
+      <PdfInsertModal
+        projectId={project.id}
+        onInsertImage={(url, name) => {
+          setOverlayMode(true);
+          canvasApiRef.current?.addImage(url, name);
+          setPdfInsertOpen(false);
+        }}
+        onCancel={() => setPdfInsertOpen(false)}
       />
     )}
     {ctxMenu && (

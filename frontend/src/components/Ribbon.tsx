@@ -43,10 +43,14 @@ interface Props {
     sendBackward: () => void;
     bringToFront: () => void;
     sendToBack: () => void;
+    alignObjects: (d: 'left'|'center'|'right'|'top'|'middle'|'bottom'|'page-center-h'|'page-center-v') => void;
+    distributeObjects: (d: 'horizontal'|'vertical') => void;
+    matchObjectSize: (w: 'width'|'height'|'both') => void;
   };
   onUploadFile: (file: File) => void;
   onUploadCsv: (file: File) => void;
   onInsertImage: (file: File) => void;
+  onInsertPdfPage: () => void;
   onSaveNow: () => void;
   onExportPdf: () => void;
   onExportPackage: () => void;
@@ -88,6 +92,7 @@ export default function Ribbon({
   onUploadFile,
   onUploadCsv,
   onInsertImage,
+  onInsertPdfPage,
   onSaveNow,
   onExportPdf,
   onExportPackage,
@@ -215,8 +220,8 @@ export default function Ribbon({
                   onChange={(e) => { if (e.target.files?.[0]) { onInsertImage(e.target.files[0]); e.currentTarget.value = ''; } }}
                 />
               </label>
+              <button className="ribbon-btn" disabled={!cx} onClick={onInsertPdfPage} title="Render a PDF page at high resolution and insert it on the active drawing page">PDF Page</button>
               <PlaceholderBtn label="Callout" />
-              <PlaceholderBtn label="Table" />
             </Group>
             <Group title="Headings">
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.addPageTitle} title="Add a page title styled like the sheet heading (uppercase, ruled)">Page Title</button>
@@ -267,13 +272,25 @@ export default function Ribbon({
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.sendToBack} title="Send selected object to the back">To Back</button>
             </Group>
             <Group title="Align">
-              <PlaceholderBtn label="Left" />
-              <PlaceholderBtn label="Center" />
-              <PlaceholderBtn label="Right" />
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('left')} title="Align left edges">⊣ Left</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('center')} title="Align horizontal centers">⊟ H Center</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('right')} title="Align right edges">⊢ Right</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('top')} title="Align top edges">⊤ Top</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('middle')} title="Align vertical middles">⊞ V Middle</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('bottom')} title="Align bottom edges">⊥ Bottom</button>
+            </Group>
+            <Group title="Page Center">
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('page-center-h')} title="Center on page horizontally">⇔ Horiz</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('page-center-v')} title="Center on page vertically">⇕ Vert</button>
             </Group>
             <Group title="Distribute">
-              <PlaceholderBtn label="Horizontal" />
-              <PlaceholderBtn label="Vertical" />
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.distributeObjects('horizontal')} title="Distribute objects horizontally (need 3+)">↔ Horiz</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.distributeObjects('vertical')} title="Distribute objects vertically (need 3+)">↕ Vert</button>
+            </Group>
+            <Group title="Match Size">
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.matchObjectSize('width')} title="Match width to the first selected object">= Width</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.matchObjectSize('height')} title="Match height to the first selected object">= Height</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.matchObjectSize('both')} title="Match both width and height to the first selected object">= Both</button>
             </Group>
           </>
         )}

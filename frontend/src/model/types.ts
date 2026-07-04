@@ -159,5 +159,8 @@ export interface CanvasApi {
   sendBackward: () => void;
   bringToFront: () => void;
   sendToBack: () => void;
+  alignObjects: (direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'page-center-h' | 'page-center-v') => void;
+  distributeObjects: (direction: 'horizontal' | 'vertical') => void;
+  matchObjectSize: (which: 'width' | 'height' | 'both') => void;
   updateSelected: (patch: Partial<CanvasSelection>) => void;
 }

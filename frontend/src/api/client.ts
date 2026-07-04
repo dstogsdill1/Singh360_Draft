@@ -98,6 +98,38 @@ export async function exportPackage(projectId: string): Promise<Blob> {
   return res.blob();
 }
 
+// ── PDF Page Renderer ──
+export interface PdfPageInfo {
+  page: number;
+  width: number;
+  height: number;
+  thumbnailDataUrl: string;
+}
+
+export async function uploadPdfForThumbnails(
+  projectId: string,
+  file: File,
+): Promise<{ ok: boolean; pdfFile: string; pageCount: number; pages: PdfPageInfo[] }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`/api/projects/${projectId}/pdf-thumbnails`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function renderPdfPage(
+  projectId: string,
+  opts: { pdfFile: string; pageIndex: number; quality: string; crop?: { x: number; y: number; w: number; h: number } | null },
+): Promise<{ ok: boolean; asset: { id: string; name: string; url: string }; meta: Record<string, unknown> }> {
+  const res = await fetch(`/api/projects/${projectId}/render-pdf-page`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // ── Component Library ──
 export interface LibraryComponent {
   id: string;
