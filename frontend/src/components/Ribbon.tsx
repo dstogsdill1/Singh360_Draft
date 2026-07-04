@@ -31,6 +31,8 @@ interface Props {
     addCircle: () => void;
     addLine: () => void;
     addArrow: () => void;
+    addPolyline: () => void;
+    addElbow: () => void;
     addPageTitle: () => void;
     addSectionHeader: () => void;
     addNote: () => void;
@@ -335,6 +337,8 @@ export default function Ribbon({
                 <button className={`ribbon-btn ${activeTool === 'circle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('circle')} title="Click-place a circle">Circle</button>
                 <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')} title="Drag to draw a line">Line</button>
                 <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')} title="Drag to draw an arrow">Arrow</button>
+                <button className={`ribbon-btn ${activeTool === 'polyline' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('polyline')} title="Click to add vertices, Enter/double-click to finish">Polyline</button>
+                <button className={`ribbon-btn ${activeTool === 'elbow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('elbow')} title="Orthogonal connector routing">Elbow Connector</button>
               </Group>
               <Group title="Line Color">
                 <select className="ribbon-select" disabled={!ln} value={typeof selection?.stroke === 'string' ? selection.stroke : '#111111'} onChange={(e) => onUpdateSelection({ stroke: e.target.value })} title={ln ? 'Stroke color of the selected line/connector' : 'Select a line or connector first'}>
@@ -354,7 +358,8 @@ export default function Ribbon({
                   <option value="dotted">Dotted</option>
                   <option value="dash-dot">Dash-dot</option>
                 </select>
-                <button className={`ribbon-btn ${selection?.arrowEnd ? 'active' : ''}`} disabled={!ln} onClick={() => onUpdateSelection({ arrowEnd: !selection?.arrowEnd })} title="Toggle arrowhead at the end">Arrow</button>
+                <button className={`ribbon-btn ${selection?.arrowStart ? 'active' : ''}`} disabled={!ln} onClick={() => onUpdateSelection({ arrowStart: !selection?.arrowStart })} title="Toggle arrowhead at start">Arrow Start</button>
+                <button className={`ribbon-btn ${selection?.arrowEnd ? 'active' : ''}`} disabled={!ln} onClick={() => onUpdateSelection({ arrowEnd: !selection?.arrowEnd })} title="Toggle arrowhead at end">Arrow End</button>
               </Group>
               <Group title="Presets">
                 {CONNECTOR_PRESETS.map((p) => (

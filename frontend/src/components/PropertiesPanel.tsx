@@ -13,6 +13,10 @@ interface Props {
   overflowWarning?: boolean;
   onMergeIntoPrevious?: () => void;
   onMakeIndependent?: () => void;
+  onConnectorConvert?: (kind: 'line' | 'arrow' | 'polyline' | 'elbow') => void;
+  onConnectorAddVertex?: () => void;
+  onConnectorDeleteVertex?: () => void;
+  onConnectorReverse?: () => void;
 }
 
 export default function PropertiesPanel({
@@ -26,6 +30,10 @@ export default function PropertiesPanel({
   overflowWarning,
   onMergeIntoPrevious,
   onMakeIndependent,
+  onConnectorConvert,
+  onConnectorAddVertex,
+  onConnectorDeleteVertex,
+  onConnectorReverse,
 }: Props) {
   const [renameValue, setRenameValue] = useState('');
   return (
@@ -134,8 +142,14 @@ export default function PropertiesPanel({
           <>
             <div className="field">
               <label htmlFor="sel-type">Object Type</label>
-              <input id="sel-type" title="What kind of object is selected" value={selection.isConnector ? 'Line / Connector' : selection.isText ? 'Text' : selection.isImage ? 'Image' : selection.type} readOnly />
+              <input id="sel-type" title="What kind of object is selected" value={selection.isConnector ? (selection.connectorKind === 'elbow' ? 'Elbow Connector' : selection.connectorKind === 'polyline' ? 'Polyline' : selection.connectorKind === 'arrow' ? 'Arrow' : 'Line') : selection.isText ? 'Text' : selection.isImage ? 'Image' : selection.type} readOnly />
             </div>
+            {selection.isConnector && (
+              <div className="field">
+                <label htmlFor="sel-points">Points Count</label>
+                <input id="sel-points" value={selection.pointsCount ?? 2} readOnly />
+              </div>
+            )}
             {selection.name !== undefined && (
               <div className="field">
                 <label htmlFor="sel-name">Object Name</label>
@@ -201,9 +215,39 @@ export default function PropertiesPanel({
                   </select>
                 </div>
                 <div className="field">
-                  <label title="Show an arrowhead at the end of the line">
-                    <input type="checkbox" checked={selection.arrowEnd ?? false} onChange={(e) => onUpdateSelection({ arrowEnd: e.target.checked })} /> Arrowhead (end)
-                  </label>
+                  <label htmlFor="sel-arrowhead">Arrowhead</label>
+                  <select
+                    id="sel-arrowhead"
+                    value={selection.arrowStart && selection.arrowEnd ? 'both' : selection.arrowStart ? 'start' : selection.arrowEnd ? 'end' : 'none'}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      onUpdateSelection({
+                        arrowStart: v === 'start' || v === 'both',
+                        arrowEnd: v === 'end' || v === 'both',
+                      });
+                    }}
+                  >
+                    <option value="none">None</option>
+                    <option value="start">Start</option>
+                    <option value="end">End</option>
+                    <option value="both">Both</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="sel-conn-label">Label</label>
+                  <input id="sel-conn-label" value={selection.label ?? ''} onChange={(e) => onUpdateSelection({ label: e.target.value })} />
+                </div>
+                <div className="field-row">
+                  <button className="props-btn" onClick={() => onConnectorAddVertex?.()}>Add Vertex</button>
+                  <button className="props-btn" onClick={() => onConnectorDeleteVertex?.()}>Delete Vertex</button>
+                </div>
+                <div className="field-row">
+                  <button className="props-btn" onClick={() => onConnectorConvert?.('line')}>To Line</button>
+                  <button className="props-btn" onClick={() => onConnectorConvert?.('elbow')}>To Elbow</button>
+                </div>
+                <div className="field-row">
+                  <button className="props-btn" onClick={() => onConnectorConvert?.('polyline')}>To Polyline</button>
+                  <button className="props-btn" onClick={() => onConnectorReverse?.()}>Reverse Direction</button>
                 </div>
               </>
             )}

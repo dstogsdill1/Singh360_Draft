@@ -126,6 +126,9 @@ export interface CanvasSelection {
   textAlign?: string;
   isText?: boolean;
   isConnector?: boolean;
+  connectorKind?: 'line' | 'arrow' | 'polyline' | 'elbow';
+  pointsCount?: number;
+  label?: string;
   isImage?: boolean;
   dash?: string;
   arrowStart?: boolean;
@@ -144,6 +147,8 @@ export interface CanvasApi {
   addCircle: () => void;
   addLine: () => void;
   addArrow: () => void;
+  addPolyline: () => void;
+  addElbow: () => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
   addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addLegend: (presetIds?: string[]) => void;
@@ -164,4 +169,8 @@ export interface CanvasApi {
   distributeObjects: (direction: 'horizontal' | 'vertical') => void;
   matchObjectSize: (which: 'width' | 'height' | 'both') => void;
   updateSelected: (patch: Partial<CanvasSelection>) => void;
+  reverseConnectorDirection: () => void;
+  addVertexToSelected: () => void;
+  deleteVertexFromSelected: () => void;
+  convertSelectedConnector: (kind: 'line' | 'arrow' | 'polyline' | 'elbow') => void;
 }

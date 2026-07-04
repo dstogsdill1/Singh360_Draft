@@ -735,6 +735,8 @@ export default function App() {
         addCircle: () => { setOverlayMode(true); canvasApiRef.current?.addCircle(); },
         addLine: () => { setOverlayMode(true); canvasApiRef.current?.addLine(); },
         addArrow: () => { setOverlayMode(true); canvasApiRef.current?.addArrow(); },
+        addPolyline: () => { setOverlayMode(true); canvasApiRef.current?.addPolyline(); },
+        addElbow: () => { setOverlayMode(true); canvasApiRef.current?.addElbow(); },
         addPageTitle: () => { setOverlayMode(true); canvasApiRef.current?.addPageTitle(activePage?.sheetTitle ?? 'Page Title'); },
         addSectionHeader: () => { setOverlayMode(true); canvasApiRef.current?.addSectionHeader('Section Header'); },
         addNote: () => { setOverlayMode(true); canvasApiRef.current?.addNote('Note'); },
@@ -960,6 +962,10 @@ export default function App() {
             onChange={(next) => patchPage(next.id, next)}
             selection={selection}
             onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
+            onConnectorConvert={(kind) => canvasApiRef.current?.convertSelectedConnector(kind)}
+            onConnectorAddVertex={() => canvasApiRef.current?.addVertexToSelected()}
+            onConnectorDeleteVertex={() => canvasApiRef.current?.deleteVertexFromSelected()}
+            onConnectorReverse={() => canvasApiRef.current?.reverseConnectorDirection()}
             projectDisplayName={project.projectDisplayName ?? project.metadata.projectName}
             projectFolder={project.projectFolder}
             onRenameProject={(name) => void onRenameProject(name)}
@@ -1035,6 +1041,8 @@ export default function App() {
           { label: 'Insert Text Box', divider: true, onClick: () => { setOverlayMode(true); canvasApiRef.current?.addText(); } },
           { label: 'Insert Arrow', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addArrow(); } },
           { label: 'Insert Line', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addLine(); } },
+          { label: 'Insert Polyline', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addPolyline(); } },
+          { label: 'Insert Elbow Connector', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addElbow(); } },
           { label: 'Insert Connector Legend', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addLegend(); } },
           { label: 'Import Worksheet from Excel', divider: true, onClick: () => setImportWsOpen({ afterPageId: activePageId ?? undefined }) },
           { label: 'Add Blank Sheet After', onClick: () => activePageId && addPage(activePageId, 'after') },
@@ -1043,6 +1051,13 @@ export default function App() {
           { label: 'Delete', disabled: !selection, onClick: () => canvasApiRef.current?.deleteSelected() },
           { label: 'Bring to Front', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.bringToFront() },
           { label: 'Send to Back', disabled: !selection, onClick: () => canvasApiRef.current?.sendToBack() },
+          { label: 'Add Vertex', divider: true, disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.addVertexToSelected() },
+          { label: 'Delete Vertex', disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.deleteVertexFromSelected() },
+          { label: 'Convert to Elbow', disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.convertSelectedConnector('elbow') },
+          { label: 'Convert to Free Polyline', disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.convertSelectedConnector('polyline') },
+          { label: 'Convert to Straight Line', disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.convertSelectedConnector('line') },
+          { label: 'Convert to Arrow', disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.convertSelectedConnector('arrow') },
+          { label: 'Reverse Direction', disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.reverseConnectorDirection() },
           { label: selection?.locked ? 'Unlock' : 'Lock', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.updateSelected({ locked: !selection?.locked }) },
         ]}
       />

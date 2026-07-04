@@ -19,6 +19,7 @@ interface Props {
 const CANVAS_W = BODY_W;
 const CANVAS_H = BODY_H;
 const SNAP = 16;
+const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label'];
 
 function summarize(obj: FabricObject): CanvasSelection {
   const anyObj = obj as unknown as Record<string, unknown>;
@@ -45,6 +46,9 @@ function summarize(obj: FabricObject): CanvasSelection {
     textAlign: typeof anyObj.textAlign === 'string' ? (anyObj.textAlign as string) : undefined,
     isText,
     isConnector,
+    connectorKind: typeof anyObj.connectorKind === 'string' ? (anyObj.connectorKind as CanvasSelection['connectorKind']) : (isConnector ? 'line' : undefined),
+    pointsCount: Array.isArray(anyObj.pointsData) ? anyObj.pointsData.length : (isConnector ? 2 : undefined),
+    label: typeof anyObj.label === 'string' ? (anyObj.label as string) : undefined,
     isImage,
     dash: isConnector ? dash : undefined,
     arrowStart: anyObj.arrowStart === true,
@@ -95,6 +99,31 @@ function makeLine(x: number, y: number) {
 function makeArrow(x: number, y: number) {
   return new Connector([x, y, x + 200, y], { stroke: '#111', strokeWidth: 2, arrowEnd: true });
 }
+function makePolyline(x: number, y: number) {
+  return new Connector([x, y, x + 120, y + 40], {
+    stroke: '#111',
+    strokeWidth: 2,
+    arrowEnd: false,
+    connectorKind: 'polyline',
+    pointsData: [
+      { x, y },
+      { x: x + 120, y: y + 40 },
+    ],
+  });
+}
+function makeElbow(x: number, y: number) {
+  return new Connector([x, y, x + 180, y + 80], {
+    stroke: '#111',
+    strokeWidth: 2,
+    arrowEnd: false,
+    connectorKind: 'elbow',
+    pointsData: [
+      { x, y },
+      { x: x + 180, y },
+      { x: x + 180, y: y + 80 },
+    ],
+  });
+}
 
 export default function CanvasEditor({
   serialized,
@@ -129,6 +158,7 @@ export default function CanvasEditor({
   const restoringRef = useRef(false);
   // Connector currently being drawn via drag-to-create.
   const creatingRef = useRef<Connector | null>(null);
+  const creatingPolyRef = useRef<Connector | null>(null);
   // Transient alignment guide lines (never serialized/exported).
   const guidesRef = useRef<FabricObject[]>([]);
 
@@ -143,14 +173,13 @@ export default function CanvasEditor({
       perPixelTargetFind: false,
     });
     fabricRef.current = canvas;
-
     const persist = () => {
       if (restoringRef.current) return;
-      onSerRef.current((canvas.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
+      onSerRef.current((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
     };
     const pushHistory = () => {
       if (restoringRef.current) return;
-      const snapshot = JSON.stringify(canvas.toObject(['objName', 'arrowStart', 'arrowEnd']));
+      const snapshot = JSON.stringify(canvas.toObject(SER_PROPS));
       const hist = historyRef.current.slice(0, histIdxRef.current + 1);
       hist.push(snapshot);
       historyRef.current = hist;
@@ -166,11 +195,11 @@ export default function CanvasEditor({
     if (serialized.length) {
       void canvas.loadFromJSON({ version: '6', objects: serialized }).then(() => {
         canvas.renderAll();
-        historyRef.current = [JSON.stringify(canvas.toObject(['objName', 'arrowStart', 'arrowEnd']))];
+        historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
         histIdxRef.current = 0;
       });
     } else {
-      historyRef.current = [JSON.stringify(canvas.toObject(['objName', 'arrowStart', 'arrowEnd']))];
+      historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
       histIdxRef.current = 0;
     }
 
@@ -208,6 +237,18 @@ export default function CanvasEditor({
     canvas.on('object:moving', (e) => {
       const t = e.target;
       if (!t) return;
+      if (t instanceof Connector) {
+        const anyT = t as unknown as Record<string, unknown>;
+        const dragOrigin = anyT.__dragOrigin as { left: number; top: number; points: Array<{ x: number; y: number }> } | undefined;
+        if (dragOrigin) {
+          const dx = (t.left ?? 0) - dragOrigin.left;
+          const dy = (t.top ?? 0) - dragOrigin.top;
+          t.pointsData = dragOrigin.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+          t.updateLineFromPoints();
+          canvas.requestRenderAll();
+          return;
+        }
+      }
       clearGuides();
       const w = (t.width ?? 0) * (t.scaleX ?? 1);
       const h = (t.height ?? 0) * (t.scaleY ?? 1);
@@ -258,6 +299,15 @@ export default function CanvasEditor({
     canvas.on('mouse:up', () => { clearGuides(); canvas.requestRenderAll(); });
     canvas.on('mouse:down', (opt) => {
       const tool = toolRef.current;
+      if (opt.target instanceof Connector) {
+        const t = opt.target as Connector;
+        const anyT = t as unknown as Record<string, unknown>;
+        anyT.__dragOrigin = {
+          left: t.left ?? 0,
+          top: t.top ?? 0,
+          points: t.pointsData.map((p) => ({ x: p.x, y: p.y })),
+        };
+      }
       if (tool === 'select' || opt.target) return;
       const p = canvas.getScenePoint(opt.e);
       // Line / arrow: start a drag-to-create connector.
@@ -273,6 +323,35 @@ export default function CanvasEditor({
         canvas.requestRenderAll();
         return;
       }
+      if (tool === 'polyline' || tool === 'elbow') {
+        if (!creatingPolyRef.current) {
+          const conn = tool === 'elbow' ? makeElbow(p.x, p.y) : makePolyline(p.x, p.y);
+          conn.pointsData = [{ x: p.x, y: p.y }, { x: p.x, y: p.y }];
+          conn.connectorKind = tool === 'elbow' ? 'elbow' : 'polyline';
+          conn.rebuildVertexControls();
+          conn.updateLineFromPoints();
+          canvas.add(conn);
+          canvas.setActiveObject(conn);
+          creatingPolyRef.current = conn;
+          canvas.requestRenderAll();
+        } else {
+          const conn = creatingPolyRef.current;
+          if (conn) {
+            const last = conn.pointsData[conn.pointsData.length - 1];
+            const nx = snapRef.current ? Math.round(p.x / SNAP) * SNAP : p.x;
+            const ny = snapRef.current ? Math.round(p.y / SNAP) * SNAP : p.y;
+            if (conn.connectorKind === 'elbow' && last) {
+              conn.pointsData.push({ x: nx, y: last.y }, { x: nx, y: ny });
+            } else {
+              conn.pointsData.push({ x: nx, y: ny });
+            }
+            conn.rebuildVertexControls();
+            conn.updateLineFromPoints();
+            canvas.requestRenderAll();
+          }
+        }
+        return;
+      }
       let obj: FabricObject | null = null;
       if (tool === 'text') obj = makeText(p.x, p.y);
       else if (tool === 'rectangle') obj = makeRect(p.x, p.y);
@@ -286,11 +365,26 @@ export default function CanvasEditor({
     });
     canvas.on('mouse:move', (opt) => {
       const conn = creatingRef.current;
-      if (!conn) return;
-      const p = canvas.getScenePoint(opt.e);
-      conn.set({ x2: p.x, y2: p.y });
-      conn.setCoords();
-      canvas.requestRenderAll();
+      if (conn) {
+        const p = canvas.getScenePoint(opt.e);
+        conn.set({ x2: p.x, y2: p.y });
+        conn.setCoords();
+        canvas.requestRenderAll();
+      }
+      const poly = creatingPolyRef.current;
+      if (poly) {
+        const p = canvas.getScenePoint(opt.e);
+        const nx = snapRef.current ? Math.round(p.x / SNAP) * SNAP : p.x;
+        const ny = snapRef.current ? Math.round(p.y / SNAP) * SNAP : p.y;
+        if (poly.pointsData.length >= 2) {
+          poly.pointsData[poly.pointsData.length - 1] =
+            poly.connectorKind === 'elbow'
+              ? { x: nx, y: poly.pointsData[poly.pointsData.length - 2].y }
+              : { x: nx, y: ny };
+          poly.updateLineFromPoints();
+          canvas.requestRenderAll();
+        }
+      }
     });
     canvas.on('mouse:up', () => {
       const conn = creatingRef.current;
@@ -307,8 +401,71 @@ export default function CanvasEditor({
       onChanged();
       consumeRef.current();
     });
+    canvas.on('object:modified', (e) => {
+      const t = e.target;
+      if (t instanceof Connector) {
+        const anyT = t as unknown as Record<string, unknown>;
+        delete anyT.__dragOrigin;
+      }
+    });
+
+    const onKeyDown = (ev: KeyboardEvent) => {
+      const poly = creatingPolyRef.current;
+      if (!poly) return;
+      if (ev.key === 'Escape') {
+        canvas.remove(poly);
+        creatingPolyRef.current = null;
+        consumeRef.current();
+        canvas.requestRenderAll();
+        return;
+      }
+      if (ev.key === 'Backspace') {
+        ev.preventDefault();
+        if (poly.pointsData.length > 2) {
+          poly.pointsData.splice(poly.pointsData.length - 2, 1);
+          poly.rebuildVertexControls();
+          poly.updateLineFromPoints();
+          canvas.requestRenderAll();
+        }
+        return;
+      }
+      if (ev.key === 'Enter') {
+        creatingPolyRef.current = null;
+        poly.rebuildVertexControls();
+        poly.updateLineFromPoints();
+        canvas.setActiveObject(poly);
+        canvas.requestRenderAll();
+        onChanged();
+        consumeRef.current();
+      }
+    };
+    const onDblClick = () => {
+      const poly = creatingPolyRef.current;
+      if (!poly) return;
+      creatingPolyRef.current = null;
+      poly.rebuildVertexControls();
+      poly.updateLineFromPoints();
+      canvas.setActiveObject(poly);
+      canvas.requestRenderAll();
+      onChanged();
+      consumeRef.current();
+    };
+    const onDblClickExisting = () => {
+      const cobj = canvas.getActiveObject();
+      if (!(cobj instanceof Connector)) return;
+      if (creatingPolyRef.current) return;
+      cobj.addVertexAtMidpoint();
+      canvas.requestRenderAll();
+      onChanged();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    canvas.upperCanvasEl?.addEventListener('dblclick', onDblClick);
+    canvas.upperCanvasEl?.addEventListener('dblclick', onDblClickExisting);
 
     return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      canvas.upperCanvasEl?.removeEventListener('dblclick', onDblClick);
+      canvas.upperCanvasEl?.removeEventListener('dblclick', onDblClickExisting);
       void canvas.dispose();
       fabricRef.current = null;
     };
@@ -349,7 +506,7 @@ export default function CanvasEditor({
       c.renderAll();
       histIdxRef.current = idx;
       restoringRef.current = false;
-      onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
+      onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
     });
   };
 
@@ -360,6 +517,8 @@ export default function CanvasEditor({
       addCircle: () => addObj(makeCircle(200, 200)),
       addLine: () => addObj(makeLine(200, 260)),
       addArrow: () => addObj(makeArrow(200, 320)),
+      addPolyline: () => addObj(makePolyline(200, 340)),
+      addElbow: () => addObj(makeElbow(200, 360)),
       addPageTitle: (text: string) => addObj(makePageTitle(text)),
       addSectionHeader: (text: string) => addObj(makeSectionHeader(text)),
       addNote: (text: string) => addObj(makeNote(text)),
@@ -579,7 +738,7 @@ export default function CanvasEditor({
           bbs.forEach(({ o, b }) => { o.set('top', (o.top ?? 0) + (midY - (b.top + b.height / 2))); o.setCoords(); });
         }
         c.requestRenderAll();
-        onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
       },
       distributeObjects: (direction) => {
         const c = fabricRef.current;
@@ -609,7 +768,7 @@ export default function CanvasEditor({
           bbs.forEach(({ o, b }) => { o.set('top', (o.top ?? 0) + (y - b.top)); o.setCoords(); y += b.height + gap; });
         }
         c.requestRenderAll();
-        onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
       },
       matchObjectSize: (which) => {
         const c = fabricRef.current;
@@ -627,7 +786,7 @@ export default function CanvasEditor({
           o.setCoords();
         });
         c.requestRenderAll();
-        onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
       },
       updateSelected: (patch) => {
         const c = fabricRef.current;
@@ -662,6 +821,7 @@ export default function CanvasEditor({
         }
         if (patch.arrowEnd !== undefined && 'arrowEnd' in o) anyO.arrowEnd = patch.arrowEnd;
         if (patch.arrowStart !== undefined && 'arrowStart' in o) anyO.arrowStart = patch.arrowStart;
+        if (patch.label !== undefined && 'label' in o) anyO.label = patch.label;
         if (patch.locked !== undefined) {
           o.set({
             lockMovementX: patch.locked,
@@ -674,7 +834,40 @@ export default function CanvasEditor({
         o.set('dirty', true);
         o.setCoords();
         c.requestRenderAll();
-        onSerRef.current((c.toObject(['objName', 'arrowStart', 'arrowEnd']).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSelRef.current(summarize(o));
+      },
+      reverseConnectorDirection: () => {
+        const c = fabricRef.current;
+        const o = c?.getActiveObject();
+        if (!c || !o || !(o instanceof Connector)) return;
+        o.reverseDirection();
+        c.requestRenderAll();
+        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+      },
+      addVertexToSelected: () => {
+        const c = fabricRef.current;
+        const o = c?.getActiveObject();
+        if (!c || !o || !(o instanceof Connector)) return;
+        o.addVertexAtMidpoint();
+        c.requestRenderAll();
+        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+      },
+      deleteVertexFromSelected: () => {
+        const c = fabricRef.current;
+        const o = c?.getActiveObject();
+        if (!c || !o || !(o instanceof Connector)) return;
+        o.deleteVertex();
+        c.requestRenderAll();
+        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+      },
+      convertSelectedConnector: (kind) => {
+        const c = fabricRef.current;
+        const o = c?.getActiveObject();
+        if (!c || !o || !(o instanceof Connector)) return;
+        o.convertKind(kind);
+        c.requestRenderAll();
+        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
         onSelRef.current(summarize(o));
       },
     };
