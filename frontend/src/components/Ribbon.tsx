@@ -59,6 +59,8 @@ interface Props {
   onRenumber: () => void;
   onOpenProject: () => void;
   onCleanWorkspace: () => void;
+  onImportWorksheet: () => void;
+  renumberBadge?: boolean;
   theme: 'dark' | 'light';
   onSetTheme: (t: 'dark' | 'light') => void;
   currentPaperLabel?: string;
@@ -106,6 +108,8 @@ export default function Ribbon({
   onRenumber,
   onOpenProject,
   onCleanWorkspace,
+  onImportWorksheet,
+  renumberBadge,
   theme,
   onSetTheme,
   currentPaperLabel,
@@ -181,7 +185,10 @@ export default function Ribbon({
             <Group title="Project">
               <button className="ribbon-btn" onClick={onOpenProject} title="Browse and open a saved project">Open Project</button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow} title="Save the project now">Save Now</button>
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onRenumber} title="Preview and apply new engineering sheet codes">Renumber Sheet Codes</button>
+              <button className={`ribbon-btn ${renumberBadge ? 'badge-warn' : ''}`} disabled={!hasProject} onClick={onRenumber} title="Preview and apply new engineering sheet codes">
+                Renumber Sheet Codes{renumberBadge ? ' ⚠' : ''}
+              </button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onImportWorksheet} title="Import one or more worksheets from another Excel workbook">Import Worksheet</button>
             </Group>
             <Group title="Maintenance">
               <button className="ribbon-btn" onClick={onCleanWorkspace} title="Archive old projects/exports to start fresh (never deletes; library preserved)">Clean Workspace</button>

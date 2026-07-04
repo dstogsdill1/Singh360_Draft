@@ -5,6 +5,8 @@ import {
   exportPackage,
   exportPdf,
   getProject,
+  importWorksheets,
+  previewImportWorksheets,
   renameProject,
   savePages,
   saveProject,
@@ -23,6 +25,8 @@ import Ribbon, { type ViewControls } from './components/Ribbon';
 import RenumberModal from './components/RenumberModal';
 import OpenProjectModal from './components/OpenProjectModal';
 import CleanWorkspaceModal from './components/CleanWorkspaceModal';
+import ImportWorksheetModal from './components/ImportWorksheetModal';
+import AddSheetModal from './components/AddSheetModal';
 import SheetContextMenu from './components/SheetContextMenu';
 import ExportModal from './components/ExportModal';
 import PdfInsertModal from './components/PdfInsertModal';
@@ -90,6 +94,9 @@ export default function App() {
   const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [pdfInsertOpen, setPdfInsertOpen] = useState(false);
+  const [addSheetPending, setAddSheetPending] = useState<{ refId: string; where: 'before' | 'after' } | null>(null);
+  const [importWsOpen, setImportWsOpen] = useState<{ afterPageId?: string } | null>(null);
+  const [renumberBadge, setRenumberBadge] = useState(false);
   const [theme, setThemeState] = useState<'dark' | 'light'>(() => {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('singh360-theme') : null;
     return saved === 'light' ? 'light' : 'dark';
@@ -229,12 +236,15 @@ export default function App() {
     }
   };
 
-  // Global clipboard paste → image onto active canvas page.
+  // Global clipboard paste → image or text onto active canvas page.
+  // Priority: image/png > image/* > SVG from text/html > HTML table → text box > text/plain
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       if (!isCanvasContext()) return;
       const items = e.clipboardData?.items;
       if (!items) return;
+
+      // 1. Native image types: highest quality, store as asset.
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         if (it.type.startsWith('image/')) {
@@ -249,6 +259,67 @@ export default function App() {
           }
           return;
         }
+      }
+
+      // 2. SVG from text/html or text/plain.
+      const htmlItem = Array.from(items).find((it) => it.type === 'text/html');
+      const plainItem = Array.from(items).find((it) => it.type === 'text/plain');
+
+      if (htmlItem) {
+        htmlItem.getAsString((html) => {
+          // Check for inline SVG.
+          if (html.includes('<svg')) {
+            const svgMatch = html.match(/<svg[\s\S]*?<\/svg>/i);
+            if (svgMatch) {
+              const svgB64 = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgMatch[0])))}`;
+              void addImageFromDataUrl(svgB64, screenshotName());
+              return;
+            }
+          }
+          // Check for <img> tag.
+          const imgMatch = html.match(/<img[^>]+src="([^"]+)"/i);
+          if (imgMatch) {
+            const src = imgMatch[1];
+            if (src.startsWith('data:image')) {
+              void addImageFromDataUrl(src, screenshotName());
+              return;
+            }
+          }
+          // Check for HTML table → offer as text (user can Import Worksheet for full table).
+          const hasTable = /<table[\s\S]*?<\/table>/i.test(html);
+          if (hasTable) {
+            // Strip tags → plain text fallback for now; a full Table paste modal is Phase F/L.
+            const div = document.createElement('div');
+            div.innerHTML = html;
+            const text = (div.textContent || '').trim();
+            if (text) {
+              setOverlayMode(true);
+              canvasApiRef.current?.addNote(text.slice(0, 1000));
+            }
+            return;
+          }
+          // Formatted text → text box.
+          const div2 = document.createElement('div');
+          div2.innerHTML = html;
+          const text2 = (div2.textContent || '').trim();
+          if (text2) {
+            setOverlayMode(true);
+            canvasApiRef.current?.addNote(text2.slice(0, 1000));
+          }
+        });
+        e.preventDefault();
+        return;
+      }
+
+      // 3. Plain text → text box.
+      if (plainItem) {
+        plainItem.getAsString((text) => {
+          if (text.trim()) {
+            setOverlayMode(true);
+            canvasApiRef.current?.addNote(text.trim().slice(0, 1000));
+          }
+        });
+        e.preventDefault();
       }
     };
     window.addEventListener('paste', onPaste);
@@ -375,9 +446,10 @@ export default function App() {
   };
 
   const addPage = (refId: string, where: 'before' | 'after') => {
-    const title = window.prompt('New sheet title:', 'New Sheet');
-    if (title === null) return;
-    const code = window.prompt('Sheet code:', '') ?? '';
+    setAddSheetPending({ refId, where });
+  };
+
+  const addSheetFromModal = (title: string, code: string, template: string, refId: string, where: 'before' | 'after') => {
     mutatePages((pages) => {
       const idx = pages.findIndex((p) => p.id === refId);
       if (idx < 0) return pages;
@@ -385,14 +457,14 @@ export default function App() {
         id: newPageId(),
         order: 0,
         include: true,
-        sheetCode: code,
-        displaySheetCode: code,
+        sheetCode: code || 'NEW',
+        displaySheetCode: code || 'NEW',
         sheetTitle: title || 'New Sheet',
         sheetTab: '',
-        pageType: 'data-grid',
-        template: 'Text / Instructions',
+        pageType: template as PageModel['pageType'] || 'data-grid',
+        template: template,
         templateId: '',
-        blocks: [{ id: `b_${newPageId()}`, type: 'paragraph', text: '' }],
+        blocks: template === 'canvas' ? [] : [{ id: `b_${newPageId()}`, type: 'paragraph', text: '' }],
         canvasObjects: [],
         notes: '',
       };
@@ -400,6 +472,8 @@ export default function App() {
       out.splice(where === 'before' ? idx : idx + 1, 0, blank);
       return out;
     });
+    setRenumberBadge(true);
+    setAddSheetPending(null);
   };
 
   const deletePage = (id: string) => {
@@ -466,9 +540,10 @@ export default function App() {
     const actions = [
       { label: 'Rename Sheet Title', onClick: () => renamePagePrompt(id) },
       { label: 'Edit Sheet Code', onClick: () => editCodePrompt(id) },
-      { label: 'Duplicate Page', divider: true, onClick: () => duplicatePage(id) },
-      { label: 'Add Page Before', onClick: () => addPage(id, 'before') },
-      { label: 'Add Page After', onClick: () => addPage(id, 'after') },
+      { label: 'Duplicate Sheet', divider: true, onClick: () => duplicatePage(id) },
+      { label: 'Add Blank Sheet Before', onClick: () => addPage(id, 'before') },
+      { label: 'Add Blank Sheet After', onClick: () => addPage(id, 'after') },
+      { label: 'Import Worksheet from Excel', onClick: () => setImportWsOpen({ afterPageId: id }) },
       { label: pg?.include ? 'Exclude Page' : 'Include Page', divider: true, onClick: () => toggleInclude(id) },
       { label: 'Delete Page', onClick: () => deletePage(id) },
       { label: 'Move Left', divider: true, onClick: () => movePage(id, -1) },
@@ -505,6 +580,20 @@ export default function App() {
       console.error('open project failed', err);
     } finally {
       setOpenProjectOpen(false);
+    }
+  };
+
+  const onImportedWorksheets = async (pageIds: string[], renumberSuggested: boolean) => {
+    setImportWsOpen(null);
+    if (!project) return;
+    try {
+      const p = await getProject(project.id);
+      setProject(p);
+      // Select the first imported page.
+      if (pageIds.length) setActivePageId(pageIds[0]);
+      if (renumberSuggested) setRenumberBadge(true);
+    } catch (err) {
+      console.error('refresh after import failed', err);
     }
   };
 
@@ -656,8 +745,10 @@ export default function App() {
       onExportPdf={() => setExportOpen(true)}
       onExportPackage={() => void onExportPackage()}
       onRenumber={onRenumber}
+      renumberBadge={renumberBadge}
       onOpenProject={() => setOpenProjectOpen(true)}
       onCleanWorkspace={() => setCleanWorkspaceOpen(true)}
+      onImportWorksheet={() => setImportWsOpen({ afterPageId: activePageId ?? undefined })}
       theme={theme}
       onSetTheme={setThemeState}
       selection={selection}
@@ -691,6 +782,20 @@ export default function App() {
       )}
       {cleanWorkspaceOpen && (
         <CleanWorkspaceModal onDone={() => setCleanWorkspaceOpen(false)} onCancel={() => setCleanWorkspaceOpen(false)} />
+      )}
+      {importWsOpen && project && (
+        <ImportWorksheetModal
+          projectId={project.id}
+          insertAfterPageId={importWsOpen.afterPageId}
+          onImported={(ids, rs) => void onImportedWorksheets(ids, rs)}
+          onCancel={() => setImportWsOpen(null)}
+        />
+      )}
+      {addSheetPending && (
+        <AddSheetModal
+          onAdd={(title, code, tmpl) => addSheetFromModal(title, code, tmpl, addSheetPending.refId, addSheetPending.where)}
+          onCancel={() => setAddSheetPending(null)}
+        />
       )}
       </>
     );
@@ -868,6 +973,20 @@ export default function App() {
     {cleanWorkspaceOpen && (
       <CleanWorkspaceModal onDone={() => setCleanWorkspaceOpen(false)} onCancel={() => setCleanWorkspaceOpen(false)} />
     )}
+    {importWsOpen && (
+      <ImportWorksheetModal
+        projectId={project.id}
+        insertAfterPageId={importWsOpen.afterPageId}
+        onImported={(ids, rs) => void onImportedWorksheets(ids, rs)}
+        onCancel={() => setImportWsOpen(null)}
+      />
+    )}
+    {addSheetPending && (
+      <AddSheetModal
+        onAdd={(title, code, tmpl) => addSheetFromModal(title, code, tmpl, addSheetPending.refId, addSheetPending.where)}
+        onCancel={() => setAddSheetPending(null)}
+      />
+    )}
     {exportOpen && (
       <ExportModal
         currentRevision={project.metadata.revision || project.metadata.version || ''}
@@ -897,6 +1016,10 @@ export default function App() {
           { label: 'Insert Text Box', divider: true, onClick: () => { setOverlayMode(true); canvasApiRef.current?.addText(); } },
           { label: 'Insert Arrow', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addArrow(); } },
           { label: 'Insert Line', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addLine(); } },
+          { label: 'Insert Connector Legend', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addLegend(); } },
+          { label: 'Import Worksheet from Excel', divider: true, onClick: () => setImportWsOpen({ afterPageId: activePageId ?? undefined }) },
+          { label: 'Add Blank Sheet After', onClick: () => activePageId && addPage(activePageId, 'after') },
+          { label: 'Duplicate Current Sheet', onClick: () => activePageId && duplicatePage(activePageId) },
           { label: 'Duplicate', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.duplicateSelected() },
           { label: 'Delete', disabled: !selection, onClick: () => canvasApiRef.current?.deleteSelected() },
           { label: 'Bring to Front', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.bringToFront() },

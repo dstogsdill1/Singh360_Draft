@@ -68,6 +68,40 @@ export async function createProjectFromWorkbook(file: File): Promise<{ id: strin
   return res.json();
 }
 
+export interface WorksheetPreview {
+  sheetName: string;
+  rowEstimate: number;
+  colEstimate: number;
+  detectedPageType: string;
+}
+
+export async function previewImportWorksheets(
+  projectId: string,
+  file: File,
+): Promise<{ sheets: WorksheetPreview[]; filename: string }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`/api/projects/${projectId}/import/workbook-sheet/preview`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function importWorksheets(
+  projectId: string,
+  file: File,
+  sheetNames: string[],
+  opts: { insertAfterPageId?: string; templateOverride?: string } = {},
+): Promise<{ pagesAdded: number; pageIds: string[]; renumberSuggested: boolean }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('sheetNames', JSON.stringify(sheetNames));
+  if (opts.insertAfterPageId) fd.append('insertAfterPageId', opts.insertAfterPageId);
+  if (opts.templateOverride) fd.append('templateOverride', opts.templateOverride);
+  const res = await fetch(`/api/projects/${projectId}/import/workbook-sheet`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function getProject(id: string): Promise<ProjectModel> {
   const res = await fetch(`/api/projects/${id}`);
   if (!res.ok) throw new Error(await res.text());

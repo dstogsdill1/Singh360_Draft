@@ -527,6 +527,101 @@ def attach_csv_structured(project_id: str):
     return jsonify({"ok": True, "id": project_id, "worksheetId": ws_id, "pagesAdded": len(new_pages)})
 
 
+@app.post("/api/projects/<project_id>/import/workbook-sheet/preview")
+def preview_import_workbook_sheet(project_id: str):
+    """Upload a workbook and return sheet names + row/col counts (no project mutation)."""
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    if "file" not in request.files:
+        return jsonify(_err("No workbook file uploaded.")), 400
+    upload = request.files["file"]
+    if not (upload.filename or "").lower().endswith((".xlsx", ".xlsm", ".xls")):
+        return jsonify(_err("Only .xlsx/.xlsm/.xls workbooks are supported.")), 400
+
+    # Store temporarily in project tmp (auto-expires on next cleanup).
+    tmp_dir = store.sources_dir(project_id, "tmp")
+    tmp_path = tmp_dir / f"preview_{uuid.uuid4().hex[:8]}_{upload.filename}"
+    try:
+        upload.save(tmp_path)
+        from core.sheet_importer import preview_workbook_sheets
+        sheets = preview_workbook_sheets(tmp_path)
+    except Exception as exc:
+        return jsonify(_err("Could not read workbook.", str(exc))), 400
+    finally:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
+    return jsonify({"ok": True, "sheets": sheets, "filename": upload.filename})
+
+
+@app.post("/api/projects/<project_id>/import/workbook-sheet")
+def do_import_workbook_sheet(project_id: str):
+    """Import selected worksheet(s) from an uploaded XLSX into the project.
+
+    Form fields:
+      file          — the workbook
+      sheetNames    — JSON array of sheet name strings
+      insertAfterPageId — page id to insert after (optional; default: append)
+      templateOverride  — page template hint (optional)
+    """
+    _safe_id(project_id)
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    if "file" not in request.files:
+        return jsonify(_err("No workbook file uploaded.")), 400
+    upload = request.files["file"]
+    if not (upload.filename or "").lower().endswith((".xlsx", ".xlsm", ".xls")):
+        return jsonify(_err("Only .xlsx/.xlsm/.xls workbooks are supported.")), 400
+
+    import json as _json
+    raw_names = request.form.get("sheetNames", "[]")
+    try:
+        sheet_names: list[str] = _json.loads(raw_names)
+        if not isinstance(sheet_names, list) or not sheet_names:
+            raise ValueError("sheetNames must be a non-empty list")
+    except (ValueError, _json.JSONDecodeError) as exc:
+        return jsonify(_err("Invalid sheetNames.", str(exc))), 400
+
+    insert_after_id = request.form.get("insertAfterPageId") or None
+    template_override = request.form.get("templateOverride") or None
+
+    # Save the workbook permanently to the project sources directory.
+    wb_dir = store.sources_dir(project_id, "workbook")
+    wb_path = wb_dir / upload.filename
+    try:
+        upload.save(wb_path)
+        from core.sheet_importer import import_workbook_sheets
+        doc = ensure_project_shape(doc)
+        doc, new_pages = import_workbook_sheets(
+            doc,
+            wb_path,
+            sheet_names,
+            insert_after_page_id=insert_after_id,
+            template_override=template_override,
+            assets_dir=store.assets_excel_dir(project_id, doc),
+            asset_url_prefix=f"/api/assets/{project_id}",
+            source_filename=upload.filename,
+        )
+        recalc_page_numbers(doc)
+        store.save(project_id, doc)
+    except Exception as exc:
+        tb = traceback.format_exc()
+        app.logger.error("workbook-sheet import failed for %s:\n%s", project_id, tb)
+        return jsonify(_err("Failed to import worksheet(s).", str(exc))), 500
+
+    return jsonify({
+        "ok": True,
+        "id": project_id,
+        "pagesAdded": len(new_pages),
+        "pageIds": [p["id"] for p in new_pages],
+        "renumberSuggested": True,
+    })
+
+
 # --------------------------------------------------------------------------
 # Image assets (pasted screenshots / dropped image files)
 # --------------------------------------------------------------------------
