@@ -12,12 +12,18 @@ import json
 import re
 import shutil
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
     from PIL import Image
 except Exception:  # noqa: BLE001
     Image = None
+
+try:
+    import fitz  # PyMuPDF
+except Exception:  # noqa: BLE001
+    fitz = None
 
 
 STATUSES = {
@@ -44,13 +50,47 @@ class LibraryStore:
     def ensure(self) -> None:
         for sub in (
             "assets/components",
+            "assets/components/controllers",
+            "assets/components/expansion_modules",
+            "assets/components/electrical_power",
+            "assets/components/network_data",
+            "assets/components/panels_enclosures",
+            "assets/components/refrigeration",
+            "assets/components/hvac",
+            "assets/components/lighting",
+            "assets/components/alarms_safety",
+            "assets/components/sensors_transducers",
+            "assets/components/symbols_markers",
+            "assets/components/logos",
+            "assets/components/legends",
             "assets/components/custom",
             "assets/thumbnails",
+            "assets/thumbnails/controllers",
+            "assets/thumbnails/expansion_modules",
+            "assets/thumbnails/electrical_power",
+            "assets/thumbnails/network_data",
+            "assets/thumbnails/panels_enclosures",
+            "assets/thumbnails/refrigeration",
+            "assets/thumbnails/hvac",
+            "assets/thumbnails/lighting",
+            "assets/thumbnails/alarms_safety",
+            "assets/thumbnails/sensors_transducers",
+            "assets/thumbnails/symbols_markers",
+            "assets/thumbnails/logos",
+            "assets/thumbnails/legends",
+            "assets/thumbnails/custom",
             "assets/workbook_images",
             "assets/reference_pages",
             "assets/reference_pages/custom",
+            "assets/originals",
+            "assets/originals/pdf",
+            "assets/originals/svg",
+            "assets/originals/source",
             "staging",
             "inbox",
+            "processed",
+            "retired",
+            "_archive",
             "inbox/processed",
         ):
             (self.dir / sub).mkdir(parents=True, exist_ok=True)
@@ -257,8 +297,8 @@ class LibraryStore:
             if c.get("curated") is True:
                 continue
             source_type = str((c.get("source") or {}).get("sourceType") or "").lower()
-            # Keep explicit RDM import mappings stable unless user curates later.
-            if source_type == "rdm-layout-editor":
+            # Keep explicit import mappings stable unless user curates later.
+            if source_type in {"rdm-layout-editor", "local-library-folder"}:
                 if not c.get("defaultLabel"):
                     c["defaultLabel"] = c.get("partNumber") or c.get("shortName") or c.get("displayName")
                 c["insertWithLabel"] = c.get("insertWithLabel", True)
@@ -458,6 +498,7 @@ class LibraryStore:
         data = self.load()
         for c in data.get("components", []):
             if c.get("id") == comp_id:
+                rename_asset_file = bool(patch.get("renameAssetFile", False))
                 for k, v in patch.items():
                     if k in self.ALLOWED_FIELDS:
                         if k == "status":
@@ -465,6 +506,30 @@ class LibraryStore:
                             if vv not in STATUSES:
                                 continue
                         c[k] = v
+                # Optional safe file rename to match displayName.
+                if rename_asset_file and c.get("assetPath"):
+                    ap = self._asset_abs(c)
+                    if ap and ap.exists():
+                        safe_stem = re.sub(r"[^A-Za-z0-9._ -]+", "", str(c.get("displayName") or ap.stem)).strip() or ap.stem
+                        safe_stem = safe_stem.replace(" ", "_")
+                        new_ap = ap.with_name(f"{safe_stem}{ap.suffix.lower()}")
+                        if new_ap.exists() and new_ap != ap:
+                            new_ap = ap.with_name(f"{safe_stem}_{uuid.uuid4().hex[:6]}{ap.suffix.lower()}")
+                        try:
+                            ap.rename(new_ap)
+                            rel_asset = f"library/{new_ap.relative_to(self.dir).as_posix()}"
+                            c["assetPath"] = rel_asset
+                            # Thumbnail rename/update.
+                            if c.get("thumbnailPath"):
+                                old_tp = self.dir / str(c.get("thumbnailPath")).replace("library/", "", 1)
+                                if old_tp.exists():
+                                    new_tp = old_tp.with_name(f"{safe_stem}.jpg")
+                                    if new_tp.exists() and new_tp != old_tp:
+                                        new_tp = old_tp.with_name(f"{safe_stem}_{uuid.uuid4().hex[:6]}.jpg")
+                                    old_tp.rename(new_tp)
+                                    c["thumbnailPath"] = f"library/{new_tp.relative_to(self.dir).as_posix()}"
+                        except Exception:  # noqa: BLE001
+                            pass
                 # Mark as user-curated so auto-categorize won't overwrite it.
                 c["curated"] = True
                 self.save(data)
@@ -618,11 +683,121 @@ class LibraryStore:
             up = tok.upper()
             if re.fullmatch(r"PR\d{3,5}", up):
                 out.append(up)
+            elif tok.isupper() and 2 <= len(tok) <= 8:
+                out.append(tok)
             elif re.fullmatch(r"[A-Za-z]*\d+[A-Za-z0-9]*", tok):
                 out.append(tok)
             else:
                 out.append(tok.capitalize())
         return " ".join(out).strip() or "Needs Review"
+
+    def _now_iso(self) -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _canon_category_from_folder(self, folder_name: str) -> str:
+        f = (folder_name or "").strip().lower()
+        if f in {"hvac", "ahu"}:
+            return "sensors"
+        if f in {"refrigeration", "tank"}:
+            return "refrigeration"
+        if f in {"light", "lighting"}:
+            return "lighting"
+        if f in {"panel", "panels", "enclosure", "enclosures"}:
+            return "panels"
+        if f in {"symbol", "symbols", "marker", "markers", "pipes", "pipe"}:
+            return "symbols"
+        if f in {"logo", "logos"}:
+            return "logos"
+        if f in {"network", "data", "network_data"}:
+            return "network"
+        if f in {"electrical", "power", "electrical_power"}:
+            return "electrical"
+        if f in {"alarms", "alarm", "safety", "alarms_safety"}:
+            return "alarms"
+        if f in {"sensors", "sensor", "transducers", "sensors_transducers"}:
+            return "sensors"
+        if f in {"controllers", "controller"}:
+            return "controllers"
+        if f in {"expansion", "expansion_modules", "modules"}:
+            return "expansion"
+        if f in {"legend", "legends"}:
+            return "legends"
+        return "review"
+
+    def _category_folder_name(self, category: str) -> str:
+        cat = (category or "review").strip().lower()
+        return {
+            "controllers": "controllers",
+            "expansion": "expansion_modules",
+            "electrical": "electrical_power",
+            "network": "network_data",
+            "panels": "panels_enclosures",
+            "refrigeration": "refrigeration",
+            "lighting": "lighting",
+            "alarms": "alarms_safety",
+            "sensors": "sensors_transducers",
+            "symbols": "symbols_markers",
+            "logos": "logos",
+            "legends": "legends",
+            "review": "custom",
+            "reference-page": "custom",
+        }.get(cat, "custom")
+
+    def _clean_display_from_filename(self, file_name: str) -> str:
+        stem = Path(file_name).stem
+        s = stem
+        s = re.sub(r"^[0-9a-f]{8,}[_\-]?", "", s, flags=re.I)
+        s = re.sub(r"[_\-]+", " ", s)
+        s = re.sub(r"\bthumbnail\b", "", s, flags=re.I)
+        s = re.sub(r"\s+", " ", s).strip()
+        # normalize logo labels
+        low = s.lower()
+        if low in {"heb logo", "h e b logo", "heb"}:
+            return "H-E-B Logo"
+        if low in {"singh360 logo", "singh 360 logo"}:
+            return "Singh360 Logo"
+        return self._safe_title(s)
+
+    def _is_thumbnail_source_path(self, p: Path) -> bool:
+        parts = [x.lower() for x in p.parts]
+        return "thumbnails" in parts
+
+    def _thumbnail_dest_for(self, category: str, component_stem: str) -> tuple[str, Path]:
+        thumb_folder = self._category_folder_name(category)
+        thumb_name = f"{component_stem}_{uuid.uuid4().hex[:8]}.jpg"
+        thumb_rel = f"library/assets/thumbnails/{thumb_folder}/{thumb_name}"
+        thumb_abs = self.dir / "assets" / "thumbnails" / thumb_folder / thumb_name
+        return thumb_rel, thumb_abs
+
+    def _build_thumbnail(self, src_abs: Path, thumb_abs: Path) -> None:
+        if Image is None:
+            return
+        if src_abs.suffix.lower() == ".svg":
+            return
+        try:
+            thumb_abs.parent.mkdir(parents=True, exist_ok=True)
+            with Image.open(src_abs) as im:
+                im.thumbnail((256, 256))
+                im.convert("RGB").save(thumb_abs, "JPEG", quality=86)
+        except Exception:  # noqa: BLE001
+            return
+
+    def _render_pdf_first_page(self, pdf_abs: Path, out_png_abs: Path, *, dpi: int = 300) -> tuple[bool, str]:
+        if fitz is None:
+            return False, "PyMuPDF is not installed. Install dependency 'PyMuPDF' to import PDF components."
+        try:
+            out_png_abs.parent.mkdir(parents=True, exist_ok=True)
+            doc = fitz.open(pdf_abs)
+            if doc.page_count < 1:
+                return False, f"PDF has no pages: {pdf_abs}"
+            page = doc.load_page(0)
+            mat = fitz.Matrix(dpi / 72.0, dpi / 72.0)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            pix.save(out_png_abs)
+            doc.close()
+            return True, ""
+        except Exception as exc:  # noqa: BLE001
+            return False, str(exc)
 
     def _rdm_classify(self, src_folder: str, stem: str) -> tuple[str, str, list[str], bool]:
         """Return (category, display_name, tags, high_confidence)."""
@@ -896,6 +1071,262 @@ class LibraryStore:
             "preview": dry_preview[:300],
         }
 
+    def import_local_folder(
+        self,
+        folder_path: str | Path,
+        *,
+        dry_run: bool = False,
+        reset_clean: bool = False,
+        source_name: str = "Local Library Folder",
+    ) -> dict:
+        """Import/reset from a local folder (single source of truth workflow)."""
+        self.ensure()
+        src_root = Path(folder_path).expanduser().resolve()
+        if not src_root.exists() or not src_root.is_dir():
+            return {"ok": False, "error": f"Folder not found or not a directory: {src_root}"}
+
+        data = self.load()
+
+        archived_old_entries = 0
+        if reset_clean and not dry_run:
+            kept = []
+            for c in data.get("components", []):
+                if c.get("curated") is True:
+                    kept.append(c)
+                else:
+                    c["status"] = "retired"
+                    c["archivedAt"] = self._now_iso()
+                    archived_old_entries += 1
+                    kept.append(c)
+            data["components"] = kept
+
+        # Build a set of non-thumbnail stems to detect thumbnail-only assets.
+        non_thumb_stems: set[str] = set()
+        all_files = [p for p in src_root.rglob("*") if p.is_file()]
+        for p in all_files:
+            if p.suffix.lower() in IMAGE_EXTS | {".pdf"} and not self._is_thumbnail_source_path(p):
+                non_thumb_stems.add(p.stem.lower())
+
+        by_sha = {str(c.get("sha256") or ""): c for c in data.get("components", []) if c.get("sha256")}
+        scanned = 0
+        added = 0
+        updated = 0
+        skipped_duplicates = 0
+        pdf_converted = 0
+        needs_review = 0
+        errors: list[str] = []
+        cat_counts: dict[str, int] = {}
+        preview: list[dict] = []
+
+        for src in sorted(all_files):
+            ext = src.suffix.lower()
+            if ext not in IMAGE_EXTS and ext != ".pdf":
+                continue
+            scanned += 1
+            rel = src.relative_to(src_root)
+            rel_str = rel.as_posix()
+            folder_hint = rel.parts[0] if rel.parts else "custom"
+            if rel.parts and rel.parts[0].lower() in {"assets", "components", "thumbnails", "originals"} and len(rel.parts) > 1:
+                folder_hint = rel.parts[1]
+            if rel.parts and rel.parts[0].lower() == "assets" and len(rel.parts) > 2 and rel.parts[1].lower() in {"components", "thumbnails"}:
+                folder_hint = rel.parts[2]
+            category = self._canon_category_from_folder(folder_hint)
+            display_name = self._clean_display_from_filename(src.name)
+            low_name = src.stem.lower()
+            if "logo" in low_name or "heb" in low_name or "h-e-b" in low_name or "singh360" in low_name:
+                category = "logos"
+            source_quality = "thumbnail_only" if (self._is_thumbnail_source_path(src) and src.stem.lower() not in non_thumb_stems) else "full"
+            if source_quality == "thumbnail_only":
+                needs_review += 1
+            cat_counts[category] = cat_counts.get(category, 0) + 1
+
+            # PDF conversion path.
+            actual_image_src = src
+            original_pdf_rel = ""
+            rendered_rel = ""
+            render_dpi = 0
+            if ext == ".pdf":
+                cat_folder = self._category_folder_name(category)
+                orig_pdf_name = f"{src.stem}_{uuid.uuid4().hex[:8]}.pdf"
+                orig_pdf_abs = self.dir / "assets" / "originals" / "pdf" / orig_pdf_name
+                rendered_name = f"{src.stem}_{uuid.uuid4().hex[:8]}.png"
+                rendered_abs = self.dir / "assets" / "components" / cat_folder / rendered_name
+                original_pdf_rel = f"library/assets/originals/pdf/{orig_pdf_name}"
+                rendered_rel = f"library/assets/components/{cat_folder}/{rendered_name}"
+                if not dry_run:
+                    try:
+                        orig_pdf_abs.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src, orig_pdf_abs)
+                        ok, msg = self._render_pdf_first_page(orig_pdf_abs, rendered_abs, dpi=300)
+                        if not ok:
+                            errors.append(f"{rel_str}: {msg}")
+                            continue
+                        pdf_converted += 1
+                        actual_image_src = rendered_abs
+                        render_dpi = 300
+                    except Exception as exc:  # noqa: BLE001
+                        errors.append(f"{rel_str}: {exc}")
+                        continue
+                else:
+                    preview.append({"file": rel_str, "category": category, "displayName": display_name, "action": "pdf-convert"})
+
+            # Compute SHA from real source image bytes (or converted image if PDF).
+            try:
+                sha = hashlib.sha256(actual_image_src.read_bytes() if actual_image_src.exists() else src.read_bytes()).hexdigest()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{rel_str}: {exc}")
+                continue
+
+            existing = by_sha.get(sha)
+            if existing is not None:
+                skipped_duplicates += 1
+                if existing.get("curated") is not True:
+                    existing["source"] = {
+                        "sourceType": "local-library-folder",
+                        "sourceFile": src.name,
+                        "sourceLocation": str(rel.parent).replace("\\", "/"),
+                        "sourceName": source_name,
+                    }
+                    existing["category"] = category
+                    existing["tags"] = sorted({*(existing.get("tags") or []), "local", "library-sync"})
+                    existing["sourceQuality"] = source_quality
+                    updated += 1
+                continue
+
+            if dry_run:
+                preview.append({"file": rel_str, "category": category, "displayName": display_name, "action": "add"})
+                continue
+
+            try:
+                cat_folder = self._category_folder_name(category)
+                if ext == ".pdf":
+                    comp_abs = actual_image_src
+                    rel_asset = rendered_rel
+                else:
+                    comp_name = f"{src.stem}_{uuid.uuid4().hex[:8]}{src.suffix.lower()}"
+                    comp_abs = self.dir / "assets" / "components" / cat_folder / comp_name
+                    comp_abs.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, comp_abs)
+                    rel_asset = f"library/assets/components/{cat_folder}/{comp_name}"
+
+                thumb_rel, thumb_abs = self._thumbnail_dest_for(category, Path(rel_asset).stem)
+                self._build_thumbnail(comp_abs, thumb_abs)
+
+                comp = {
+                    "id": f"cmp_{sha[:12]}",
+                    "displayName": display_name,
+                    "shortName": display_name,
+                    "category": category,
+                    "aliases": [],
+                    "tags": ["local", "library-sync"],
+                    "assetKind": "image",
+                    "assetPath": rel_asset,
+                    "thumbnailPath": thumb_rel,
+                    "status": "needs_review" if source_quality == "thumbnail_only" else "approved",
+                    "insertWithLabel": True,
+                    "defaultLabel": display_name,
+                    "sourceQuality": source_quality,
+                    "source": {
+                        "sourceType": "local-library-folder",
+                        "sourceFile": src.name,
+                        "sourceLocation": str(rel.parent).replace("\\", "/"),
+                        "sourceName": source_name,
+                    },
+                    "sha256": sha,
+                }
+                if ext == ".pdf":
+                    comp["sourceType"] = "pdf"
+                    comp["originalPdfPath"] = original_pdf_rel
+                    comp["renderedImagePath"] = rel_asset
+                    comp["pageNumber"] = 1
+                    comp["renderDpi"] = render_dpi
+
+                self._compute_hashes(comp)
+                data.setdefault("components", []).append(comp)
+                by_sha[sha] = comp
+                added += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{rel_str}: {exc}")
+
+        if not dry_run:
+            self._curate_components(data)
+            self._dedupe_components(data)
+            self.save(data)
+
+        return {
+            "ok": True,
+            "scanned": scanned,
+            "added": added,
+            "updated": updated,
+            "skippedDuplicates": skipped_duplicates,
+            "pdfConverted": pdf_converted,
+            "needsReview": needs_review,
+            "archivedOldEntries": archived_old_entries,
+            "categories": cat_counts,
+            "errors": errors,
+            "dryRun": dry_run,
+            "preview": preview[:300],
+        }
+
+    def sync_names_from_files(self) -> dict:
+        data = self.load()
+        changed = 0
+        for c in data.get("components", []):
+            if c.get("curated") is True:
+                continue
+            ap = self._asset_abs(c)
+            if not ap:
+                continue
+            new_name = self._clean_display_from_filename(ap.name)
+            if new_name and new_name != c.get("displayName"):
+                c["displayName"] = new_name
+                c["shortName"] = new_name
+                c["defaultLabel"] = c.get("partNumber") or new_name
+                changed += 1
+        if changed:
+            self.save(data)
+        return {"ok": True, "changed": changed}
+
+    def rebuild_thumbnails(self) -> dict:
+        data = self.load()
+        built = 0
+        missing = 0
+        for c in data.get("components", []):
+            ap = self._asset_abs(c)
+            if not ap:
+                continue
+            cat = self._category_folder_name(str(c.get("category") or "review"))
+            if c.get("thumbnailPath"):
+                tp = self.dir / str(c.get("thumbnailPath")).replace("library/", "", 1)
+            else:
+                t_rel, tp = self._thumbnail_dest_for(cat, ap.stem)
+                c["thumbnailPath"] = t_rel
+            if not tp.exists():
+                missing += 1
+            self._build_thumbnail(ap, tp)
+            if tp.exists():
+                built += 1
+        self.save(data)
+        return {"ok": True, "rebuilt": built, "missingBefore": missing}
+
+    def archive_dirty_extracted_assets(self) -> dict:
+        data = self.load()
+        changed = 0
+        for c in data.get("components", []):
+            if c.get("curated") is True:
+                continue
+            st = str(c.get("status") or "").lower()
+            src_type = str((c.get("source") or {}).get("sourceType") or "").lower()
+            if src_type in {"rdm-layout-editor", "local-library-folder"}:
+                continue
+            if st in {"needs_review", "duplicate", "candidate"}:
+                c["status"] = "retired"
+                c["archivedAt"] = self._now_iso()
+                changed += 1
+        if changed:
+            self.save(data)
+        return {"ok": True, "archived": changed}
+
     def rescan_inbox(self) -> dict:
         inbox = self.dir / "inbox"
         processed = self.dir / "inbox" / "processed"
@@ -927,10 +1358,25 @@ class LibraryStore:
         assets/reference_pages/custom that are not yet indexed."""
         data = self.load()
         added = 0
+        updated = 0
+        missing = 0
         roots = [
-            self.dir / "assets" / "components" / "custom",
+            self.dir / "assets" / "components",
             self.dir / "assets" / "reference_pages" / "custom",
         ]
+
+        # Mark missing files first.
+        for c in data.get("components", []):
+            ap = self._asset_abs(c)
+            if not ap:
+                c["missing"] = True
+                missing += 1
+            else:
+                c["missing"] = False
+
+        # Hash index for existing components to detect moved/renamed files.
+        by_sha: dict[str, dict] = {str(c.get("sha256") or ""): c for c in data.get("components", []) if c.get("sha256")}
+
         for root in roots:
             if not root.exists():
                 continue
@@ -941,6 +1387,26 @@ class LibraryStore:
                 exists = any(str(c.get("assetPath") or "") == rel_asset for c in data.get("components", []))
                 if exists:
                     continue
+
+                # Try matching by SHA to update moved paths.
+                try:
+                    sha = hashlib.sha256(p.read_bytes()).hexdigest()
+                except Exception:  # noqa: BLE001
+                    sha = ""
+                if sha and sha in by_sha:
+                    c0 = by_sha[sha]
+                    old = str(c0.get("assetPath") or "")
+                    if old != rel_asset:
+                        c0["assetPath"] = rel_asset
+                        c0["missing"] = False
+                        if c0.get("curated") is not True:
+                            new_name = self._clean_display_from_filename(p.name)
+                            c0["displayName"] = new_name
+                            c0["shortName"] = new_name
+                            c0["defaultLabel"] = c0.get("partNumber") or new_name
+                        updated += 1
+                    continue
+
                 comp = self._new_component_from_file(p, status="needs_review")
                 comp["assetPath"] = rel_asset
                 if "reference_pages" in rel_asset:
@@ -952,7 +1418,7 @@ class LibraryStore:
         self._curate_components(data)
         self._dedupe_components(data)
         self.save(data)
-        return {"ok": True, "added": added}
+        return {"ok": True, "added": added, "updated": updated, "missing": missing}
 
     def add_component_upload(self, src_file: Path, *, display_name: str, category: str, part_number: str = "",
                              approve: bool = False) -> dict:

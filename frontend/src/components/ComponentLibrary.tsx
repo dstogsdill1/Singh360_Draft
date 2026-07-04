@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   addLibraryComponentFile,
+  archiveDirtyExtractedAssets,
   bulkUpdateLibraryComponents,
   getLibrary,
+  importLocalLibraryFolder,
   importLibrarySeed,
   autoCategorizeLibrary,
   importRdmLibraryFolder,
+  rebuildLibraryThumbnails,
   rescanLibraryAssets,
   rescanLibraryInbox,
+  syncLibraryNamesFromFiles,
   libraryAssetUrl,
   deleteLibraryComponent,
   retireLibraryComponent,
@@ -71,6 +75,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const [editDefaultLabel, setEditDefaultLabel] = useState('');
   const [editStatus, setEditStatus] = useState('needs_review');
   const [editInsertWithLabel, setEditInsertWithLabel] = useState(true);
+  const [editRenameAssetFile, setEditRenameAssetFile] = useState(false);
   const [editNotes, setEditNotes] = useState('');
   const [error, setError] = useState('');
   const [savedMsg, setSavedMsg] = useState('');
@@ -121,7 +126,58 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     try {
       const res = await rescanLibraryAssets();
       await refresh();
-      window.alert(`Library rescan complete. Added ${res.added} manually-added files.`);
+      window.alert(`Library rescan complete. Added ${res.added}, updated ${res.updated ?? 0}, missing ${res.missing ?? 0}.`);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const doImportLocalFolder = async () => {
+    const p = window.prompt(
+      'Local library folder path:',
+      'C:\\Users\\DarrinStogsdill\\OneDrive - Homeland Development Services LLC\\Desktop\\Singh360_SmartDraw\\Singh360_Component_Library_Seed\\library\\assets',
+    );
+    if (!p || !p.trim()) return;
+    try {
+      const dry = window.confirm('Run DRY RUN first?\n\nOK = dry-run preview\nCancel = import now');
+      const reset = window.confirm('Reset/clean existing library entries before import?\n\nOK = archive old non-curated entries\nCancel = merge only');
+      const res = await importLocalLibraryFolder({ path: p.trim(), dryRun: dry, resetClean: reset, sourceName: 'Local Library Folder' });
+      if (!dry) await refresh();
+      window.alert(
+        `Local import ${dry ? 'dry-run ' : ''}complete.\nscanned=${res.scanned} added=${res.added} updated=${res.updated} dup=${res.skippedDuplicates} pdf=${res.pdfConverted} review=${res.needsReview} archived=${res.archivedOldEntries}`,
+      );
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const doSyncNames = async () => {
+    try {
+      const res = await syncLibraryNamesFromFiles();
+      await refresh();
+      window.alert(`Synced names from file names. changed=${res.changed}`);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const doRebuildThumbs = async () => {
+    try {
+      const res = await rebuildLibraryThumbnails();
+      await refresh();
+      window.alert(`Thumbnails rebuilt. rebuilt=${res.rebuilt}, missingBefore=${res.missingBefore}`);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const doArchiveDirty = async () => {
+    const ok = window.confirm('Archive dirty extracted candidates?\n\nThis marks non-curated needs-review/duplicate/candidate entries as retired (no file deletion).');
+    if (!ok) return;
+    try {
+      const res = await archiveDirtyExtractedAssets();
+      await refresh();
+      window.alert(`Archived dirty extracted assets: ${res.archived}`);
     } catch (e) {
       setError(String(e));
     }
@@ -245,6 +301,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     setEditDefaultLabel(c.defaultLabel || '');
     setEditStatus((c.status || 'needs_review').toLowerCase());
     setEditInsertWithLabel(c.insertWithLabel !== false);
+    setEditRenameAssetFile(false);
     setEditNotes(c.notes || '');
   };
   const saveEdit = async (c: LibraryComponent) => {
@@ -261,6 +318,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         defaultLabel: editDefaultLabel.trim() || undefined,
         status: newStatus,
         insertWithLabel: editInsertWithLabel,
+        renameAssetFile: editRenameAssetFile,
         notes: editNotes.trim() || undefined,
       });
       setEditId(null);
@@ -388,8 +446,12 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
       <div className="lib-toolbar">
         <button className="lib-btn" onClick={() => void doAutoCategorize()} title="Auto-assign categories from part names/keywords (review afterwards)">Auto-categorize</button>
         <button className="lib-btn" onClick={() => void doImportRdmFolder()} title="Import official RDM Layout Editor image folder (local path)">Import RDM Folder</button>
+        <button className="lib-btn" onClick={() => void doImportLocalFolder()} title="Import / Reset from a local library assets folder">Reset From Folder</button>
         <button className="lib-btn" onClick={() => void doRescanInbox()} title="Scan .docs/library/inbox and import files as Needs Review candidates">Rescan Inbox</button>
         <button className="lib-btn" onClick={() => void doRescanLibrary()} title="Scan custom component/reference folders for manually-added files">Rescan Library</button>
+        <button className="lib-btn" onClick={() => void doSyncNames()} title="Sync display names from asset filenames for non-curated items">Sync Names From Files</button>
+        <button className="lib-btn" onClick={() => void doRebuildThumbs()} title="Rebuild missing/outdated thumbnails from full-resolution assets">Rebuild Thumbnails</button>
+        <button className="lib-btn" onClick={() => void doArchiveDirty()} title="Archive dirty extracted candidates (status only; no delete)">Archive Dirty Extracted</button>
         <label className="lib-btn file-ribbon-btn" title="Upload a new image into the library (starts as Needs Review)">
           Add Files
           <input
@@ -469,6 +531,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
                   <option value="retired">Retired</option>
                 </select>
                 <label className="lib-showretired"><input type="checkbox" checked={editInsertWithLabel} onChange={(e) => setEditInsertWithLabel(e.target.checked)} /> Insert with label</label>
+                <label className="lib-showretired"><input type="checkbox" checked={editRenameAssetFile} onChange={(e) => setEditRenameAssetFile(e.target.checked)} /> Also rename asset file</label>
                 <input className="lib-edit-name" value={editNotes} placeholder="Notes" onChange={(e) => setEditNotes(e.target.value)} />
                 <div className="lib-actions">
                   <button className="lib-btn" onClick={() => void saveEdit(c)}>Save</button>
@@ -485,6 +548,11 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
                     {c.status ? ` · ${c.status}` : ''}
                     {c.duplicateGroupId ? ` · ${c.duplicateGroupId}` : ''}
                   </div>
+                  {c.sourceQuality === 'thumbnail_only' && (
+                    <div className="lib-sourcewarn" title="Thumbnail-only source can be low resolution for output">
+                      This asset may be low resolution. Replace with original if available.
+                    </div>
+                  )}
                   <div className="lib-badges">
                     {(String(c.source?.sourceType || '').toLowerCase() === 'rdm-layout-editor' || String(c.assetPath || '').toLowerCase().includes('/rdm_layout_editor/')) && <span className="lib-badge">RDM</span>}
                     {String(c.assetPath || '').toLowerCase().includes('/components/custom/') && <span className="lib-badge">Custom</span>}

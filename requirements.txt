@@ -6,3 +6,6 @@ flask>=3.0,<4
 # PDF export via server.py /api/export/pdf/<id>
 # After installing: playwright install chromium
 playwright>=1.40
+
+# PDF component conversion (library PDF -> rendered PNG component)
+PyMuPDF>=1.24

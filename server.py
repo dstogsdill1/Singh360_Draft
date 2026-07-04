@@ -768,6 +768,52 @@ def import_rdm_library_folder():
     return jsonify(result)
 
 
+@app.post("/api/library/import-local-folder")
+def import_local_library_folder_route():
+    body = request.get_json(silent=True) or {}
+    folder = str(body.get("path") or "").strip()
+    if not folder:
+        return jsonify(_err("Path is required.")), 400
+    dry_run = bool(body.get("dryRun", False))
+    reset_clean = bool(body.get("resetClean", False))
+    source_name = str(body.get("sourceName") or "Local Library Folder").strip() or "Local Library Folder"
+    try:
+        result = library.import_local_folder(folder, dry_run=dry_run, reset_clean=reset_clean, source_name=source_name)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Local library import failed: %s", exc)
+        return jsonify(_err("Local library import failed.", str(exc))), 500
+    if not result.get("ok"):
+        return jsonify(_err(result.get("error", "Local library import failed"))), 400
+    return jsonify(result)
+
+
+@app.post("/api/library/sync-names")
+def sync_library_names():
+    try:
+        return jsonify(library.sync_names_from_files())
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Sync names failed: %s", exc)
+        return jsonify(_err("Sync names failed.", str(exc))), 500
+
+
+@app.post("/api/library/rebuild-thumbnails")
+def rebuild_library_thumbnails():
+    try:
+        return jsonify(library.rebuild_thumbnails())
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Rebuild thumbnails failed: %s", exc)
+        return jsonify(_err("Rebuild thumbnails failed.", str(exc))), 500
+
+
+@app.post("/api/library/archive-dirty")
+def archive_dirty_library_assets():
+    try:
+        return jsonify(library.archive_dirty_extracted_assets())
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Archive dirty assets failed: %s", exc)
+        return jsonify(_err("Archive dirty assets failed.", str(exc))), 500
+
+
 @app.post("/api/library/components/bulk")
 def bulk_update_library_components():
     body = request.get_json(silent=True) or {}

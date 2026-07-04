@@ -251,6 +251,9 @@ export interface LibraryComponent {
   height?: number;
   aspectRatio?: number;
   fileSize?: number;
+  sourceQuality?: string;
+  missing?: boolean;
+  renameAssetFile?: boolean;
   source?: {
     sourceType?: string;
     sourceFile?: string;
@@ -284,8 +287,53 @@ export async function rescanLibraryInbox(): Promise<{ ok: boolean; added: number
   return res.json();
 }
 
-export async function rescanLibraryAssets(): Promise<{ ok: boolean; added: number }> {
+export async function rescanLibraryAssets(): Promise<{ ok: boolean; added: number; updated?: number; missing?: number }> {
   const res = await fetch('/api/library/rescan-library', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function importLocalLibraryFolder(opts: {
+  path: string;
+  dryRun?: boolean;
+  resetClean?: boolean;
+  sourceName?: string;
+}): Promise<{
+  ok: boolean;
+  scanned: number;
+  added: number;
+  updated: number;
+  skippedDuplicates: number;
+  pdfConverted: number;
+  needsReview: number;
+  archivedOldEntries: number;
+  categories: Record<string, number>;
+  errors: string[];
+  dryRun?: boolean;
+}> {
+  const res = await fetch('/api/library/import-local-folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function syncLibraryNamesFromFiles(): Promise<{ ok: boolean; changed: number }> {
+  const res = await fetch('/api/library/sync-names', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function rebuildLibraryThumbnails(): Promise<{ ok: boolean; rebuilt: number; missingBefore: number }> {
+  const res = await fetch('/api/library/rebuild-thumbnails', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function archiveDirtyExtractedAssets(): Promise<{ ok: boolean; archived: number }> {
+  const res = await fetch('/api/library/archive-dirty', { method: 'POST' });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

@@ -570,6 +570,15 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 .lib-meta { min-width: 0; }
 .lib-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-sub { font-size: 10px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-sourcewarn {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #8a5a00;
+  background: #fff3cd;
+  border: 1px solid #ffe69c;
+  border-radius: 4px;
+  padding: 2px 5px;
+}
 .lib-badges { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; }
 .lib-badge {
   font-size: 9px;
