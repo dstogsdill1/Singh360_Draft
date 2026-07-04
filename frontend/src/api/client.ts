@@ -114,6 +114,17 @@ export interface LibraryComponent {
   defaultWidth?: number;
   defaultHeight?: number;
   status?: string;
+  defaultLabel?: string;
+  insertWithLabel?: boolean;
+  notes?: string;
+  duplicateGroupId?: string;
+  isDuplicateCanonical?: boolean;
+  sha256?: string;
+  perceptualHash?: string;
+  width?: number;
+  height?: number;
+  aspectRatio?: number;
+  fileSize?: number;
 }
 
 export interface LibraryData {
@@ -121,6 +132,8 @@ export interface LibraryData {
   categories: Array<{ id: string; count: number }>;
   connectorStyles: Array<Record<string, unknown>>;
   symbols: Array<Record<string, unknown>>;
+  statusCounts?: Record<string, number>;
+  paths?: { root: string; inbox: string; components: string; referencePages: string; thumbnails: string };
 }
 
 export function libraryAssetUrl(path: string): string {
@@ -129,6 +142,18 @@ export function libraryAssetUrl(path: string): string {
 
 export async function getLibrary(): Promise<LibraryData> {
   const res = await fetch('/api/library');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function rescanLibraryInbox(): Promise<{ ok: boolean; added: number; duplicates: number }> {
+  const res = await fetch('/api/library/rescan-inbox', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function rescanLibraryAssets(): Promise<{ ok: boolean; added: number }> {
+  const res = await fetch('/api/library/rescan-library', { method: 'POST' });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -162,6 +187,31 @@ export async function updateLibraryComponent(id: string, patch: Partial<LibraryC
   });
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()).component;
+}
+
+export async function bulkUpdateLibraryComponents(ids: string[], patch: Partial<LibraryComponent>): Promise<{ ok: boolean; updated: number }> {
+  const res = await fetch('/api/library/components/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, patch }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function addLibraryComponentFile(
+  file: File,
+  options: { displayName: string; category: string; partNumber?: string; approve?: boolean },
+): Promise<{ ok: boolean; created: boolean; component: LibraryComponent }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('displayName', options.displayName);
+  fd.append('category', options.category);
+  if (options.partNumber) fd.append('partNumber', options.partNumber);
+  if (options.approve) fd.append('approve', '1');
+  const res = await fetch('/api/library/add-component', { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
 export async function deleteLibraryComponent(id: string): Promise<void> {

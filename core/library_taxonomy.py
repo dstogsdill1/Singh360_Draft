@@ -6,6 +6,7 @@ Keyword matching is done against displayName / shortName / partNumber only
 (extraction tags are too noisy).
 """
 from __future__ import annotations
+import re
 
 # Canonical category id -> display label (shown in the panel dropdown).
 CATEGORIES: list[tuple[str, str]] = [
@@ -78,15 +79,60 @@ RULES: list[tuple[str, list[str], str | None]] = [
     ("lighting", ["lighting contactor", "dimming", "light sensor", "lighting override"], None),
     ("legends", ["legend"], None),
     # Reference pages (page-sized crops / drawings).
-    ("reference-page", ["blueprint", "floor plan", "floorplan", "elevation", "one-line", "one line",
-                        "layout", "schematic", "reference page"], None),
+    # Keep conservative: only explicit page-like indicators.
+    ("reference-page", ["blueprint", "floor plan", "floorplan", "reference page", "workflow diagram"], None),
 ]
 
 
 def classify(display_name: str, short_name: str = "", part_number: str = "",
              aspect: float | None = None) -> tuple[str, str | None]:
     """Return (category_id, canonical_name_or_None). Falls back to review."""
-    hay = f" {display_name} {short_name} {part_number} ".lower()
+    display = (display_name or "").lower()
+    short = (short_name or "").lower()
+    part = (part_number or "").lower()
+    hay = f" {display} {short} {part} "
+
+    # 1) High-priority functional overrides (never let these become PR controllers).
+    if any(k in hay for k in ("h-e-b", "heb", "singh360", "logo", "client logo")):
+        if "h-e-b" in hay or "heb" in hay:
+            return "logos", "H-E-B Logo"
+        if "singh360" in hay:
+            return "logos", "Singh360 Logo"
+        return "logos", None
+    if "contactor" in hay:
+        return "electrical", "Contactor"
+    if "relay" in hay:
+        return "electrical", "Relay"
+    if "power supply" in hay:
+        return "electrical", "Power Supply"
+    if "amber" in hay and "strobe" in hay:
+        return "alarms", "Amber Strobe"
+    if "red" in hay and "strobe" in hay:
+        return "alarms", "Red Strobe"
+    if "strobe" in hay:
+        return "alarms", "Horn/Strobe"
+
+    # 2) Strict part-number families (boundary-aware).
+    if re.search(r"\bpr0660\b", hay):
+        return "expansion", "PR0660 Stepper Expansion Module"
+    if re.search(r"\bpr0661\b", hay):
+        return "expansion", "PR0661 Plant I/O Expansion Module"
+    if re.search(r"\bpr0662\b", hay):
+        return "expansion", "PR0662 Plant I/O Expansion Module"
+    if re.search(r"\bpr0663\b", hay):
+        return "expansion", "PR0663 Expansion Module"
+    if re.search(r"\bpr0751\b", hay):
+        return "controllers", "PR0751-IP Remote Expansion Controller"
+    if re.search(r"\bpr0680\b", hay):
+        return "controllers", "PR0680CD-TDB Programmable Controller"
+    if re.search(r"\bpr0652\b", hay):
+        return "controllers", "PR0652-CCT Circuit Controller"
+    if re.search(r"\bpr0650(-cct)?\b|\bpr0650cd\b", hay):
+        return "controllers", "PR0650CD-TDB Programmable Controller"
+
+    # 3) Reference pages only when explicit keywords or extreme aspect.
+    if any(k in hay for k in ("blueprint", "floor plan", "floorplan", "reference page", "workflow diagram")):
+        return "reference-page", None
     for cat, keys, canon in RULES:
         if any(k in hay for k in keys):
             return cat, canon

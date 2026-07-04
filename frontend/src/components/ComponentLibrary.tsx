@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  addLibraryComponentFile,
+  bulkUpdateLibraryComponents,
   getLibrary,
   importLibrarySeed,
   autoCategorizeLibrary,
+  rescanLibraryAssets,
+  rescanLibraryInbox,
   libraryAssetUrl,
   deleteLibraryComponent,
   retireLibraryComponent,
@@ -23,9 +27,10 @@ export const COMPONENT_DRAG_TYPE = 'application/x-singh360-component';
 const NO_LABEL_CATS = new Set(['logos', 'logo', 'symbols', 'symbol', 'legends', 'legend', 'reference-page']);
 
 function labelFor(c: LibraryComponent): string | null {
+  if (c.insertWithLabel === false) return null;
   const cat = (c.category || '').toLowerCase();
   if (NO_LABEL_CATS.has(cat)) return null;
-  return c.partNumber || c.shortName || c.displayName || null;
+  return c.defaultLabel || c.partNumber || c.shortName || c.displayName || null;
 }
 
 // Canonical categories (must match core/library_taxonomy.py).
@@ -48,10 +53,23 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [showRetired, setShowRetired] = useState(false);
+  const [showCandidates, setShowCandidates] = useState(false);
+  const [showNeedsReview, setShowNeedsReview] = useState(false);
+  const [showReferencePages, setShowReferencePages] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [insertWithLabel, setInsertWithLabel] = useState(true);
+  const [selected, setSelected] = useState<string[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editCat, setEditCat] = useState('');
+  const [editShort, setEditShort] = useState('');
+  const [editPart, setEditPart] = useState('');
+  const [editAliases, setEditAliases] = useState('');
+  const [editTags, setEditTags] = useState('');
+  const [editDefaultLabel, setEditDefaultLabel] = useState('');
+  const [editStatus, setEditStatus] = useState('needs_review');
+  const [editInsertWithLabel, setEditInsertWithLabel] = useState(true);
+  const [editNotes, setEditNotes] = useState('');
   const [error, setError] = useState('');
 
   const refresh = async () => {
@@ -80,7 +98,40 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     try {
       const res = await autoCategorizeLibrary();
       await refresh();
-      window.alert(`Auto-categorized ${res.changed} of ${res.total} components. Review and fine-tune with the ✎ edit button.`);
+      window.alert(`Auto-categorize complete. Metadata updated; no files were deleted. (changed=${res.changed}, total=${res.total})`);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const doRescanInbox = async () => {
+    try {
+      const res = await rescanLibraryInbox();
+      await refresh();
+      window.alert(`Inbox scan complete. Added ${res.added}, duplicates ${res.duplicates}.`);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const doRescanLibrary = async () => {
+    try {
+      const res = await rescanLibraryAssets();
+      await refresh();
+      window.alert(`Library rescan complete. Added ${res.added} manually-added files.`);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const doAddFiles = async (file: File) => {
+    try {
+      await addLibraryComponentFile(file, {
+        displayName: file.name.replace(/\.[^.]+$/, ''),
+        category: 'review',
+        approve: false,
+      });
+      await refresh();
     } catch (e) {
       setError(String(e));
     }
@@ -90,13 +141,22 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const isRetired = (c: LibraryComponent) => (c.status || '').startsWith('retired');
   const isReference = (c: LibraryComponent) => (c.category || '').toLowerCase() === 'reference-page';
 
+  const statusVisible = (c: LibraryComponent): boolean => {
+    const st = String(c.status || 'needs_review').toLowerCase();
+    if (st === 'approved') return true;
+    if (st === 'candidate') return showCandidates;
+    if (st === 'needs_review') return showNeedsReview;
+    if (st === 'reference_page') return showReferencePages;
+    if (st === 'duplicate') return showDuplicates;
+    if (st === 'retired') return showRetired;
+    return showNeedsReview;
+  };
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return components.filter((c) => {
-      if (isRetired(c) && !showRetired) return false;
+      if (!statusVisible(c)) return false;
       const cat = (c.category || 'uncategorized').toLowerCase();
-      // Reference pages are hidden from the default "all" view (Phase A).
-      if (category === 'all' && cat === 'reference-page') return false;
       if (category !== 'all' && cat !== category) return false;
       if (!q) return true;
       const hay = [c.displayName, c.shortName, c.partNumber, c.category, ...(c.aliases ?? []), ...(c.tags ?? [])]
@@ -105,7 +165,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [components, query, category, showRetired]);
+  }, [components, query, category, showRetired, showCandidates, showNeedsReview, showReferencePages, showDuplicates]);
 
   const insert = (c: LibraryComponent) => {
     if (!c.assetPath) return;
@@ -116,10 +176,29 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     setEditId(c.id);
     setEditName(c.displayName);
     setEditCat((c.category || 'uncategorized').toLowerCase());
+    setEditShort(c.shortName || '');
+    setEditPart(c.partNumber || '');
+    setEditAliases((c.aliases || []).join(', '));
+    setEditTags((c.tags || []).join(', '));
+    setEditDefaultLabel(c.defaultLabel || '');
+    setEditStatus((c.status || 'needs_review').toLowerCase());
+    setEditInsertWithLabel(c.insertWithLabel !== false);
+    setEditNotes(c.notes || '');
   };
   const saveEdit = async (c: LibraryComponent) => {
     try {
-      await updateLibraryComponent(c.id, { displayName: editName.trim() || c.displayName, category: editCat });
+      await updateLibraryComponent(c.id, {
+        displayName: editName.trim() || c.displayName,
+        shortName: editShort.trim() || undefined,
+        category: editCat,
+        partNumber: editPart.trim() || undefined,
+        aliases: editAliases.split(',').map((x) => x.trim()).filter(Boolean),
+        tags: editTags.split(',').map((x) => x.trim()).filter(Boolean),
+        defaultLabel: editDefaultLabel.trim() || undefined,
+        status: editStatus,
+        insertWithLabel: editInsertWithLabel,
+        notes: editNotes.trim() || undefined,
+      });
       setEditId(null);
       await refresh();
     } catch (e) {
@@ -173,6 +252,21 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
 
   const cats = data?.categories ?? [];
 
+  const onToggleSelected = (id: string, on: boolean) => {
+    setSelected((prev) => (on ? [...new Set([...prev, id])] : prev.filter((x) => x !== id)));
+  };
+
+  const bulkPatch = async (patch: Partial<LibraryComponent>) => {
+    if (!selected.length) return;
+    try {
+      await bulkUpdateLibraryComponents(selected, patch);
+      setSelected([]);
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   return (
     <div className="lib-panel">
       <div className="lib-controls">
@@ -194,11 +288,43 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
       <label className="lib-showretired" title="Show retired components">
         <input type="checkbox" checked={showRetired} onChange={(e) => setShowRetired(e.target.checked)} /> Show retired
       </label>
+      <label className="lib-showretired" title="Show candidate items pending review">
+        <input type="checkbox" checked={showCandidates} onChange={(e) => setShowCandidates(e.target.checked)} /> Show Candidates
+      </label>
+      <label className="lib-showretired" title="Show items marked Needs Review">
+        <input type="checkbox" checked={showNeedsReview} onChange={(e) => setShowNeedsReview(e.target.checked)} /> Show Needs Review
+      </label>
+      <label className="lib-showretired" title="Show reference pages (full drawings/layout crops)">
+        <input type="checkbox" checked={showReferencePages} onChange={(e) => setShowReferencePages(e.target.checked)} /> Show Reference Pages
+      </label>
+      <label className="lib-showretired" title="Show duplicate items">
+        <input type="checkbox" checked={showDuplicates} onChange={(e) => setShowDuplicates(e.target.checked)} /> Show Duplicates
+      </label>
       <label className="lib-showretired" title="Insert equipment/components with an editable text label (off for logos/symbols)">
         <input type="checkbox" checked={insertWithLabel} onChange={(e) => setInsertWithLabel(e.target.checked)} /> Insert with label
       </label>
       <div className="lib-toolbar">
         <button className="lib-btn" onClick={() => void doAutoCategorize()} title="Auto-assign categories from part names/keywords (review afterwards)">Auto-categorize</button>
+        <button className="lib-btn" onClick={() => void doRescanInbox()} title="Scan .docs/library/inbox and import files as Needs Review candidates">Rescan Inbox</button>
+        <button className="lib-btn" onClick={() => void doRescanLibrary()} title="Scan custom component/reference folders for manually-added files">Rescan Library</button>
+        <label className="lib-btn file-ribbon-btn" title="Upload a new image into the library (starts as Needs Review)">
+          Add Files
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif,image/bmp"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void doAddFiles(f); e.currentTarget.value = ''; }}
+          />
+        </label>
+      </div>
+      <div className="lib-toolbar">
+        <button className="lib-btn" disabled={!selected.length} onClick={() => void bulkPatch({ status: 'approved' })} title="Approve selected items">Approve Selected</button>
+        <button className="lib-btn" disabled={!selected.length} onClick={() => void bulkPatch({ status: 'retired' })} title="Retire selected items">Retire Selected</button>
+        <button className="lib-btn" disabled={!selected.length} onClick={() => void bulkPatch({ status: 'reference_page', category: 'reference-page' })} title="Mark selected as Reference Pages">Mark Reference</button>
+        <button className="lib-btn" disabled={!selected.length} onClick={() => void bulkPatch({ status: 'needs_review', category: 'review' })} title="Move selected to Needs Review">Needs Review</button>
+      </div>
+      <div className="lib-paths">
+        <div>Root: {data?.paths?.root || '(unknown)'}</div>
+        <div>Inbox: {data?.paths?.inbox || '(unknown)'}</div>
       </div>
 
       <div className="lib-grid">
@@ -218,6 +344,15 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
             onDoubleClick={() => canInsert && editId !== c.id && insert(c)}
             title={`${c.displayName}${c.partNumber ? ` · ${c.partNumber}` : ''}${isReference(c) ? ' · reference page' : ''}`}
           >
+            <label className="lib-pick" title="Select for bulk actions">
+              <input
+                type="checkbox"
+                aria-label={`Select ${c.displayName} for bulk actions`}
+                title={`Select ${c.displayName} for bulk actions`}
+                checked={selected.includes(c.id)}
+                onChange={(e) => onToggleSelected(c.id, e.target.checked)}
+              />
+            </label>
             <div className="lib-thumb">
               {c.thumbnailPath ? (
                 <img src={libraryAssetUrl(c.thumbnailPath)} alt={c.displayName} loading="lazy" />
@@ -237,6 +372,21 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
                 <select className="lib-edit-cat" value={editCat} onChange={(e) => setEditCat(e.target.value)} title="Category">
                   {CANON_CATS.map((k) => <option key={k} value={k}>{catLabel(k)}</option>)}
                 </select>
+                <input className="lib-edit-name" value={editShort} placeholder="Short name" onChange={(e) => setEditShort(e.target.value)} />
+                <input className="lib-edit-name" value={editPart} placeholder="Part number" onChange={(e) => setEditPart(e.target.value)} />
+                <input className="lib-edit-name" value={editAliases} placeholder="Aliases (comma-separated)" onChange={(e) => setEditAliases(e.target.value)} />
+                <input className="lib-edit-name" value={editTags} placeholder="Tags (comma-separated)" onChange={(e) => setEditTags(e.target.value)} />
+                <input className="lib-edit-name" value={editDefaultLabel} placeholder="Default insert label" onChange={(e) => setEditDefaultLabel(e.target.value)} />
+                <select className="lib-edit-cat" value={editStatus} onChange={(e) => setEditStatus(e.target.value)} title="Status">
+                  <option value="approved">Approved</option>
+                  <option value="candidate">Candidate</option>
+                  <option value="needs_review">Needs Review</option>
+                  <option value="duplicate">Duplicate</option>
+                  <option value="reference_page">Reference Page</option>
+                  <option value="retired">Retired</option>
+                </select>
+                <label className="lib-showretired"><input type="checkbox" checked={editInsertWithLabel} onChange={(e) => setEditInsertWithLabel(e.target.checked)} /> Insert with label</label>
+                <input className="lib-edit-name" value={editNotes} placeholder="Notes" onChange={(e) => setEditNotes(e.target.value)} />
                 <div className="lib-actions">
                   <button className="lib-btn" onClick={() => void saveEdit(c)}>Save</button>
                   <button className="lib-btn" onClick={() => setEditId(null)}>Cancel</button>
@@ -246,7 +396,12 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
               <>
                 <div className="lib-meta">
                   <div className="lib-name">{c.shortName || c.displayName}</div>
-                  <div className="lib-sub">{c.partNumber || c.category}{isRetired(c) ? ' · retired' : ''}</div>
+                  <div className="lib-sub">
+                    {c.partNumber || c.category}
+                    {isRetired(c) ? ' · retired' : ''}
+                    {c.status ? ` · ${c.status}` : ''}
+                    {c.duplicateGroupId ? ` · ${c.duplicateGroupId}` : ''}
+                  </div>
                 </div>
                 <div className="lib-actions">
                   <button className="lib-btn" disabled={!canInsert} onClick={() => insert(c)} title="Insert on active page">Insert</button>

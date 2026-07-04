@@ -7,9 +7,28 @@ images stay local and are never committed.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import shutil
+import uuid
 from pathlib import Path
+
+try:
+    from PIL import Image
+except Exception:  # noqa: BLE001
+    Image = None
+
+
+STATUSES = {
+    "approved",
+    "candidate",
+    "needs_review",
+    "duplicate",
+    "reference_page",
+    "retired",
+}
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
 
 
 class LibraryStore:
@@ -21,13 +40,30 @@ class LibraryStore:
 
     # ---- filesystem helpers -------------------------------------------------
     def ensure(self) -> None:
-        for sub in ("assets/components", "assets/thumbnails", "assets/workbook_images", "assets/reference_pages", "staging"):
+        for sub in (
+            "assets/components",
+            "assets/components/custom",
+            "assets/thumbnails",
+            "assets/workbook_images",
+            "assets/reference_pages",
+            "assets/reference_pages/custom",
+            "staging",
+            "inbox",
+            "inbox/processed",
+        ):
             (self.dir / sub).mkdir(parents=True, exist_ok=True)
         if not self.index_path.exists():
             self._write_index(self._empty_index())
 
     def _empty_index(self) -> dict:
-        return {"schemaVersion": "0.1", "connectorStyles": [], "symbols": [], "components": [], "referencePages": [], "stats": {}}
+        return {
+            "schemaVersion": "0.2",
+            "connectorStyles": [],
+            "symbols": [],
+            "components": [],
+            "referencePages": [],
+            "stats": {},
+        }
 
     def _write_index(self, data: dict) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -49,16 +85,291 @@ class LibraryStore:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dest)
                 copied += 1
+        data = self._raw_load()
+        self._curate_components(data)
+        self._dedupe_components(data)
+        self.save(data)
         data = self.load()
         return {"ok": True, "filesCopied": copied, "componentCount": len(data.get("components", []))}
 
     # ---- read/write ---------------------------------------------------------
-    def load(self) -> dict:
+    def _raw_load(self) -> dict:
         self.ensure()
         try:
             data = json.loads(self.index_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             data = self._empty_index()
+        return data
+
+    def _normalize_status(self, c: dict) -> None:
+        status = str(c.get("status") or "").lower().strip()
+        if status.startswith("retired"):
+            c["status"] = "retired"
+            return
+        # Legacy/default mappings.
+        if status in ("", "candidate_private_review", "review", "needs-review"):
+            c["status"] = "needs_review"
+            return
+        if status == "reference-page":
+            c["status"] = "reference_page"
+            return
+        if status not in STATUSES:
+            c["status"] = "needs_review"
+
+    def _component_haystack(self, c: dict) -> str:
+        return " ".join(
+            [
+                str(c.get("displayName", "")),
+                str(c.get("shortName", "")),
+                str(c.get("partNumber", "")),
+                " ".join(c.get("aliases", []) or []),
+                " ".join(c.get("tags", []) or []),
+                str((c.get("source") or {}).get("sourceFile", "")),
+                str((c.get("source") or {}).get("sourceLocation", "")),
+                str(c.get("nearbyText", "")),
+            ]
+        ).lower()
+
+    def _asset_abs(self, c: dict) -> Path | None:
+        ap = str(c.get("assetPath") or "")
+        if not ap:
+            return None
+        return self.asset_path(ap)
+
+    def _image_meta(self, p: Path) -> tuple[int, int, int, str | None]:
+        size = p.stat().st_size if p.exists() else 0
+        w = h = 0
+        ph = None
+        if Image is not None and p.suffix.lower() != ".svg":
+            try:
+                with Image.open(p) as im:
+                    w, h = im.size
+                    ph = self._average_hash(im)
+            except Exception:  # noqa: BLE001
+                pass
+        return w, h, size, ph
+
+    def _average_hash(self, im) -> str:
+        g = im.convert("L").resize((8, 8))
+        px = list(g.getdata())
+        avg = sum(px) / len(px)
+        bits = "".join("1" if v >= avg else "0" for v in px)
+        return f"{int(bits, 2):016x}"
+
+    def _hamming(self, a: str, b: str) -> int:
+        try:
+            return (int(a, 16) ^ int(b, 16)).bit_count()
+        except Exception:  # noqa: BLE001
+            return 999
+
+    def _compute_hashes(self, c: dict) -> None:
+        p = self._asset_abs(c)
+        if not p or not p.exists():
+            return
+        if not c.get("sha256"):
+            c["sha256"] = hashlib.sha256(p.read_bytes()).hexdigest()
+        w, h, size, ph = self._image_meta(p)
+        if w and h:
+            c["width"] = c.get("width") or w
+            c["height"] = c.get("height") or h
+            c["aspectRatio"] = round(w / h, 4) if h else None
+        c["fileSize"] = size
+        if ph:
+            c["perceptualHash"] = ph
+
+    def _is_reference_page(self, c: dict) -> bool:
+        hay = self._component_haystack(c)
+        asset_path = str(c.get("assetPath") or "").lower()
+        if "/reference_pages/" in asset_path:
+            return True
+        if any(k in hay for k in ("blueprint", "floor plan", "floorplan", "reference page", "workflow diagram")):
+            return True
+        w = int(c.get("width") or c.get("defaultWidth") or 0)
+        h = int(c.get("height") or c.get("defaultHeight") or 0)
+        if w and h:
+            # Keep this strict to avoid reclassifying ordinary device cards.
+            if w >= 2200 or h >= 2200:
+                return True
+            ratio = max(w / max(h, 1), h / max(w, 1))
+            if ratio >= 3.6:
+                return True
+        return False
+
+    def _squash_duplicates_in_index(self, data: dict) -> None:
+        comps = data.get("components", [])
+        out: list[dict] = []
+        seen_ids: set[str] = set()
+        seen_asset: set[str] = set()
+        for c in comps:
+            cid = str(c.get("id") or "")
+            ap = str(c.get("assetPath") or "")
+            if cid and cid in seen_ids:
+                continue
+            if ap and ap in seen_asset:
+                continue
+            if cid:
+                seen_ids.add(cid)
+            if ap:
+                seen_asset.add(ap)
+            out.append(c)
+        if len(out) != len(comps):
+            data["components"] = out
+
+    def _is_confident_approved(self, c: dict) -> bool:
+        # Conservative approval gate: only obviously well-labeled items are approved.
+        cat = str(c.get("category") or "").lower()
+        if cat in {"review", "reference-page"}:
+            return False
+        hay = self._component_haystack(c)
+        display = str(c.get("displayName") or "").lower()
+        short = str(c.get("shortName") or "").lower()
+        part = str(c.get("partNumber") or "").lower()
+        strict = f" {display} {short} {part} "
+        if cat == "logos":
+            return "h-e-b" in strict or "heb" in strict or "singh360" in strict
+        if cat == "controllers":
+            return bool(re.search(r"\bpr0650\b|\bpr0680\b|\bpr0751\b|\bpr0652\b", strict))
+        if cat == "expansion":
+            return bool(re.search(r"\bpr066[0-3]\b", strict))
+        if cat == "electrical":
+            return any(k in strict for k in ("contactor", "relay", "power supply", "breaker", "disconnect"))
+        if cat == "alarms":
+            return any(k in strict for k in ("strobe", "entrapment", "leak indicator", "door alarm"))
+        if cat == "network":
+            return any(k in strict for k in ("data manager", "orbit", "idf", "mdf", "bacnet", "switch"))
+        if cat == "panels":
+            return any(k in strict for k in ("lcp", "wicp", "ccg", "panel"))
+        if cat == "sensors":
+            return any(k in strict for k in ("sensor", "transducer", "temperature", "humidity", "door switch"))
+        if cat in {"refrigeration", "lighting", "symbols", "legends"}:
+            return any(k in strict for k in ("rack", "evaporator", "condenser", "dimming", "marker", "legend"))
+        return any(w in hay for w in ("pr0650", "pr0660", "contactor", "data manager", "logo"))
+
+    def _curate_components(self, data: dict) -> None:
+        from core.library_taxonomy import classify
+
+        self._squash_duplicates_in_index(data)
+        for c in data.get("components", []):
+            self._normalize_status(c)
+            self._compute_hashes(c)
+            if c.get("curated") is True:
+                continue
+            full_hay = self._component_haystack(c)
+            aspect = c.get("aspectRatio")
+            cat, canon = classify(
+                str(c.get("displayName", "")),
+                str(c.get("shortName", "")),
+                str(c.get("partNumber", "")),
+                float(aspect) if isinstance(aspect, (int, float)) else None,
+            )
+            # Context-aware overrides from extracted text/source metadata.
+            if any(k in full_hay for k in ("h-e-b", "heb logo", "singh360 logo", "client logo")):
+                cat, canon = ("logos", "H-E-B Logo" if "h-e-b" in full_hay or "heb" in full_hay else None)
+            elif "contactor" in full_hay:
+                cat, canon = ("electrical", "Contactor")
+            elif "amber" in full_hay and "strobe" in full_hay:
+                cat, canon = ("alarms", "Amber Strobe")
+            elif "red" in full_hay and "strobe" in full_hay:
+                cat, canon = ("alarms", "Red Strobe")
+            if self._is_reference_page(c):
+                cat = "reference-page"
+            c["category"] = cat
+            if canon:
+                c["displayName"] = canon
+            # Status assignment by confidence/safety.
+            source_type = str((c.get("source") or {}).get("sourceType") or "").lower()
+            if source_type == "inbox" and str(c.get("status") or "") in {"needs_review", "candidate"}:
+                c["status"] = "needs_review"
+            elif cat == "review":
+                c["status"] = "needs_review"
+            elif cat == "reference-page":
+                c["status"] = "reference_page"
+            elif self._is_confident_approved(c):
+                c["status"] = "approved"
+            else:
+                c["status"] = "needs_review"
+            # Default label policy.
+            if cat in {"logos", "symbols", "legends", "reference-page"}:
+                c["insertWithLabel"] = False
+            else:
+                c["insertWithLabel"] = True
+            if not c.get("defaultLabel"):
+                c["defaultLabel"] = c.get("partNumber") or c.get("shortName") or c.get("displayName")
+
+    def _dedupe_components(self, data: dict) -> None:
+        comps = data.get("components", [])
+        # Exact duplicates by sha256.
+        by_sha: dict[str, list[dict]] = {}
+        for c in comps:
+            sha = str(c.get("sha256") or "")
+            if sha:
+                by_sha.setdefault(sha, []).append(c)
+        for sha, grp in by_sha.items():
+            if len(grp) <= 1:
+                continue
+            gid = f"dup-{sha[:10]}"
+            # Keep first as canonical; others duplicate unless curated/retired.
+            grp_sorted = sorted(grp, key=lambda x: str(x.get("id") or ""))
+            for i, c in enumerate(grp_sorted):
+                c["duplicateGroupId"] = gid
+                if i == 0:
+                    c["isDuplicateCanonical"] = True
+                elif c.get("status") not in {"retired", "approved"}:
+                    c["status"] = "duplicate"
+                    c["isDuplicateCanonical"] = False
+
+        # Near duplicates via perceptual hash.
+        with_ph = [c for c in comps if c.get("perceptualHash")]
+        seen_pairs: set[tuple[str, str]] = set()
+        for i in range(len(with_ph)):
+            a = with_ph[i]
+            for j in range(i + 1, len(with_ph)):
+                b = with_ph[j]
+                key = tuple(sorted((str(a.get("id")), str(b.get("id")))))
+                if key in seen_pairs:
+                    continue
+                seen_pairs.add(key)
+                if self._hamming(str(a.get("perceptualHash")), str(b.get("perceptualHash"))) <= 4:
+                    gid = a.get("duplicateGroupId") or b.get("duplicateGroupId") or f"dup-near-{uuid.uuid4().hex[:8]}"
+                    a["duplicateGroupId"] = gid
+                    b["duplicateGroupId"] = gid
+                    if not a.get("isDuplicateCanonical"):
+                        a["isDuplicateCanonical"] = True
+                    if b.get("status") not in {"approved", "retired"}:
+                        b["status"] = "duplicate"
+                        b["isDuplicateCanonical"] = False
+
+    def _derive_categories(self, comps: list[dict], *, include_statuses: set[str]) -> list[dict]:
+        cats: dict[str, int] = {}
+        for c in comps:
+            st = str(c.get("status") or "needs_review")
+            if st not in include_statuses:
+                continue
+            cat = (c.get("category") or "uncategorized").lower()
+            cats[cat] = cats.get(cat, 0) + 1
+        return [{"id": k, "count": v} for k, v in sorted(cats.items())]
+
+    def load(self) -> dict:
+        data = self._raw_load()
+        self._curate_components(data)
+        self._dedupe_components(data)
+        # default-visible categories are based on approved only.
+        comps = data.get("components", [])
+        data["categoriesApproved"] = self._derive_categories(comps, include_statuses={"approved"})
+        data["categories"] = self._derive_categories(comps, include_statuses={"approved", "candidate", "needs_review", "duplicate", "reference_page"})
+        data["statusCounts"] = {
+            st: sum(1 for c in comps if str(c.get("status") or "") == st)
+            for st in sorted(STATUSES)
+        }
+        data["paths"] = {
+            "root": str(self.dir),
+            "inbox": str(self.dir / "inbox"),
+            "components": str(self.dir / "assets" / "components"),
+            "referencePages": str(self.dir / "assets" / "reference_pages"),
+            "thumbnails": str(self.dir / "assets" / "thumbnails"),
+        }
+        self.save(data)
+        return data
         # Derive category counts for the panel filter.
         cats: dict[str, int] = {}
         for c in data.get("components", []):
@@ -117,8 +428,20 @@ class LibraryStore:
             self.save(data)
         return found
 
-    ALLOWED_FIELDS = {"displayName", "shortName", "category", "partNumber", "aliases", "tags", "notes",
-                      "defaultLabel", "labelPosition", "labelLinked", "status"}
+    ALLOWED_FIELDS = {
+        "displayName",
+        "shortName",
+        "category",
+        "partNumber",
+        "aliases",
+        "tags",
+        "notes",
+        "defaultLabel",
+        "labelPosition",
+        "labelLinked",
+        "insertWithLabel",
+        "status",
+    }
 
     def update_component(self, comp_id: str, patch: dict) -> dict | None:
         data = self.load()
@@ -126,6 +449,10 @@ class LibraryStore:
             if c.get("id") == comp_id:
                 for k, v in patch.items():
                     if k in self.ALLOWED_FIELDS:
+                        if k == "status":
+                            vv = str(v).strip().lower()
+                            if vv not in STATUSES:
+                                continue
                         c[k] = v
                 # Mark as user-curated so auto-categorize won't overwrite it.
                 c["curated"] = True
@@ -143,42 +470,205 @@ class LibraryStore:
         self.save(data)
         return True
 
-    # Keyword → category rules are defined in core.library_taxonomy (canonical).
+    def find_usage(self, docs_dir: Path, comp_id: str) -> list[dict]:
+        """Return project/page usages for a library component by matching its
+        assetPath against canvas image src values."""
+        c = self.get_component(comp_id)
+        if not c:
+            return []
+        ap = str(c.get("assetPath") or "")
+        if not ap:
+            return []
+        needle = f"/api/library/assets/{ap}"
+        hits: list[dict] = []
+        for p in sorted((docs_dir / "projects").glob("*/project.json")):
+            try:
+                proj = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                continue
+            pid = proj.get("id") or p.parent.name
+            for page in proj.get("pages", []) or []:
+                objs = page.get("canvasObjects") or []
+                if any(str(o.get("src") or "") == needle for o in objs if isinstance(o, dict)):
+                    hits.append({
+                        "projectId": pid,
+                        "pageId": page.get("id"),
+                        "sheetCode": page.get("displaySheetCode") or page.get("sheetCode"),
+                        "sheetTitle": page.get("sheetTitle"),
+                    })
+        return hits
+
+    def set_component_status(self, comp_id: str, status: str) -> bool:
+        status = status.strip().lower()
+        if status not in STATUSES:
+            return False
+        data = self.load()
+        for c in data.get("components", []):
+            if c.get("id") == comp_id:
+                c["status"] = status
+                c["curated"] = True
+                self.save(data)
+                return True
+        return False
+
+    def bulk_update(self, ids: list[str], patch: dict) -> dict:
+        data = self.load()
+        updated = 0
+        idset = set(ids)
+        for c in data.get("components", []):
+            if c.get("id") not in idset:
+                continue
+            for k, v in patch.items():
+                if k in self.ALLOWED_FIELDS:
+                    if k == "status" and str(v).strip().lower() not in STATUSES:
+                        continue
+                    c[k] = v
+            c["curated"] = True
+            updated += 1
+        if updated:
+            self.save(data)
+        return {"ok": True, "updated": updated}
+
+    def _new_component_from_file(self, path: Path, *, status: str = "needs_review") -> dict:
+        stem = path.stem
+        clean = re.sub(r"[_\-]+", " ", stem).strip()[:120] or "Needs Review"
+        cid = f"custom_{uuid.uuid4().hex[:10]}"
+        rel_asset = f"library/assets/components/custom/{path.name}"
+        thumb_name = f"custom_{uuid.uuid4().hex[:10]}.jpg"
+        thumb_rel = f"library/assets/thumbnails/custom/{thumb_name}"
+        comp = {
+            "id": cid,
+            "displayName": clean,
+            "shortName": clean,
+            "category": "review",
+            "aliases": [],
+            "tags": ["custom", "inbox"],
+            "assetKind": "image",
+            "assetPath": rel_asset,
+            "thumbnailPath": thumb_rel,
+            "status": status,
+            "insertWithLabel": True,
+            "defaultLabel": clean,
+            "source": {
+                "sourceType": "inbox",
+                "sourceFile": path.name,
+                "sourceLocation": "inbox",
+            },
+        }
+        self._compute_hashes(comp)
+        # Generate thumbnail when PIL is available.
+        ap = self.asset_path(rel_asset)
+        tp = self.asset_path(thumb_rel)
+        if ap and tp and Image is not None and ap.suffix.lower() != ".svg":
+            try:
+                tp.parent.mkdir(parents=True, exist_ok=True)
+                with Image.open(ap) as im:
+                    im.thumbnail((256, 256))
+                    im.convert("RGB").save(tp, "JPEG", quality=86)
+            except Exception:  # noqa: BLE001
+                pass
+        return comp
+
+    def _upsert_component_by_sha(self, data: dict, comp: dict) -> tuple[bool, dict]:
+        sha = comp.get("sha256")
+        if not sha:
+            data.setdefault("components", []).append(comp)
+            return True, comp
+        for c in data.get("components", []):
+            if c.get("sha256") == sha:
+                return False, c
+        data.setdefault("components", []).append(comp)
+        return True, comp
+
+    def _copy_to_custom_components(self, src: Path) -> Path:
+        dst = self.dir / "assets" / "components" / "custom" / src.name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        # Avoid name collisions.
+        if dst.exists():
+            dst = dst.with_name(f"{dst.stem}_{uuid.uuid4().hex[:6]}{dst.suffix.lower()}")
+        shutil.copy2(src, dst)
+        return dst
+
+    def rescan_inbox(self) -> dict:
+        inbox = self.dir / "inbox"
+        processed = self.dir / "inbox" / "processed"
+        data = self.load()
+        added = 0
+        duplicates = 0
+        for p in sorted(inbox.iterdir() if inbox.exists() else []):
+            if p.is_dir() or p.suffix.lower() not in IMAGE_EXTS:
+                continue
+            copied = self._copy_to_custom_components(p)
+            comp = self._new_component_from_file(copied, status="needs_review")
+            created, _ = self._upsert_component_by_sha(data, comp)
+            if created:
+                added += 1
+            else:
+                duplicates += 1
+            processed.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.move(str(p), str(processed / p.name))
+            except Exception:  # noqa: BLE001
+                pass
+        self._curate_components(data)
+        self._dedupe_components(data)
+        self.save(data)
+        return {"ok": True, "added": added, "duplicates": duplicates}
+
+    def rescan_library_assets(self) -> dict:
+        """Pick up manually-added files under assets/components/custom and
+        assets/reference_pages/custom that are not yet indexed."""
+        data = self.load()
+        added = 0
+        roots = [
+            self.dir / "assets" / "components" / "custom",
+            self.dir / "assets" / "reference_pages" / "custom",
+        ]
+        for root in roots:
+            if not root.exists():
+                continue
+            for p in sorted(root.rglob("*")):
+                if p.is_dir() or p.suffix.lower() not in IMAGE_EXTS:
+                    continue
+                rel_asset = f"library/{p.relative_to(self.dir).as_posix()}"
+                exists = any(str(c.get("assetPath") or "") == rel_asset for c in data.get("components", []))
+                if exists:
+                    continue
+                comp = self._new_component_from_file(p, status="needs_review")
+                comp["assetPath"] = rel_asset
+                if "reference_pages" in rel_asset:
+                    comp["category"] = "reference-page"
+                    comp["status"] = "reference_page"
+                created, _ = self._upsert_component_by_sha(data, comp)
+                if created:
+                    added += 1
+        self._curate_components(data)
+        self._dedupe_components(data)
+        self.save(data)
+        return {"ok": True, "added": added}
+
+    def add_component_upload(self, src_file: Path, *, display_name: str, category: str, part_number: str = "",
+                             approve: bool = False) -> dict:
+        copied = self._copy_to_custom_components(src_file)
+        data = self.load()
+        comp = self._new_component_from_file(copied, status="approved" if approve else "needs_review")
+        comp["displayName"] = display_name.strip() or comp["displayName"]
+        comp["shortName"] = comp["displayName"]
+        comp["category"] = (category or "review").strip().lower()
+        comp["partNumber"] = part_number.strip()
+        comp["defaultLabel"] = comp["partNumber"] or comp["displayName"]
+        created, existing = self._upsert_component_by_sha(data, comp)
+        self._curate_components(data)
+        self._dedupe_components(data)
+        self.save(data)
+        return {"ok": True, "created": created, "component": comp if created else existing}
 
     def auto_categorize(self) -> dict:
-        """Bucket components using the canonical EMS/RDM taxonomy and, where
-        confident (part numbers, logos), canonicalize the display name. Never
-        touches user-curated items, and never deletes files. Marks unknowns as
-        'review' / status 'needs-review'."""
-        from core.library_taxonomy import classify
-
         data = self.load()
-        changed = 0
-        for c in data.get("components", []):
-            if c.get("curated") is True:
-                continue
-            w = c.get("defaultWidth") or c.get("width") or 0
-            h = c.get("defaultHeight") or c.get("height") or 0
-            aspect = (w / h) if (w and h) else None
-            cat, canon = classify(
-                str(c.get("displayName", "")),
-                str(c.get("shortName", "")),
-                str(c.get("partNumber", "")),
-                aspect,
-            )
-            touched = False
-            if (c.get("category") or "").lower() != cat:
-                c["category"] = cat
-                touched = True
-            if canon and c.get("displayName") != canon:
-                c["displayName"] = canon
-                touched = True
-            if cat == "review":
-                if c.get("status") != "needs-review":
-                    c["status"] = "needs-review"
-                    touched = True
-            if touched:
-                changed += 1
-        if changed:
+        before = json.dumps(data.get("components", []), sort_keys=True)
+        self._curate_components(data)
+        self._dedupe_components(data)
+        after = json.dumps(data.get("components", []), sort_keys=True)
+        if before != after:
             self.save(data)
-        return {"ok": True, "changed": changed, "total": len(data.get("components", []))}
+        return {"ok": True, "changed": 0 if before == after else 1, "total": len(data.get("components", []))}

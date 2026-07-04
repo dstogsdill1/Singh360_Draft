@@ -597,6 +597,73 @@ def auto_categorize_library():
         return jsonify(_err("Auto-categorize failed.", str(exc))), 500
 
 
+@app.post("/api/library/rescan-inbox")
+def rescan_library_inbox():
+    try:
+        return jsonify(library.rescan_inbox())
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Inbox rescan failed: %s", exc)
+        return jsonify(_err("Inbox rescan failed.", str(exc))), 500
+
+
+@app.post("/api/library/rescan-library")
+def rescan_library_assets():
+    try:
+        return jsonify(library.rescan_library_assets())
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Library rescan failed: %s", exc)
+        return jsonify(_err("Library rescan failed.", str(exc))), 500
+
+
+@app.post("/api/library/components/bulk")
+def bulk_update_library_components():
+    body = request.get_json(silent=True) or {}
+    ids = body.get("ids") or []
+    patch = body.get("patch") or {}
+    if not isinstance(ids, list) or not isinstance(patch, dict):
+        return jsonify(_err("ids(list) and patch(object) are required.")), 400
+    ids = [x for x in ids if isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,80}", x)]
+    try:
+        return jsonify(library.bulk_update(ids, patch))
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Bulk library update failed: %s", exc)
+        return jsonify(_err("Bulk library update failed.", str(exc))), 500
+
+
+@app.post("/api/library/add-component")
+def add_library_component():
+    if "file" not in request.files:
+        return jsonify(_err("No file uploaded.")), 400
+    upload = request.files["file"]
+    if not upload.filename:
+        return jsonify(_err("Filename is required.")), 400
+    ext = Path(upload.filename).suffix.lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}:
+        return jsonify(_err("Unsupported image type.")), 400
+    temp_name = f"temp_{uuid.uuid4().hex[:16]}{ext}"
+    temp_path = DOCS_DIR / temp_name
+    try:
+        upload.save(temp_path)
+        display_name = (request.form.get("displayName") or "").strip() or Path(upload.filename).stem
+        category = (request.form.get("category") or "review").strip()
+        part_number = (request.form.get("partNumber") or "").strip()
+        approve = (request.form.get("approve") or "").strip().lower() in {"1", "true", "yes", "on"}
+        result = library.add_component_upload(
+            temp_path,
+            display_name=display_name,
+            category=category,
+            part_number=part_number,
+            approve=approve,
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Add component failed: %s", exc)
+        return jsonify(_err("Failed to add component.", str(exc))), 500
+    finally:
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+    return jsonify(result)
+
+
 @app.get("/api/library/assets/<path:rel>")
 def get_library_asset(rel: str):
     target = library.asset_path(rel)
@@ -644,6 +711,9 @@ def delete_library_component(comp_id: str):
     confirm = request.args.get("confirm") == "1" or (request.get_json(silent=True) or {}).get("confirm") is True
     if not confirm:
         return jsonify(_err("Deletion requires confirm=1.", "This removes the library entry (assets on disk are kept).")), 400
+    usage = library.find_usage(DOCS_DIR, comp_id)
+    if usage:
+        return jsonify(_err("Component is used in existing projects.", f"Retire it instead. Usages: {usage}")), 409
     if not library.delete_component(comp_id):
         return jsonify(_err("Component not found.")), 404
     return jsonify({"ok": True, "id": comp_id, "deleted": True})

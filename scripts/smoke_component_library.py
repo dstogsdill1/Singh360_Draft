@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,8 +33,12 @@ def main() -> int:
     lib = c.get("/api/library").get_json()
     comps = lib.get("components", [])
     cats = lib.get("categories", [])
-    print(f"seed import: {seed.status_code} | components: {len(comps)} | categories: {len(cats)} | "
-          f"connectorStyles: {len(lib.get('connectorStyles', []))} | symbols: {len(lib.get('symbols', []))}")
+    status_counts = lib.get("statusCounts", {})
+    print(
+        f"seed import: {seed.status_code} | components: {len(comps)} | categories: {len(cats)} | "
+        f"connectorStyles: {len(lib.get('connectorStyles', []))} | symbols: {len(lib.get('symbols', []))} | "
+        f"statusCounts: {status_counts}"
+    )
 
     if not comps:
         print("NOTE: no components found — seed folder may be absent. Skipping asset checks.")
@@ -42,6 +47,26 @@ def main() -> int:
             problems.append("no categories derived")
         if not lib.get("connectorStyles"):
             problems.append("no connector styles")
+        for k in ("approved", "candidate", "needs_review", "duplicate", "reference_page", "retired"):
+            if k not in status_counts:
+                problems.append(f"missing statusCounts[{k}]")
+
+        # Dedupe proof: at least one duplicate group should exist in the seed.
+        dup_groups: dict[str, int] = {}
+        for x in comps:
+            g = x.get("duplicateGroupId")
+            if g:
+                dup_groups[g] = dup_groups.get(g, 0) + 1
+        if not any(v >= 2 for v in dup_groups.values()):
+            problems.append("no duplicate groups detected")
+        else:
+            biggest = max(dup_groups.values())
+            print(f"duplicate groups: {len(dup_groups)} (largest group size={biggest})")
+
+        # Insert-label metadata sanity.
+        logos = [x for x in comps if (x.get("category") or "").lower() == "logos"]
+        if logos and any(x.get("insertWithLabel") is not False for x in logos[:5]):
+            problems.append("logos should default to insertWithLabel=false")
 
         # 2. Asset + thumbnail resolve for the first component that has them.
         sample = next((x for x in comps if x.get("assetPath")), None)
@@ -65,6 +90,48 @@ def main() -> int:
         no_confirm = c.delete(f"/api/library/components/{cid}")
         if no_confirm.status_code != 400:
             problems.append("delete without confirm should be rejected (400)")
+
+    # 4b. Approve + rename persistence via PATCH.
+    target = next((x for x in comps if x.get("status") in {"needs_review", "candidate"}), None)
+    if target:
+        rid = target["id"]
+        patch = {
+            "displayName": "Contactor",
+            "category": "electrical",
+            "status": "approved",
+            "defaultLabel": "Contactor",
+            "insertWithLabel": True,
+        }
+        p = c.patch(f"/api/library/components/{rid}", json=patch)
+        if p.status_code != 200:
+            problems.append(f"patch approve/rename failed ({p.status_code})")
+        else:
+            reload_lib = c.get("/api/library").get_json()
+            again = next((x for x in reload_lib.get("components", []) if x.get("id") == rid), None)
+            if not again:
+                problems.append("patched component missing after reload")
+            else:
+                if again.get("displayName") != "Contactor" or again.get("status") != "approved":
+                    problems.append("patch changes did not persist")
+
+    # 4c. Inbox import proof (generate tiny PNG in inbox, rescan).
+    inbox = server.DOCS_DIR / "library" / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    tiny = inbox / f"smoke_{uuid.uuid4().hex[:8]}.png"
+    tiny.write_bytes(
+        bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000a49444154789c6360000000020001e221bc330000000049454e44ae426082"
+        )
+    )
+    rscan = c.post("/api/library/rescan-inbox")
+    if rscan.status_code != 200:
+        problems.append(f"rescan-inbox failed ({rscan.status_code})")
+    else:
+        info = rscan.get_json()
+        print(f"rescan-inbox: added={info.get('added')} duplicates={info.get('duplicates')}")
+        if int(info.get("added", 0)) < 1:
+            problems.append("inbox file was not imported as a candidate")
 
     # 5. Page-scoped overlay isolation via a throwaway project.
     wb = os.environ.get("SINGH360_SA31_WORKBOOK", "")
