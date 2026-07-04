@@ -45,6 +45,8 @@ class LibraryStore:
         self.assets = self.dir / "assets"
         self.seed = repo_root / "Singh360_Component_Library_Seed" / "library"
         self.index_path = self.dir / "library.json"
+        self.config_path = self.dir / "config.json"
+        self.default_master_root = repo_root / "Singh360_Component_Library_Seed" / "library" / "assets"
 
     # ---- filesystem helpers -------------------------------------------------
     def ensure(self) -> None:
@@ -110,6 +112,32 @@ class LibraryStore:
     def _write_index(self, data: dict) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.index_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _read_config(self) -> dict:
+        self.ensure()
+        try:
+            cfg = json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
+        except Exception:  # noqa: BLE001
+            cfg = {}
+        if "masterLibraryRoot" not in cfg:
+            cfg["masterLibraryRoot"] = str(self.default_master_root)
+        return cfg
+
+    def _write_config(self, cfg: dict) -> None:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self.config_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def get_master_root(self) -> str:
+        return str(self._read_config().get("masterLibraryRoot") or self.default_master_root)
+
+    def set_master_root(self, root_path: str | Path) -> dict:
+        p = Path(root_path).expanduser().resolve()
+        if not p.exists() or not p.is_dir():
+            return {"ok": False, "error": f"Invalid library root: {p}"}
+        cfg = self._read_config()
+        cfg["masterLibraryRoot"] = str(p)
+        self._write_config(cfg)
+        return {"ok": True, "masterLibraryRoot": str(p)}
 
     # ---- seed import --------------------------------------------------------
     def import_seed(self) -> dict:
@@ -414,6 +442,7 @@ class LibraryStore:
         }
         data["paths"] = {
             "root": str(self.dir),
+            "masterLibraryRoot": self.get_master_root(),
             "inbox": str(self.dir / "inbox"),
             "components": str(self.dir / "assets" / "components"),
             "referencePages": str(self.dir / "assets" / "reference_pages"),
@@ -696,6 +725,15 @@ class LibraryStore:
 
     def _canon_category_from_folder(self, folder_name: str) -> str:
         f = (folder_name or "").strip().lower()
+        # Folder-based master mode: preserve distinct folder categories.
+        if f in {
+            "alarm", "alarms_safety", "controllers", "custom", "electrical",
+            "electrical_power", "equipment", "expansion_modules", "hvac", "legends",
+            "lighting", "logos", "network", "panel", "panels_enclosures",
+            "refrigeration", "sensors_transducers", "symbol", "symbols_markers",
+            "uncategorized",
+        }:
+            return f
         if f in {"hvac", "ahu"}:
             return "sensors"
         if f in {"refrigeration", "tank"}:
@@ -726,6 +764,14 @@ class LibraryStore:
 
     def _category_folder_name(self, category: str) -> str:
         cat = (category or "review").strip().lower()
+        if cat in {
+            "alarm", "alarms_safety", "controllers", "custom", "electrical",
+            "electrical_power", "equipment", "expansion_modules", "hvac", "legends",
+            "lighting", "logos", "network", "panel", "panels_enclosures",
+            "refrigeration", "sensors_transducers", "symbol", "symbols_markers",
+            "uncategorized",
+        }:
+            return cat
         return {
             "controllers": "controllers",
             "expansion": "expansion_modules",
@@ -1132,9 +1178,6 @@ class LibraryStore:
                 folder_hint = rel.parts[2]
             category = self._canon_category_from_folder(folder_hint)
             display_name = self._clean_display_from_filename(src.name)
-            low_name = src.stem.lower()
-            if "logo" in low_name or "heb" in low_name or "h-e-b" in low_name or "singh360" in low_name:
-                category = "logos"
             source_quality = "thumbnail_only" if (self._is_thumbnail_source_path(src) and src.stem.lower() not in non_thumb_stems) else "full"
             if source_quality == "thumbnail_only":
                 needs_review += 1
@@ -1267,6 +1310,10 @@ class LibraryStore:
             "dryRun": dry_run,
             "preview": preview[:300],
         }
+
+    def refresh_from_master_root(self, *, dry_run: bool = False, reset_clean: bool = False) -> dict:
+        root = self.get_master_root()
+        return self.import_local_folder(root, dry_run=dry_run, reset_clean=reset_clean, source_name="Master Library Root")
 
     def sync_names_from_files(self) -> dict:
         data = self.load()

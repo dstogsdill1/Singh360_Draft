@@ -268,7 +268,7 @@ export interface LibraryData {
   connectorStyles: Array<Record<string, unknown>>;
   symbols: Array<Record<string, unknown>>;
   statusCounts?: Record<string, number>;
-  paths?: { root: string; inbox: string; components: string; referencePages: string; thumbnails: string };
+  paths?: { root: string; masterLibraryRoot?: string; inbox: string; components: string; referencePages: string; thumbnails: string };
 }
 
 export function libraryAssetUrl(path: string): string {
@@ -277,6 +277,41 @@ export function libraryAssetUrl(path: string): string {
 
 export async function getLibrary(): Promise<LibraryData> {
   const res = await fetch('/api/library');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getLibraryRoot(): Promise<{ ok: boolean; path: string }> {
+  const res = await fetch('/api/library/root');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function setLibraryRoot(path: string): Promise<{ ok: boolean; masterLibraryRoot: string }> {
+  const res = await fetch('/api/library/root', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function refreshLibraryFromRoot(opts?: { dryRun?: boolean; resetClean?: boolean }): Promise<{
+  ok: boolean;
+  scanned: number;
+  added: number;
+  updated: number;
+  skippedDuplicates: number;
+  pdfConverted: number;
+  needsReview: number;
+  archivedOldEntries: number;
+}> {
+  const res = await fetch('/api/library/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts || {}),
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -419,6 +454,15 @@ export async function addLibraryComponentFile(
   if (options.partNumber) fd.append('partNumber', options.partNumber);
   if (options.approve) fd.append('approve', '1');
   const res = await fetch('/api/library/add-component', { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function addLibraryFileToRoot(file: File, category: string): Promise<{ ok: boolean; savedTo: string }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('category', category);
+  const res = await fetch('/api/library/add-file', { method: 'POST', body: fd });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

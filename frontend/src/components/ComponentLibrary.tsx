@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  addLibraryComponentFile,
+  addLibraryFileToRoot,
   archiveDirtyExtractedAssets,
   bulkUpdateLibraryComponents,
   getLibrary,
+  getLibraryRoot,
   importLocalLibraryFolder,
-  importLibrarySeed,
-  autoCategorizeLibrary,
-  importRdmLibraryFolder,
+  refreshLibraryFromRoot,
   rebuildLibraryThumbnails,
-  rescanLibraryAssets,
-  rescanLibraryInbox,
+  setLibraryRoot,
   syncLibraryNamesFromFiles,
   libraryAssetUrl,
   deleteLibraryComponent,
@@ -40,14 +38,21 @@ function labelFor(c: LibraryComponent): string | null {
 
 // Canonical categories (must match core/library_taxonomy.py).
 const CANON_CATS = [
+  'alarm', 'alarms_safety',
   'controllers', 'expansion', 'panels', 'network', 'electrical', 'sensors', 'alarms',
   'refrigeration', 'lighting', 'symbols', 'legends', 'logos', 'reference-page', 'review', 'uncategorized',
+  'custom', 'electrical_power', 'equipment', 'expansion_modules', 'hvac', 'panel', 'panels_enclosures', 'sensors_transducers', 'symbol', 'symbols_markers',
 ];
 const CAT_LABELS: Record<string, string> = {
+  alarm: 'Alarm',
+  alarms_safety: 'Alarms / Safety',
   controllers: 'Controllers', expansion: 'Expansion Modules', panels: 'Panels / Enclosures',
   network: 'Network / Data', electrical: 'Electrical / Power', sensors: 'Sensors / Transducers',
   alarms: 'Alarms / Safety', refrigeration: 'Refrigeration', lighting: 'Lighting',
   symbols: 'Symbols / Markers', legends: 'Legends', logos: 'Logos',
+  custom: 'Custom', electrical_power: 'Electrical / Power', equipment: 'Equipment', expansion_modules: 'Expansion Modules',
+  hvac: 'HVAC', panel: 'Panel', panels_enclosures: 'Panels / Enclosures', sensors_transducers: 'Sensors / Transducers',
+  symbol: 'Symbol', symbols_markers: 'Symbols / Markers',
   'reference-page': 'Reference Pages', review: 'Needs Review', uncategorized: 'Uncategorized',
 };
 const catLabel = (id: string) => CAT_LABELS[id] ?? id;
@@ -63,6 +68,8 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   const [showNeedsReview, setShowNeedsReview] = useState(false);
   const [showReferencePages, setShowReferencePages] = useState(false);
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [libraryRoot, setLibraryRootState] = useState('');
   const [insertWithLabel, setInsertWithLabel] = useState(true);
   const [selected, setSelected] = useState<string[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
@@ -84,6 +91,8 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     try {
       setLoading(true);
       setData(await getLibrary());
+      const root = await getLibraryRoot();
+      setLibraryRootState(root.path || '');
     } catch (e) {
       setError(String(e));
     } finally {
@@ -95,57 +104,38 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     void refresh();
   }, []);
 
-  const doImportSeed = async () => {
-    setLoading(true);
-    const res = await importLibrarySeed();
-    if (!res.ok) setError(res.error || 'Seed import failed');
-    await refresh();
-  };
-
-  const doAutoCategorize = async () => {
-    try {
-      const res = await autoCategorizeLibrary();
-      await refresh();
-      window.alert(`Auto-categorize complete. Metadata updated; no files were deleted. (changed=${res.changed}, total=${res.total})`);
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
-  const doRescanInbox = async () => {
-    try {
-      const res = await rescanLibraryInbox();
-      await refresh();
-      window.alert(`Inbox scan complete. Added ${res.added}, duplicates ${res.duplicates}.`);
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
   const doRescanLibrary = async () => {
     try {
-      const res = await rescanLibraryAssets();
+      const res = await refreshLibraryFromRoot({ dryRun: false, resetClean: false });
       await refresh();
-      window.alert(`Library rescan complete. Added ${res.added}, updated ${res.updated ?? 0}, missing ${res.missing ?? 0}.`);
+      window.alert(`Library refresh complete. scanned=${res.scanned}, added=${res.added}, updated=${res.updated}, skipped=${res.skippedDuplicates}, pdf=${res.pdfConverted}`);
     } catch (e) {
       setError(String(e));
     }
   };
 
-  const doImportLocalFolder = async () => {
-    const p = window.prompt(
-      'Local library folder path:',
-      'C:\\Users\\DarrinStogsdill\\OneDrive - Homeland Development Services LLC\\Desktop\\Singh360_SmartDraw\\Singh360_Component_Library_Seed\\library\\assets',
-    );
+  const doChangeRoot = async () => {
+    const p = window.prompt('Library Root path:', libraryRoot || '');
     if (!p || !p.trim()) return;
     try {
-      const dry = window.confirm('Run DRY RUN first?\n\nOK = dry-run preview\nCancel = import now');
-      const reset = window.confirm('Reset/clean existing library entries before import?\n\nOK = archive old non-curated entries\nCancel = merge only');
-      const res = await importLocalLibraryFolder({ path: p.trim(), dryRun: dry, resetClean: reset, sourceName: 'Local Library Folder' });
+      await setLibraryRoot(p.trim());
+      setLibraryRootState(p.trim());
+      window.alert('Library root updated. Click Refresh Library to sync.');
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const doResetFromFolder = async () => {
+    const p = window.prompt('Import / Reset from local folder path:', libraryRoot || '');
+    if (!p || !p.trim()) return;
+    try {
+      await setLibraryRoot(p.trim());
+      setLibraryRootState(p.trim());
+      const dry = window.confirm('Run DRY RUN first?\n\nOK = dry-run preview\nCancel = apply now');
+      const res = await importLocalLibraryFolder({ path: p.trim(), dryRun: dry, resetClean: true, sourceName: 'Master Library Root' });
       if (!dry) await refresh();
-      window.alert(
-        `Local import ${dry ? 'dry-run ' : ''}complete.\nscanned=${res.scanned} added=${res.added} updated=${res.updated} dup=${res.skippedDuplicates} pdf=${res.pdfConverted} review=${res.needsReview} archived=${res.archivedOldEntries}`,
-      );
+      window.alert(`Reset import ${dry ? 'dry-run ' : ''}complete. scanned=${res.scanned}, added=${res.added}, updated=${res.updated}, skipped=${res.skippedDuplicates}, pdf=${res.pdfConverted}, archived=${res.archivedOldEntries}`);
     } catch (e) {
       setError(String(e));
     }
@@ -183,37 +173,11 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     }
   };
 
-  const doImportRdmFolder = async () => {
-    const p = window.prompt(
-      'RDM library folder path:',
-      'C:\\Program Files (x86)\\RDM Layout Editor 3\\Images',
-    );
-    if (!p || !p.trim()) return;
-    try {
-      const dry = window.confirm('Run DRY RUN first?\n\nOK = dry-run preview\nCancel = import now');
-      const res = await importRdmLibraryFolder({ path: p.trim(), dryRun: dry });
-      if (dry) {
-        const rows = (res.preview || []).slice(0, 25).map((x) => `- ${x.action}: ${x.displayName} [${x.category}] (${x.file})`);
-        window.alert(
-          `RDM dry-run complete.\n\nscanned=${res.scanned} added=${res.added} dup=${res.skippedDuplicates} updated=${res.updated} review=${res.needsReview}`
-          + (rows.length ? `\n\nSample:\n${rows.join('\n')}` : ''),
-        );
-      } else {
-        await refresh();
-        window.alert(`RDM import complete. scanned=${res.scanned}, added=${res.added}, duplicates=${res.skippedDuplicates}, updated=${res.updated}, needsReview=${res.needsReview}`);
-      }
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
   const doAddFiles = async (file: File) => {
     try {
-      await addLibraryComponentFile(file, {
-        displayName: file.name.replace(/\.[^.]+$/, ''),
-        category: 'review',
-        approve: false,
-      });
+      const chosen = window.prompt('Category folder for this file (e.g. refrigeration, hvac, logos):', category === 'all' ? 'custom' : category);
+      if (!chosen) return;
+      await addLibraryFileToRoot(file, chosen.trim().toLowerCase());
       await refresh();
     } catch (e) {
       setError(String(e));
@@ -226,6 +190,9 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
 
   const statusVisible = (c: LibraryComponent): boolean => {
     const st = String(c.status || 'needs_review').toLowerCase();
+    if (!showAdvanced) {
+      return st !== 'retired' && st !== 'reference_page' && st !== 'duplicate' && st !== 'candidate' && st !== 'needs_review';
+    }
     if (st === 'approved') return true;
     if (st === 'candidate') return showCandidates;
     if (st === 'needs_review') return showNeedsReview;
@@ -236,6 +203,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
   };
 
   const sourceVisible = (c: LibraryComponent): boolean => {
+    if (!showAdvanced) return true;
     if (sourceFilter === 'all') return true;
     const st = String(c.source?.sourceType || '').toLowerCase();
     const ap = String(c.assetPath || '').toLowerCase();
@@ -376,7 +344,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
     return (
       <div className="lib-empty">
         <p>No components yet.</p>
-        <button className="btn btn-primary" onClick={() => void doImportSeed()}>Import Seed Library</button>
+        <button className="btn btn-primary" onClick={() => void doResetFromFolder()}>Import / Reset From Folder</button>
         {error && <p className="lib-error">{error}</p>}
       </div>
     );
@@ -416,6 +384,31 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
             <option key={c.id} value={c.id}>{catLabel(c.id)} ({c.count})</option>
           ))}
         </select>
+      </div>
+      <div className="lib-paths">
+        <div>Library Root: {libraryRoot || data?.paths?.masterLibraryRoot || '(unset)'}</div>
+        <div>Local Mirror: {data?.paths?.root || '(unknown)'}</div>
+      </div>
+      <div className="lib-toolbar">
+        <button className="lib-btn" onClick={() => void doChangeRoot()} title="Set master library root folder path">Change Root</button>
+        <button className="lib-btn" onClick={() => void doRescanLibrary()} title="Refresh from current master library root">Refresh Library</button>
+        <button className="lib-btn" onClick={() => void doRebuildThumbs()} title="Rebuild thumbnails from source assets">Rebuild Thumbnails</button>
+        <button className="lib-btn" onClick={() => void doResetFromFolder()} title="Import / Reset from a local library folder">Reset From Folder</button>
+        <label className="lib-btn file-ribbon-btn" title="Add file into a category folder under current library root">
+          Add Files
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif,image/bmp,application/pdf"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void doAddFiles(f); e.currentTarget.value = ''; }}
+          />
+        </label>
+        <label className="lib-showretired" title="Show advanced filters and maintenance actions">
+          <input type="checkbox" checked={showAdvanced} onChange={(e) => setShowAdvanced(e.target.checked)} /> Show Advanced
+        </label>
+      </div>
+
+      {showAdvanced && <>
+      <div className="lib-controls">
         <select className="lib-cat" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as never)} title="Filter by source">
           <option value="all">Source: All</option>
           <option value="rdm">RDM Layout Editor</option>
@@ -444,22 +437,8 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         <input type="checkbox" checked={insertWithLabel} onChange={(e) => setInsertWithLabel(e.target.checked)} /> Insert with label
       </label>
       <div className="lib-toolbar">
-        <button className="lib-btn" onClick={() => void doAutoCategorize()} title="Auto-assign categories from part names/keywords (review afterwards)">Auto-categorize</button>
-        <button className="lib-btn" onClick={() => void doImportRdmFolder()} title="Import official RDM Layout Editor image folder (local path)">Import RDM Folder</button>
-        <button className="lib-btn" onClick={() => void doImportLocalFolder()} title="Import / Reset from a local library assets folder">Reset From Folder</button>
-        <button className="lib-btn" onClick={() => void doRescanInbox()} title="Scan .docs/library/inbox and import files as Needs Review candidates">Rescan Inbox</button>
-        <button className="lib-btn" onClick={() => void doRescanLibrary()} title="Scan custom component/reference folders for manually-added files">Rescan Library</button>
         <button className="lib-btn" onClick={() => void doSyncNames()} title="Sync display names from asset filenames for non-curated items">Sync Names From Files</button>
-        <button className="lib-btn" onClick={() => void doRebuildThumbs()} title="Rebuild missing/outdated thumbnails from full-resolution assets">Rebuild Thumbnails</button>
         <button className="lib-btn" onClick={() => void doArchiveDirty()} title="Archive dirty extracted candidates (status only; no delete)">Archive Dirty Extracted</button>
-        <label className="lib-btn file-ribbon-btn" title="Upload a new image into the library (starts as Needs Review)">
-          Add Files
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif,image/bmp"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void doAddFiles(f); e.currentTarget.value = ''; }}
-          />
-        </label>
       </div>
       <div className="lib-toolbar">
         <button className="lib-btn" disabled={!selected.length} onClick={() => void bulkPatch({ status: 'approved' })} title="Approve selected items">Approve Selected</button>
@@ -467,10 +446,7 @@ export default function ComponentLibrary({ onInsert, canInsert }: Props) {
         <button className="lib-btn" disabled={!selected.length} onClick={() => void bulkPatch({ status: 'reference_page', category: 'reference-page' })} title="Mark selected as Reference Pages">Mark Reference</button>
         <button className="lib-btn" disabled={!selected.length} onClick={() => void bulkPatch({ status: 'needs_review', category: 'review' })} title="Move selected to Needs Review">Needs Review</button>
       </div>
-      <div className="lib-paths">
-        <div>Root: {data?.paths?.root || '(unknown)'}</div>
-        <div>Inbox: {data?.paths?.inbox || '(unknown)'}</div>
-      </div>
+      </>}
 
       <div className="lib-grid">
         {visible.map((c) => (

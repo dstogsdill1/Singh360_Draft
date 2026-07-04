@@ -704,6 +704,38 @@ def get_library():
     return jsonify(library.load())
 
 
+@app.get("/api/library/root")
+def get_library_root():
+    return jsonify({"ok": True, "path": library.get_master_root()})
+
+
+@app.post("/api/library/root")
+def set_library_root():
+    body = request.get_json(silent=True) or {}
+    path = str(body.get("path") or "").strip()
+    if not path:
+        return jsonify(_err("Path is required.")), 400
+    result = library.set_master_root(path)
+    if not result.get("ok"):
+        return jsonify(_err(result.get("error", "Failed to set library root."))), 400
+    return jsonify(result)
+
+
+@app.post("/api/library/refresh")
+def refresh_library_from_root():
+    body = request.get_json(silent=True) or {}
+    dry_run = bool(body.get("dryRun", False))
+    reset_clean = bool(body.get("resetClean", False))
+    try:
+        result = library.refresh_from_master_root(dry_run=dry_run, reset_clean=reset_clean)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Refresh library from root failed: %s", exc)
+        return jsonify(_err("Refresh library failed.", str(exc))), 500
+    if not result.get("ok"):
+        return jsonify(_err(result.get("error", "Refresh library failed"))), 400
+    return jsonify(result)
+
+
 @app.post("/api/library/import-seed")
 def import_library_seed():
     try:
@@ -861,6 +893,35 @@ def add_library_component():
         if temp_path.exists():
             temp_path.unlink(missing_ok=True)
     return jsonify(result)
+
+
+@app.post("/api/library/add-file")
+def add_library_file_to_root():
+    if "file" not in request.files:
+        return jsonify(_err("No file uploaded.")), 400
+    upload = request.files["file"]
+    if not upload.filename:
+        return jsonify(_err("Filename is required.")), 400
+    ext = Path(upload.filename).suffix.lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".pdf"}:
+        return jsonify(_err("Unsupported file type.")), 400
+    category = (request.form.get("category") or "custom").strip().lower()
+    root = Path(library.get_master_root())
+    if not root.exists() or not root.is_dir():
+        return jsonify(_err("Library root is not valid. Set Library Root first.")), 400
+    cat_dir = root / category
+    cat_dir.mkdir(parents=True, exist_ok=True)
+    fname = Path(upload.filename).name
+    dst = cat_dir / fname
+    if dst.exists():
+        dst = cat_dir / f"{dst.stem}_{uuid.uuid4().hex[:6]}{dst.suffix.lower()}"
+    try:
+        upload.save(dst)
+        result = library.refresh_from_master_root(dry_run=False, reset_clean=False)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("Add file to library root failed: %s", exc)
+        return jsonify(_err("Add file failed.", str(exc))), 500
+    return jsonify({"ok": True, "savedTo": str(dst), "refresh": result})
 
 
 @app.get("/api/library/assets/<path:rel>")
