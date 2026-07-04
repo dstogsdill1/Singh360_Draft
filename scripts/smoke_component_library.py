@@ -186,6 +186,46 @@ def main() -> int:
             if by_name.get("Light Sensor", {}).get("category") != "lighting":
                 problems.append("Light Sensor category should be lighting")
 
+            # Insert/save/reload proof using an imported RDM asset.
+            rpump = by_name.get("Pump") or by_name.get("Traffic Lights On")
+            if rpump and rpump.get("assetPath"):
+                pid2 = "c0ffee00c0ffee01"
+                proj2 = {
+                    "id": pid2,
+                    "pages": [{"id": "page_rdm", "sheetTitle": "RDM Insert", "sheetCode": "1.0",
+                               "displaySheetCode": "1.0", "sheetTab": "", "pageType": "canvas",
+                               "order": 1, "include": True, "blocks": [], "canvasObjects": [],
+                               "notes": "", "revisionRows": [], "pageGroupId": "pg_rdm",
+                               "continuationOf": None, "continuationIndex": 0,
+                               "generatedContinuation": False, "layoutWarnings": []}],
+                    "worksheets": [],
+                    "sources": [],
+                    "metadata": {"projectName": "RDM Insert Test"},
+                    "projectDisplayName": "RDM Insert Test",
+                }
+                c.post(f"/api/projects/{pid2}", json=proj2)
+                rdm_src = "/api/library/assets/" + str(rpump.get("assetPath"))
+                proj_saved = c.get(f"/api/projects/{pid2}").get_json()
+                proj_saved["pages"][0]["canvasObjects"] = [{
+                    "type": "image",
+                    "left": 24,
+                    "top": 24,
+                    "width": 80,
+                    "height": 80,
+                    "src": rdm_src,
+                    "objName": "RDM Pump",
+                }]
+                c.post(f"/api/projects/{pid2}/pages", json={"pages": proj_saved["pages"]})
+                re2 = c.get(f"/api/projects/{pid2}").get_json()
+                src2 = ((re2.get("pages") or [{}])[0].get("canvasObjects") or [{}])[0].get("src")
+                if src2 != rdm_src:
+                    problems.append("RDM insert src did not persist after save/reload")
+                # Asset route must resolve for inserted item.
+                chk = c.get(rdm_src)
+                if chk.status_code != 200:
+                    problems.append(f"RDM inserted asset route failed ({chk.status_code})")
+                c.delete(f"/api/projects/{pid2}")
+
             # Curated item must not be overwritten by reimport.
             pump = by_name.get("Pump")
             if pump and pump.get("id"):
