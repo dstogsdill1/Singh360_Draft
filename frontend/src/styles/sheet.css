@@ -21,9 +21,9 @@
   position: absolute;
   left: 8px;
   top: 8px;
-  right: 8px;
-  bottom: 158px;
-  overflow: auto;
+  width: 1598px;
+  height: 866px;
+  overflow: hidden;
   background: #fff;
 }
 
@@ -133,8 +133,8 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 1560px;
-  height: 860px;
+  width: 1598px;
+  height: 866px;
   z-index: 5;
   pointer-events: none;
 }

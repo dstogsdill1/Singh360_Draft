@@ -3,6 +3,7 @@ import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImag
 import type { CanvasApi, CanvasSelection } from '../model/types';
 import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray } from '../model/connectorPresets';
+import { BODY_W, BODY_H } from '../model/sheetGeometry';
 
 interface Props {
   serialized: Record<string, unknown>[];
@@ -15,8 +16,8 @@ interface Props {
   overlayMode: boolean;
 }
 
-const CANVAS_W = 1560;
-const CANVAS_H = 860;
+const CANVAS_W = BODY_W;
+const CANVAS_H = BODY_H;
 const SNAP = 16;
 
 function summarize(obj: FabricObject): CanvasSelection {
@@ -28,6 +29,7 @@ function summarize(obj: FabricObject): CanvasSelection {
   const dash = !dashArr || dashArr.length === 0 ? 'solid'
     : dashArr.length === 2 && dashArr[0] <= 3 ? 'dotted'
     : dashArr.length >= 4 ? 'dash-dot'
+    : dashArr.length === 2 && dashArr[0] >= 14 ? 'long-dash'
     : 'dashed';
   return {
     type: (obj.type as string) || 'object',
@@ -655,13 +657,8 @@ export default function CanvasEditor({
         }
         // Connector / line style props.
         if (patch.dash !== undefined) {
-          const map: Record<string, number[] | undefined> = {
-            solid: undefined,
-            dashed: [10, 6],
-            dotted: [2, 5],
-            'dash-dot': [12, 5, 2, 5],
-          };
-          o.set('strokeDashArray', map[patch.dash] ?? undefined);
+          const w = (anyO.strokeWidth as number) ?? patch.strokeWidth ?? 2;
+          o.set('strokeDashArray', dashArray(patch.dash as never, w));
         }
         if (patch.arrowEnd !== undefined && 'arrowEnd' in o) anyO.arrowEnd = patch.arrowEnd;
         if (patch.arrowStart !== undefined && 'arrowStart' in o) anyO.arrowStart = patch.arrowStart;

@@ -31,6 +31,35 @@ export async function archiveDuplicateFolders(id: string): Promise<string[]> {
   return json.archived ?? [];
 }
 
+export interface WorkspaceResetOptions {
+  archiveProjects?: boolean;
+  archiveExports?: boolean;
+  archiveTmp?: boolean;
+  includeLegacyFlatJson?: boolean;
+  resetLibrary?: boolean;
+  confirmResetLibrary?: boolean;
+  dryRun?: boolean;
+}
+
+export interface WorkspaceResetResult {
+  dryRun: boolean;
+  archiveDir: string;
+  moved: string[];
+  kept: string[];
+  notes: string[];
+  movedCount: number;
+}
+
+export async function resetWorkspace(opts: WorkspaceResetOptions): Promise<WorkspaceResetResult> {
+  const res = await fetch('/api/workspace/reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function createProjectFromWorkbook(file: File): Promise<{ id: string }> {
   const fd = new FormData();
   fd.append('file', file);

@@ -174,6 +174,7 @@ export default function PropertiesPanel({
                   <select id="sel-dash" value={selection.dash ?? 'solid'} onChange={(e) => onUpdateSelection({ dash: e.target.value })}>
                     <option value="solid">Solid</option>
                     <option value="dashed">Dashed</option>
+                    <option value="long-dash">Long dash</option>
                     <option value="dotted">Dotted</option>
                     <option value="dash-dot">Dash-dot</option>
                   </select>

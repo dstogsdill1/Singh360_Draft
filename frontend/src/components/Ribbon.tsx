@@ -58,6 +58,10 @@ interface Props {
   onExportPackage: () => void;
   onRenumber: () => void;
   onOpenProject: () => void;
+  onCleanWorkspace: () => void;
+  theme: 'dark' | 'light';
+  onSetTheme: (t: 'dark' | 'light') => void;
+  currentPaperLabel?: string;
   selection: CanvasSelection | null;
   onUpdateSelection: (patch: Partial<CanvasSelection>) => void;
 }
@@ -101,6 +105,10 @@ export default function Ribbon({
   onExportPackage,
   onRenumber,
   onOpenProject,
+  onCleanWorkspace,
+  theme,
+  onSetTheme,
+  currentPaperLabel,
   selection,
   onUpdateSelection,
 }: Props) {
@@ -175,8 +183,11 @@ export default function Ribbon({
               <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow} title="Save the project now">Save Now</button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={onRenumber} title="Preview and apply new engineering sheet codes">Renumber Sheet Codes</button>
             </Group>
+            <Group title="Maintenance">
+              <button className="ribbon-btn" onClick={onCleanWorkspace} title="Archive old projects/exports to start fresh (never deletes; library preserved)">Clean Workspace</button>
+            </Group>
             <Group title="Output">
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf} title="Export the included pages to a 17x11 PDF">Export PDF</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf} title="Choose paper size and export a PDF">Export PDF</button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPackage} title="Export a ZIP with project.json, manifest, sources, assets and exports">Export Package</button>
             </Group>
           </>
@@ -326,9 +337,10 @@ export default function Ribbon({
                 </select>
               </Group>
               <Group title="Line Style">
-                <select className="ribbon-select" disabled={!ln} value={selection?.dash ?? 'solid'} onChange={(e) => onUpdateSelection({ dash: e.target.value })} title={ln ? 'Solid / dashed / dotted / dash-dot' : 'Select a line or connector first'}>
+                <select className="ribbon-select" disabled={!ln} value={selection?.dash ?? 'solid'} onChange={(e) => onUpdateSelection({ dash: e.target.value })} title={ln ? 'Solid / dashed / long-dash / dotted / dash-dot' : 'Select a line or connector first'}>
                   <option value="solid">Solid</option>
                   <option value="dashed">Dashed</option>
+                  <option value="long-dash">Long dash</option>
                   <option value="dotted">Dotted</option>
                   <option value="dash-dot">Dash-dot</option>
                 </select>
@@ -370,13 +382,18 @@ export default function Ribbon({
               <button className={`ribbon-btn ${view.showGrid ? 'active' : ''}`} disabled={!hasProject} onClick={view.toggleGrid}>Show Grid</button>
               <button className={`ribbon-btn ${view.snap ? 'active' : ''}`} disabled={!hasProject} onClick={view.toggleSnap}>Snap</button>
             </Group>
+            <Group title="Theme">
+              <button className={`ribbon-btn ${theme === 'dark' ? 'active' : ''}`} onClick={() => onSetTheme('dark')} title="Dark workspace (default)">Dark</button>
+              <button className={`ribbon-btn ${theme === 'light' ? 'active' : ''}`} onClick={() => onSetTheme('light')} title="Light workspace for daylight / screenshots">Light</button>
+            </Group>
           </>
         )}
 
         {tab === 'Export' && (
           <>
             <Group title="PDF">
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf}>Export PDF 17x11</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf} title="Choose paper size and export a PDF">Export PDF</button>
+              <span className="ribbon-readout" title="Current export paper size">{currentPaperLabel || 'ANSI B / 11 x 17'}</span>
             </Group>
             <Group title="Package">
               <PlaceholderBtn label="Package Export" />

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PageModel } from '../model/types';
 
 interface Props {
@@ -14,7 +14,14 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
   const [dragId, setDragId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const activeRef = useRef<HTMLDivElement | null>(null);
   const included = pages.filter((p) => p.include);
+
+  // Auto-scroll the active tab into view when it changes so the user never
+  // loses track of the current page.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+  }, [activePageId]);
 
   const reorder = (draggedId: string, targetId: string) => {
     if (draggedId === targetId) return;
@@ -45,6 +52,7 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
           key={p.id}
           role="button"
           tabIndex={0}
+          ref={p.id === activePageId ? activeRef : null}
           className={`page-tab ${p.id === activePageId ? 'active' : ''} ${p.generatedContinuation ? 'cont' : ''}`}
           onClick={() => onSelect(p.id)}
           onDoubleClick={() => startEdit(p)}

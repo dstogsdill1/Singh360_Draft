@@ -249,6 +249,36 @@ def list_projects():
     return jsonify({"projects": store.list_projects()})
 
 
+@app.post("/api/workspace/reset")
+def workspace_reset():
+    """Archive-first local cleanup. Never deletes; moves data to .docs/_archive/.
+
+    The component library is preserved unless the caller explicitly opts in with
+    resetLibrary=true AND confirmResetLibrary=true (still archived, not deleted).
+    """
+    from core.workspace_reset import run_reset
+
+    body = request.get_json(force=True, silent=True) or {}
+    reset_library = bool(body.get("resetLibrary")) and bool(body.get("confirmResetLibrary"))
+    if bool(body.get("resetLibrary")) and not bool(body.get("confirmResetLibrary")):
+        return jsonify(_err("Library reset requires an explicit confirmation.")), 400
+    try:
+        plan = run_reset(
+            DOCS_DIR,
+            archive_projects=bool(body.get("archiveProjects", True)),
+            archive_exports=bool(body.get("archiveExports", True)),
+            archive_tmp=bool(body.get("archiveTmp", True)),
+            archive_debug=bool(body.get("archiveTmp", True)),
+            include_legacy_flat_json=bool(body.get("includeLegacyFlatJson", False)),
+            reset_library=reset_library,
+            dry_run=bool(body.get("dryRun", False)),
+        )
+    except Exception as exc:
+        app.logger.error("workspace reset failed: %s", exc)
+        return jsonify(_err("Workspace reset failed.", str(exc))), 500
+    return jsonify({"ok": True, **plan.to_dict()})
+
+
 @app.post("/api/projects/new")
 def new_project():
     """Bootstrap a project from an uploaded Excel workbook."""

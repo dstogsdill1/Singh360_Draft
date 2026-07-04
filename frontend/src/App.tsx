@@ -22,6 +22,7 @@ import PrintView from './components/PrintView';
 import Ribbon, { type ViewControls } from './components/Ribbon';
 import RenumberModal from './components/RenumberModal';
 import OpenProjectModal from './components/OpenProjectModal';
+import CleanWorkspaceModal from './components/CleanWorkspaceModal';
 import SheetContextMenu from './components/SheetContextMenu';
 import ExportModal from './components/ExportModal';
 import PdfInsertModal from './components/PdfInsertModal';
@@ -86,8 +87,17 @@ export default function App() {
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [renumberOpen, setRenumberOpen] = useState(false);
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
+  const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [pdfInsertOpen, setPdfInsertOpen] = useState(false);
+  const [theme, setThemeState] = useState<'dark' | 'light'>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('singh360-theme') : null;
+    return saved === 'light' ? 'light' : 'dark';
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('singh360-theme', theme); } catch { /* ignore */ }
+  }, [theme]);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; pageId: string } | null>(null);
   const canvasApiRef = useRef<CanvasApi | null>(null);
@@ -647,6 +657,9 @@ export default function App() {
       onExportPackage={() => void onExportPackage()}
       onRenumber={onRenumber}
       onOpenProject={() => setOpenProjectOpen(true)}
+      onCleanWorkspace={() => setCleanWorkspaceOpen(true)}
+      theme={theme}
+      onSetTheme={setThemeState}
       selection={selection}
       onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
     />
@@ -676,10 +689,12 @@ export default function App() {
           onCancel={() => setOpenProjectOpen(false)}
         />
       )}
+      {cleanWorkspaceOpen && (
+        <CleanWorkspaceModal onDone={() => setCleanWorkspaceOpen(false)} onCancel={() => setCleanWorkspaceOpen(false)} />
+      )}
       </>
     );
   }
-
   const includedCount = project.pages.filter((p) => p.include).length;
 
   return (
@@ -849,6 +864,9 @@ export default function App() {
         onOpen={(id) => void openProjectById(id)}
         onCancel={() => setOpenProjectOpen(false)}
       />
+    )}
+    {cleanWorkspaceOpen && (
+      <CleanWorkspaceModal onDone={() => setCleanWorkspaceOpen(false)} onCancel={() => setCleanWorkspaceOpen(false)} />
     )}
     {exportOpen && (
       <ExportModal
