@@ -424,7 +424,6 @@ export default function CanvasEditor({
       if (ev.key === 'Escape') {
         canvas.remove(poly);
         creatingPolyRef.current = null;
-        consumeRef.current();
         canvas.requestRenderAll();
         return;
       }
@@ -440,41 +439,47 @@ export default function CanvasEditor({
       }
       if (ev.key === 'Enter') {
         creatingPolyRef.current = null;
+        // Drop trailing preview point if it duplicates the previous vertex.
+        if (poly.pointsData.length >= 2) {
+          const a = poly.pointsData[poly.pointsData.length - 2];
+          const b = poly.pointsData[poly.pointsData.length - 1];
+          if (Math.hypot((b?.x ?? 0) - (a?.x ?? 0), (b?.y ?? 0) - (a?.y ?? 0)) < 2) {
+            poly.pointsData.pop();
+          }
+        }
         poly.rebuildVertexControls();
         poly.updateLineFromPoints();
         canvas.setActiveObject(poly);
         canvas.requestRenderAll();
         onChanged();
-        consumeRef.current();
       }
     };
-    const onDblClick = () => {
+    const onDblClick = (ev: MouseEvent) => {
+      ev.preventDefault();
+      ev.stopPropagation();
       const poly = creatingPolyRef.current;
       if (!poly) return;
       creatingPolyRef.current = null;
+      // Drop trailing preview point if it duplicates the previous vertex.
+      if (poly.pointsData.length >= 2) {
+        const a = poly.pointsData[poly.pointsData.length - 2];
+        const b = poly.pointsData[poly.pointsData.length - 1];
+        if (Math.hypot((b?.x ?? 0) - (a?.x ?? 0), (b?.y ?? 0) - (a?.y ?? 0)) < 2) {
+          poly.pointsData.pop();
+        }
+      }
       poly.rebuildVertexControls();
       poly.updateLineFromPoints();
       canvas.setActiveObject(poly);
       canvas.requestRenderAll();
       onChanged();
-      consumeRef.current();
-    };
-    const onDblClickExisting = () => {
-      const cobj = canvas.getActiveObject();
-      if (!(cobj instanceof Connector)) return;
-      if (creatingPolyRef.current) return;
-      cobj.addVertexAtMidpoint();
-      canvas.requestRenderAll();
-      onChanged();
     };
     window.addEventListener('keydown', onKeyDown);
     canvas.upperCanvasEl?.addEventListener('dblclick', onDblClick);
-    canvas.upperCanvasEl?.addEventListener('dblclick', onDblClickExisting);
 
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       canvas.upperCanvasEl?.removeEventListener('dblclick', onDblClick);
-      canvas.upperCanvasEl?.removeEventListener('dblclick', onDblClickExisting);
       void canvas.dispose();
       fabricRef.current = null;
     };
