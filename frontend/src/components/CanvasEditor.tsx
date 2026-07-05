@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, type FabricObject } from 'fabric';
+import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, filters, type FabricObject } from 'fabric';
 import type { CanvasApi, CanvasSelection, LineStyle } from '../model/types';
 import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
@@ -123,6 +123,21 @@ function makeElbow(x: number, y: number) {
       { x: x + 180, y: y + 80 },
     ],
   });
+}
+
+function wantsBw(url: string): boolean {
+  try {
+    const u = new URL(url, window.location.origin);
+    return u.searchParams.get('bw') === '1';
+  } catch {
+    return /[?&]bw=1(?:&|$)/.test(url);
+  }
+}
+
+function applyBwIfRequested(img: FabricImage, url: string) {
+  if (!wantsBw(url)) return;
+  img.filters = [new filters.Grayscale()];
+  img.applyFilters();
 }
 
 export default function CanvasEditor({
@@ -562,6 +577,7 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         if (!c) return;
         void FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
+          applyBwIfRequested(img, url);
           const maxW = CANVAS_W * 0.6;
           const maxH = CANVAS_H * 0.6;
           const iw = img.width || 1;
@@ -592,6 +608,7 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         if (!c) return;
         void FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
+          applyBwIfRequested(img, url);
           const maxW = CANVAS_W * 0.35;
           const maxH = CANVAS_H * 0.35;
           const iw = img.width || 1;

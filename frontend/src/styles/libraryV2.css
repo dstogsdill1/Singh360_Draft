@@ -1,14 +1,14 @@
 /* Milestone 4A — Component Library V2 panel styles. */
-.libv2 { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
-.libv2-controls { display: flex; flex-direction: column; gap: 6px; }
-.libv2-row { display: flex; gap: 6px; }
+.libv2 { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; overflow-x: hidden; }
+.libv2-controls { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.libv2-row { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .libv2-row.wrap { flex-wrap: wrap; }
 .libv2-grow { flex: 1; }
-.libv2-search { width: 100%; }
+.libv2-search { width: 100%; max-width: 100%; }
 
 .libv2-modes button.active { font-weight: 700; }
 
-.libv2-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; max-height: 360px; overflow-y: auto; }
+.libv2-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; max-height: 360px; overflow-y: auto; overflow-x: hidden; min-width: 0; }
 .libv2-grid.list { display: block; }
 
 .libv2-card { border: 1px solid #d0d0d0; border-radius: 6px; padding: 6px; background: #fff; cursor: pointer; }
@@ -36,13 +36,17 @@
 
 .libv2-empty { padding: 12px; color: #888; font-size: 12px; }
 
-.libv2-editor { margin-top: 10px; border-top: 1px solid #ddd; padding-top: 8px; }
+.libv2-editor { margin-top: 10px; border-top: 1px solid #ddd; padding-top: 8px; overflow-x: hidden; min-width: 0; }
+.libv2-editor-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .libv2-editor-title { font-weight: 700; margin-bottom: 6px; }
-.libv2-erow { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; font-size: 12px; }
+.libv2-erow { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; font-size: 12px; min-width: 0; }
 .libv2-erow > span:first-child { width: 110px; color: #555; }
-.libv2-erow > span:last-child { flex: 1; }
-.libv2-erow input, .libv2-erow select { width: 100%; }
+.libv2-erow > span:last-child { flex: 1; min-width: 0; }
+.libv2-erow input, .libv2-erow select { width: 100%; max-width: 100%; }
 .libv2-size { display: flex; gap: 4px; }
 .libv2-size input { width: 64px; }
 .libv2-checks { display: flex; gap: 8px; margin-top: 6px; }
 .libv2-editor-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.libv2-editor-actions button { max-width: 100%; white-space: normal; }
+.libv2-done { border: 1px solid #b7bec6; background: #fff; border-radius: 4px; padding: 3px 10px; cursor: pointer; }
+.libv2-done:hover { background: #eef2f6; }

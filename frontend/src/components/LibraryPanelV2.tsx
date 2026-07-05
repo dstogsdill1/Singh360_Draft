@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addLibV2File,
   cleanLibV2PhysicalDuplicates,
-  generateLibV2Symbol,
   getLibV2,
   libV2AssetUrl,
   migrateLegacyLibV2,
@@ -79,6 +78,7 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
   const [rep, setRep] = useState<ViewRep>('both');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -96,6 +96,10 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
     () => components.find((c) => c.id === selectedId) ?? null,
     [components, selectedId],
   );
+
+  useEffect(() => {
+    setDraftName(selected?.displayName ?? '');
+  }, [selected?.id, selected?.displayName]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -118,23 +122,16 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
 
   const doInsertBw = async (c: LibV2Component) => {
     if (!canInsert) return;
-    let comp = c;
-    if (!comp.symbolFile) {
-      setLoading(true);
-      try {
-        const generated = await generateLibV2Symbol(comp.id);
-        if (!generated.symbolFile) {
-          window.alert('Unable to generate a B/W symbol for this component yet.');
-          return;
-        }
-        const latest = await getLibV2();
-        setData(latest);
-        comp = latest.components.find((x) => x.id === comp.id) ?? { ...comp, symbolFile: generated.symbolFile };
-      } finally {
-        setLoading(false);
-      }
+    if (c.symbolFile) {
+      onInsert(displayNameFor(c), insertUrlFor(c, 'symbol'), labelFor(c));
+      return;
     }
-    onInsert(displayNameFor(comp), insertUrlFor(comp, 'symbol'), labelFor(comp));
+    // Symbol Builder endpoint is not fully enabled in this repo yet for all
+    // assets. Fall back to source insertion with a B/W rendering hint so the
+    // user always gets an immediate black/white result instead of a no-op.
+    const src = insertUrlFor(c, 'source');
+    const bwSrc = `${src}${src.includes('?') ? '&' : '?'}bw=1`;
+    onInsert(displayNameFor(c), bwSrc, labelFor(c));
   };
 
   const onDragStart = (e: React.DragEvent, c: LibV2Component) => {
@@ -213,6 +210,13 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
     await load();
   };
 
+  const commitDraftName = async () => {
+    if (!selected) return;
+    const next = draftName.trim();
+    if (!next || next === selected.displayName) return;
+    await patchSelected({ displayName: next });
+  };
+
   return (
     <div className="libv2">
       <div className="libv2-controls">
@@ -268,7 +272,7 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
         {filtered.map((c) => (
           <div key={c.id} className={selectedId === c.id ? 'libv2-card selected' : 'libv2-card'}
             draggable={canInsert} onDragStart={(e) => onDragStart(e, c)}
-            onClick={() => setSelectedId(c.id)}>
+            onClick={() => setSelectedId((prev) => (prev === c.id ? null : c.id))}>
             <CardPreview c={c} rep={rep} />
             <div className="libv2-meta">
               <div className="libv2-name">{displayNameFor(c)}</div>
@@ -283,7 +287,7 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
                 <button
                   onClick={(e) => { e.stopPropagation(); void doInsertBw(c); }}
                   disabled={!canInsert || loading}
-                  title={c.symbolFile ? 'Insert black/white symbol' : 'Generate black/white symbol and insert'}
+                  title={c.symbolFile ? 'Insert black/white symbol' : 'Insert source image in black/white'}
                 >
                   B/W
                 </button>
@@ -299,9 +303,29 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
 
       {selected && (
         <div className="libv2-editor">
-          <div className="libv2-editor-title">Edit: {displayNameFor(selected)}</div>
+          <div className="libv2-editor-title-row">
+            <div className="libv2-editor-title">Edit: {displayNameFor(selected)}</div>
+            <button className="libv2-done" onClick={() => setSelectedId(null)} title="Close editor">Done</button>
+          </div>
           <EditorRow label="Display name">
-            <input title="Display name" value={selected.displayName} onChange={(e) => void patchSelected({ displayName: e.target.value })} />
+            <input
+              title="Display name"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onBlur={() => void commitDraftName()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void commitDraftName();
+                  (e.currentTarget as HTMLInputElement).blur();
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setDraftName(selected.displayName);
+                  setSelectedId(null);
+                }
+              }}
+            />
           </EditorRow>
           <EditorRow label="Category">
             <select title="Category" value={selected.category} onChange={(e) => void patchSelected({ category: e.target.value })}>
