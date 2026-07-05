@@ -367,8 +367,13 @@ export default function CanvasEditor({
       const conn = creatingRef.current;
       if (conn) {
         const p = canvas.getScenePoint(opt.e);
-        conn.set({ x2: p.x, y2: p.y });
-        conn.setCoords();
+        if (conn.pointsData?.length >= 2) {
+          conn.pointsData[1] = { x: p.x, y: p.y };
+          conn.updateLineFromPoints();
+        } else {
+          conn.set({ x2: p.x, y2: p.y });
+          conn.setCoords();
+        }
         canvas.requestRenderAll();
       }
       const poly = creatingPolyRef.current;
@@ -395,6 +400,10 @@ export default function CanvasEditor({
       if (Math.hypot(dx, dy) < 6) {
         conn.set({ x2: (conn.x1 ?? 0) + 160, y2: conn.y1 ?? 0 });
         conn.setCoords();
+        if (conn.pointsData?.length >= 2) {
+          conn.pointsData[1] = { x: (conn.x1 ?? 0) + 160, y: conn.y1 ?? 0 };
+          conn.updateLineFromPoints();
+        }
       }
       creatingRef.current = null;
       canvas.requestRenderAll();

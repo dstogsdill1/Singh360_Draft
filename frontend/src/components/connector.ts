@@ -237,8 +237,8 @@ function endpointPosition(which: 'start' | 'end') {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return function (_dim: Point, _finalMatrix: unknown, fabricObject: any): Point {
     const line = fabricObject as Connector;
-    const pts = line.calcLinePoints();
-    const local = which === 'start' ? new Point(pts.x1, pts.y1) : new Point(pts.x2, pts.y2);
+    const p = which === 'start' ? line.pointsData[0] : line.pointsData[line.pointsData.length - 1];
+    const local = new Point((p?.x ?? 0) - (line.left ?? 0), (p?.y ?? 0) - (line.top ?? 0));
     const vpt = line.canvas?.viewportTransform;
     const m = vpt
       ? util.multiplyTransformMatrices(vpt, line.calcTransformMatrix())
@@ -251,14 +251,10 @@ function endpointAction(which: 'start' | 'end') {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return function (_eventData: unknown, transform: any, x: number, y: number): boolean {
     const line = transform.target as Connector;
-    const pts = line.calcLinePoints();
-    const m = line.calcTransformMatrix();
-    const absStart = new Point(pts.x1, pts.y1).transform(m);
-    const absEnd = new Point(pts.x2, pts.y2).transform(m);
-    const ns = which === 'start' ? new Point(x, y) : absStart;
-    const ne = which === 'end' ? new Point(x, y) : absEnd;
-    line.set({ angle: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0, x1: ns.x, y1: ns.y, x2: ne.x, y2: ne.y });
-    line.setCoords();
+    if (!line.pointsData?.length) return false;
+    if (which === 'start') line.pointsData[0] = { x, y };
+    else line.pointsData[line.pointsData.length - 1] = { x, y };
+    line.updateLineFromPoints();
     return true;
   };
 }
@@ -271,7 +267,7 @@ function vertexPosition(idx: number) {
   return function (_dim: Point, _finalMatrix: unknown, fabricObject: any): Point {
     const line = fabricObject as Connector;
     const p = line.pointsData[idx] ?? line.pointsData[0];
-    const local = new Point(p.x, p.y);
+    const local = new Point((p?.x ?? 0) - (line.left ?? 0), (p?.y ?? 0) - (line.top ?? 0));
     const vpt = line.canvas?.viewportTransform;
     const m = vpt
       ? util.multiplyTransformMatrices(vpt, line.calcTransformMatrix())
