@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "0.1",
+  "description": "Functional categories and manufacturer metadata for the Singh360 component-builder workbench. This file is workbench-local classification vocabulary and does NOT change the production app library schema.",
+  "manufacturers": [
+    {
+      "id": "rdm",
+      "displayName": "RDM",
+      "aliases": ["rdm", "resource data management", "intuitive", "tdb"]
+    },
+    {
+      "id": "cpc",
+      "displayName": "CPC / Emerson",
+      "aliases": ["cpc", "emerson", "e2", "einstein", "retail solutions"]
+    },
+    {
+      "id": "niagara",
+      "displayName": "Niagara",
+      "aliases": ["niagara", "tridium", "jace", "n4"]
+    },
+    {
+      "id": "generic",
+      "displayName": "Generic",
+      "aliases": ["generic", "unknown", "misc"]
+    },
+    {
+      "id": "heb",
+      "displayName": "H-E-B / Customer",
+      "aliases": ["heb", "h-e-b", "h e b", "customer"]
+    },
+    {
+      "id": "singh360",
+      "displayName": "Singh360",
+      "aliases": ["singh360", "singh 360", "singh"]
+    }
+  ],
+  "categories": [
+    {
+      "id": "controllers",
+      "displayName": "Controllers",
+      "keywords": ["controller", "ctrl", "intuitive", "tdb", "console", "cct", "pr0650", "pr0680", "e2", "jace"]
+    },
+    {
+      "id": "expansion_modules",
+      "displayName": "Expansion Modules",
+      "keywords": ["expansion", "io", "i/o", "stepper", "mini io", "8p-4e", "4-4", "probe input", "pr0660", "pr0661", "pr0662", "pr0663", "pr0681"]
+    },
+    {
+      "id": "panels_enclosures",
+      "displayName": "Panels & Enclosures",
+      "keywords": ["panel", "enclosure", "cabinet", "wicp", "backplate", "din", "housing"]
+    },
+    {
+      "id": "electrical_power",
+      "displayName": "Electrical / Power",
+      "keywords": ["contactor", "breaker", "relay", "power supply", "psu", "transformer", "disconnect", "vfd", "starter", "fuse", "busbar"]
+    },
+    {
+      "id": "network_data",
+      "displayName": "Network / Data",
+      "keywords": ["switch", "router", "gateway", "modem", "network", "ethernet", "cat6", "fiber", "port", "hub", "modbus", "bacnet", "mstp", "canbus"]
+    },
+    {
+      "id": "sensors_transducers",
+      "displayName": "Sensors & Transducers",
+      "keywords": ["sensor", "probe", "transducer", "temperature", "humidity", "pressure", "co2", "leak", "light sensor", "rh", "ntc", "ptc"]
+    },
+    {
+      "id": "alarms_safety",
+      "displayName": "Alarms & Safety",
+      "keywords": ["alarm", "strobe", "beacon", "siren", "horn", "entrapment", "smoke", "door alarm", "safety", "traffic light"]
+    },
+    {
+      "id": "refrigeration",
+      "displayName": "Refrigeration",
+      "keywords": ["compressor", "pack", "condenser", "evaporator", "valve", "eev", "coldroom", "case", "mercury", "pump", "refrigerant", "rdm intuitiveplant"]
+    },
+    {
+      "id": "hvac",
+      "displayName": "HVAC",
+      "keywords": ["hvac", "ahu", "rtu", "fan", "sfan", "rfan", "damper", "coil", "vav", "air handler"]
+    },
+    {
+      "id": "lighting",
+      "displayName": "Lighting",
+      "keywords": ["light", "lighting", "luminaire", "fixture", "lamp", "photocell"]
+    },
+    {
+      "id": "logos",
+      "displayName": "Logos",
+      "keywords": ["logo", "brandmark", "wordmark"]
+    },
+    {
+      "id": "symbols_markers",
+      "displayName": "Symbols & Markers",
+      "keywords": ["symbol", "marker", "callout", "tag", "annotation", "bubble"]
+    },
+    {
+      "id": "legends",
+      "displayName": "Legends",
+      "keywords": ["legend", "key", "schedule key", "notes"]
+    },
+    {
+      "id": "custom",
+      "displayName": "Custom",
+      "keywords": ["custom", "misc", "other"]
+    }
+  ],
+  "symbolStatusValues": [
+    "none",
+    "candidate_generated",
+    "under_review",
+    "approved",
+    "rejected"
+  ]
+}
