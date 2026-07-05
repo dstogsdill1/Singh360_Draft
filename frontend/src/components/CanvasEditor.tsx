@@ -433,17 +433,20 @@ export default function CanvasEditor({
     };
 
     const onKeyDown = (ev: KeyboardEvent) => {
-      const poly = creatingPolyRef.current;
-      if (!poly) return;
+      // Escape ALWAYS bails out to the Select tool — cancels any half-drawn line
+      // and exits draw mode, so you can never get trapped in a drawing tool.
       if (ev.key === 'Escape') {
-        // Always escape cleanly back to Select — never leave a stuck state.
-        canvas.remove(poly);
-        creatingPolyRef.current = null;
-        polyCommittedRef.current = [];
-        canvas.requestRenderAll();
-        consumeRef.current();
+        if (creatingPolyRef.current) {
+          canvas.remove(creatingPolyRef.current);
+          creatingPolyRef.current = null;
+          polyCommittedRef.current = [];
+          canvas.requestRenderAll();
+        }
+        if (toolRef.current !== 'select') consumeRef.current();
         return;
       }
+      const poly = creatingPolyRef.current;
+      if (!poly) return;
       if (ev.key === 'Backspace') {
         ev.preventDefault();
         const committed = polyCommittedRef.current;

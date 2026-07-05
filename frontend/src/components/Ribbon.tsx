@@ -334,6 +334,7 @@ export default function Ribbon({
           return (
             <>
               <Group title="Place">
+                <button className={`ribbon-btn ${activeTool === 'select' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('select')} title="Select / move / edit objects (Esc also returns here)">Select</button>
                 <button className={`ribbon-btn ${activeTool === 'text' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('text')} title="Click-place a text box">Text</button>
                 <button className={`ribbon-btn ${activeTool === 'rectangle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('rectangle')} title="Click-place a rectangle">Rectangle</button>
                 <button className={`ribbon-btn ${activeTool === 'circle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('circle')} title="Click-place a circle">Circle</button>
