@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import type { FitMode } from './DocumentView';
-import type { CanvasSelection } from '../model/types';
+import type { CanvasSelection, LineStyle } from '../model/types';
 import { CONNECTOR_PRESETS } from '../model/connectorPresets';
 
 export interface ViewControls {
@@ -69,6 +69,7 @@ interface Props {
   currentPaperLabel?: string;
   selection: CanvasSelection | null;
   onUpdateSelection: (patch: Partial<CanvasSelection>) => void;
+  onSetLineStyle: (style: LineStyle) => void;
 }
 
 type RibbonTab = 'File' | 'Home' | 'Insert' | 'Draw' | 'Text' | 'Arrange' | 'View' | 'Export';
@@ -119,6 +120,7 @@ export default function Ribbon({
   currentPaperLabel,
   selection,
   onUpdateSelection,
+  onSetLineStyle,
 }: Props) {
   const [tab, setTab] = useState<RibbonTab>('File');
 
@@ -335,10 +337,10 @@ export default function Ribbon({
                 <button className={`ribbon-btn ${activeTool === 'text' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('text')} title="Click-place a text box">Text</button>
                 <button className={`ribbon-btn ${activeTool === 'rectangle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('rectangle')} title="Click-place a rectangle">Rectangle</button>
                 <button className={`ribbon-btn ${activeTool === 'circle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('circle')} title="Click-place a circle">Circle</button>
-                <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')} title="Drag to draw a line">Line</button>
-                <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')} title="Drag to draw an arrow">Arrow</button>
-                <button className={`ribbon-btn ${activeTool === 'polyline' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('polyline')} title="Click to add vertices, Enter/double-click to finish">Polyline</button>
-                <button className={`ribbon-btn ${activeTool === 'elbow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('elbow')} title="Orthogonal connector routing">Elbow Connector</button>
+                <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')} title="Click to drop each point of a line, then double-click or Enter to finish (Esc cancels)">Line</button>
+                <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')} title="Same as Line but with an arrowhead on the last point">Arrow</button>
+                <button className={`ribbon-btn ${activeTool === 'polyline' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('polyline')} title="Click to drop each point, double-click or Enter to finish">Polyline</button>
+                <button className={`ribbon-btn ${activeTool === 'elbow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('elbow')} title="Like a line but with square (90°) corners between points">Elbow Connector</button>
               </Group>
               <Group title="Line Color">
                 <select className="ribbon-select" disabled={!ln} value={typeof selection?.stroke === 'string' ? selection.stroke : '#111111'} onChange={(e) => onUpdateSelection({ stroke: e.target.value })} title={ln ? 'Stroke color of the selected line/connector' : 'Select a line or connector first'}>
@@ -366,9 +368,15 @@ export default function Ribbon({
                   <button
                     key={p.id}
                     className="ribbon-btn"
-                    disabled={!ln}
-                    onClick={() => onUpdateSelection({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowEnd: p.arrowEnd ?? false })}
-                    title={`${p.label} = ${p.stroke} ${p.dash} ${p.strokeWidth}px`}
+                    disabled={!cx}
+                    onClick={() => {
+                      // Set the style for the NEXT line + arm the click-to-place
+                      // line tool. If a connector is already selected, restyle it.
+                      onSetLineStyle({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowStart: false, arrowEnd: p.arrowEnd ?? false });
+                      onSetTool('line');
+                      if (ln) onUpdateSelection({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowEnd: p.arrowEnd ?? false });
+                    }}
+                    title={`Draw a ${p.label} line — click each point, double-click/Enter to finish`}
                   >
                     {p.label}
                   </button>

@@ -141,6 +141,14 @@ export interface CanvasSelection {
   locked: boolean;
 }
 
+export interface LineStyle {
+  stroke: string;
+  dash: 'solid' | 'dashed' | 'dotted' | 'dash-dot' | 'long-dash';
+  strokeWidth: number;
+  arrowStart: boolean;
+  arrowEnd: boolean;
+}
+
 export interface CanvasApi {
   addText: () => void;
   addRect: () => void;
@@ -149,6 +157,7 @@ export interface CanvasApi {
   addArrow: () => void;
   addPolyline: () => void;
   addElbow: () => void;
+  setLineStyle: (style: LineStyle) => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
   addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addLegend: (presetIds?: string[]) => void;

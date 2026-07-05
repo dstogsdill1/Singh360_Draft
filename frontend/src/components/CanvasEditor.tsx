@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, type FabricObject } from 'fabric';
-import type { CanvasApi, CanvasSelection } from '../model/types';
+import type { CanvasApi, CanvasSelection, LineStyle } from '../model/types';
 import { Connector } from './connector';
-import { CONNECTOR_PRESETS, dashArray } from '../model/connectorPresets';
+import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
 import { BODY_W, BODY_H } from '../model/sheetGeometry';
 
 interface Props {
@@ -145,6 +145,11 @@ export default function CanvasEditor({
   const consumeRef = useRef(onToolConsumed);
   const onSelRef = useRef(onSelectionChange);
   const onSerRef = useRef(onSerializedChange);
+  // Style applied to NEW lines drawn with the Line/Arrow/Polyline tools. Driven
+  // by the Draw-tab controls + presets via the `setLineStyle` API method.
+  const lineStyleRef = useRef<LineStyle>({
+    stroke: '#111111', dash: 'solid', strokeWidth: 2, arrowStart: false, arrowEnd: false,
+  });
   toolRef.current = activeTool;
   snapRef.current = snap;
   overlayModeRef.current = overlayMode;
@@ -156,11 +161,9 @@ export default function CanvasEditor({
   const historyRef = useRef<string[]>([]);
   const histIdxRef = useRef(-1);
   const restoringRef = useRef(false);
-  // Connector currently being drawn via drag-to-create.
-  const creatingRef = useRef<Connector | null>(null);
-  const lineStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Connector currently being drawn (multi-point click placement).
   const creatingPolyRef = useRef<Connector | null>(null);
-  // Committed absolute vertices while building a polyline/elbow (preview point excluded).
+  // Committed absolute vertices while building a line (preview point excluded).
   const polyCommittedRef = useRef<Array<{ x: number; y: number }>>([]);
   // Transient alignment guide lines (never serialized/exported).
   const guidesRef = useRef<FabricObject[]>([]);
@@ -295,42 +298,42 @@ export default function CanvasEditor({
       canvas.requestRenderAll();
     });
     canvas.on('mouse:up', () => { clearGuides(); canvas.requestRenderAll(); });
+    // ---- Simple multi-point line placement ---------------------------------
+    // Line / Arrow / Polyline all work the SAME way: click to drop each point,
+    // move to preview the next segment, double-click or Enter to finish, Esc to
+    // cancel, Backspace to remove the last point. Elbow adds square corners.
+    const styleForNewLine = (tool: string) => {
+      const s = lineStyleRef.current;
+      const kind =
+        tool === 'arrow' ? 'arrow' : tool === 'elbow' ? 'elbow' : tool === 'polyline' ? 'polyline' : 'line';
+      return {
+        stroke: s.stroke || '#111',
+        strokeWidth: s.strokeWidth || 2,
+        strokeDashArray: dashArray(s.dash as DashStyle, s.strokeWidth || 2),
+        arrowStart: s.arrowStart,
+        arrowEnd: tool === 'arrow' ? true : s.arrowEnd,
+        connectorKind: kind as 'line' | 'arrow' | 'polyline' | 'elbow',
+      };
+    };
+    const isLineTool = (t: string) => t === 'line' || t === 'arrow' || t === 'polyline' || t === 'elbow';
+
     canvas.on('mouse:down', (opt) => {
       const tool = toolRef.current;
-      // While actively building a polyline/elbow, EVERY click drops a point —
-      // even if it lands on the line being drawn. Don't let target-hit bail out.
-      const buildingPoly = !!creatingPolyRef.current && (tool === 'polyline' || tool === 'elbow');
-      if (!buildingPoly && (tool === 'select' || opt.target)) return;
+      // While actively building a line, EVERY click drops a point.
+      const building = !!creatingPolyRef.current;
+      if (!building && (tool === 'select' || opt.target)) return;
       const p = canvas.getScenePoint(opt.e);
       const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
       const px = sp(p.x);
       const py = sp(p.y);
-      // Line / arrow: press-drag-release to create a two-point connector.
-      if (tool === 'line' || tool === 'arrow') {
-        const conn = new Connector([{ x: px, y: py }, { x: px, y: py }], {
-          stroke: '#111',
-          strokeWidth: 2,
-          arrowEnd: tool === 'arrow',
-          connectorKind: tool === 'arrow' ? 'arrow' : 'line',
-        });
-        canvas.add(conn);
-        canvas.setActiveObject(conn);
-        creatingRef.current = conn;
-        lineStartRef.current = { x: px, y: py };
-        canvas.requestRenderAll();
-        return;
-      }
-      // Polyline / elbow: click to drop each point (PowerPoint style).
-      // First click starts it; each subsequent click commits a vertex.
-      if (tool === 'polyline' || tool === 'elbow') {
-        const isElbow = tool === 'elbow';
+
+      if (isLineTool(tool) || building) {
+        const isElbow = (creatingPolyRef.current?.connectorKind ?? tool) === 'elbow';
         if (!creatingPolyRef.current) {
+          // First click: start the line at this point.
           polyCommittedRef.current = [{ x: px, y: py }];
           const conn = new Connector([{ x: px, y: py }, { x: px, y: py }], {
-            stroke: '#111',
-            strokeWidth: 2,
-            arrowEnd: false,
-            connectorKind: isElbow ? 'elbow' : 'polyline',
+            ...styleForNewLine(tool),
             pointsData: [{ x: px, y: py }, { x: px, y: py }],
           });
           canvas.add(conn);
@@ -338,6 +341,7 @@ export default function CanvasEditor({
           creatingPolyRef.current = conn;
           canvas.requestRenderAll();
         } else {
+          // Subsequent click: commit the next point.
           const conn = creatingPolyRef.current;
           const committed = polyCommittedRef.current;
           const prev = committed[committed.length - 1];
@@ -346,11 +350,12 @@ export default function CanvasEditor({
           } else {
             committed.push({ x: px, y: py });
           }
-          conn.setAbsPoints(committed.length >= 2 ? committed : [...committed, { x: px, y: py }]);
+          conn.setAbsPoints(committed);
           canvas.requestRenderAll();
         }
         return;
       }
+
       let obj: FabricObject | null = null;
       if (tool === 'text') obj = makeText(p.x, p.y);
       else if (tool === 'rectangle') obj = makeRect(p.x, p.y);
@@ -363,45 +368,23 @@ export default function CanvasEditor({
       consumeRef.current();
     });
     canvas.on('mouse:move', (opt) => {
+      const poly = creatingPolyRef.current;
+      if (!poly) return;
       const p = canvas.getScenePoint(opt.e);
       const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
       const px = sp(p.x);
       const py = sp(p.y);
-      const conn = creatingRef.current;
-      if (conn && lineStartRef.current) {
-        conn.setAbsPoints([lineStartRef.current, { x: px, y: py }]);
-        canvas.requestRenderAll();
+      const committed = polyCommittedRef.current;
+      const display = [...committed];
+      const prev = committed[committed.length - 1];
+      if (poly.connectorKind === 'elbow' && prev) {
+        display.push({ x: px, y: prev.y }, { x: px, y: py });
+      } else {
+        display.push({ x: px, y: py });
       }
-      const poly = creatingPolyRef.current;
-      if (poly) {
-        const committed = polyCommittedRef.current;
-        const display = [...committed];
-        const prev = committed[committed.length - 1];
-        if (poly.connectorKind === 'elbow' && prev) {
-          display.push({ x: px, y: prev.y }, { x: px, y: py });
-        } else {
-          display.push({ x: px, y: py });
-        }
-        if (display.length < 2) display.push({ x: px, y: py });
-        poly.setAbsPoints(display);
-        canvas.requestRenderAll();
-      }
-    });
-    canvas.on('mouse:up', () => {
-      const conn = creatingRef.current;
-      if (!conn) return;
-      // Give a minimum length if the user just clicked without dragging.
-      const abs = conn.getAbsPoints();
-      const dx = abs[1].x - abs[0].x;
-      const dy = abs[1].y - abs[0].y;
-      if (Math.hypot(dx, dy) < 6) {
-        conn.setAbsPoints([abs[0], { x: abs[0].x + 160, y: abs[0].y }]);
-      }
-      creatingRef.current = null;
-      lineStartRef.current = null;
+      if (display.length < 2) display.push({ x: px, y: py });
+      poly.setAbsPoints(display);
       canvas.requestRenderAll();
-      onChanged();
-      consumeRef.current();
     });
 
     const finishPoly = () => {
@@ -525,6 +508,7 @@ export default function CanvasEditor({
       addArrow: () => addObj(makeArrow(200, 320)),
       addPolyline: () => addObj(makePolyline(200, 340)),
       addElbow: () => addObj(makeElbow(200, 360)),
+      setLineStyle: (style: LineStyle) => { lineStyleRef.current = style; },
       addPageTitle: (text: string) => addObj(makePageTitle(text)),
       addSectionHeader: (text: string) => addObj(makeSectionHeader(text)),
       addNote: (text: string) => addObj(makeNote(text)),

@@ -14,7 +14,7 @@ import {
   uploadAssetDataUrl,
   uploadAssetFile,
 } from './api/client';
-import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, ViewMode } from './model/types';
+import type { CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode } from './model/types';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
@@ -89,6 +89,9 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('normalized');
   const [activeTool, setActiveTool] = useState('select');
   const [overlayMode, setOverlayMode] = useState(false);
+  const [lineStyle, setLineStyle] = useState<LineStyle>({
+    stroke: '#111111', dash: 'solid', strokeWidth: 2, arrowStart: false, arrowEnd: false,
+  });
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [renumberOpen, setRenumberOpen] = useState(false);
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
@@ -152,11 +155,19 @@ export default function App() {
   }, [activePageId]);
 
   const onScaleChange = useCallback((s: number) => setEffectiveScale(s), []);
+  const lineStyleRef = useRef(lineStyle);
+  lineStyleRef.current = lineStyle;
   const onRegisterApi = useCallback((api: CanvasApi | null) => {
     canvasApiRef.current = api;
+    if (api) api.setLineStyle(lineStyleRef.current);
   }, []);
   const onSelectionChange = useCallback((sel: CanvasSelection | null) => setSelection(sel), []);
   const onToolConsumed = useCallback(() => setActiveTool('select'), []);
+
+  // Push the current new-line style down to the canvas whenever it changes.
+  useEffect(() => {
+    canvasApiRef.current?.setLineStyle(lineStyle);
+  }, [lineStyle]);
 
   // Refs so global paste/keyboard handlers read current values.
   const projectRef = useRef(project);
@@ -772,6 +783,7 @@ export default function App() {
       onSetTheme={setThemeState}
       selection={selection}
       onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
+      onSetLineStyle={(style) => setLineStyle(style)}
     />
   );
 
