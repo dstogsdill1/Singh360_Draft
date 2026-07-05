@@ -37,6 +37,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _catalog  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CB_ROOT = REPO_ROOT / ".docs" / "component_builder"
 CANDIDATES_DIR = CB_ROOT / "work" / "symbol_candidates"
@@ -81,10 +84,8 @@ def load_decisions(path: Path | None) -> dict[str, dict]:
 
 
 def choose_candidate(row: dict, decision: dict) -> Path | None:
-    mfr = row.get("manufacturer") or "generic"
-    cat = row.get("category") or "custom"
-    cid = row.get("id") or ""
-    cdir = CANDIDATES_DIR / mfr / cat / cid
+    cdir = CANDIDATES_DIR / _catalog.slug(row.get("manufacturer") or "generic") \
+        / _catalog.slug(row.get("category") or "custom") / (row.get("id") or "")
     if not cdir.exists():
         return None
     chosen = (decision.get("chosenVariant") or "").strip()
@@ -93,7 +94,8 @@ def choose_candidate(row: dict, decision: dict) -> Path | None:
         if cand.exists():
             return cand
     # deterministic preference order when no explicit choice
-    for name in ("outline", "silhouette", "edges", "threshold", "nobg", "grayscale"):
+    for name in ("device", "lineart", "outline", "silhouette", "edges",
+                 "threshold", "highcontrast", "nobg", "grayscale"):
         cand = cdir / f"{name}.png"
         if cand.exists():
             return cand

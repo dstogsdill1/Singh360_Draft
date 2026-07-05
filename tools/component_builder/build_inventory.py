@@ -25,6 +25,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _catalog  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOL_DIR = Path(__file__).resolve().parent
 CB_ROOT = REPO_ROOT / ".docs" / "component_builder"
@@ -156,11 +159,86 @@ def classify(record: dict, taxonomy: dict, aliases: dict) -> dict:
     }
 
 
+MANIFEST_FIELDS = [
+    "id", "displayName", "manufacturer", "category", "partNumber", "aliases",
+    "sourcePath", "sourceHash", "needsReview", "symbolStatus", "notes",
+]
+
+
+def write_manifest(rows: list[dict], out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=MANIFEST_FIELDS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def run_catalog_mode(args: argparse.Namespace) -> int:
+    manifest = _catalog.resolve_manifest(args.manifest)
+    if not manifest:
+        print(f"[error] manifest not found: {args.manifest}", file=sys.stderr)
+        return 2
+    source_root = _catalog.resolve_source_root(args.source_root, manifest.parent)
+    rows, catalog = _catalog.load_rows(manifest, source_root)
+    if not catalog:
+        print(f"[note] {manifest.name} is not a master catalog; falling back to "
+              "inventory classification is not applicable here.", file=sys.stderr)
+
+    out_rows = []
+    for r in rows:
+        out_rows.append({
+            "id": r["id"],
+            "displayName": r["displayName"],
+            "manufacturer": r["manufacturer"],
+            "category": r["category"],
+            "partNumber": r["partNumber"],
+            "aliases": r["aliases"],
+            "sourcePath": r["sourceRel"] or r["sourceImageFile"],
+            "sourceHash": "",
+            "needsReview": "true" if r["needsReview"] else "false",
+            "symbolStatus": r["symbolStatus"],
+            "notes": r["notes"],
+        })
+
+    out_path = Path(args.out)
+    if not out_path.is_absolute():
+        out_path = REPO_ROOT / out_path
+    write_manifest(out_rows, out_path)
+
+    missing = [r for r in rows if not r["sourceExists"]]
+    missing_specific = [r for r in missing if r["templateSpecific"]]
+    missing_review = [r for r in missing if not r["templateSpecific"]]
+
+    print(f"[ok] read {len(rows)} catalog row(s) from {_catalog.rel_to_repo(manifest)}")
+    print(f"[ok] source-root: {_catalog.rel_to_repo(source_root)}")
+    print(f"[ok] with source image: {sum(1 for r in rows if r['sourceExists'])} | "
+          f"missing image: {len(missing)} "
+          f"(procedural-eligible: {len(missing_specific)}, needsReview: {len(missing_review)})")
+    print(f"[ok] wrote {_catalog.rel_to_repo(out_path)}")
+
+    print("\n[category summary]")
+    print(f"  {'category':22} {'total':>5} {'src':>5} {'proc':>5} {'review':>7}")
+    for c in _catalog.category_summary(rows):
+        print(f"  {c['category']:22} {c['total']:>5} {c['withSource']:>5} "
+              f"{c['proceduralOnly']:>5} {c['needsReview']:>7}")
+
+    if missing_review:
+        print("\n[rows missing source image AND not procedural-drawable -> needsReview]")
+        for r in missing_review:
+            print(f"  - {r['id']} ({r['category']}/{r['templateType'] or 'no-template'})")
+    return 0
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--manifest", default=None,
+                    help="Master catalog CSV (e.g. Singh360_Component_Master_Catalog.csv). "
+                         "If given, classify directly from it instead of source_inventory.json.")
+    ap.add_argument("--source-root", default=None,
+                    help="Root folder for catalog sourceImageFile paths (e.g. 'sources').")
     ap.add_argument("--inventory", default=str(REPORTS_DIR / "source_inventory.json"),
-                    help="Path to source_inventory.json.")
+                    help="Path to source_inventory.json (legacy inventory mode).")
     ap.add_argument("--out", default=str(APPROVED_DIR / "manifest_review.csv"),
                     help="Output manifest CSV path.")
     ap.add_argument("--include-embedded", action="store_true",
@@ -173,6 +251,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.manifest:
+        return run_catalog_mode(args)
+
     inv_path = Path(args.inventory)
     if not inv_path.is_absolute():
         inv_path = REPO_ROOT / inv_path
