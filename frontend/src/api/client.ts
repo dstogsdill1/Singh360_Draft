@@ -503,3 +503,93 @@ export async function deleteLibraryComponent(id: string): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
+// ---------------------------------------------------------------------------
+// Component Library V2 (Milestone 4A) — manifest-backed clean library.
+// ---------------------------------------------------------------------------
+export interface LibV2Port { id: string; x: number; y: number; kind: string }
+
+export interface LibV2Component {
+  id: string;
+  displayName: string;
+  category: string;
+  subcategory?: string;
+  manufacturer?: string;
+  partNumber?: string;
+  aliases?: string[];
+  sourceFile: string;
+  thumbnailFile?: string;
+  symbolFile?: string;
+  type?: string;
+  defaultLabel?: string;
+  defaultWidth?: number;
+  defaultHeight?: number;
+  labelPosition?: string;
+  ports?: LibV2Port[];
+  approved?: boolean;
+  needsReview?: boolean;
+  favorite?: boolean;
+  notes?: string;
+}
+
+export interface LibV2Category { id: string; label: string; count: number }
+
+export interface LibV2Data {
+  ok: boolean;
+  version: number;
+  components: LibV2Component[];
+  categories: LibV2Category[];
+  counts: { total: number; favorites: number; needsReview: number };
+}
+
+export const libV2AssetUrl = (rel: string) => `/api/lib/asset/${rel}`;
+
+export async function getLibV2(): Promise<LibV2Data> {
+  const res = await fetch('/api/lib');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function refreshLibV2(): Promise<{ ok: boolean; scanned: number; added: number; skipped: number; duplicates: number }> {
+  const res = await fetch('/api/lib/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function rebuildLibV2Thumbnails(): Promise<{ ok: boolean; rebuilt: number; missingSource: number }> {
+  const res = await fetch('/api/lib/rebuild-thumbnails', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function cleanLibV2Duplicates(dryRun: boolean): Promise<{ ok: boolean; duplicates?: number; archived?: number; duplicateGroups?: number }> {
+  const res = await fetch('/api/lib/clean-duplicates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun }) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function addLibV2File(category: string, file: File): Promise<{ ok: boolean; saved: string }> {
+  const fd = new FormData();
+  fd.append('category', category);
+  fd.append('file', file);
+  const res = await fetch('/api/lib/add-file', { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function updateLibV2Component(id: string, patch: Partial<LibV2Component>): Promise<{ ok: boolean; component: LibV2Component }> {
+  const res = await fetch(`/api/lib/components/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function renameLibV2File(id: string): Promise<{ ok: boolean; component?: LibV2Component; error?: string }> {
+  const res = await fetch(`/api/lib/components/${id}/rename-file`, { method: 'POST' });
+  return res.json();
+}
+
+export async function generateLibV2Symbol(id: string): Promise<{ ok: boolean; symbolFile?: string }> {
+  const res = await fetch(`/api/lib/components/${id}/symbol`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+

@@ -24,6 +24,15 @@ from flask import Flask, Response, abort, jsonify, redirect, request, send_file,
 from core.csv_importer import build_csv_worksheet_and_pages, import_csv_to_grid
 from core.export_pdf import export_pdf_via_playwright
 from core.library_store import LibraryStore
+from core.library_v2 import LibraryV2
+from core import pdf_import_v2
+from core.drawing_generators import (
+    generate_callout_schedule,
+    generate_component_stack,
+    generate_overall_layout,
+)
+from core.sheet_numbering import default_sheet_index
+from engines.ems_sheet import render_layout_sheet, render_schedule_sheets
 from core.page_composer import compose_pages
 from core.pdf_renderer import get_page_thumbnails, render_page_to_png, is_available as pdf_renderer_available
 from core.pdf_importer import import_pdf
@@ -698,6 +707,169 @@ def get_asset(project_id: str, asset_name: str):
 # Component Library (local .docs/library, seeded from the seed folder)
 # --------------------------------------------------------------------------
 library = LibraryStore(DOCS_DIR, HERE)
+
+# --------------------------------------------------------------------------
+# Component Library V2 (Milestone 4A) — clean root .docs/library/components,
+# manifest.json source of truth. Endpoints are namespaced under /api/lib.
+# --------------------------------------------------------------------------
+lib2 = LibraryV2(DOCS_DIR)
+lib2.ensure()
+
+
+@app.get("/api/lib")
+def lib2_get():
+    return jsonify(lib2.load())
+
+
+@app.post("/api/lib/refresh")
+def lib2_refresh():
+    body = request.get_json(silent=True) or {}
+    try:
+        return jsonify(lib2.refresh(dry_run=bool(body.get("dryRun", False))))
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("lib2 refresh failed: %s", exc)
+        return jsonify(_err("Refresh failed.", str(exc))), 500
+
+
+@app.post("/api/lib/rebuild-thumbnails")
+def lib2_rebuild_thumbnails():
+    try:
+        return jsonify(lib2.rebuild_thumbnails())
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("lib2 rebuild thumbnails failed: %s", exc)
+        return jsonify(_err("Rebuild thumbnails failed.", str(exc))), 500
+
+
+@app.post("/api/lib/clean-duplicates")
+def lib2_clean_duplicates():
+    body = request.get_json(silent=True) or {}
+    try:
+        return jsonify(lib2.clean_duplicates(dry_run=bool(body.get("dryRun", True))))
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("lib2 clean duplicates failed: %s", exc)
+        return jsonify(_err("Clean duplicates failed.", str(exc))), 500
+
+
+@app.post("/api/lib/add-file")
+def lib2_add_file():
+    category = (request.form.get("category") or "custom").strip()
+    upload = request.files.get("file")
+    if upload is None or not upload.filename:
+        return jsonify(_err("A file is required.")), 400
+    try:
+        result = lib2.add_file(category, upload.filename, upload.read())
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("lib2 add file failed: %s", exc)
+        return jsonify(_err("Add file failed.", str(exc))), 500
+    return jsonify(result)
+
+
+@app.patch("/api/lib/components/<comp_id>")
+def lib2_update_component(comp_id: str):
+    patch = request.get_json(silent=True) or {}
+    result = lib2.update_component(comp_id, patch)
+    return jsonify(result), (200 if result.get("ok") else 404)
+
+
+@app.post("/api/lib/components/<comp_id>/rename-file")
+def lib2_rename_file(comp_id: str):
+    result = lib2.rename_file_to_display(comp_id)
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
+@app.post("/api/lib/components/<comp_id>/symbol")
+def lib2_generate_symbol(comp_id: str):
+    result = lib2.generate_symbol(comp_id)
+    return jsonify(result), (200 if result.get("ok") else 404)
+
+
+@app.get("/api/lib/asset/<path:rel>")
+def lib2_asset(rel: str):
+    target = lib2.resolve_asset(rel)
+    if target is None:
+        abort(404)
+    return send_file(str(target))
+
+
+# ---- PDF underlay import (Phase 6) ----
+@app.post("/api/lib/pdf/info")
+def lib2_pdf_info():
+    upload = request.files.get("file")
+    if upload is None or not upload.filename:
+        return jsonify(_err("A PDF file is required.")), 400
+    tmp_dir = DOCS_DIR / "exports" / "pdf_tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp = tmp_dir / f"{uuid.uuid4().hex}.pdf"
+    tmp.write_bytes(upload.read())
+    try:
+        return jsonify(pdf_import_v2.get_pdf_info(tmp))
+    finally:
+        try:
+            tmp.unlink()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@app.post("/api/lib/pdf/import")
+def lib2_pdf_import():
+    upload = request.files.get("file")
+    if upload is None or not upload.filename:
+        return jsonify(_err("A PDF file is required.")), 400
+    try:
+        page_index = int(request.form.get("page", "0"))
+        dpi = int(request.form.get("dpi", str(pdf_import_v2.DPI_STANDARD)))
+    except ValueError:
+        return jsonify(_err("Invalid page or dpi.")), 400
+    autocrop = request.form.get("autocrop", "1") not in ("0", "false", "False")
+    out_dir = DOCS_DIR / "exports" / "underlays"
+    tmp_dir = DOCS_DIR / "exports" / "pdf_tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp = tmp_dir / f"{uuid.uuid4().hex}.pdf"
+    tmp.write_bytes(upload.read())
+    try:
+        result = pdf_import_v2.import_pdf_page(tmp, page_index, out_dir, dpi=dpi, autocrop=autocrop)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("PDF import failed: %s", exc)
+        return jsonify(_err("PDF import failed.", str(exc))), 500
+    finally:
+        try:
+            tmp.unlink()
+        except Exception:  # noqa: BLE001
+            pass
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
+# ---- Data-driven generators (Phase 7) ----
+@app.post("/api/lib/generate/overall-layout")
+def lib2_gen_overall():
+    body = request.get_json(silent=True) or {}
+    graph = generate_overall_layout(body.get("assets") or [], title=body.get("title") or "EMS Controls Overall Layout")
+    sheet = body.get("sheet") or "ansi_b"
+    return jsonify({"ok": True, "graph": graph,
+                    "svg": render_layout_sheet(graph, sheet=sheet, sheet_no=body.get("sheetNo", "EMS 1.0"))})
+
+
+@app.post("/api/lib/generate/component-stack")
+def lib2_gen_stack():
+    body = request.get_json(silent=True) or {}
+    graph = generate_component_stack(body.get("components") or [], title=body.get("title") or "Component Rack / Stack")
+    sheet = body.get("sheet") or "ansi_b"
+    return jsonify({"ok": True, "graph": graph,
+                    "svg": render_layout_sheet(graph, sheet=sheet, sheet_no=body.get("sheetNo", ""))})
+
+
+@app.post("/api/lib/generate/callout-schedule")
+def lib2_gen_callout():
+    body = request.get_json(silent=True) or {}
+    table = generate_callout_schedule(body.get("placed") or [], title=body.get("title") or "Callout Schedule")
+    sheet = body.get("sheet") or "ansi_b"
+    sheets = render_schedule_sheets(table, sheet=sheet, base_sheet_no=body.get("sheetNo", ""))
+    return jsonify({"ok": True, "table": table, "sheets": sheets})
+
+
+@app.get("/api/lib/sheet-index")
+def lib2_sheet_index():
+    return jsonify({"ok": True, "sheets": default_sheet_index()})
 
 
 @app.get("/api/library")

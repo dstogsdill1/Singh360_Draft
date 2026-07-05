@@ -18,7 +18,7 @@ import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, Vi
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
-import ComponentLibrary from './components/ComponentLibrary';
+import LibraryPanelV2 from './components/LibraryPanelV2';
 import DocumentView, { type FitMode, MAX_SCALE, MIN_SCALE } from './components/DocumentView';
 import PropertiesPanel from './components/PropertiesPanel';
 import PrintView from './components/PrintView';
@@ -834,7 +834,7 @@ export default function App() {
             <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
           </CollapsibleSection>
           <CollapsibleSection title="Component Library" defaultOpen={false} hint="Reusable EMS/RDM components. Search, then drag onto the active page.">
-            <ComponentLibrary onInsert={onInsertComponent} canInsert={canvasEnabled} />
+            <LibraryPanelV2 onInsert={onInsertComponent} canInsert={canvasEnabled} />
           </CollapsibleSection>
         </>
       }
