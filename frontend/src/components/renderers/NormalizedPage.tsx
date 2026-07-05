@@ -47,8 +47,11 @@ export default function NormalizedPage({
   const blocks = page.blocks ?? [];
   const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
   const isIndexPage = page.pageType === 'index';
-  const overlayInteractive = overlayMode || activeTool !== 'select';
   const hasOverlay = (page.canvasObjects?.length ?? 0) > 0;
+  // The overlay must capture clicks when: overlay-edit mode is on, a draw tool is
+  // active, OR the page already has overlay objects (so a line you just drew stays
+  // selectable/movable instead of going click-through).
+  const overlayInteractive = overlayMode || activeTool !== 'select' || hasOverlay;
 
   const base = (() => {
     // Generated sheet index / TOC — live-computed from current project pages.
