@@ -511,14 +511,22 @@ export interface LibV2Port { id: string; x: number; y: number; kind: string }
 export interface LibV2Component {
   id: string;
   displayName: string;
+  shortName?: string;
   category: string;
   subcategory?: string;
   manufacturer?: string;
   partNumber?: string;
   aliases?: string[];
+  searchTerms?: string[];
   sourceFile: string;
+  edgeFile?: string;
+  bwFile?: string;
   thumbnailFile?: string;
   symbolFile?: string;
+  sourceUrl?: string;
+  edgeUrl?: string;
+  bwUrl?: string;
+  thumbnailUrl?: string;
   type?: string;
   defaultLabel?: string;
   defaultWidth?: number;
@@ -530,8 +538,15 @@ export interface LibV2Component {
   favorite?: boolean;
   notes?: string;
   hasSource?: boolean;
+  hasEdge?: boolean;
+  hasBw?: boolean;
+  canBwFallback?: boolean;
   hasSymbol?: boolean;
   status?: string;
+  preferredEdgeVariant?: string;
+  edgeVariantOptions?: string[];
+  chosenVariant?: string;
+  retired?: boolean;
 }
 
 export interface LibV2Category { id: string; label: string; count: number }
@@ -542,14 +557,16 @@ export interface LibV2Data {
   components: LibV2Component[];
   categories: LibV2Category[];
   hasLegacy?: boolean;
+  legacyCount?: number;
   libraryRoot?: string;
-  counts: { total: number; favorites: number; needsReview: number; withSymbol?: number };
+  counts: { total: number; favorites: number; needsReview: number; withSymbol?: number; withEdge?: number };
 }
 
 export const libV2AssetUrl = (rel: string) => `/api/lib/asset/${rel}`;
 
-export async function getLibV2(): Promise<LibV2Data> {
-  const res = await fetch('/api/lib');
+export async function getLibV2(includeLegacy: boolean = false): Promise<LibV2Data> {
+  const q = includeLegacy ? '?includeLegacy=1' : '';
+  const res = await fetch(`/api/lib${q}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -583,6 +600,25 @@ export async function addLibV2File(category: string, file: File): Promise<{ ok: 
 
 export async function updateLibV2Component(id: string, patch: Partial<LibV2Component>): Promise<{ ok: boolean; component: LibV2Component }> {
   const res = await fetch(`/api/lib/components/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function duplicateLibV2Component(id: string): Promise<{ ok: boolean; component: LibV2Component; error?: string }> {
+  const res = await fetch(`/api/lib/components/${id}/duplicate`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function replaceLibV2Asset(
+  id: string,
+  target: 'source' | 'edge' | 'bw',
+  file: File,
+): Promise<{ ok: boolean; component?: LibV2Component; error?: string }> {
+  const fd = new FormData();
+  fd.append('target', target);
+  fd.append('file', file);
+  const res = await fetch(`/api/lib/components/${id}/replace-asset`, { method: 'POST', body: fd });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

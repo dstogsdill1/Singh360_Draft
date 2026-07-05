@@ -87,3 +87,14 @@ Update statuses here as work progresses. `In Progress` = actively being built,
 - Existing fake `*.symbol.svg` files are archived and unlinked from manifest.
 - Deep editor hardening (connectors/polyline/no-scroll/pdf underlay wiring)
   remains out of scope for this phase-zero cleanup pass.
+
+## Milestone 4D — Component Library UX: Source / Edge / B&W only
+
+| Phase | Item | Status |
+| ----- | ---- | ------ |
+| 1 | Representation contract (`sourceUrl`, `edgeUrl`, `bwUrl`, `thumbnailUrl`, flags, search terms) | Done |
+| 2 | Approved export first + hide stale legacy by default | Done |
+| 3 | Normal panel simplified (Search, Category, Source/Edge/B&W, Open Builder, Refresh, cards) | Done |
+| 4 | Open Component Builder modal (Components + Advanced) | Done |
+| 5 | Edge-first defaults + clean label priority | Done |
+| 6 | Smoke coverage updates | Done |

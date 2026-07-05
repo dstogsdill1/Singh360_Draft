@@ -740,7 +740,8 @@ lib2.ensure()
 
 @app.get("/api/lib")
 def lib2_get():
-    return jsonify(lib2.load())
+    include_legacy = request.args.get("includeLegacy", "0") in {"1", "true", "True", "yes"}
+    return jsonify(lib2.load(include_legacy=include_legacy))
 
 
 @app.post("/api/lib/refresh")
@@ -827,6 +828,22 @@ def lib2_update_component(comp_id: str):
     patch = request.get_json(silent=True) or {}
     result = lib2.update_component(comp_id, patch)
     return jsonify(result), (200 if result.get("ok") else 404)
+
+
+@app.post("/api/lib/components/<comp_id>/duplicate")
+def lib2_duplicate_component(comp_id: str):
+    result = lib2.duplicate_component(comp_id)
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
+@app.post("/api/lib/components/<comp_id>/replace-asset")
+def lib2_replace_asset(comp_id: str):
+    target = (request.form.get("target") or "").strip().lower()
+    upload = request.files.get("file")
+    if upload is None or not upload.filename:
+        return jsonify(_err("A replacement file is required.")), 400
+    result = lib2.replace_component_asset(comp_id, target, upload.filename, upload.read())
+    return jsonify(result), (200 if result.get("ok") else 400)
 
 
 @app.post("/api/lib/components/<comp_id>/rename-file")
@@ -1557,6 +1574,9 @@ def archive_project(project_id: str):
         app.logger.error("archive_project failed for %s: %s", project_id, exc)
         return jsonify(_err("Failed to archive project.", str(exc))), 500
     return jsonify({"ok": True, "id": project_id, "archivedTo": str(dest)})
+
+
+@app.post("/api/projects/<project_id>/export/package")
 def export_package(project_id: str):
     """Build a ZIP package: project.json + sources + assets + latest PDF + manifest."""
     import io

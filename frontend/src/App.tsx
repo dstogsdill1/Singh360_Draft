@@ -212,13 +212,6 @@ export default function App() {
     canvasApiRef.current?.addComponent(url, name, label);
   };
 
-  // Insert BOTH the source image and the B/W symbol side-by-side ("Both" mode).
-  const onInsertComponentBoth = (name: string, sourceUrl: string, symbolUrl: string, label: string | null) => {
-    if (!isCanvasContext()) return;
-    setOverlayMode(true);
-    canvasApiRef.current?.addComponentPair(sourceUrl, symbolUrl, name, label);
-  };
-
   const onDropComponent = (url: string, name: string, label: string | null, clientX: number, clientY: number) => {
     if (!isCanvasContext()) return;
     setOverlayMode(true);
@@ -853,7 +846,7 @@ export default function App() {
             <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
           </CollapsibleSection>
           <CollapsibleSection title="Component Library" defaultOpen={false} hint="Reusable EMS/RDM components. Search, then drag onto the active page.">
-            <LibraryPanelV2 onInsert={onInsertComponent} onInsertBoth={onInsertComponentBoth} canInsert={canvasEnabled} />
+            <LibraryPanelV2 onInsert={onInsertComponent} canInsert={canvasEnabled} activePageType={activePage?.pageType} />
           </CollapsibleSection>
         </>
       }

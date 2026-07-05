@@ -36,6 +36,22 @@
 .libv2-actions { display: flex; gap: 4px; margin-top: 4px; }
 
 .libv2-empty { padding: 12px; color: #888; font-size: 12px; }
+.libv2-missing { color: #9a3412; font-size: 11px; }
+.libv2-insert-menu { position: relative; }
+.libv2-insert-menu summary { list-style: none; cursor: pointer; border: 1px solid #d0d0d0; border-radius: 4px; padding: 2px 6px; background: #fff; }
+.libv2-insert-menu summary::-webkit-details-marker { display: none; }
+.libv2-insert-menu[open] > div { position: absolute; top: 22px; right: 0; z-index: 5; background: #fff; border: 1px solid #d0d0d0; border-radius: 6px; display: grid; gap: 4px; padding: 6px; min-width: 150px; }
+
+.libv2-modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.libv2-modal { width: min(960px, 92vw); max-height: 88vh; overflow: auto; background: #fff; border-radius: 10px; border: 1px solid #d0d0d0; padding: 10px; display: grid; gap: 8px; }
+.libv2-modal-head { display: flex; justify-content: space-between; align-items: center; }
+.libv2-builder-grid { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 10px; }
+.libv2-builder-list { margin-top: 6px; display: grid; gap: 4px; max-height: 48vh; overflow: auto; }
+.libv2-builder-list button { text-align: left; border: 1px solid #d7d7d7; border-radius: 6px; padding: 5px 7px; background: #fff; }
+.libv2-builder-list button.active { border-color: #2563eb; background: #eff6ff; }
+.libv2-previews { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.libv2-builder-grid label { display: grid; gap: 4px; margin-bottom: 6px; }
+.libv2-advanced { display: grid; gap: 8px; }
 
 .libv2-editor { margin-top: 10px; border-top: 1px solid #ddd; padding-top: 8px; overflow-x: hidden; min-width: 0; }
 .libv2-editor-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }

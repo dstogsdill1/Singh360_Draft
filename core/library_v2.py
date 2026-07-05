@@ -29,6 +29,7 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 try:  # Pillow is optional; hashing/thumbnails degrade gracefully without it.
     from PIL import Image
@@ -67,12 +68,48 @@ EDITABLE_FIELDS = {
     "notes",
     "ports",
     "type",
+    "preferredEdgeVariant",
+    "edgeFile",
+    "bwFile",
+    "sourceFile",
+    "symbolFile",
+    "retired",
+    "shortName",
 }
+
+EDGE_VARIANT_PRIORITY = ["lineart", "edges", "outline", "silhouette"]
+EDGE_PREFERRED_NAMES = set([*EDGE_VARIANT_PRIORITY, "edge", "line_art"])
+BW_VARIANT_PRIORITY = ["highcontrast", "threshold", "grayscale", "nobg"]
+BW_PREFERRED_NAMES = set([*BW_VARIANT_PRIORITY, "bw", "blackwhite"])
+NO_LABEL_CATEGORIES = {"logos", "reference_pages"}
 
 
 def _slug(text: str) -> str:
     s = re.sub(r"[^a-zA-Z0-9]+", "-", (text or "").strip()).strip("-")
     return s or "component"
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (text or "").strip().lower())
+
+
+def _variant_from_symbol(path: str) -> str:
+    stem = Path(path or "").stem.lower()
+    m = re.search(r"__([a-z0-9_-]+)$", stem)
+    if m:
+        return m.group(1)
+    return ""
+
+
+def _asset_name_is_hashy(value: str) -> bool:
+    v = (value or "").strip()
+    if not v:
+        return True
+    if re.search(r"[0-9a-f]{10,}", v.lower()):
+        return True
+    if v.lower().startswith(("controller_", "asset_")):
+        return True
+    return False
 
 
 # Legacy folder (`.docs/library/assets/components/<cat>`) -> V2 canonical folder.
@@ -774,28 +811,53 @@ class LibraryV2:
         }
 
     # ---- read ------------------------------------------------------------
-    def load(self) -> dict:
+    def load(self, include_legacy: bool = False) -> dict:
         self.ensure()
         export = self._load_builder_export()
         legacy_count = 0
         if export is not None:
-            comps = export
-            # Count stale manifest entries that the approved export supersedes.
-            export_ids = {c.get("id") for c in export}
             manifest = self._read_manifest()
-            legacy_count = sum(
-                1
-                for c in manifest.get("components", [])
-                if c.get("id") not in export_ids and c.get("origin") != "override" and c.get("sourceFile")
-            )
+            override_by_id = {c.get("id"): c for c in manifest.get("components", [])}
+
+            approved: list[dict] = []
+            approved_keys: set[str] = set()
+            for c in export:
+                merged = dict(c)
+                ov = override_by_id.get(c.get("id"))
+                if ov:
+                    for key in EDITABLE_FIELDS:
+                        if key in ov and ov[key] not in (None, ""):
+                            merged[key] = ov[key]
+                    if ov.get("favorite"):
+                        merged["favorite"] = True
+                payload = self._compose_component_payload(merged)
+                if payload.get("retired"):
+                    continue
+                approved.append(payload)
+                approved_keys.update(self._identity_keys(payload))
+
+            legacy_candidates: list[dict] = []
+            for raw in manifest.get("components", []):
+                if raw.get("origin") == "override":
+                    continue
+                payload = self._compose_component_payload(raw)
+                if payload.get("retired"):
+                    continue
+                legacy_candidates.append(payload)
+
+            stale_hidden = 0
+            legacy_visible: list[dict] = []
+            for c in legacy_candidates:
+                if self._identity_keys(c) & approved_keys:
+                    stale_hidden += 1
+                    continue
+                legacy_visible.append(c)
+
+            legacy_count = stale_hidden + len(legacy_visible)
+            comps = approved + (legacy_visible if include_legacy else [])
         else:
             manifest = self._read_manifest()
-            comps = manifest["components"]
-            for c in comps:
-                sf = c.get("sourceFile", "")
-                syf = c.get("symbolFile", "")
-                c["hasSource"] = bool(sf) and (self.root / sf).exists()
-                c["hasSymbol"] = bool(syf) and (self.root / syf).exists()
+            comps = [self._compose_component_payload(c) for c in manifest["components"] if not c.get("retired")]
         counts: dict[str, int] = {}
         for c in comps:
             counts[c.get("category", "custom")] = counts.get(c.get("category", "custom"), 0) + 1
@@ -815,6 +877,7 @@ class LibraryV2:
                 "favorites": sum(1 for c in comps if c.get("favorite")),
                 "needsReview": sum(1 for c in comps if c.get("needsReview")),
                 "withSymbol": sum(1 for c in comps if c.get("hasSymbol")),
+                "withEdge": sum(1 for c in comps if c.get("hasEdge")),
             },
             "connectorStyles": self._read_connectors(),
         }
@@ -855,7 +918,6 @@ class LibraryV2:
         if not isinstance(entries, list) or not entries:
             return None
 
-        overrides = {c.get("id"): c for c in self._read_manifest().get("components", [])}
         out: list[dict] = []
         seen_ids: set[str] = set()
         for e in entries:
@@ -865,8 +927,6 @@ class LibraryV2:
                 category = "custom"
             source_rel = self._rel_from_any(e.get("sourceComponent", ""))
             symbol_rel = self._rel_from_any(e.get("symbol", ""))
-            has_source = bool(source_rel) and (self.root / source_rel).exists()
-            has_symbol = bool(symbol_rel) and (self.root / symbol_rel).exists()
             cid = e.get("id") or _slug(e.get("displayName", "") or Path(source_rel).stem)
             if cid in seen_ids:
                 cid = f"{cid}_{uuid.uuid4().hex[:6]}"
@@ -882,10 +942,12 @@ class LibraryV2:
                 "manufacturer": e.get("manufacturer", "") or "",
                 "partNumber": part,
                 "aliases": e.get("aliases", []) or [],
-                "sourceFile": source_rel if has_source else "",
+                "sourceFile": source_rel,
                 "thumbnailFile": "",
-                "symbolFile": symbol_rel if has_symbol else "",
-                "symbolStatus": "built" if has_symbol else "not_built",
+                "symbolFile": symbol_rel,
+                "edgeFile": "",
+                "bwFile": "",
+                "symbolStatus": "built" if symbol_rel else "not_built",
                 "type": cd.type,
                 "defaultLabel": part or display,
                 "defaultWidth": cd.width,
@@ -897,17 +959,10 @@ class LibraryV2:
                 "favorite": False,
                 "notes": e.get("notes", "") or "",
                 "status": "approved",
-                "hasSource": has_source,
-                "hasSymbol": has_symbol,
+                "chosenVariant": e.get("chosenVariant", ""),
+                "preferredEdgeVariant": e.get("preferredEdgeVariant", ""),
                 "origin": "builder_export",
             }
-            ov = overrides.get(cid)
-            if ov:
-                for key in EDITABLE_FIELDS:
-                    if key in ov and ov[key] not in (None, ""):
-                        comp[key] = ov[key]
-                if ov.get("favorite"):
-                    comp["favorite"] = True
             out.append(comp)
         return out
 
@@ -916,6 +971,278 @@ class LibraryV2:
             return json.loads(self.connectors_path.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
             return connector_styles_payload()
+
+    @staticmethod
+    def _url_for_asset(rel: str) -> str:
+        rel_clean = (rel or "").replace("\\", "/").lstrip("/")
+        return f"/api/lib/asset/{quote(rel_clean, safe='/-_.~')}" if rel_clean else ""
+
+    def _variant_candidates(self, category: str, symbol_rel: str, source_rel: str) -> dict[str, str]:
+        out: dict[str, str] = {}
+        if symbol_rel:
+            v = _variant_from_symbol(symbol_rel)
+            if v:
+                out[v] = symbol_rel
+        if not category:
+            return out
+        cat_dir = self.symbols / category
+        if not cat_dir.exists():
+            return out
+
+        base = ""
+        if symbol_rel:
+            base = re.sub(r"__[a-z0-9_-]+$", "", Path(symbol_rel).stem, flags=re.IGNORECASE)
+        if not base and source_rel:
+            base = Path(source_rel).stem
+        if not base:
+            return out
+
+        for p in cat_dir.iterdir():
+            if not p.is_file():
+                continue
+            stem = p.stem
+            if stem == base:
+                out.setdefault("device", self._rel(p))
+                continue
+            m = re.match(rf"^{re.escape(base)}__([a-z0-9_-]+)$", stem, flags=re.IGNORECASE)
+            if not m:
+                continue
+            out.setdefault(m.group(1).lower(), self._rel(p))
+        return out
+
+    @staticmethod
+    def _clean_display_name(display: str, source_rel: str, comp_id: str) -> str:
+        candidates = [display, Path(source_rel or "").stem, comp_id]
+        for raw in candidates:
+            if not raw:
+                continue
+            value = raw.replace("_", " ").strip()
+            if value and not _asset_name_is_hashy(value):
+                return value
+        return (display or "Component").strip() or "Component"
+
+    @staticmethod
+    def _label_for_component(comp: dict) -> str:
+        for raw in (
+            comp.get("defaultLabel", ""),
+            comp.get("partNumber", ""),
+            comp.get("displayName", ""),
+            comp.get("shortName", ""),
+        ):
+            val = str(raw or "").strip()
+            if val and not _asset_name_is_hashy(val):
+                return val
+        return ""
+
+    @staticmethod
+    def _identity_keys(comp: dict) -> set[str]:
+        keys: set[str] = set()
+        cid = str(comp.get("id") or "").strip().lower()
+        if cid:
+            keys.add(f"id:{cid}")
+        name = _norm(str(comp.get("displayName") or ""))
+        if name:
+            keys.add(f"name:{name}")
+        part = _norm(str(comp.get("partNumber") or ""))
+        if part:
+            keys.add(f"part:{part}")
+        for alias in comp.get("aliases") or []:
+            a = _norm(str(alias))
+            if a:
+                keys.add(f"alias:{a}")
+        ch = str(comp.get("contentHash") or "").strip().lower()
+        if ch:
+            keys.add(f"hash:{ch}")
+        return keys
+
+    def _compose_component_payload(self, raw: dict) -> dict:
+        category = (raw.get("category") or "custom").lower()
+        if category not in LIBRARY_CATEGORIES:
+            category = "custom"
+
+        source_rel = self._rel_from_any(raw.get("sourceFile") or raw.get("sourceComponent") or "")
+        edge_override = self._rel_from_any(raw.get("edgeFile") or "")
+        bw_override = self._rel_from_any(raw.get("bwFile") or "")
+        symbol_rel = self._rel_from_any(raw.get("symbolFile") or raw.get("symbol") or "")
+
+        has_source = bool(source_rel) and (self.root / source_rel).exists()
+        if not has_source:
+            source_rel = ""
+
+        has_symbol = bool(symbol_rel) and (self.root / symbol_rel).exists()
+        if not has_symbol:
+            symbol_rel = ""
+
+        if edge_override and not (self.root / edge_override).exists():
+            edge_override = ""
+        if bw_override and not (self.root / bw_override).exists():
+            bw_override = ""
+
+        variants = self._variant_candidates(category, symbol_rel, source_rel)
+        chosen_variant = str(raw.get("chosenVariant") or "").strip().lower()
+        preferred_variant = str(raw.get("preferredEdgeVariant") or "").strip().lower()
+
+        edge_rel = ""
+        if edge_override:
+            edge_rel = edge_override
+        elif preferred_variant and preferred_variant in variants:
+            edge_rel = variants[preferred_variant]
+        elif chosen_variant in EDGE_PREFERRED_NAMES and chosen_variant in variants:
+            edge_rel = variants[chosen_variant]
+        else:
+            for v in EDGE_VARIANT_PRIORITY:
+                if v in variants:
+                    edge_rel = variants[v]
+                    break
+            if not edge_rel and symbol_rel:
+                edge_rel = symbol_rel
+
+        bw_rel = ""
+        can_bw_fallback = False
+        if bw_override:
+            bw_rel = bw_override
+        else:
+            for v in BW_VARIANT_PRIORITY:
+                if v in variants:
+                    bw_rel = variants[v]
+                    break
+            if not bw_rel and chosen_variant in BW_PREFERRED_NAMES and chosen_variant in variants:
+                bw_rel = variants[chosen_variant]
+            if not bw_rel and symbol_rel and chosen_variant in BW_PREFERRED_NAMES:
+                bw_rel = symbol_rel
+            if not bw_rel and source_rel:
+                can_bw_fallback = True
+
+        thumb_rel = self._rel_from_any(raw.get("thumbnailFile") or "")
+        if not thumb_rel or not (self.root / thumb_rel).exists():
+            thumb_rel = source_rel
+
+        source_url = self._url_for_asset(source_rel)
+        edge_url = self._url_for_asset(edge_rel)
+        bw_url = self._url_for_asset(bw_rel)
+        if not bw_url and can_bw_fallback and source_rel:
+            bw_url = self._url_for_asset(source_rel) + "?bw=1"
+        thumb_url = self._url_for_asset(thumb_rel)
+
+        cid = raw.get("id") or _slug(raw.get("displayName") or Path(source_rel or edge_rel or "").stem)
+        display = self._clean_display_name(raw.get("displayName") or "", source_rel, cid)
+        part = str(raw.get("partNumber") or "").strip()
+        aliases = [str(a).strip() for a in (raw.get("aliases") or []) if str(a).strip()]
+
+        search_terms = [display, part, *aliases, str(raw.get("manufacturer") or "").strip(), category]
+        label = self._label_for_component({
+            "defaultLabel": raw.get("defaultLabel") or "",
+            "partNumber": part,
+            "displayName": display,
+            "shortName": raw.get("shortName") or "",
+        })
+        if category in NO_LABEL_CATEGORIES:
+            label = ""
+
+        return {
+            **raw,
+            "id": cid,
+            "displayName": display,
+            "category": category,
+            "partNumber": part,
+            "defaultLabel": label,
+            "aliases": aliases,
+            "searchTerms": [x for x in search_terms if x],
+            "sourceFile": source_rel,
+            "symbolFile": symbol_rel,
+            "edgeFile": edge_override,
+            "bwFile": bw_override,
+            "sourceUrl": source_url,
+            "edgeUrl": edge_url,
+            "bwUrl": bw_url,
+            "thumbnailUrl": thumb_url,
+            "hasSource": bool(source_url),
+            "hasEdge": bool(edge_url),
+            "hasBw": bool(bw_url),
+            "canBwFallback": can_bw_fallback,
+            "hasSymbol": bool(symbol_rel),
+            "preferredEdgeVariant": preferred_variant or "",
+            "edgeVariantOptions": sorted(list(variants.keys())),
+            "chosenVariant": chosen_variant,
+            "retired": bool(raw.get("retired", False)),
+        }
+
+    def duplicate_component(self, comp_id: str) -> dict:
+        source = next((c for c in self.load(include_legacy=True).get("components", []) if c.get("id") == comp_id), None)
+        if not source:
+            return {"ok": False, "error": "Component not found."}
+        manifest = self._read_manifest()
+        new_id = f"{_slug(source.get('id') or 'component')}_{uuid.uuid4().hex[:6]}"
+        clone = {
+            "id": new_id,
+            "displayName": f"{source.get('displayName') or 'Component'} Copy",
+            "category": source.get("category") or "custom",
+            "partNumber": source.get("partNumber") or "",
+            "aliases": list(source.get("aliases") or []),
+            "sourceFile": source.get("sourceFile") or "",
+            "symbolFile": source.get("symbolFile") or "",
+            "edgeFile": source.get("edgeFile") or "",
+            "bwFile": source.get("bwFile") or "",
+            "defaultLabel": source.get("defaultLabel") or "",
+            "preferredEdgeVariant": source.get("preferredEdgeVariant") or "",
+            "origin": "override",
+            "createdAt": _now(),
+        }
+        manifest.setdefault("components", []).append(clone)
+        self._write_manifest(manifest)
+        return {"ok": True, "component": self._compose_component_payload(clone)}
+
+    def replace_component_asset(self, comp_id: str, target: str, filename: str, data: bytes) -> dict:
+        target = (target or "").strip().lower()
+        if target not in {"source", "edge", "bw"}:
+            return {"ok": False, "error": "target must be source, edge, or bw."}
+
+        current = next((c for c in self.load(include_legacy=True).get("components", []) if c.get("id") == comp_id), None)
+        if not current:
+            return {"ok": False, "error": "Component not found."}
+
+        ext = Path(filename or "").suffix.lower() or ".png"
+        if ext not in SOURCE_EXTS:
+            return {"ok": False, "error": "Unsupported file type."}
+
+        category = current.get("category") if current.get("category") in LIBRARY_CATEGORIES else "custom"
+        stem = _slug(current.get("id") or current.get("displayName") or "component")
+        if target == "source":
+            out_dir = self.components / category
+            file_name = f"{stem}{ext}"
+        elif target == "edge":
+            out_dir = self.symbols / category
+            file_name = f"{stem}__custom{ext}"
+        else:
+            out_dir = self.symbols / category
+            file_name = f"{stem}__bw{ext}"
+
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / file_name
+        i = 1
+        while dest.exists():
+            if target == "source":
+                dest = out_dir / f"{stem}-{i}{ext}"
+            elif target == "edge":
+                dest = out_dir / f"{stem}__custom-{i}{ext}"
+            else:
+                dest = out_dir / f"{stem}__bw-{i}{ext}"
+            i += 1
+        dest.write_bytes(data)
+        rel = self._rel(dest)
+
+        patch: dict = {}
+        if target == "source":
+            patch["sourceFile"] = rel
+        elif target == "edge":
+            patch["edgeFile"] = rel
+            patch["preferredEdgeVariant"] = "custom"
+        else:
+            patch["bwFile"] = rel
+
+        self.update_component(comp_id, patch)
+        updated = next((c for c in self.load(include_legacy=True).get("components", []) if c.get("id") == comp_id), None)
+        return {"ok": True, "component": updated}
 
     # ---- add file --------------------------------------------------------
     def add_file(self, category: str, filename: str, data: bytes) -> dict:
