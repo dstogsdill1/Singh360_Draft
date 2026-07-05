@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addLibV2File,
   cleanLibV2PhysicalDuplicates,
-  generateAllLibV2Symbols,
-  generateLibV2Symbol,
   getLibV2,
   libV2AssetUrl,
   migrateLegacyLibV2,
@@ -27,7 +25,7 @@ const NO_LABEL_CATS = new Set(['logos', 'symbols_markers', 'reference_pages']);
 // Categories that keep their SOURCE image even in Symbol view (real logos).
 const SOURCE_ONLY_CATS = new Set(['logos', 'reference_pages']);
 
-type FilterMode = 'all' | 'favorites' | 'needsReview';
+type FilterMode = 'all' | 'favorites';
 type ViewRep = 'source' | 'symbol' | 'both';
 
 function labelFor(c: LibV2Component): string | null {
@@ -87,7 +85,6 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
     return components.filter((c) => {
       if (category !== 'all' && c.category !== category) return false;
       if (mode === 'favorites' && !c.favorite) return false;
-      if (mode === 'needsReview' && !c.needsReview) return false;
       if (!q) return true;
       const hay = [
         c.displayName, c.defaultLabel, c.partNumber, c.manufacturer,
@@ -154,13 +151,8 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
       window.alert(`Migrate complete.\nCopied: ${r.copied}`);
     } finally { setLoading(false); }
   };
-  const doGenerateSymbols = async () => {
-    setLoading(true);
-    try {
-      const r = await generateAllLibV2Symbols();
-      await load();
-      window.alert(`Generate Symbols\nGenerated: ${r.generated}\nSkipped (logos/reference): ${r.skipped}`);
-    } finally { setLoading(false); }
+  const openComponentBuilder = () => {
+    window.alert('Coming later — opens Component Builder workflow.');
   };
   const onPickFiles = async (files: FileList | null) => {
     if (!files || !files.length) return;
@@ -205,9 +197,9 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
           </button>
         </div>
         <div className="libv2-row libv2-modes">
-          {(['all', 'favorites', 'needsReview'] as FilterMode[]).map((m) => (
+          {(['all', 'favorites'] as FilterMode[]).map((m) => (
             <button key={m} className={mode === m ? 'active' : undefined} onClick={() => setMode(m)}>
-              {m === 'all' ? 'All' : m === 'favorites' ? 'Favorites' : 'Needs Review'}
+              {m === 'all' ? 'All' : 'Favorites'}
             </button>
           ))}
         </div>
@@ -226,9 +218,9 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
           {data?.hasLegacy && (
             <button onClick={() => void doMigrate()} disabled={loading} title="Copy legacy .docs/library/assets/components into V2">Migrate Legacy Components</button>
           )}
-          <button onClick={() => void doGenerateSymbols()} disabled={loading}>Generate Symbols</button>
           <button onClick={() => void doRebuild()} disabled={loading}>Rebuild Thumbnails</button>
           <button onClick={() => void doClean()} disabled={loading}>Clean Duplicates</button>
+          <button onClick={openComponentBuilder} title="Coming later — opens Component Builder">Open Component Builder</button>
           <input ref={fileInput} type="file" multiple accept="image/*,.pdf,.svg" hidden
             onChange={(e) => void onPickFiles(e.target.files)} />
         </div>
@@ -304,7 +296,7 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
             <label><input type="checkbox" checked={!!selected.needsReview} onChange={(e) => void patchSelected({ needsReview: e.target.checked })} /> Needs review</label>
           </div>
           <div className="libv2-editor-actions">
-            <button onClick={async () => { await generateLibV2Symbol(selected.id); await load(); }}>Generate Symbol</button>
+            <button onClick={openComponentBuilder}>Generate Symbol (Component Builder)</button>
             <button onClick={async () => {
               const r = await renameLibV2File(selected.id);
               if (!r.ok) window.alert(r.error || 'Rename failed'); else await load();

@@ -65,3 +65,25 @@ Update statuses here as work progresses. `In Progress` = actively being built,
 - Phases 7, 10–16 (deep editor: connectors, polylines, PDF underlay wiring,
   generator UI, workflow placeholder, no-scroll, insert grouping, template
   tooltips) are NOT done this pass — deferred, not faked.
+
+## Milestone 4C — Phase Zero runtime cleanup
+
+| Phase | Item | Status |
+| ----- | ---- | ------ |
+| A | Runtime inspect script (`inspect_runtime_workspace.py`) | Done |
+| B | Minimal `.docs` self-heal on startup + cleanup script | Done |
+| C | Fake generated symbol cleanup script + manifest clear | Done |
+| D | Legacy runtime folder consolidator (dry-run + apply archive move) | Done |
+| E | Active roots locked (`components`, `symbols`, `thumbnails`) | Done |
+| F | Simplified normal library panel (no fake symbol generation) | Done |
+| G | Runtime docs (`docs/COMPONENT_LIBRARY_RUNTIME.md`) | Done |
+| H | KANBAN update | Done |
+| I | Required tests | In Progress |
+
+### 4C honest flags
+
+- This pass intentionally **does not build real equipment symbols**. Symbol
+  creation is deferred to a future Component Builder workflow.
+- Existing fake `*.symbol.svg` files are archived and unlinked from manifest.
+- Deep editor hardening (connectors/polyline/no-scroll/pdf underlay wiring)
+  remains out of scope for this phase-zero cleanup pass.

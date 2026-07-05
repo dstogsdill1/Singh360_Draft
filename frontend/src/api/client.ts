@@ -610,7 +610,7 @@ export interface MigrateLegacyPreview {
 export async function migrateLegacyLibV2(dryRun: boolean): Promise<MigrateLegacyPreview> {
   const res = await fetch('/api/lib/migrate-legacy', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dryRun, rebuildThumbnails: true, generateSymbols: true }),
+    body: JSON.stringify({ dryRun, rebuildThumbnails: true, generateSymbols: false }),
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

@@ -48,6 +48,28 @@ FRONTEND_DIST_DIR = HERE / "frontend" / "dist"
 DOCS_DIR = HERE / ".docs"
 DOCS_DIR.mkdir(exist_ok=True)
 
+
+def _ensure_minimal_runtime_workspace(docs: Path) -> None:
+    """Self-heal only the active minimal runtime structure under `.docs/.`"""
+    (docs / "projects").mkdir(parents=True, exist_ok=True)
+    (docs / "exports").mkdir(parents=True, exist_ok=True)
+    (docs / "archive").mkdir(parents=True, exist_ok=True)
+    (docs / "library" / "components").mkdir(parents=True, exist_ok=True)
+    (docs / "library" / "symbols").mkdir(parents=True, exist_ok=True)
+    (docs / "library" / "thumbnails").mkdir(parents=True, exist_ok=True)
+    manifest = docs / "library" / "manifest.json"
+    aliases = docs / "library" / "aliases.json"
+    connectors = docs / "library" / "connector_styles.json"
+    if not manifest.exists():
+        manifest.write_text('{\n  "version": 2,\n  "components": []\n}\n', encoding="utf-8")
+    if not aliases.exists():
+        aliases.write_text('{\n  "version": 1,\n  "aliases": {}\n}\n', encoding="utf-8")
+    if not connectors.exists():
+        connectors.write_text('{\n  "version": 1,\n  "presets": []\n}\n', encoding="utf-8")
+
+
+_ensure_minimal_runtime_workspace(DOCS_DIR)
+
 PROJECT_ID_RE = re.compile(r"^[a-f0-9]{16}$")
 _DEFAULT_PORT = 8765
 
@@ -758,7 +780,7 @@ def lib2_migrate_legacy():
         return jsonify(lib2.migrate_legacy(
             dry_run=dry,
             rebuild_thumbnails=bool(body.get("rebuildThumbnails", True)),
-            generate_symbols=bool(body.get("generateSymbols", True)),
+            generate_symbols=bool(body.get("generateSymbols", False)),
         ))
     except Exception as exc:  # noqa: BLE001
         app.logger.error("lib2 migrate legacy failed: %s", exc)
@@ -768,7 +790,8 @@ def lib2_migrate_legacy():
 @app.post("/api/lib/generate-symbols")
 def lib2_generate_symbols():
     try:
-        return jsonify(lib2.generate_all_symbols())
+        result = lib2.generate_all_symbols()
+        return jsonify(result), (200 if result.get("ok") else 400)
     except Exception as exc:  # noqa: BLE001
         app.logger.error("lib2 generate symbols failed: %s", exc)
         return jsonify(_err("Generate symbols failed.", str(exc))), 500
@@ -815,7 +838,7 @@ def lib2_rename_file(comp_id: str):
 @app.post("/api/lib/components/<comp_id>/symbol")
 def lib2_generate_symbol(comp_id: str):
     result = lib2.generate_symbol(comp_id)
-    return jsonify(result), (200 if result.get("ok") else 404)
+    return jsonify(result), (200 if result.get("ok") else 400)
 
 
 @app.get("/api/lib/asset/<path:rel>")

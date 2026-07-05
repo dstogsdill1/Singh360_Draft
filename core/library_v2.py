@@ -40,7 +40,6 @@ from core.drawing_style import (
     category_default,
     connector_styles_payload,
 )
-from core.symbol_generator import generate_symbol_svg
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
 PDF_EXT = {".pdf"}
@@ -116,6 +115,7 @@ class LibraryV2:
         self.docs = Path(docs_dir)
         self.root = self.docs / "library"
         self.components = self.root / "components"
+        self.symbols = self.root / "symbols"
         self.thumbnails = self.root / "thumbnails"
         self.manifest_path = self.root / "manifest.json"
         self.aliases_path = self.root / "aliases.json"
@@ -126,10 +126,11 @@ class LibraryV2:
 
     # ---- scaffolding -----------------------------------------------------
     def ensure(self) -> None:
-        for top in (self.projects, self.exports, self.archive, self.components, self.thumbnails):
+        for top in (self.projects, self.exports, self.archive, self.components, self.symbols, self.thumbnails):
             top.mkdir(parents=True, exist_ok=True)
         for cat in LIBRARY_CATEGORIES:
             (self.components / cat).mkdir(parents=True, exist_ok=True)
+            (self.symbols / cat).mkdir(parents=True, exist_ok=True)
         if not self.manifest_path.exists():
             self._write_manifest({"version": MANIFEST_VERSION, "components": [], "updatedAt": _now()})
         if not self.aliases_path.exists():
@@ -212,6 +213,26 @@ class LibraryV2:
     def _rel(self, path: Path) -> str:
         return path.relative_to(self.root).as_posix()
 
+    def _approved_symbol_for(self, category: str, source_file_rel: str) -> str:
+        """Return library-relative approved symbol path for a source file if present.
+
+        Approved symbols live under `.docs/library/symbols/<category>/<stem>.svg`.
+        """
+        stem = Path(source_file_rel).stem
+        candidate = self.symbols / category / f"{stem}.svg"
+        if candidate.exists():
+            return self._rel(candidate)
+        return ""
+
+    def _sync_symbol_links(self, manifest: dict) -> None:
+        """Re-link manifest entries to approved symbols without generating any."""
+        for comp in manifest.get("components", []):
+            category = comp.get("category", "custom")
+            source_rel = comp.get("sourceFile", "")
+            approved = self._approved_symbol_for(category, source_rel)
+            comp["symbolFile"] = approved
+            comp["symbolStatus"] = "built" if approved else "not_built"
+
     # ---- refresh (idempotent) --------------------------------------------
     def refresh(self, dry_run: bool = False) -> dict:
         """Scan components/, add new files as manifest entries, block duplicates.
@@ -262,6 +283,7 @@ class LibraryV2:
             added += 1
 
         if not dry_run:
+            self._sync_symbol_links(manifest)
             self._write_manifest(manifest)
         return {
             "ok": True,
@@ -276,6 +298,8 @@ class LibraryV2:
     def _new_entry(self, category: str, path: Path, chash: str, phash: str | None) -> dict:
         cd = category_default(category)
         stem = path.stem
+        source_rel = self._rel(path)
+        approved_symbol = self._approved_symbol_for(category, source_rel)
         width = height = None
         if Image is not None and path.suffix.lower() in IMAGE_EXTS and path.suffix.lower() != ".svg":
             try:
@@ -291,9 +315,10 @@ class LibraryV2:
             "manufacturer": "",
             "partNumber": "",
             "aliases": [],
-            "sourceFile": self._rel(path),
+            "sourceFile": source_rel,
             "thumbnailFile": "",
-            "symbolFile": "",
+            "symbolFile": approved_symbol,
+            "symbolStatus": "built" if approved_symbol else "not_built",
             "type": cd.type,
             "defaultLabel": stem,
             "defaultWidth": cd.width,
@@ -308,7 +333,7 @@ class LibraryV2:
             "perceptualHash": phash,
             "imageWidth": width,
             "imageHeight": height,
-            "source": {"file": self._rel(path)},
+            "source": {"file": source_rel},
             "createdAt": _now(),
         }
 
@@ -487,53 +512,21 @@ class LibraryV2:
 
     # ---- symbol generation (Phase 3) -------------------------------------
     def generate_symbol(self, comp_id: str) -> dict:
-        manifest = self._read_manifest()
-        comp = next((c for c in manifest["components"] if c.get("id") == comp_id), None)
-        if comp is None:
-            return {"ok": False, "error": "Component not found."}
-        src = self.root / comp.get("sourceFile", "")
-        stem = src.stem if src.name else _slug(comp.get("displayName", "component"))
-        svg = generate_symbol_svg(comp)
-        sym_path = (self.components / comp.get("category", "custom") / f"{stem}{SYMBOL_SUFFIX}")
-        sym_path.parent.mkdir(parents=True, exist_ok=True)
-        sym_path.write_text(svg, encoding="utf-8")
-        comp["symbolFile"] = self._rel(sym_path)
-        comp["updatedAt"] = _now()
-        self._write_manifest(manifest)
-        return {"ok": True, "symbolFile": comp["symbolFile"]}
+        _ = comp_id
+        return {
+            "ok": False,
+            "error": "Symbol Builder workflow not yet enabled. Open Component Builder.",
+        }
 
     def generate_all_symbols(self, skip_categories: set[str] | None = None) -> dict:
-        """Bulk-generate B/W symbols for every component (skip logos/reference).
-
-        Skipped categories keep their SOURCE image: any previously-generated
-        symbol is cleared so a logo never shows a generated box.
-        """
-        skip = SYMBOL_SKIP_CATEGORIES if skip_categories is None else skip_categories
-        manifest = self._read_manifest()
-        generated = skipped = cleared = 0
-        for comp in manifest["components"]:
-            if comp.get("category") in skip:
-                skipped += 1
-                if comp.get("symbolFile"):
-                    old = self.root / comp["symbolFile"]
-                    try:
-                        if old.exists():
-                            old.unlink()
-                    except Exception:  # noqa: BLE001
-                        pass
-                    comp["symbolFile"] = ""
-                    cleared += 1
-                continue
-            stem = Path(comp.get("sourceFile", "")).stem or _slug(comp.get("displayName", "component"))
-            svg = generate_symbol_svg(comp)
-            sym_path = self.components / comp.get("category", "custom") / f"{stem}{SYMBOL_SUFFIX}"
-            sym_path.parent.mkdir(parents=True, exist_ok=True)
-            sym_path.write_text(svg, encoding="utf-8")
-            comp["symbolFile"] = self._rel(sym_path)
-            comp["updatedAt"] = _now()
-            generated += 1
-        self._write_manifest(manifest)
-        return {"ok": True, "generated": generated, "skipped": skipped, "clearedSymbols": cleared}
+        _ = skip_categories
+        return {
+            "ok": False,
+            "error": "Symbol Builder workflow not yet enabled. Open Component Builder.",
+            "generated": 0,
+            "skipped": 0,
+            "clearedSymbols": 0,
+        }
 
     # ---- legacy migration (Phase 1/2) ------------------------------------
     @property
@@ -580,7 +573,7 @@ class LibraryV2:
         return hashes
 
     def migrate_legacy(self, dry_run: bool = True, *, rebuild_thumbnails: bool = True,
-                       generate_symbols: bool = True) -> dict:
+                       generate_symbols: bool = False) -> dict:
         """Copy legacy `assets/components/<cat>` files into the V2 root.
 
         Never deletes legacy files; skips exact-SHA256 duplicates (already in V2
@@ -652,7 +645,10 @@ class LibraryV2:
         if rebuild_thumbnails:
             result["thumbnails"] = self.rebuild_thumbnails()
         if generate_symbols:
-            result["symbols"] = self.generate_all_symbols()
+            result["symbols"] = {
+                "ok": False,
+                "error": "Symbol Builder workflow not yet enabled. Open Component Builder.",
+            }
         return result
 
     # ---- physical duplicate cleanup (Phase 5) ----------------------------
@@ -732,6 +728,47 @@ class LibraryV2:
         self._write_manifest(manifest)
         return {"ok": True, "removed": removed}
 
+    def archive_fake_symbols(self, dry_run: bool = True) -> dict:
+        """Move generated `*.symbol.svg` under components/ to archive and clear
+        manifest references, marking symbolStatus=not_built.
+        """
+        self.ensure()
+        fake_paths = sorted(self.components.rglob(f"*{SYMBOL_SUFFIX}"))
+        if dry_run:
+            return {"ok": True, "dryRun": True, "fakeSymbols": len(fake_paths)}
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        target = self.archive / f"fake_symbols_{stamp}"
+        target.mkdir(parents=True, exist_ok=True)
+
+        moved = 0
+        for src in fake_paths:
+            rel = src.relative_to(self.components)
+            dst = target / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.move(str(src), str(dst))
+                moved += 1
+            except Exception:  # noqa: BLE001
+                pass
+
+        manifest = self._read_manifest()
+        cleared = 0
+        for c in manifest.get("components", []):
+            if c.get("symbolFile", "").endswith(SYMBOL_SUFFIX):
+                c["symbolFile"] = ""
+                c["symbolStatus"] = "not_built"
+                c["updatedAt"] = _now()
+                cleared += 1
+        self._write_manifest(manifest)
+        return {
+            "ok": True,
+            "dryRun": False,
+            "moved": moved,
+            "manifestCleared": cleared,
+            "archiveDir": target.name,
+        }
+
     # ---- read ------------------------------------------------------------
     def load(self) -> dict:
         self.ensure()
@@ -753,7 +790,11 @@ class LibraryV2:
                 "total": len(comps),
                 "favorites": sum(1 for c in comps if c.get("favorite")),
                 "needsReview": sum(1 for c in comps if c.get("needsReview")),
-                "withSymbol": sum(1 for c in comps if c.get("symbolFile")),
+                "withSymbol": sum(
+                    1
+                    for c in comps
+                    if c.get("symbolFile") and (self.root / c.get("symbolFile", "")).exists()
+                ),
             },
             "connectorStyles": self._read_connectors(),
         }
