@@ -49,7 +49,10 @@ export class Connector extends Polyline {
       strokeLineCap: 'round',
       strokeLineJoin: 'round',
       objectCaching: false,
-      perPixelTargetFind: true,
+      // Easy to grab: clicking anywhere in the line's bounding band selects it
+      // (a hair-thin per-pixel target was nearly impossible to click).
+      perPixelTargetFind: false,
+      padding: 6,
       hasBorders: false,
       cornerColor: '#12539b',
       cornerStyle: 'circle',

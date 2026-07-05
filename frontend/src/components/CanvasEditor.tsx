@@ -165,6 +165,9 @@ export default function CanvasEditor({
   const creatingPolyRef = useRef<Connector | null>(null);
   // Committed absolute vertices while building a line (preview point excluded).
   const polyCommittedRef = useRef<Array<{ x: number; y: number }>>([]);
+  // Finalizes any in-progress line (set inside the mount effect). Called when the
+  // tool changes so the user can NEVER get stuck mid-draw.
+  const finalizeRef = useRef<(() => void) | null>(null);
   // Transient alignment guide lines (never serialized/exported).
   const guidesRef = useRef<FabricObject[]>([]);
 
@@ -316,6 +319,7 @@ export default function CanvasEditor({
       };
     };
     const isLineTool = (t: string) => t === 'line' || t === 'arrow' || t === 'polyline' || t === 'elbow';
+    const isMultiPoint = (kind: string) => kind === 'polyline' || kind === 'elbow';
 
     canvas.on('mouse:down', (opt) => {
       const tool = toolRef.current;
@@ -328,7 +332,8 @@ export default function CanvasEditor({
       const py = sp(p.y);
 
       if (isLineTool(tool) || building) {
-        const isElbow = (creatingPolyRef.current?.connectorKind ?? tool) === 'elbow';
+        const kind = (creatingPolyRef.current?.connectorKind ?? tool) as string;
+        const isElbow = kind === 'elbow';
         if (!creatingPolyRef.current) {
           // First click: start the line at this point.
           polyCommittedRef.current = [{ x: px, y: py }];
@@ -352,6 +357,10 @@ export default function CanvasEditor({
           }
           conn.setAbsPoints(committed);
           canvas.requestRenderAll();
+          // Simple Line / Arrow = exactly two points → finish now (auto-select).
+          if (!isMultiPoint(kind) && committed.length >= 2) {
+            finishLine(true);
+          }
         }
         return;
       }
@@ -387,28 +396,52 @@ export default function CanvasEditor({
       canvas.requestRenderAll();
     });
 
-    const finishPoly = () => {
+    // Finish the in-progress line: keep it, select it, and (by default) return to
+    // the Select tool so the user can immediately move/edit it.
+    const finishLine = (backToSelect = true) => {
       const poly = creatingPolyRef.current;
       if (!poly) return;
       creatingPolyRef.current = null;
       const committed = polyCommittedRef.current;
       const finalPts = committed.length >= 2 ? committed : poly.getAbsPoints();
       poly.setAbsPoints(finalPts);
+      poly.setCoords();
       polyCommittedRef.current = [];
       canvas.setActiveObject(poly);
       canvas.requestRenderAll();
       onChanged();
-      consumeRef.current();
+      if (backToSelect) consumeRef.current();
+    };
+    // Silently wrap up a half-drawn line when the tool changes (keep if >=2 pts,
+    // otherwise drop it) — prevents ever getting stuck mid-draw.
+    finalizeRef.current = () => {
+      const poly = creatingPolyRef.current;
+      if (!poly) return;
+      const committed = polyCommittedRef.current;
+      if (committed.length >= 2) {
+        creatingPolyRef.current = null;
+        poly.setAbsPoints(committed);
+        poly.setCoords();
+        polyCommittedRef.current = [];
+        onChanged();
+      } else {
+        canvas.remove(poly);
+        creatingPolyRef.current = null;
+        polyCommittedRef.current = [];
+      }
+      canvas.requestRenderAll();
     };
 
     const onKeyDown = (ev: KeyboardEvent) => {
       const poly = creatingPolyRef.current;
       if (!poly) return;
       if (ev.key === 'Escape') {
+        // Always escape cleanly back to Select — never leave a stuck state.
         canvas.remove(poly);
         creatingPolyRef.current = null;
         polyCommittedRef.current = [];
         canvas.requestRenderAll();
+        consumeRef.current();
         return;
       }
       if (ev.key === 'Backspace') {
@@ -423,14 +456,14 @@ export default function CanvasEditor({
       }
       if (ev.key === 'Enter') {
         ev.preventDefault();
-        finishPoly();
+        finishLine();
       }
     };
     const onDblClick = (ev: MouseEvent) => {
       if (!creatingPolyRef.current) return;
       ev.preventDefault();
       ev.stopPropagation();
-      finishPoly();
+      finishLine();
     };
     window.addEventListener('keydown', onKeyDown);
     canvas.upperCanvasEl?.addEventListener('dblclick', onDblClick);
@@ -450,6 +483,9 @@ export default function CanvasEditor({
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
+    // Any half-drawn line is wrapped up before the mode switches, so changing
+    // tools/tabs can never leave the canvas stuck in "building" mode.
+    finalizeRef.current?.();
     const drawing = activeTool !== 'select';
     canvas.selection = !drawing;
     canvas.skipTargetFind = drawing;
@@ -457,8 +493,8 @@ export default function CanvasEditor({
     canvas.hoverCursor = drawing ? 'crosshair' : 'move';
     if (drawing) {
       canvas.discardActiveObject();
-      canvas.requestRenderAll();
     }
+    canvas.requestRenderAll();
   }, [activeTool]);
 
   // NOTE: overlay pointer-events are driven purely by React/CSS in NormalizedPage
