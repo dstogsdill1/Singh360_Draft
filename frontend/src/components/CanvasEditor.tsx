@@ -297,7 +297,10 @@ export default function CanvasEditor({
     canvas.on('mouse:up', () => { clearGuides(); canvas.requestRenderAll(); });
     canvas.on('mouse:down', (opt) => {
       const tool = toolRef.current;
-      if (tool === 'select' || opt.target) return;
+      // While actively building a polyline/elbow, EVERY click drops a point —
+      // even if it lands on the line being drawn. Don't let target-hit bail out.
+      const buildingPoly = !!creatingPolyRef.current && (tool === 'polyline' || tool === 'elbow');
+      if (!buildingPoly && (tool === 'select' || opt.target)) return;
       const p = canvas.getScenePoint(opt.e);
       const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
       const px = sp(p.x);

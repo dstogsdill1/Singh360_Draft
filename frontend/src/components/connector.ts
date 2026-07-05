@@ -1,32 +1,15 @@
-import { Polyline, Control, Point, util, classRegistry } from 'fabric';
+import { Polyline, controlsUtils, Point, classRegistry } from 'fabric';
 
 /**
  * Connector — a real multi-point line/arrow/polyline/elbow built on Fabric's
- * native Polyline so the bounding box, hit-testing, whole-object move and vertex
- * editing all behave correctly (PowerPoint/Visio style).
- *
- * Points live in Fabric's local "points" space; absolute scene coordinates are
- * always derivable from the object transform, so:
- *  - drag the body → the whole connector moves (native Fabric transform)
- *  - drag a vertex handle → only that point moves
- *  - it serializes/reloads/exports as one stable object
+ * native Polyline. Vertex editing uses Fabric's OFFICIAL built-in
+ * `controlsUtils.createPolyControls()` (the poly-controls demo recipe) so every
+ * point is a grabbable handle and dragging the body moves the whole object —
+ * exactly like PowerPoint / Visio.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyOpts = Record<string, any>;
 type XY = { x: number; y: number };
-
-function renderHandle(ctx: CanvasRenderingContext2D, left: number, top: number) {
-  const s = 8;
-  ctx.save();
-  ctx.fillStyle = '#12539b';
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(left, top, s / 2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-}
 
 function normalizePoints(input: unknown, options: AnyOpts): XY[] {
   if (Array.isArray(options.pointsData) && options.pointsData.length >= 2) {
@@ -66,11 +49,12 @@ export class Connector extends Polyline {
       strokeLineCap: 'round',
       strokeLineJoin: 'round',
       objectCaching: false,
-      perPixelTargetFind: false,
-      padding: 10,
-      hasBorders: true,
-      borderColor: '#12539b',
-      borderScaleFactor: 2,
+      perPixelTargetFind: true,
+      hasBorders: false,
+      cornerColor: '#12539b',
+      cornerStyle: 'circle',
+      cornerSize: 10,
+      transparentCorners: false,
       ...options,
       fill: '',
     });
@@ -80,7 +64,13 @@ export class Connector extends Polyline {
     this.connectorKind = options.connectorKind ?? (options.arrowEnd ? 'arrow' : 'line');
     this.label = options.label;
     if (options.strokeDashArray) this.strokeDashArray = options.strokeDashArray;
-    this.rebuildVertexControls();
+    this.applyVertexControls();
+  }
+
+  /** Swap the object's controls for one grabbable handle per vertex. */
+  applyVertexControls() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.controls = controlsUtils.createPolyControls(this as any);
   }
 
   // ---- absolute scene coordinates -----------------------------------------
@@ -96,7 +86,7 @@ export class Connector extends Polyline {
     if (!abs || abs.length < 2) return;
     this.points = abs.map((p) => new Point(p.x, p.y));
     this.setBoundingBox(true);
-    this.rebuildVertexControls();
+    this.applyVertexControls();
     this.setCoords();
     this.dirty = true;
   }
@@ -172,22 +162,6 @@ export class Connector extends Polyline {
     ctx.restore();
   }
 
-  rebuildVertexControls() {
-    const controls: Record<string, Control> = {};
-    (this.points as XY[]).forEach((_p, idx) => {
-      const control = new Control({
-        positionHandler: polyPositionHandler,
-        actionHandler: anchorWrapper(idx > 0 ? idx - 1 : 1, polyActionHandler),
-        actionName: 'modifyConnector',
-        cursorStyle: 'crosshair',
-        render: renderHandle,
-      });
-      (control as unknown as Record<string, unknown>).pointIndex = idx;
-      controls[`p${idx}`] = control;
-    });
-    this.controls = controls;
-  }
-
   addVertexAtMidpoint() {
     const abs = this.getAbsPoints();
     if (abs.length < 2) return;
@@ -235,63 +209,6 @@ export class Connector extends Polyline {
       this.setAbsPoints(abs);
     }
   }
-}
-
-// ---- Fabric editable-polygon control recipe -------------------------------
-function polyPositionHandler(
-  this: Control,
-  _dim: Point,
-  _finalMatrix: unknown,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fabricObject: any,
-): Point {
-  const idx = (this as unknown as Record<string, number>).pointIndex ?? 0;
-  const p = fabricObject.points[idx] ?? fabricObject.points[0];
-  const x = p.x - fabricObject.pathOffset.x;
-  const y = p.y - fabricObject.pathOffset.y;
-  const vpt = fabricObject.canvas?.viewportTransform;
-  const m = vpt
-    ? util.multiplyTransformMatrices(vpt, fabricObject.calcTransformMatrix())
-    : fabricObject.calcTransformMatrix();
-  return new Point(x, y).transform(m);
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function polyActionHandler(_eventData: unknown, transform: any, x: number, y: number): boolean {
-  const polygon = transform.target;
-  const currentControl = polygon.controls[polygon.__corner];
-  const idx = (currentControl as Record<string, number>).pointIndex ?? 0;
-  const mouseLocalPosition = polygon.toLocalPoint(new Point(x, y), 'center', 'center');
-  const polygonBaseSize = polygon._getNonTransformedDimensions();
-  const size = polygon._getTransformedDimensions();
-  const finalX = (mouseLocalPosition.x * polygonBaseSize.x) / size.x + polygon.pathOffset.x;
-  const finalY = (mouseLocalPosition.y * polygonBaseSize.y) / size.y + polygon.pathOffset.y;
-  polygon.points[idx] = new Point(finalX, finalY);
-  return true;
-}
-
-function anchorWrapper(
-  anchorIndex: number,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fn: (eventData: unknown, transform: any, x: number, y: number) => boolean,
-) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return function (eventData: unknown, transform: any, x: number, y: number): boolean {
-    const fabricObject = transform.target;
-    const idx = Math.min(anchorIndex, fabricObject.points.length - 1);
-    const absolutePoint = new Point(
-      fabricObject.points[idx].x - fabricObject.pathOffset.x,
-      fabricObject.points[idx].y - fabricObject.pathOffset.y,
-    ).transform(fabricObject.calcTransformMatrix());
-    const actionPerformed = fn(eventData, transform, x, y);
-    fabricObject.setBoundingBox();
-    const polygonBaseSize = fabricObject._getNonTransformedDimensions();
-    const newX = (fabricObject.points[idx].x - fabricObject.pathOffset.x) / polygonBaseSize.x;
-    const newY = (fabricObject.points[idx].y - fabricObject.pathOffset.y) / polygonBaseSize.y;
-    fabricObject.setPositionByOrigin(absolutePoint, newX + 0.5, newY + 0.5);
-    fabricObject.rebuildVertexControls?.();
-    return actionPerformed;
-  };
 }
 
 classRegistry.setClass(Connector);
