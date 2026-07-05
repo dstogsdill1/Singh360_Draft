@@ -750,6 +750,41 @@ def lib2_clean_duplicates():
         return jsonify(_err("Clean duplicates failed.", str(exc))), 500
 
 
+@app.post("/api/lib/migrate-legacy")
+def lib2_migrate_legacy():
+    body = request.get_json(silent=True) or {}
+    dry = bool(body.get("dryRun", True))
+    try:
+        return jsonify(lib2.migrate_legacy(
+            dry_run=dry,
+            rebuild_thumbnails=bool(body.get("rebuildThumbnails", True)),
+            generate_symbols=bool(body.get("generateSymbols", True)),
+        ))
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("lib2 migrate legacy failed: %s", exc)
+        return jsonify(_err("Migrate legacy failed.", str(exc))), 500
+
+
+@app.post("/api/lib/generate-symbols")
+def lib2_generate_symbols():
+    try:
+        return jsonify(lib2.generate_all_symbols())
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("lib2 generate symbols failed: %s", exc)
+        return jsonify(_err("Generate symbols failed.", str(exc))), 500
+
+
+@app.post("/api/lib/clean-physical-duplicates")
+def lib2_clean_physical_duplicates():
+    body = request.get_json(silent=True) or {}
+    try:
+        return jsonify(lib2.clean_physical_duplicates(dry_run=bool(body.get("dryRun", True))))
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("lib2 clean physical duplicates failed: %s", exc)
+        return jsonify(_err("Clean physical duplicates failed.", str(exc))), 500
+
+
+
 @app.post("/api/lib/add-file")
 def lib2_add_file():
     category = (request.form.get("category") or "custom").strip()

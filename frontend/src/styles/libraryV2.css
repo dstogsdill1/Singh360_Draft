@@ -18,6 +18,16 @@
 .libv2-thumb { width: 100%; height: 72px; object-fit: contain; background: #fafafa; }
 .libv2-grid.list .libv2-thumb { width: 48px; height: 48px; }
 
+.libv2-fallback { width: 100%; height: 72px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 10px; color: #666; background: repeating-linear-gradient(45deg, #f4f4f4, #f4f4f4 6px, #ececec 6px, #ececec 12px); border: 1px dashed #ccc; overflow: hidden; padding: 2px; box-sizing: border-box; }
+.libv2-grid.list .libv2-fallback { width: 48px; height: 48px; }
+
+.libv2-both { display: flex; gap: 4px; }
+.libv2-both > * { flex: 1; height: 72px; }
+.libv2-grid.list .libv2-both > * { height: 48px; }
+
+.libv2-badge { display: inline-block; margin-left: 6px; padding: 0 4px; font-size: 9px; font-weight: 700; color: #111; background: #e7e7e7; border: 1px solid #bbb; border-radius: 3px; }
+.libv2-rep-label { align-self: center; font-size: 11px; color: #666; margin-right: 2px; }
+
 .libv2-meta { min-width: 0; flex: 1; }
 .libv2-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .libv2-part { font-size: 11px; color: #555; }

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addLibV2File,
-  cleanLibV2Duplicates,
+  cleanLibV2PhysicalDuplicates,
+  generateAllLibV2Symbols,
   generateLibV2Symbol,
   getLibV2,
   libV2AssetUrl,
+  migrateLegacyLibV2,
   rebuildLibV2Thumbnails,
   refreshLibV2,
   renameLibV2File,
@@ -22,20 +24,35 @@ interface Props {
 
 // Categories that never get an auto label (logos / markers / reference pages).
 const NO_LABEL_CATS = new Set(['logos', 'symbols_markers', 'reference_pages']);
+// Categories that keep their SOURCE image even in Symbol view (real logos).
+const SOURCE_ONLY_CATS = new Set(['logos', 'reference_pages']);
 
 type FilterMode = 'all' | 'favorites' | 'needsReview';
+type ViewRep = 'source' | 'symbol' | 'both';
 
 function labelFor(c: LibV2Component): string | null {
   if (NO_LABEL_CATS.has((c.category || '').toLowerCase())) return null;
   return c.defaultLabel || c.partNumber || c.displayName || null;
 }
 
-// Prefer the black-and-white drawing symbol for insertion; fall back to source.
-function insertUrl(c: LibV2Component): string {
-  return libV2AssetUrl(c.symbolFile || c.sourceFile);
+function fileStem(path?: string): string {
+  if (!path) return '';
+  const base = path.split('/').pop() || path;
+  return base.replace(/\.[^.]+$/, '');
 }
-function thumbUrl(c: LibV2Component): string {
+
+// URL of the source preview (thumbnail if present, else raw source).
+function sourceThumbUrl(c: LibV2Component): string {
   return libV2AssetUrl(c.thumbnailFile || c.sourceFile);
+}
+function symbolUrl(c: LibV2Component): string | null {
+  return c.symbolFile ? libV2AssetUrl(c.symbolFile) : null;
+}
+// Which URL to insert given the current representation preference.
+function insertUrlFor(c: LibV2Component, rep: ViewRep): string {
+  const cat = (c.category || '').toLowerCase();
+  if (rep === 'source' || SOURCE_ONLY_CATS.has(cat)) return libV2AssetUrl(c.sourceFile);
+  return libV2AssetUrl(c.symbolFile || c.sourceFile);
 }
 
 export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
@@ -44,6 +61,7 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [mode, setMode] = useState<FilterMode>('all');
+  const [rep, setRep] = useState<ViewRep>('both');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -71,20 +89,22 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
       if (mode === 'favorites' && !c.favorite) return false;
       if (mode === 'needsReview' && !c.needsReview) return false;
       if (!q) return true;
-      const hay = [c.displayName, c.partNumber, c.manufacturer, (c.aliases || []).join(' ')]
-        .join(' ').toLowerCase();
+      const hay = [
+        c.displayName, c.defaultLabel, c.partNumber, c.manufacturer,
+        (c.aliases || []).join(' '), c.category, fileStem(c.sourceFile),
+      ].join(' ').toLowerCase();
       return hay.includes(q);
     });
   }, [components, query, category, mode]);
 
   const doInsert = (c: LibV2Component) => {
     if (!canInsert) return;
-    onInsert(c.displayName, insertUrl(c), labelFor(c));
+    onInsert(c.displayName, insertUrlFor(c, rep === 'both' ? 'symbol' : rep), labelFor(c));
   };
 
   const onDragStart = (e: React.DragEvent, c: LibV2Component) => {
     e.dataTransfer.setData(COMPONENT_DRAG_TYPE, JSON.stringify({
-      name: c.displayName, url: insertUrl(c), label: labelFor(c),
+      name: c.displayName, url: insertUrlFor(c, rep === 'both' ? 'symbol' : rep), label: labelFor(c),
     }));
     e.dataTransfer.effectAllowed = 'copy';
   };
@@ -106,15 +126,41 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
     } finally { setLoading(false); }
   };
   const doClean = async () => {
-    const preview = await cleanLibV2Duplicates(true);
+    const preview = await cleanLibV2PhysicalDuplicates(true);
     if (!(preview.duplicates && preview.duplicates > 0)) {
-      window.alert('Clean Duplicates: no duplicates found.');
+      window.alert('Clean Duplicates: no physical duplicates found.');
       return;
     }
-    if (!window.confirm(`Move ${preview.duplicates} duplicate(s) to .docs/archive?`)) return;
-    const r = await cleanLibV2Duplicates(false);
-    await load();
-    window.alert(`Clean Duplicates\nArchived: ${r.archived}`);
+    if (!window.confirm(`Move ${preview.duplicates} duplicate file(s) to .docs/archive? (originals are kept)`)) return;
+    setLoading(true);
+    try {
+      const r = await cleanLibV2PhysicalDuplicates(false);
+      await load();
+      window.alert(`Clean Duplicates\nArchived: ${r.archived}`);
+    } finally { setLoading(false); }
+  };
+  const doMigrate = async () => {
+    const preview = await migrateLegacyLibV2(true);
+    if (!preview.willCopy) {
+      window.alert(`Migrate Legacy Components\nLegacy files found: ${preview.legacyFound ?? 0}\nNothing new to copy (all already present).`);
+      return;
+    }
+    const cats = Object.entries(preview.targetCategories ?? {}).map(([k, v]) => `  ${k}: ${v}`).join('\n');
+    if (!window.confirm(`Migrate Legacy Components\nWill copy: ${preview.willCopy}\nSkip duplicates: ${preview.willSkipDuplicates}\nInto categories:\n${cats}\n\nProceed?`)) return;
+    setLoading(true);
+    try {
+      const r = await migrateLegacyLibV2(false);
+      await load();
+      window.alert(`Migrate complete.\nCopied: ${r.copied}`);
+    } finally { setLoading(false); }
+  };
+  const doGenerateSymbols = async () => {
+    setLoading(true);
+    try {
+      const r = await generateAllLibV2Symbols();
+      await load();
+      window.alert(`Generate Symbols\nGenerated: ${r.generated}\nSkipped (logos/reference): ${r.skipped}`);
+    } finally { setLoading(false); }
   };
   const onPickFiles = async (files: FileList | null) => {
     if (!files || !files.length) return;
@@ -165,9 +211,22 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
             </button>
           ))}
         </div>
+        <div className="libv2-row libv2-modes">
+          <span className="libv2-rep-label">Show:</span>
+          {(['source', 'symbol', 'both'] as ViewRep[]).map((r) => (
+            <button key={r} className={rep === r ? 'active' : undefined} onClick={() => setRep(r)}
+              title={r === 'source' ? 'Source image' : r === 'symbol' ? 'Black/white symbol' : 'Both'}>
+              {r === 'source' ? 'Source' : r === 'symbol' ? 'B/W Symbol' : 'Both'}
+            </button>
+          ))}
+        </div>
         <div className="libv2-row wrap">
           <button onClick={() => fileInput.current?.click()}>Add Files</button>
           <button onClick={() => void doRefresh()} disabled={loading}>Refresh Library</button>
+          {data?.hasLegacy && (
+            <button onClick={() => void doMigrate()} disabled={loading} title="Copy legacy .docs/library/assets/components into V2">Migrate Legacy Components</button>
+          )}
+          <button onClick={() => void doGenerateSymbols()} disabled={loading}>Generate Symbols</button>
           <button onClick={() => void doRebuild()} disabled={loading}>Rebuild Thumbnails</button>
           <button onClick={() => void doClean()} disabled={loading}>Clean Duplicates</button>
           <input ref={fileInput} type="file" multiple accept="image/*,.pdf,.svg" hidden
@@ -180,14 +239,18 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
           <div key={c.id} className={selectedId === c.id ? 'libv2-card selected' : 'libv2-card'}
             draggable={canInsert} onDragStart={(e) => onDragStart(e, c)}
             onClick={() => setSelectedId(c.id)}>
-            <img className="libv2-thumb" src={thumbUrl(c)} alt={c.displayName}
-              onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }} />
+            <CardPreview c={c} rep={rep} />
             <div className="libv2-meta">
               <div className="libv2-name">{c.displayName}</div>
               {c.partNumber ? <div className="libv2-part">{c.partNumber}</div> : null}
-              <div className="libv2-cat">{c.category}</div>
+              <div className="libv2-cat">
+                {c.category}
+                {c.symbolFile ? <span className="libv2-badge" title="Black/white symbol available">B/W</span> : null}
+              </div>
               <div className="libv2-actions">
-                <button onClick={(e) => { e.stopPropagation(); doInsert(c); }} disabled={!canInsert} title="Insert with label onto active page">Insert</button>
+                <button onClick={(e) => { e.stopPropagation(); doInsert(c); }} disabled={!canInsert} title="Insert onto active page (with label)">Insert</button>
+                <button onClick={(e) => { e.stopPropagation(); if (canInsert) onInsert(c.displayName, insertUrlFor(c, 'source'), labelFor(c)); }} disabled={!canInsert} title="Insert source image">Src</button>
+                <button onClick={(e) => { e.stopPropagation(); if (canInsert && c.symbolFile) onInsert(c.displayName, insertUrlFor(c, 'symbol'), labelFor(c)); }} disabled={!canInsert || !c.symbolFile} title="Insert black/white symbol">B/W</button>
                 <button onClick={(e) => { e.stopPropagation(); setSelectedId(c.id); }} title="Edit">Edit</button>
                 <button onClick={(e) => { e.stopPropagation(); void toggleFavorite(c); }}
                   className={c.favorite ? 'active' : undefined} title={c.favorite ? 'Unfavorite' : 'Favorite'}>{c.favorite ? '★' : '☆'}</button>
@@ -195,7 +258,7 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
             </div>
           </div>
         ))}
-        {!filtered.length && <div className="libv2-empty">No components. Add files or Refresh Library.</div>}
+        {!filtered.length && <div className="libv2-empty">No components. {data?.hasLegacy ? 'Click Migrate Legacy Components,' : 'Add files or'} Refresh Library.</div>}
       </div>
 
       {selected && (
@@ -260,4 +323,34 @@ function EditorRow({ label, children }: { label: string; children: React.ReactNo
       <span>{children}</span>
     </label>
   );
+}
+
+// A thumbnail that never shows a broken-image icon: on error it swaps to a
+// clean fallback tile with the filename.
+function SafeImg({ url, alt, title }: { url: string; alt: string; title?: string }) {
+  const [ok, setOk] = useState(true);
+  if (!ok || !url) {
+    return <div className="libv2-fallback" title={title || alt}>{alt}</div>;
+  }
+  return <img className="libv2-thumb" src={url} alt={alt} title={title} onError={() => setOk(false)} />;
+}
+
+// Card preview honouring the Source / B/W Symbol / Both representation choice.
+function CardPreview({ c, rep }: { c: LibV2Component; rep: ViewRep }) {
+  const cat = (c.category || '').toLowerCase();
+  const sym = symbolUrl(c);
+  const src = sourceThumbUrl(c);
+  const forceSource = SOURCE_ONLY_CATS.has(cat);
+  if (rep === 'symbol' && sym && !forceSource) {
+    return <SafeImg url={sym} alt={c.displayName} title="Black/white symbol" />;
+  }
+  if (rep === 'both' && sym && !forceSource) {
+    return (
+      <div className="libv2-both">
+        <SafeImg url={src} alt={c.displayName} title="Source" />
+        <SafeImg url={sym} alt={c.displayName} title="B/W symbol" />
+      </div>
+    );
+  }
+  return <SafeImg url={src} alt={c.displayName} title="Source" />;
 }

@@ -39,7 +39,6 @@ export default function TitleBlock({ project, page }: Props) {
       <div className="tb-cell tb-stack">
         <Field label="Project" value={projectName} />
         <Field label="Location" value={m.location} />
-        <Field label="Source File" value={m.sourceFile} />
       </div>
 
       {/* Sheet title + notes */}

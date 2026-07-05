@@ -114,6 +114,52 @@ def main() -> int:
     done = lib.clean_duplicates(dry_run=False)
     check(done["archived"] >= 1, f"Clean Duplicates archives duplicates (archived={done['archived']})")
 
+    # --- Test: SVG thumbnailFile points at an existing file (no broken .webp) ---
+    lib.rebuild_thumbnails()
+    lib_data = lib.load()
+    bad = [c for c in lib_data["components"]
+           if c.get("thumbnailFile") and lib.resolve_asset(c["thumbnailFile"]) is None]
+    check(not bad, f"Every thumbnailFile resolves to a real file (broken={len(bad)})")
+
+    # --- Test: legacy migration populates V2 from assets/components ---
+    legacy = lib.legacy_root
+    (legacy / "controllers").mkdir(parents=True, exist_ok=True)
+    (legacy / "alarm").mkdir(parents=True, exist_ok=True)
+    _write_svg(legacy / "controllers" / "PR0650CD-TDB.svg", "<rect width='40' height='40' fill='none'/>")
+    _write_svg(legacy / "alarm" / "Strobe_Horn.svg", "<circle cx='20' cy='20' r='16' fill='none'/>")
+    check(lib.has_legacy(), "has_legacy() detects legacy assets/components files")
+    preview = lib.migrate_legacy(dry_run=True)
+    check(preview["willCopy"] >= 2, f"Migrate dry-run plans copies (willCopy={preview['willCopy']})")
+    check(preview["targetCategories"].get("alarms_safety", 0) >= 1, "alarm -> alarms_safety mapping in plan")
+    applied = lib.migrate_legacy(dry_run=False, rebuild_thumbnails=False, generate_symbols=False)
+    after = lib.load()
+    cat_ids = {c["category"] for c in after["components"]}
+    check(applied["copied"] >= 2 and "alarms_safety" in cat_ids,
+          f"Migration copied legacy files into V2 (copied={applied['copied']})")
+    # Idempotent: migrating again copies nothing new (exact-hash skip).
+    again = lib.migrate_legacy(dry_run=True)
+    check(again["willCopy"] == 0, f"Re-migrate copies nothing new (willCopy={again['willCopy']})")
+
+    # --- Test: bulk symbol generation writes symbolFile (skips logos) ---
+    _write_svg(lib.components / "logos" / "HEB_logo.svg", "<rect width='40' height='40'/>")
+    lib.refresh()
+    gs = lib.generate_all_symbols()
+    sym_data = lib.load()
+    with_symbol = [c for c in sym_data["components"] if c.get("symbolFile")]
+    logo = next((c for c in sym_data["components"] if c["category"] == "logos"), None)
+    check(gs["generated"] >= 2 and len(with_symbol) >= 2, f"Bulk symbols generated (n={gs['generated']})")
+    check(logo is not None and not logo.get("symbolFile"), "Logos are skipped by bulk symbol generation")
+
+    # --- Test: physical duplicate cleanup archives byte-identical extras ---
+    for i in range(5):
+        _write_svg(lib.components / "custom" / f"contactor_copy_{i}.svg", "<rect width='9' height='9'/>")
+    pd = lib.clean_physical_duplicates(dry_run=True)
+    check(pd["duplicates"] >= 4, f"Physical dedupe detects identical copies (dupes={pd['duplicates']})")
+    pdo = lib.clean_physical_duplicates(dry_run=False)
+    check(pdo["archived"] >= 4, f"Physical dedupe archives extras, keeps one (archived={pdo['archived']})")
+    remaining = list((lib.components / "custom").glob("contactor_copy_*.svg"))
+    check(len(remaining) == 1, f"Exactly one identical contactor copy remains (remaining={len(remaining)})")
+
     # --- Test 8: overall layout generator makes nodes, connectors, legend ---
     graph = generate_overall_layout([
         {"name": "LCP1", "category": "panels_enclosures"},

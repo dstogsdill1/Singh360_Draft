@@ -25,3 +25,43 @@ Update statuses here as work progresses. `In Progress` = actively being built,
 - SmartDraw VSON wire field names remain an integration contract to confirm.
 - PDF underlay visual crispness must be eyeballed at 100% + exported 17×11.
 - RDM XML dialect must be confirmed against a native Layout Editor sample.
+
+## Milestone 4B — Populate library from legacy + editor hardening
+
+| Phase | Item | Status |
+| ----- | ---- | ------ |
+| 1 | Migrate legacy `assets/components` into V2 (SHA256-safe, no delete) | Done |
+| 2 | Migration button + `scripts/migrate_legacy_library_v2.py` CLI | Done |
+| 3 | Bulk B/W symbol generation + Source/Symbol/Both view + insert choices | Done |
+| 4 | Thumbnail fixes (SVG path correct, PDF render, clean fallback tile) | Done |
+| 5 | Physical duplicate cleanup (archive extras, keep one) | Done |
+| 6 | Simplified panel (search incl. filename, migrate/symbols/dedupe buttons) | Done |
+| 7 | Insert-with-label grouping (single object, ungroup, persist) | Deferred |
+| 8 | Title block no longer shows raw Source File | Done |
+| 9 | Created Date stays manual (no auto-update anywhere) | Done (verified) |
+| 10 | Page template tooltips/descriptions | Deferred |
+| 11 | Line/arrow connector geometry (pointsData sync) | Deferred |
+| 12 | Polyline/elbow hardening (single dblclick handler) | Deferred |
+| 13 | No baked-in workflow content (blank editable placeholder) | Deferred |
+| 14 | Hard no-scroll normalized sheets | Deferred |
+| 15 | Wire PDF underlay (`pdf_import_v2`) into the editor canvas | Deferred |
+| 16 | Generators minimal UI wiring | Deferred |
+| 17 | KANBAN update | Done |
+| 18 | Tests | Done (see note) |
+
+### 4B honest flags
+
+- Migration/dedupe/symbols proven on live `.docs`: 60 components, 58 with B/W
+  symbols (logos correctly excluded), 0 broken thumbnails, 77 stray physical
+  duplicates archived.
+- A few items from the earlier ad-hoc migration sit in `custom` (e.g. Alarm
+  Strobe Horn); they are searchable and can be re-categorized in the editor
+  (persists to `manifest.json`). No `Singh360` component exists in the legacy
+  source (firm logo is served from `/static/LOGO-750px.png`).
+- `scripts/smoke_component_library.py` (LEGACY `/api/library` store) reports 3
+  missing thumbnails for vector-only legacy items (Fan, Valve Open, H-E-B Logo).
+  This is the deprecated store and is independent of V2; the V2 smoke suite is
+  fully green with no broken thumbnails.
+- Phases 7, 10–16 (deep editor: connectors, polylines, PDF underlay wiring,
+  generator UI, workflow placeholder, no-scroll, insert grouping, template
+  tooltips) are NOT done this pass — deferred, not faked.

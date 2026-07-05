@@ -538,7 +538,9 @@ export interface LibV2Data {
   version: number;
   components: LibV2Component[];
   categories: LibV2Category[];
-  counts: { total: number; favorites: number; needsReview: number };
+  hasLegacy?: boolean;
+  libraryRoot?: string;
+  counts: { total: number; favorites: number; needsReview: number; withSymbol?: number };
 }
 
 export const libV2AssetUrl = (rel: string) => `/api/lib/asset/${rel}`;
@@ -589,6 +591,41 @@ export async function renameLibV2File(id: string): Promise<{ ok: boolean; compon
 
 export async function generateLibV2Symbol(id: string): Promise<{ ok: boolean; symbolFile?: string }> {
   const res = await fetch(`/api/lib/components/${id}/symbol`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export interface MigrateLegacyPreview {
+  ok: boolean;
+  dryRun?: boolean;
+  legacyFound?: number;
+  legacyCategories?: Record<string, number>;
+  willCopy?: number;
+  willSkipDuplicates?: number;
+  targetCategories?: Record<string, number>;
+  copied?: number;
+  note?: string;
+}
+
+export async function migrateLegacyLibV2(dryRun: boolean): Promise<MigrateLegacyPreview> {
+  const res = await fetch('/api/lib/migrate-legacy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dryRun, rebuildThumbnails: true, generateSymbols: true }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function generateAllLibV2Symbols(): Promise<{ ok: boolean; generated: number; skipped: number }> {
+  const res = await fetch('/api/lib/generate-symbols', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function cleanLibV2PhysicalDuplicates(dryRun: boolean): Promise<{ ok: boolean; duplicates?: number; archived?: number; duplicateGroups?: number }> {
+  const res = await fetch('/api/lib/clean-physical-duplicates', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun }),
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

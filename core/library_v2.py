@@ -76,6 +76,37 @@ def _slug(text: str) -> str:
     return s or "component"
 
 
+# Legacy folder (`.docs/library/assets/components/<cat>`) -> V2 canonical folder.
+LEGACY_CATEGORY_MAP = {
+    "alarm": "alarms_safety",
+    "alarms_safety": "alarms_safety",
+    "controllers": "controllers",
+    "custom": "custom",
+    "electrical": "electrical_power",
+    "electrical_power": "electrical_power",
+    "equipment": "custom",
+    "expansion_modules": "expansion_modules",
+    "hvac": "hvac",
+    "legends": "symbols_markers",
+    "lighting": "lighting",
+    "logos": "logos",
+    "network": "network_data",
+    "network_data": "network_data",
+    "panel": "panels_enclosures",
+    "panels_enclosures": "panels_enclosures",
+    "rdm_layout_editor": "custom",
+    "refrigeration": "refrigeration",
+    "sensors_transducers": "sensors_transducers",
+    "symbol": "symbols_markers",
+    "symbols_markers": "symbols_markers",
+    "uncategorized": "custom",
+}
+
+# Bulk symbol generation never overwrites real logos/reference pages with a
+# generated box — they stay as their source image.
+SYMBOL_SKIP_CATEGORIES = {"logos", "reference_pages"}
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -283,10 +314,13 @@ class LibraryV2:
 
     # ---- thumbnails ------------------------------------------------------
     def rebuild_thumbnails(self, size: int = 256) -> dict:
-        """Delete all thumbnails and regenerate from the manifest only."""
+        """Delete all thumbnails and regenerate from the manifest only.
+
+        Writes ONLY into thumbnails/ — never creates a component source file.
+        Component count is invariant across a rebuild.
+        """
         self.ensure()
-        if self.thumbnails.exists():
-            shutil.rmtree(self.thumbnails)
+        self._clear_thumbnails()
         self.thumbnails.mkdir(parents=True, exist_ok=True)
         manifest = self._read_manifest()
         rebuilt = missing = 0
@@ -296,41 +330,79 @@ class LibraryV2:
                 missing += 1
                 comp["thumbnailFile"] = ""
                 continue
-            thumb_rel = self._thumb_rel(comp, src)
-            thumb_path = self.root / thumb_rel
-            if self._make_thumbnail(src, thumb_path, size):
-                comp["thumbnailFile"] = thumb_rel
+            thumb_rel = self._make_thumbnail(comp, src, size)
+            comp["thumbnailFile"] = thumb_rel or ""
+            if thumb_rel:
                 rebuilt += 1
-            else:
-                comp["thumbnailFile"] = ""
         self._write_manifest(manifest)
         return {"ok": True, "rebuilt": rebuilt, "missingSource": missing}
 
-    def _thumb_rel(self, comp: dict, src: Path) -> str:
-        cat = comp.get("category", "custom")
-        return f"thumbnails/{cat}/{src.stem}.webp"
-
-    def _make_thumbnail(self, src: Path, dest: Path, size: int) -> bool:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if src.suffix.lower() == ".svg":
-            # SVG is already vector; copy as-is so the UI can render it directly.
+    def _clear_thumbnails(self) -> None:
+        """Best-effort clear of the thumbnails dir (OneDrive/Windows can lock it)."""
+        if not self.thumbnails.exists():
+            return
+        for p in sorted(self.thumbnails.rglob("*"), key=lambda x: len(x.parts), reverse=True):
             try:
-                shutil.copyfile(src, dest.with_suffix(".svg"))
-                return True
+                if p.is_file():
+                    p.unlink()
+                elif p.is_dir():
+                    p.rmdir()
             except Exception:  # noqa: BLE001
-                return False
+                pass
+
+    def _make_thumbnail(self, comp: dict, src: Path, size: int) -> str | None:
+        """Write a thumbnail into thumbnails/<cat>/ and return its library-relative
+        path (or None). SVG is copied as vector; PDF is rendered first; raster
+        images become .webp. Never points at a non-existent file.
+        """
+        cat = comp.get("category", "custom")
+        out_dir = self.thumbnails / cat
+        out_dir.mkdir(parents=True, exist_ok=True)
+        stem = Path(comp.get("sourceFile", src.name)).stem
+        ext = src.suffix.lower()
+
+        # SVG: copy the vector as-is so the browser renders it directly.
+        if ext == ".svg":
+            dest = out_dir / f"{stem}.svg"
+            try:
+                shutil.copyfile(src, dest)
+                return self._rel(dest)
+            except Exception:  # noqa: BLE001
+                return None
+
+        # PDF: render the first page to a PNG, then thumbnail that.
+        raster = src
+        if ext == ".pdf":
+            rendered = self._render_pdf_first_page(src, out_dir, stem)
+            if rendered is None:
+                return None
+            raster = rendered
+
         if Image is None:
-            return False
+            return None
+        dest = out_dir / f"{stem}.webp"
         try:
-            with Image.open(src) as im:
+            with Image.open(raster) as im:
                 im = im.convert("RGBA")
                 im.thumbnail((size, size))
                 bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
                 bg.alpha_composite(im)
                 bg.convert("RGB").save(dest, "WEBP", quality=86)
-            return True
+            return self._rel(dest)
         except Exception:  # noqa: BLE001
-            return False
+            return None
+
+    def _render_pdf_first_page(self, pdf: Path, out_dir: Path, stem: str) -> Path | None:
+        """Render page 1 of a PDF to PNG (via PyMuPDF) for thumbnailing/insertion."""
+        try:
+            from core.pdf_renderer import render_page_to_png, is_available
+        except Exception:  # noqa: BLE001
+            return None
+        if not is_available():
+            return None
+        png = out_dir / f"{stem}.pdfpage.png"
+        result = render_page_to_png(pdf, 0, png, dpi=150)
+        return png if result.get("ok") and png.exists() else None
 
     # ---- clean duplicates ------------------------------------------------
     def clean_duplicates(self, dry_run: bool = True) -> dict:
@@ -430,6 +502,236 @@ class LibraryV2:
         self._write_manifest(manifest)
         return {"ok": True, "symbolFile": comp["symbolFile"]}
 
+    def generate_all_symbols(self, skip_categories: set[str] | None = None) -> dict:
+        """Bulk-generate B/W symbols for every component (skip logos/reference).
+
+        Skipped categories keep their SOURCE image: any previously-generated
+        symbol is cleared so a logo never shows a generated box.
+        """
+        skip = SYMBOL_SKIP_CATEGORIES if skip_categories is None else skip_categories
+        manifest = self._read_manifest()
+        generated = skipped = cleared = 0
+        for comp in manifest["components"]:
+            if comp.get("category") in skip:
+                skipped += 1
+                if comp.get("symbolFile"):
+                    old = self.root / comp["symbolFile"]
+                    try:
+                        if old.exists():
+                            old.unlink()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    comp["symbolFile"] = ""
+                    cleared += 1
+                continue
+            stem = Path(comp.get("sourceFile", "")).stem or _slug(comp.get("displayName", "component"))
+            svg = generate_symbol_svg(comp)
+            sym_path = self.components / comp.get("category", "custom") / f"{stem}{SYMBOL_SUFFIX}"
+            sym_path.parent.mkdir(parents=True, exist_ok=True)
+            sym_path.write_text(svg, encoding="utf-8")
+            comp["symbolFile"] = self._rel(sym_path)
+            comp["updatedAt"] = _now()
+            generated += 1
+        self._write_manifest(manifest)
+        return {"ok": True, "generated": generated, "skipped": skipped, "clearedSymbols": cleared}
+
+    # ---- legacy migration (Phase 1/2) ------------------------------------
+    @property
+    def legacy_root(self) -> Path:
+        return self.root / "assets" / "components"
+
+    def _iter_legacy_sources(self):
+        """Yield (top_folder, path) for legacy source files, skipping thumbnails
+        and generated symbols. Category = the top-level legacy folder name."""
+        lr = self.legacy_root
+        if not lr.exists():
+            return
+        for cat_dir in sorted(lr.iterdir()):
+            if not cat_dir.is_dir() or cat_dir.name.lower() in ("thumbnails", "rendered", "originals"):
+                continue
+            for p in sorted(cat_dir.rglob("*")):
+                if not p.is_file() or p.name.startswith("."):
+                    continue
+                if "thumbnails" in {part.lower() for part in p.parts}:
+                    continue
+                if p.name.lower().endswith(SYMBOL_SUFFIX):
+                    continue
+                if p.suffix.lower() not in SOURCE_EXTS:
+                    continue
+                yield cat_dir.name.lower(), p
+
+    def has_legacy(self) -> bool:
+        for _ in self._iter_legacy_sources():
+            return True
+        return False
+
+    def _existing_component_hashes(self) -> set[str]:
+        hashes: set[str] = set()
+        for cat in LIBRARY_CATEGORIES:
+            d = self.components / cat
+            if not d.exists():
+                continue
+            for p in d.rglob("*"):
+                if p.is_file() and p.suffix.lower() in SOURCE_EXTS and not p.name.lower().endswith(SYMBOL_SUFFIX):
+                    try:
+                        hashes.add(self.content_hash(p))
+                    except Exception:  # noqa: BLE001
+                        pass
+        return hashes
+
+    def migrate_legacy(self, dry_run: bool = True, *, rebuild_thumbnails: bool = True,
+                       generate_symbols: bool = True) -> dict:
+        """Copy legacy `assets/components/<cat>` files into the V2 root.
+
+        Never deletes legacy files; skips exact-SHA256 duplicates (already in V2
+        or repeated within the legacy set). Archives the current manifest before
+        applying. Dry-run returns a preview.
+        """
+        self.ensure()
+        if not self.has_legacy():
+            return {"ok": True, "legacyFound": 0, "note": "No legacy assets/components found."}
+
+        seen = self._existing_component_hashes()
+        legacy_counts: dict[str, int] = {}
+        target_counts: dict[str, int] = {}
+        plan: list[tuple[Path, str]] = []
+        skipped_dupes = 0
+        for top, path in self._iter_legacy_sources():
+            legacy_counts[top] = legacy_counts.get(top, 0) + 1
+            dest_cat = LEGACY_CATEGORY_MAP.get(top, "custom")
+            try:
+                h = self.content_hash(path)
+            except Exception:  # noqa: BLE001
+                continue
+            if h in seen:
+                skipped_dupes += 1
+                continue
+            seen.add(h)
+            plan.append((path, dest_cat))
+            target_counts[dest_cat] = target_counts.get(dest_cat, 0) + 1
+
+        if dry_run:
+            return {
+                "ok": True, "dryRun": True,
+                "legacyFound": sum(legacy_counts.values()),
+                "legacyCategories": legacy_counts,
+                "willCopy": len(plan),
+                "willSkipDuplicates": skipped_dupes,
+                "targetCategories": target_counts,
+            }
+
+        # Archive current manifest before mutating.
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        self.archive.mkdir(parents=True, exist_ok=True)
+        if self.manifest_path.exists():
+            shutil.copyfile(self.manifest_path,
+                            self.archive / f"library_manifest_before_migration_{stamp}.json")
+
+        copied = 0
+        for path, dest_cat in plan:
+            dest_dir = self.components / dest_cat
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / path.name  # preserve readable filename
+            i = 1
+            while dest.exists():
+                dest = dest_dir / f"{path.stem}-{i}{path.suffix}"
+                i += 1
+            try:
+                shutil.copyfile(path, dest)
+                copied += 1
+            except Exception:  # noqa: BLE001
+                pass
+
+        refreshed = self.refresh()
+        result = {
+            "ok": True, "dryRun": False, "copied": copied,
+            "skippedDuplicates": skipped_dupes,
+            "legacyCategories": legacy_counts, "targetCategories": target_counts,
+            "refresh": refreshed,
+        }
+        if rebuild_thumbnails:
+            result["thumbnails"] = self.rebuild_thumbnails()
+        if generate_symbols:
+            result["symbols"] = self.generate_all_symbols()
+        return result
+
+    # ---- physical duplicate cleanup (Phase 5) ----------------------------
+    def clean_physical_duplicates(self, dry_run: bool = True) -> dict:
+        """Scan components/<cat> for byte-identical files; keep one, archive rest."""
+        self.ensure()
+        groups: dict[str, list[Path]] = {}
+        for cat in LIBRARY_CATEGORIES:
+            d = self.components / cat
+            if not d.exists():
+                continue
+            for p in sorted(d.iterdir()):
+                if not p.is_file() or p.suffix.lower() not in SOURCE_EXTS:
+                    continue
+                if p.name.lower().endswith(SYMBOL_SUFFIX):
+                    continue
+                try:
+                    groups.setdefault(self.content_hash(p), []).append(p)
+                except Exception:  # noqa: BLE001
+                    pass
+        dup_groups = {h: ps for h, ps in groups.items() if len(ps) > 1}
+        total_dupes = sum(len(ps) - 1 for ps in dup_groups.values())
+
+        if dry_run:
+            return {"ok": True, "dryRun": True, "duplicateGroups": len(dup_groups),
+                    "duplicates": total_dupes}
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        arch_dir = self.archive / f"library_duplicates_{stamp}"
+        arch_dir.mkdir(parents=True, exist_ok=True)
+        archived = 0
+        for ps in dup_groups.values():
+            keeper = self._pick_keeper(ps)
+            for p in ps:
+                if p == keeper:
+                    continue
+                try:
+                    dest = arch_dir / p.name
+                    j = 1
+                    while dest.exists():
+                        dest = arch_dir / f"{p.stem}-{j}{p.suffix}"
+                        j += 1
+                    shutil.move(str(p), str(dest))
+                    archived += 1
+                except Exception:  # noqa: BLE001
+                    pass
+        self._prune_missing()
+        result = {"ok": True, "dryRun": False, "archived": archived, "archiveDir": arch_dir.name}
+        result["thumbnails"] = self.rebuild_thumbnails()
+        return result
+
+    @staticmethod
+    def _pick_keeper(paths: list[Path]) -> Path:
+        """Prefer a readable filename (no hash suffix) and higher resolution."""
+        def score(p: Path) -> tuple:
+            name = p.stem
+            has_hash = 1 if re.search(r"_[0-9a-f]{8,}_|_[0-9a-f]{8,}$", name) else 0
+            res = 0
+            if Image is not None and p.suffix.lower() in IMAGE_EXTS and p.suffix.lower() != ".svg":
+                try:
+                    with Image.open(p) as im:
+                        res = im.size[0] * im.size[1]
+                except Exception:  # noqa: BLE001
+                    res = 0
+            # Lower has_hash is better; higher res better; shorter name better.
+            return (has_hash, -res, len(name))
+        return sorted(paths, key=score)[0]
+
+    def _prune_missing(self) -> dict:
+        """Drop manifest components whose source file no longer exists."""
+        manifest = self._read_manifest()
+        before = len(manifest["components"])
+        manifest["components"] = [
+            c for c in manifest["components"] if (self.root / c.get("sourceFile", "")).exists()
+        ]
+        removed = before - len(manifest["components"])
+        self._write_manifest(manifest)
+        return {"ok": True, "removed": removed}
+
     # ---- read ------------------------------------------------------------
     def load(self) -> dict:
         self.ensure()
@@ -445,10 +747,13 @@ class LibraryV2:
             "version": MANIFEST_VERSION,
             "components": comps,
             "categories": categories,
+            "hasLegacy": self.has_legacy(),
+            "libraryRoot": str(self.components),
             "counts": {
                 "total": len(comps),
                 "favorites": sum(1 for c in comps if c.get("favorite")),
                 "needsReview": sum(1 for c in comps if c.get("needsReview")),
+                "withSymbol": sum(1 for c in comps if c.get("symbolFile")),
             },
             "connectorStyles": self._read_connectors(),
         }
