@@ -338,10 +338,9 @@ export default function Ribbon({
                 <button className={`ribbon-btn ${activeTool === 'text' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('text')} title="Click-place a text box">Text</button>
                 <button className={`ribbon-btn ${activeTool === 'rectangle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('rectangle')} title="Click-place a rectangle">Rectangle</button>
                 <button className={`ribbon-btn ${activeTool === 'circle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('circle')} title="Click-place a circle">Circle</button>
-                <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')} title="Click to drop each point of a line, then double-click or Enter to finish (Esc cancels)">Line</button>
-                <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')} title="Same as Line but with an arrowhead on the last point">Arrow</button>
-                <button className={`ribbon-btn ${activeTool === 'polyline' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('polyline')} title="Click to drop each point, double-click or Enter to finish">Polyline</button>
-                <button className={`ribbon-btn ${activeTool === 'elbow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('elbow')} title="Like a line but with square (90°) corners between points">Elbow Connector</button>
+                <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')} title="Two clicks: start point, then end point. Done.">Line</button>
+                <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')} title="Two clicks like Line, with an arrowhead on the end">Arrow</button>
+                <button className={`ribbon-btn ${activeTool === 'polyline' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('polyline')} title="Click to drop each point (as many as you want). Press Esc when done — you stay in edit mode until then.">Multi-Point Line</button>
               </Group>
               <Group title="Line Color">
                 <select className="ribbon-select" disabled={!ln} value={typeof selection?.stroke === 'string' ? selection.stroke : '#111111'} onChange={(e) => onUpdateSelection({ stroke: e.target.value })} title={ln ? 'Stroke color of the selected line/connector' : 'Select a line or connector first'}>
@@ -371,13 +370,19 @@ export default function Ribbon({
                     className="ribbon-btn"
                     disabled={!cx}
                     onClick={() => {
-                      // Set the style for the NEXT line + arm the click-to-place
-                      // line tool. If a connector is already selected, restyle it.
+                      // Remember this style for the NEXT new line.
                       onSetLineStyle({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowStart: false, arrowEnd: p.arrowEnd ?? false });
-                      onSetTool('line');
-                      if (ln) onUpdateSelection({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowEnd: p.arrowEnd ?? false });
+                      if (ln) {
+                        // A line is already selected → just recolor it and STAY in
+                        // Select mode so you can click preset after preset without
+                        // having to Esc + re-select each time.
+                        onUpdateSelection({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowEnd: p.arrowEnd ?? false });
+                      } else {
+                        // Nothing selected → arm the Line tool pre-styled to draw one.
+                        onSetTool('line');
+                      }
                     }}
-                    title={`Draw a ${p.label} line — click each point, double-click/Enter to finish`}
+                    title={`${p.label}: recolor the selected line, or (nothing selected) start a new ${p.label} line`}
                   >
                     {p.label}
                   </button>

@@ -433,16 +433,23 @@ export default function CanvasEditor({
     };
 
     const onKeyDown = (ev: KeyboardEvent) => {
-      // Escape ALWAYS bails out to the Select tool — cancels any half-drawn line
-      // and exits draw mode, so you can never get trapped in a drawing tool.
+      // Escape = "I'm done." Keep whatever line you've drawn (>=2 points), select
+      // it, and drop back to the Select tool. A barely-started line is discarded.
+      // You can NEVER get trapped in a drawing tool.
       if (ev.key === 'Escape') {
         if (creatingPolyRef.current) {
-          canvas.remove(creatingPolyRef.current);
-          creatingPolyRef.current = null;
-          polyCommittedRef.current = [];
-          canvas.requestRenderAll();
+          if (polyCommittedRef.current.length >= 2) {
+            finishLine();
+          } else {
+            canvas.remove(creatingPolyRef.current);
+            creatingPolyRef.current = null;
+            polyCommittedRef.current = [];
+            canvas.requestRenderAll();
+            if (toolRef.current !== 'select') consumeRef.current();
+          }
+        } else if (toolRef.current !== 'select') {
+          consumeRef.current();
         }
-        if (toolRef.current !== 'select') consumeRef.current();
         return;
       }
       const poly = creatingPolyRef.current;
