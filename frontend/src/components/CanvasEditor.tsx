@@ -645,6 +645,72 @@ export default function CanvasEditor({
           c.requestRenderAll();
         });
       },
+      addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        // Load both images, then place source on the left and the B/W symbol to
+        // its right, each with an optional label, and select them together.
+        void Promise.all([
+          FabricImage.fromURL(sourceUrl, { crossOrigin: 'anonymous' }),
+          FabricImage.fromURL(symbolUrl, { crossOrigin: 'anonymous' }),
+        ]).then(([srcImg, symImg]) => {
+          const maxW = CANVAS_W * 0.3;
+          const maxH = CANVAS_H * 0.3;
+          const fit = (im: FabricImage) => Math.min(1, maxW / (im.width || 1), maxH / (im.height || 1));
+          const sScale = fit(srcImg);
+          const ySymScale = fit(symImg);
+          const sW = (srcImg.width || 1) * sScale;
+          const sH = (srcImg.height || 1) * sScale;
+          const symW = (symImg.width || 1) * ySymScale;
+          const gap = 40;
+          const totalW = sW + gap + symW;
+          let originX = (CANVAS_W - totalW) / 2;
+          let originY = (CANVAS_H - sH) / 2;
+          const el = canvasRef.current;
+          if (at && el) {
+            const rect = el.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              originX = ((at.clientX - rect.left) / rect.width) * CANVAS_W - totalW / 2;
+              originY = ((at.clientY - rect.top) / rect.height) * CANVAS_H - sH / 2;
+            }
+          }
+          const added: FabricObject[] = [];
+          const place = (im: FabricImage, left: number, scale: number, tag: string) => {
+            const iw = (im.width || 1) * scale;
+            const ih = (im.height || 1) * scale;
+            im.set({ left, top: originY, scaleX: scale, scaleY: scale });
+            (im as unknown as Record<string, unknown>).objName = `${name} (${tag})`;
+            styleForSelection(im);
+            c.add(im);
+            added.push(im);
+            if (label) {
+              const lbl = new Textbox(`${label}${tag === 'symbol' ? ' (B/W)' : ''}`, {
+                left,
+                top: originY + ih + 6,
+                width: Math.max(120, iw),
+                fontSize: 13,
+                fontFamily: 'Arial',
+                textAlign: 'center',
+                fill: '#111',
+              });
+              (lbl as unknown as Record<string, unknown>).objName = `${name} (${tag}) Label`;
+              c.add(lbl);
+              added.push(lbl);
+            }
+          };
+          place(srcImg, originX, sScale, 'source');
+          symImg.filters = [new filters.Grayscale()];
+          symImg.applyFilters();
+          place(symImg, originX + sW + gap, ySymScale, 'symbol');
+          if (added.length > 1) {
+            const sel = new ActiveSelection(added, { canvas: c });
+            c.setActiveObject(sel);
+          } else if (added.length === 1) {
+            c.setActiveObject(added[0]);
+          }
+          c.requestRenderAll();
+        });
+      },
       addLegend: (presetIds?: string[]) => {
         const c = fabricRef.current;
         if (!c) return;

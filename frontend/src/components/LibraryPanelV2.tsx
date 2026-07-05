@@ -17,6 +17,7 @@ import '../styles/libraryV2.css';
 
 interface Props {
   onInsert: (name: string, url: string, label: string | null) => void;
+  onInsertBoth: (name: string, sourceUrl: string, symbolUrl: string, label: string | null) => void;
   canInsert: boolean;
 }
 
@@ -62,14 +63,8 @@ function sourceThumbUrl(c: LibV2Component): string {
 function symbolUrl(c: LibV2Component): string | null {
   return c.symbolFile ? libV2AssetUrl(c.symbolFile) : null;
 }
-// Which URL to insert given the current representation preference.
-function insertUrlFor(c: LibV2Component, rep: ViewRep): string {
-  const cat = (c.category || '').toLowerCase();
-  if (rep === 'source' || SOURCE_ONLY_CATS.has(cat)) return libV2AssetUrl(c.sourceFile);
-  return libV2AssetUrl(c.symbolFile || c.sourceFile);
-}
 
-export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
+export default function LibraryPanelV2({ onInsert, onInsertBoth, canInsert }: Props) {
   const [data, setData] = useState<LibV2Data | null>(null);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
@@ -115,28 +110,59 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
     });
   }, [components, query, category, mode]);
 
-  const doInsert = (c: LibV2Component) => {
-    if (!canInsert) return;
-    onInsert(displayNameFor(c), insertUrlFor(c, rep === 'both' ? 'symbol' : rep), labelFor(c));
+  const sourceUrlFor = (c: LibV2Component) => libV2AssetUrl(c.sourceFile);
+  const bwFallbackUrl = (c: LibV2Component) => {
+    const src = libV2AssetUrl(c.sourceFile);
+    return `${src}${src.includes('?') ? '&' : '?'}bw=1`;
   };
 
-  const doInsertBw = async (c: LibV2Component) => {
+  // Insert Source: always the full-colour original (never the thumbnail).
+  const doInsertSource = (c: LibV2Component) => {
+    if (!canInsert) return;
+    onInsert(displayNameFor(c), sourceUrlFor(c), labelFor(c));
+  };
+
+  // Insert B/W: the real symbol if one exists; otherwise WARN and offer a
+  // grayscale-of-source fallback rather than silently inserting the wrong asset.
+  const doInsertBw = (c: LibV2Component) => {
     if (!canInsert) return;
     if (c.symbolFile) {
-      onInsert(displayNameFor(c), insertUrlFor(c, 'symbol'), labelFor(c));
+      onInsert(displayNameFor(c), libV2AssetUrl(c.symbolFile), labelFor(c));
       return;
     }
-    // Symbol Builder endpoint is not fully enabled in this repo yet for all
-    // assets. Fall back to source insertion with a B/W rendering hint so the
-    // user always gets an immediate black/white result instead of a no-op.
-    const src = insertUrlFor(c, 'source');
-    const bwSrc = `${src}${src.includes('?') ? '&' : '?'}bw=1`;
-    onInsert(displayNameFor(c), bwSrc, labelFor(c));
+    const ok = window.confirm(
+      `No B/W symbol exists for "${displayNameFor(c)}".\n\nInsert the Source image in black & white instead?`,
+    );
+    if (ok) onInsert(displayNameFor(c), bwFallbackUrl(c), labelFor(c));
+  };
+
+  // Insert Both: source + B/W symbol side-by-side. Needs a real symbol; if none,
+  // offer the grayscale-of-source fallback as the "symbol" half.
+  const doInsertBoth = (c: LibV2Component) => {
+    if (!canInsert) return;
+    const symbol = c.symbolFile ? libV2AssetUrl(c.symbolFile) : null;
+    if (symbol) {
+      onInsertBoth(displayNameFor(c), sourceUrlFor(c), symbol, labelFor(c));
+      return;
+    }
+    const ok = window.confirm(
+      `No B/W symbol exists for "${displayNameFor(c)}".\n\nInsert Source plus a black & white copy of it?`,
+    );
+    if (ok) onInsertBoth(displayNameFor(c), sourceUrlFor(c), bwFallbackUrl(c), labelFor(c));
+  };
+
+  // The main Insert button honours the current Source / B&W / Both mode.
+  const doInsert = (c: LibV2Component) => {
+    if (rep === 'source') return doInsertSource(c);
+    if (rep === 'symbol') return doInsertBw(c);
+    return doInsertBoth(c);
   };
 
   const onDragStart = (e: React.DragEvent, c: LibV2Component) => {
+    // Drag drops a single object: source for Source/Both, symbol for B/W (if any).
+    const url = rep === 'symbol' && c.symbolFile ? libV2AssetUrl(c.symbolFile) : sourceUrlFor(c);
     e.dataTransfer.setData(COMPONENT_DRAG_TYPE, JSON.stringify({
-      name: displayNameFor(c), url: insertUrlFor(c, rep === 'both' ? 'symbol' : rep), label: labelFor(c),
+      name: displayNameFor(c), url, label: labelFor(c),
     }));
     e.dataTransfer.effectAllowed = 'copy';
   };
@@ -282,12 +308,12 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
                 {c.symbolFile ? <span className="libv2-badge" title="Black/white symbol available">B/W</span> : null}
               </div>
               <div className="libv2-actions">
-                <button onClick={(e) => { e.stopPropagation(); doInsert(c); }} disabled={!canInsert} title="Insert onto active page (with label)">Insert</button>
-                <button onClick={(e) => { e.stopPropagation(); if (canInsert) onInsert(displayNameFor(c), insertUrlFor(c, 'source'), labelFor(c)); }} disabled={!canInsert} title="Insert source image">Src</button>
+                <button onClick={(e) => { e.stopPropagation(); doInsert(c); }} disabled={!canInsert} title={`Insert (${rep === 'source' ? 'Source' : rep === 'symbol' ? 'B/W' : 'Both'}) onto the active page`}>Insert</button>
+                <button onClick={(e) => { e.stopPropagation(); doInsertSource(c); }} disabled={!canInsert} title="Insert the full-colour source image">Src</button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); void doInsertBw(c); }}
-                  disabled={!canInsert || loading}
-                  title={c.symbolFile ? 'Insert black/white symbol' : 'Insert source image in black/white'}
+                  onClick={(e) => { e.stopPropagation(); doInsertBw(c); }}
+                  disabled={!canInsert}
+                  title={c.symbolFile ? 'Insert the black/white symbol' : 'No B/W symbol — offers a black/white copy of the source'}
                 >
                   B/W
                 </button>

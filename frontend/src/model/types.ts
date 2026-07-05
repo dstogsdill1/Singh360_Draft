@@ -160,6 +160,7 @@ export interface CanvasApi {
   setLineStyle: (style: LineStyle) => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
   addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
+  addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addLegend: (presetIds?: string[]) => void;
   addPageTitle: (text: string) => void;
   addSectionHeader: (text: string) => void;
