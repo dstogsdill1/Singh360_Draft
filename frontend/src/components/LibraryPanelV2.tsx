@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addLibV2File,
   cleanLibV2PhysicalDuplicates,
+  generateLibV2Symbol,
   getLibV2,
   libV2AssetUrl,
   migrateLegacyLibV2,
@@ -33,10 +34,26 @@ function labelFor(c: LibV2Component): string | null {
   return c.defaultLabel || c.partNumber || c.displayName || null;
 }
 
+function humanizeStem(s: string): string {
+  return s
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function fileStem(path?: string): string {
   if (!path) return '';
   const base = path.split('/').pop() || path;
   return base.replace(/\.[^.]+$/, '');
+}
+
+function displayNameFor(c: LibV2Component): string {
+  const raw = (c.displayName || '').trim();
+  if (!raw) return humanizeStem(fileStem(c.sourceFile)) || 'Component';
+  if (!raw.includes(' ') && (raw.includes('_') || raw.includes('-'))) {
+    return humanizeStem(raw);
+  }
+  return raw;
 }
 
 // URL of the source preview (thumbnail if present, else raw source).
@@ -87,7 +104,7 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
       if (mode === 'favorites' && !c.favorite) return false;
       if (!q) return true;
       const hay = [
-        c.displayName, c.defaultLabel, c.partNumber, c.manufacturer,
+        c.displayName, displayNameFor(c), c.defaultLabel, c.partNumber, c.manufacturer,
         (c.aliases || []).join(' '), c.category, fileStem(c.sourceFile),
       ].join(' ').toLowerCase();
       return hay.includes(q);
@@ -96,12 +113,33 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
 
   const doInsert = (c: LibV2Component) => {
     if (!canInsert) return;
-    onInsert(c.displayName, insertUrlFor(c, rep === 'both' ? 'symbol' : rep), labelFor(c));
+    onInsert(displayNameFor(c), insertUrlFor(c, rep === 'both' ? 'symbol' : rep), labelFor(c));
+  };
+
+  const doInsertBw = async (c: LibV2Component) => {
+    if (!canInsert) return;
+    let comp = c;
+    if (!comp.symbolFile) {
+      setLoading(true);
+      try {
+        const generated = await generateLibV2Symbol(comp.id);
+        if (!generated.symbolFile) {
+          window.alert('Unable to generate a B/W symbol for this component yet.');
+          return;
+        }
+        const latest = await getLibV2();
+        setData(latest);
+        comp = latest.components.find((x) => x.id === comp.id) ?? { ...comp, symbolFile: generated.symbolFile };
+      } finally {
+        setLoading(false);
+      }
+    }
+    onInsert(displayNameFor(comp), insertUrlFor(comp, 'symbol'), labelFor(comp));
   };
 
   const onDragStart = (e: React.DragEvent, c: LibV2Component) => {
     e.dataTransfer.setData(COMPONENT_DRAG_TYPE, JSON.stringify({
-      name: c.displayName, url: insertUrlFor(c, rep === 'both' ? 'symbol' : rep), label: labelFor(c),
+      name: displayNameFor(c), url: insertUrlFor(c, rep === 'both' ? 'symbol' : rep), label: labelFor(c),
     }));
     e.dataTransfer.effectAllowed = 'copy';
   };
@@ -233,7 +271,7 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
             onClick={() => setSelectedId(c.id)}>
             <CardPreview c={c} rep={rep} />
             <div className="libv2-meta">
-              <div className="libv2-name">{c.displayName}</div>
+              <div className="libv2-name">{displayNameFor(c)}</div>
               {c.partNumber ? <div className="libv2-part">{c.partNumber}</div> : null}
               <div className="libv2-cat">
                 {c.category}
@@ -241,8 +279,14 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
               </div>
               <div className="libv2-actions">
                 <button onClick={(e) => { e.stopPropagation(); doInsert(c); }} disabled={!canInsert} title="Insert onto active page (with label)">Insert</button>
-                <button onClick={(e) => { e.stopPropagation(); if (canInsert) onInsert(c.displayName, insertUrlFor(c, 'source'), labelFor(c)); }} disabled={!canInsert} title="Insert source image">Src</button>
-                <button onClick={(e) => { e.stopPropagation(); if (canInsert && c.symbolFile) onInsert(c.displayName, insertUrlFor(c, 'symbol'), labelFor(c)); }} disabled={!canInsert || !c.symbolFile} title="Insert black/white symbol">B/W</button>
+                <button onClick={(e) => { e.stopPropagation(); if (canInsert) onInsert(displayNameFor(c), insertUrlFor(c, 'source'), labelFor(c)); }} disabled={!canInsert} title="Insert source image">Src</button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); void doInsertBw(c); }}
+                  disabled={!canInsert || loading}
+                  title={c.symbolFile ? 'Insert black/white symbol' : 'Generate black/white symbol and insert'}
+                >
+                  B/W
+                </button>
                 <button onClick={(e) => { e.stopPropagation(); setSelectedId(c.id); }} title="Edit">Edit</button>
                 <button onClick={(e) => { e.stopPropagation(); void toggleFavorite(c); }}
                   className={c.favorite ? 'active' : undefined} title={c.favorite ? 'Unfavorite' : 'Favorite'}>{c.favorite ? '★' : '☆'}</button>
@@ -255,7 +299,7 @@ export default function LibraryPanelV2({ onInsert, canInsert }: Props) {
 
       {selected && (
         <div className="libv2-editor">
-          <div className="libv2-editor-title">Edit: {selected.displayName}</div>
+          <div className="libv2-editor-title">Edit: {displayNameFor(selected)}</div>
           <EditorRow label="Display name">
             <input title="Display name" value={selected.displayName} onChange={(e) => void patchSelected({ displayName: e.target.value })} />
           </EditorRow>
