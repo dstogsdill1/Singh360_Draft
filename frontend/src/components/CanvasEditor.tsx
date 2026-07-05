@@ -461,6 +461,23 @@ export default function CanvasEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // While ANY draw tool is active, turn OFF Fabric's object selection + target
+  // finding so every click is a pure coordinate capture (drop a point / start a
+  // shape) instead of selecting/"highlighting" whatever is under the cursor.
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const drawing = activeTool !== 'select';
+    canvas.selection = !drawing;
+    canvas.skipTargetFind = drawing;
+    canvas.defaultCursor = drawing ? 'crosshair' : 'default';
+    canvas.hoverCursor = drawing ? 'crosshair' : 'move';
+    if (drawing) {
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    }
+  }, [activeTool]);
+
   // NOTE: overlay pointer-events are driven purely by React/CSS in NormalizedPage
   // (`overlayInteractive`). A previous DOM-walking hover pass-through was removed
   // because Fabric v6 wraps the <canvas> in a `.canvas-container`, so the effect
