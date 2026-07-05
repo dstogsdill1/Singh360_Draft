@@ -158,7 +158,10 @@ export default function CanvasEditor({
   const restoringRef = useRef(false);
   // Connector currently being drawn via drag-to-create.
   const creatingRef = useRef<Connector | null>(null);
+  const lineStartRef = useRef<{ x: number; y: number } | null>(null);
   const creatingPolyRef = useRef<Connector | null>(null);
+  // Committed absolute vertices while building a polyline/elbow (preview point excluded).
+  const polyCommittedRef = useRef<Array<{ x: number; y: number }>>([]);
   // Transient alignment guide lines (never serialized/exported).
   const guidesRef = useRef<FabricObject[]>([]);
 
@@ -237,17 +240,12 @@ export default function CanvasEditor({
     canvas.on('object:moving', (e) => {
       const t = e.target;
       if (!t) return;
+      // Connectors are native Polylines — let Fabric translate the whole object
+      // (its absolute vertices are derived from the object transform).
       if (t instanceof Connector) {
-        const anyT = t as unknown as Record<string, unknown>;
-        const dragOrigin = anyT.__dragOrigin as { left: number; top: number; points: Array<{ x: number; y: number }> } | undefined;
-        if (dragOrigin) {
-          const dx = (t.left ?? 0) - dragOrigin.left;
-          const dy = (t.top ?? 0) - dragOrigin.top;
-          t.pointsData = dragOrigin.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
-          t.updateLineFromPoints();
-          canvas.requestRenderAll();
-          return;
-        }
+        t.setCoords();
+        canvas.requestRenderAll();
+        return;
       }
       clearGuides();
       const w = (t.width ?? 0) * (t.scaleX ?? 1);
@@ -299,56 +297,54 @@ export default function CanvasEditor({
     canvas.on('mouse:up', () => { clearGuides(); canvas.requestRenderAll(); });
     canvas.on('mouse:down', (opt) => {
       const tool = toolRef.current;
-      if (opt.target instanceof Connector) {
-        const t = opt.target as Connector;
-        const anyT = t as unknown as Record<string, unknown>;
-        anyT.__dragOrigin = {
-          left: t.left ?? 0,
-          top: t.top ?? 0,
-          points: t.pointsData.map((p) => ({ x: p.x, y: p.y })),
-        };
-      }
       if (tool === 'select' || opt.target) return;
       const p = canvas.getScenePoint(opt.e);
-      // Line / arrow: start a drag-to-create connector.
+      const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
+      const px = sp(p.x);
+      const py = sp(p.y);
+      // Line / arrow: press-drag-release to create a two-point connector.
       if (tool === 'line' || tool === 'arrow') {
-        const conn = new Connector([p.x, p.y, p.x, p.y], {
+        const conn = new Connector([{ x: px, y: py }, { x: px, y: py }], {
           stroke: '#111',
           strokeWidth: 2,
           arrowEnd: tool === 'arrow',
+          connectorKind: tool === 'arrow' ? 'arrow' : 'line',
         });
         canvas.add(conn);
         canvas.setActiveObject(conn);
         creatingRef.current = conn;
+        lineStartRef.current = { x: px, y: py };
         canvas.requestRenderAll();
         return;
       }
+      // Polyline / elbow: click to drop each point (PowerPoint style).
+      // First click starts it; each subsequent click commits a vertex.
       if (tool === 'polyline' || tool === 'elbow') {
+        const isElbow = tool === 'elbow';
         if (!creatingPolyRef.current) {
-          const conn = tool === 'elbow' ? makeElbow(p.x, p.y) : makePolyline(p.x, p.y);
-          conn.pointsData = [{ x: p.x, y: p.y }, { x: p.x, y: p.y }];
-          conn.connectorKind = tool === 'elbow' ? 'elbow' : 'polyline';
-          conn.rebuildVertexControls();
-          conn.updateLineFromPoints();
+          polyCommittedRef.current = [{ x: px, y: py }];
+          const conn = new Connector([{ x: px, y: py }, { x: px, y: py }], {
+            stroke: '#111',
+            strokeWidth: 2,
+            arrowEnd: false,
+            connectorKind: isElbow ? 'elbow' : 'polyline',
+            pointsData: [{ x: px, y: py }, { x: px, y: py }],
+          });
           canvas.add(conn);
           canvas.setActiveObject(conn);
           creatingPolyRef.current = conn;
           canvas.requestRenderAll();
         } else {
           const conn = creatingPolyRef.current;
-          if (conn) {
-            const last = conn.pointsData[conn.pointsData.length - 1];
-            const nx = snapRef.current ? Math.round(p.x / SNAP) * SNAP : p.x;
-            const ny = snapRef.current ? Math.round(p.y / SNAP) * SNAP : p.y;
-            if (conn.connectorKind === 'elbow' && last) {
-              conn.pointsData.push({ x: nx, y: last.y }, { x: nx, y: ny });
-            } else {
-              conn.pointsData.push({ x: nx, y: ny });
-            }
-            conn.rebuildVertexControls();
-            conn.updateLineFromPoints();
-            canvas.requestRenderAll();
+          const committed = polyCommittedRef.current;
+          const prev = committed[committed.length - 1];
+          if (isElbow && prev) {
+            committed.push({ x: px, y: prev.y }, { x: px, y: py });
+          } else {
+            committed.push({ x: px, y: py });
           }
+          conn.setAbsPoints(committed.length >= 2 ? committed : [...committed, { x: px, y: py }]);
+          canvas.requestRenderAll();
         }
         return;
       }
@@ -364,59 +360,60 @@ export default function CanvasEditor({
       consumeRef.current();
     });
     canvas.on('mouse:move', (opt) => {
+      const p = canvas.getScenePoint(opt.e);
+      const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
+      const px = sp(p.x);
+      const py = sp(p.y);
       const conn = creatingRef.current;
-      if (conn) {
-        const p = canvas.getScenePoint(opt.e);
-        if (conn.pointsData?.length >= 2) {
-          conn.pointsData[1] = { x: p.x, y: p.y };
-          conn.updateLineFromPoints();
-        } else {
-          conn.set({ x2: p.x, y2: p.y });
-          conn.setCoords();
-        }
+      if (conn && lineStartRef.current) {
+        conn.setAbsPoints([lineStartRef.current, { x: px, y: py }]);
         canvas.requestRenderAll();
       }
       const poly = creatingPolyRef.current;
       if (poly) {
-        const p = canvas.getScenePoint(opt.e);
-        const nx = snapRef.current ? Math.round(p.x / SNAP) * SNAP : p.x;
-        const ny = snapRef.current ? Math.round(p.y / SNAP) * SNAP : p.y;
-        if (poly.pointsData.length >= 2) {
-          poly.pointsData[poly.pointsData.length - 1] =
-            poly.connectorKind === 'elbow'
-              ? { x: nx, y: poly.pointsData[poly.pointsData.length - 2].y }
-              : { x: nx, y: ny };
-          poly.updateLineFromPoints();
-          canvas.requestRenderAll();
+        const committed = polyCommittedRef.current;
+        const display = [...committed];
+        const prev = committed[committed.length - 1];
+        if (poly.connectorKind === 'elbow' && prev) {
+          display.push({ x: px, y: prev.y }, { x: px, y: py });
+        } else {
+          display.push({ x: px, y: py });
         }
+        if (display.length < 2) display.push({ x: px, y: py });
+        poly.setAbsPoints(display);
+        canvas.requestRenderAll();
       }
     });
     canvas.on('mouse:up', () => {
       const conn = creatingRef.current;
       if (!conn) return;
       // Give a minimum length if the user just clicked without dragging.
-      const dx = (conn.x2 ?? 0) - (conn.x1 ?? 0);
-      const dy = (conn.y2 ?? 0) - (conn.y1 ?? 0);
+      const abs = conn.getAbsPoints();
+      const dx = abs[1].x - abs[0].x;
+      const dy = abs[1].y - abs[0].y;
       if (Math.hypot(dx, dy) < 6) {
-        conn.set({ x2: (conn.x1 ?? 0) + 160, y2: conn.y1 ?? 0 });
-        conn.setCoords();
-        if (conn.pointsData?.length >= 2) {
-          conn.pointsData[1] = { x: (conn.x1 ?? 0) + 160, y: conn.y1 ?? 0 };
-          conn.updateLineFromPoints();
-        }
+        conn.setAbsPoints([abs[0], { x: abs[0].x + 160, y: abs[0].y }]);
       }
       creatingRef.current = null;
+      lineStartRef.current = null;
       canvas.requestRenderAll();
       onChanged();
       consumeRef.current();
     });
-    canvas.on('object:modified', (e) => {
-      const t = e.target;
-      if (t instanceof Connector) {
-        const anyT = t as unknown as Record<string, unknown>;
-        delete anyT.__dragOrigin;
-      }
-    });
+
+    const finishPoly = () => {
+      const poly = creatingPolyRef.current;
+      if (!poly) return;
+      creatingPolyRef.current = null;
+      const committed = polyCommittedRef.current;
+      const finalPts = committed.length >= 2 ? committed : poly.getAbsPoints();
+      poly.setAbsPoints(finalPts);
+      polyCommittedRef.current = [];
+      canvas.setActiveObject(poly);
+      canvas.requestRenderAll();
+      onChanged();
+      consumeRef.current();
+    };
 
     const onKeyDown = (ev: KeyboardEvent) => {
       const poly = creatingPolyRef.current;
@@ -424,55 +421,30 @@ export default function CanvasEditor({
       if (ev.key === 'Escape') {
         canvas.remove(poly);
         creatingPolyRef.current = null;
+        polyCommittedRef.current = [];
         canvas.requestRenderAll();
         return;
       }
       if (ev.key === 'Backspace') {
         ev.preventDefault();
-        if (poly.pointsData.length > 2) {
-          poly.pointsData.splice(poly.pointsData.length - 2, 1);
-          poly.rebuildVertexControls();
-          poly.updateLineFromPoints();
+        const committed = polyCommittedRef.current;
+        if (committed.length > 1) {
+          committed.pop();
+          poly.setAbsPoints(committed.length >= 2 ? committed : [...committed, committed[0]]);
           canvas.requestRenderAll();
         }
         return;
       }
       if (ev.key === 'Enter') {
-        creatingPolyRef.current = null;
-        // Drop trailing preview point if it duplicates the previous vertex.
-        if (poly.pointsData.length >= 2) {
-          const a = poly.pointsData[poly.pointsData.length - 2];
-          const b = poly.pointsData[poly.pointsData.length - 1];
-          if (Math.hypot((b?.x ?? 0) - (a?.x ?? 0), (b?.y ?? 0) - (a?.y ?? 0)) < 2) {
-            poly.pointsData.pop();
-          }
-        }
-        poly.rebuildVertexControls();
-        poly.updateLineFromPoints();
-        canvas.setActiveObject(poly);
-        canvas.requestRenderAll();
-        onChanged();
+        ev.preventDefault();
+        finishPoly();
       }
     };
     const onDblClick = (ev: MouseEvent) => {
+      if (!creatingPolyRef.current) return;
       ev.preventDefault();
       ev.stopPropagation();
-      const poly = creatingPolyRef.current;
-      if (!poly) return;
-      creatingPolyRef.current = null;
-      // Drop trailing preview point if it duplicates the previous vertex.
-      if (poly.pointsData.length >= 2) {
-        const a = poly.pointsData[poly.pointsData.length - 2];
-        const b = poly.pointsData[poly.pointsData.length - 1];
-        if (Math.hypot((b?.x ?? 0) - (a?.x ?? 0), (b?.y ?? 0) - (a?.y ?? 0)) < 2) {
-          poly.pointsData.pop();
-        }
-      }
-      poly.rebuildVertexControls();
-      poly.updateLineFromPoints();
-      canvas.setActiveObject(poly);
-      canvas.requestRenderAll();
-      onChanged();
+      finishPoly();
     };
     window.addEventListener('keydown', onKeyDown);
     canvas.upperCanvasEl?.addEventListener('dblclick', onDblClick);

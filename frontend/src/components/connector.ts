@@ -1,135 +1,167 @@
-import { Line, Control, Point, util, classRegistry } from 'fabric';
+import { Polyline, Control, Point, util, classRegistry } from 'fabric';
 
 /**
- * A real connector: a Fabric Line subclass with independent, draggable endpoint
- * handles and an optional arrowhead that always follows the end point. Unlike a
- * grouped line+triangle "arrow", this behaves like a PowerPoint/Visio connector:
- *  - click the body to select, drag the body to move the whole connector
- *  - drag either endpoint handle to move that endpoint independently
- *  - the arrowhead tracks the end point
- *  - it serializes/reloads/exports as a single stable object
+ * Connector — a real multi-point line/arrow/polyline/elbow built on Fabric's
+ * native Polyline so the bounding box, hit-testing, whole-object move and vertex
+ * editing all behave correctly (PowerPoint/Visio style).
+ *
+ * Points live in Fabric's local "points" space; absolute scene coordinates are
+ * always derivable from the object transform, so:
+ *  - drag the body → the whole connector moves (native Fabric transform)
+ *  - drag a vertex handle → only that point moves
+ *  - it serializes/reloads/exports as one stable object
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyOpts = Record<string, any>;
+type XY = { x: number; y: number };
 
 function renderHandle(ctx: CanvasRenderingContext2D, left: number, top: number) {
-  const s = 7;
+  const s = 8;
   ctx.save();
   ctx.fillStyle = '#12539b';
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(left, top, s / 2 + 1, 0, Math.PI * 2);
+  ctx.arc(left, top, s / 2, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   ctx.restore();
 }
 
-export class Connector extends Line {
+function normalizePoints(input: unknown, options: AnyOpts): XY[] {
+  if (Array.isArray(options.pointsData) && options.pointsData.length >= 2) {
+    return options.pointsData.map((p: XY) => ({ x: Number(p.x), y: Number(p.y) }));
+  }
+  if (Array.isArray(input) && input.length >= 2 && typeof input[0] === 'object') {
+    return (input as XY[]).map((p) => ({ x: Number(p.x), y: Number(p.y) }));
+  }
+  if (Array.isArray(input) && input.length >= 4 && typeof input[0] === 'number') {
+    const n = input as number[];
+    return [
+      { x: n[0], y: n[1] },
+      { x: n[2], y: n[3] },
+    ];
+  }
+  return [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+  ];
+}
+
+export class Connector extends Polyline {
   static type = 'Connector';
 
   arrowStart = false;
-  arrowEnd = true;
+  arrowEnd = false;
   objName?: string;
   connectorKind: 'line' | 'arrow' | 'polyline' | 'elbow' = 'line';
-  pointsData: Array<{ x: number; y: number }> = [];
   label?: string;
 
-  constructor(points: [number, number, number, number], options: AnyOpts = {}) {
-    super(points, options);
+  constructor(input: unknown, options: AnyOpts = {}) {
+    const pts = normalizePoints(input, options);
+    super(pts, {
+      stroke: options.stroke ?? '#111',
+      strokeWidth: options.strokeWidth ?? 2,
+      strokeUniform: true,
+      strokeLineCap: 'round',
+      strokeLineJoin: 'round',
+      objectCaching: false,
+      perPixelTargetFind: false,
+      padding: 10,
+      hasBorders: true,
+      borderColor: '#12539b',
+      borderScaleFactor: 2,
+      ...options,
+      fill: '',
+    });
     this.arrowStart = options.arrowStart ?? false;
-    this.arrowEnd = options.arrowEnd ?? true;
+    this.arrowEnd = options.arrowEnd ?? false;
     this.objName = options.objName;
-    this.connectorKind = options.connectorKind ?? (this.arrowEnd ? 'arrow' : 'line');
-    this.pointsData = Array.isArray(options.pointsData)
-      ? options.pointsData.map((p: { x: number; y: number }) => ({ x: Number(p.x), y: Number(p.y) }))
-      : [
-          { x: points[0], y: points[1] },
-          { x: points[2], y: points[3] },
-        ];
+    this.connectorKind = options.connectorKind ?? (options.arrowEnd ? 'arrow' : 'line');
     this.label = options.label;
-    this.strokeUniform = true;
-    // Easy to grab: use the bounding box (not per-pixel) and add generous hit
-    // padding so thin lines/arrows are simple to select and move.
-    this.perPixelTargetFind = false;
-    this.padding = 10;
-    this.hasBorders = true;
-    this.objectCaching = false;
-    this.borderColor = '#12539b';
-    this.borderScaleFactor = 2;
-    this.controls = {
-      start: new Control({
-        positionHandler: endpointPosition('start'),
-        actionHandler: endpointAction('start'),
-        actionName: 'endpoint',
-        cursorStyle: 'crosshair',
-        render: renderHandle,
-      }),
-      end: new Control({
-        positionHandler: endpointPosition('end'),
-        actionHandler: endpointAction('end'),
-        actionName: 'endpoint',
-        cursorStyle: 'crosshair',
-        render: renderHandle,
-      }),
-    };
+    if (options.strokeDashArray) this.strokeDashArray = options.strokeDashArray;
     this.rebuildVertexControls();
-    this.updateLineFromPoints();
+  }
+
+  // ---- absolute scene coordinates -----------------------------------------
+  getAbsPoints(): XY[] {
+    const m = this.calcTransformMatrix();
+    return (this.points as XY[]).map((p) => {
+      const t = new Point(p.x - this.pathOffset.x, p.y - this.pathOffset.y).transform(m);
+      return { x: Math.round(t.x), y: Math.round(t.y) };
+    });
+  }
+
+  setAbsPoints(abs: XY[]) {
+    if (!abs || abs.length < 2) return;
+    this.points = abs.map((p) => new Point(p.x, p.y));
+    this.setBoundingBox(true);
+    this.rebuildVertexControls();
+    this.setCoords();
+    this.dirty = true;
+  }
+
+  // Back-compat accessor (returns absolute points).
+  get pointsData(): XY[] {
+    return this.getAbsPoints();
+  }
+  set pointsData(v: XY[]) {
+    this.setAbsPoints(v);
+  }
+
+  updateLineFromPoints() {
+    this.setBoundingBox(true);
+    this.setCoords();
+    this.dirty = true;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toObject(...args: any[]) {
-    const propertiesToInclude = (args?.[0] ?? []) as any[];
+    const propertiesToInclude = (args?.[0] ?? []) as string[];
     return {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...(super.toObject(propertiesToInclude as any) as any),
       arrowStart: this.arrowStart,
       arrowEnd: this.arrowEnd,
       connectorKind: this.connectorKind,
-      pointsData: this.pointsData,
+      pointsData: this.getAbsPoints(),
       label: this.label,
       objName: this.objName,
     };
   }
 
-  _render(ctx: CanvasRenderingContext2D) {
-    if (!this.pointsData || this.pointsData.length < 2) {
-      super._render(ctx);
-      return;
-    }
-    const pts = this.pointsData;
-    ctx.save();
-    ctx.strokeStyle = (this.stroke as string) || '#111';
-    ctx.lineWidth = this.strokeWidth || 2;
-    const d = this.strokeDashArray as number[] | undefined;
-    if (d && d.length) ctx.setLineDash(d);
-    else ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x - (this.left ?? 0), pts[0].y - (this.top ?? 0));
-    for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo(pts[i].x - (this.left ?? 0), pts[i].y - (this.top ?? 0));
-    }
-    ctx.stroke();
+  static async fromObject(object: AnyOpts): Promise<Connector> {
+    const abs = Array.isArray(object.pointsData) && object.pointsData.length >= 2
+      ? object.pointsData
+      : object.points;
+    return new Connector(abs, { ...object, pointsData: abs });
+  }
 
-    if (this.arrowEnd && pts.length >= 2) {
+  _render(ctx: CanvasRenderingContext2D) {
+    super._render(ctx);
+    const pts = this.points as XY[];
+    if (pts.length < 2) return;
+    const ox = this.pathOffset.x;
+    const oy = this.pathOffset.y;
+    if (this.arrowEnd) {
       const a = pts[pts.length - 2];
       const b = pts[pts.length - 1];
-      this._arrowHead(ctx, a.x - (this.left ?? 0), a.y - (this.top ?? 0), b.x - (this.left ?? 0), b.y - (this.top ?? 0));
+      this._arrowHead(ctx, a.x - ox, a.y - oy, b.x - ox, b.y - oy);
     }
-    if (this.arrowStart && pts.length >= 2) {
+    if (this.arrowStart) {
       const a = pts[1];
       const b = pts[0];
-      this._arrowHead(ctx, a.x - (this.left ?? 0), a.y - (this.top ?? 0), b.x - (this.left ?? 0), b.y - (this.top ?? 0));
+      this._arrowHead(ctx, a.x - ox, a.y - oy, b.x - ox, b.y - oy);
     }
-    ctx.restore();
   }
 
   _arrowHead(ctx: CanvasRenderingContext2D, fromX: number, fromY: number, toX: number, toY: number) {
     const angle = Math.atan2(toY - fromY, toX - fromX);
-    const size = Math.max(9, (this.strokeWidth || 2) * 3.2);
+    const size = Math.max(10, (this.strokeWidth || 2) * 3.2);
     ctx.save();
     ctx.translate(toX, toY);
     ctx.rotate(angle);
+    ctx.setLineDash([]);
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.lineTo(-size, size / 2);
@@ -140,154 +172,127 @@ export class Connector extends Line {
     ctx.restore();
   }
 
-  updateLineFromPoints() {
-    if (!this.pointsData || this.pointsData.length < 2) return;
-    const xs = this.pointsData.map((p) => p.x);
-    const ys = this.pointsData.map((p) => p.y);
-    const minX = Math.min(...xs);
-    const minY = Math.min(...ys);
-    const maxX = Math.max(...xs);
-    const maxY = Math.max(...ys);
-    this.set({
-      left: minX,
-      top: minY,
-      width: Math.max(1, maxX - minX),
-      height: Math.max(1, maxY - minY),
-      x1: this.pointsData[0].x,
-      y1: this.pointsData[0].y,
-      x2: this.pointsData[this.pointsData.length - 1].x,
-      y2: this.pointsData[this.pointsData.length - 1].y,
-    });
-    this.setCoords();
-  }
-
   rebuildVertexControls() {
-    const baseStart = this.controls.start;
-    const baseEnd = this.controls.end;
-    const controls: Record<string, Control> = {
-      start: baseStart,
-      end: baseEnd,
-    };
-    this.pointsData.forEach((_p, idx) => {
-      controls[`v${idx}`] = new Control({
-        positionHandler: vertexPosition(idx),
-        actionHandler: vertexAction(idx),
-        actionName: 'vertex',
+    const controls: Record<string, Control> = {};
+    (this.points as XY[]).forEach((_p, idx) => {
+      const control = new Control({
+        positionHandler: polyPositionHandler,
+        actionHandler: anchorWrapper(idx > 0 ? idx - 1 : 1, polyActionHandler),
+        actionName: 'modifyConnector',
         cursorStyle: 'crosshair',
         render: renderHandle,
       });
+      (control as unknown as Record<string, unknown>).pointIndex = idx;
+      controls[`p${idx}`] = control;
     });
     this.controls = controls;
   }
 
   addVertexAtMidpoint() {
-    if (!this.pointsData || this.pointsData.length < 2) return;
+    const abs = this.getAbsPoints();
+    if (abs.length < 2) return;
     let bestIdx = 0;
     let bestLen = -1;
-    for (let i = 0; i < this.pointsData.length - 1; i++) {
-      const a = this.pointsData[i];
-      const b = this.pointsData[i + 1];
-      const len = Math.hypot(b.x - a.x, b.y - a.y);
-      if (len > bestLen) {
-        bestLen = len;
-        bestIdx = i;
-      }
+    for (let i = 0; i < abs.length - 1; i++) {
+      const len = Math.hypot(abs[i + 1].x - abs[i].x, abs[i + 1].y - abs[i].y);
+      if (len > bestLen) { bestLen = len; bestIdx = i; }
     }
-    const a = this.pointsData[bestIdx];
-    const b = this.pointsData[bestIdx + 1];
-    this.pointsData.splice(bestIdx + 1, 0, { x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) });
-    this.rebuildVertexControls();
-    this.updateLineFromPoints();
+    const a = abs[bestIdx];
+    const b = abs[bestIdx + 1];
+    abs.splice(bestIdx + 1, 0, { x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) });
+    this.setAbsPoints(abs);
   }
 
   deleteVertex() {
-    if (!this.pointsData || this.pointsData.length <= 2) return;
-    this.pointsData.splice(this.pointsData.length - 2, 1);
-    this.rebuildVertexControls();
-    this.updateLineFromPoints();
+    const abs = this.getAbsPoints();
+    if (abs.length <= 2) return;
+    abs.splice(abs.length - 2, 1);
+    this.setAbsPoints(abs);
   }
 
   reverseDirection() {
-    this.pointsData = [...this.pointsData].reverse();
+    const abs = this.getAbsPoints().reverse();
     const a = this.arrowStart;
     this.arrowStart = this.arrowEnd;
     this.arrowEnd = a;
-    this.updateLineFromPoints();
+    this.setAbsPoints(abs);
   }
 
   convertKind(kind: 'line' | 'arrow' | 'polyline' | 'elbow') {
+    const abs = this.getAbsPoints();
     this.connectorKind = kind;
     if (kind === 'line' || kind === 'arrow') {
-      const s = this.pointsData[0];
-      const e = this.pointsData[this.pointsData.length - 1];
-      this.pointsData = [s, e];
+      const s = abs[0];
+      const e = abs[abs.length - 1];
       this.arrowStart = false;
-      this.arrowEnd = kind === 'arrow' ? true : this.arrowEnd;
+      this.arrowEnd = kind === 'arrow';
+      this.setAbsPoints([s, e]);
     } else if (kind === 'elbow') {
-      const s = this.pointsData[0];
-      const e = this.pointsData[this.pointsData.length - 1];
-      this.pointsData = [s, { x: e.x, y: s.y }, e];
+      const s = abs[0];
+      const e = abs[abs.length - 1];
+      this.setAbsPoints([s, { x: e.x, y: s.y }, e]);
+    } else {
+      this.setAbsPoints(abs);
     }
-    this.rebuildVertexControls();
-    this.updateLineFromPoints();
   }
 }
 
-function endpointPosition(which: 'start' | 'end') {
+// ---- Fabric editable-polygon control recipe -------------------------------
+function polyPositionHandler(
+  this: Control,
+  _dim: Point,
+  _finalMatrix: unknown,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return function (_dim: Point, _finalMatrix: unknown, fabricObject: any): Point {
-    const line = fabricObject as Connector;
-    const p = which === 'start' ? line.pointsData[0] : line.pointsData[line.pointsData.length - 1];
-    const local = new Point((p?.x ?? 0) - (line.left ?? 0), (p?.y ?? 0) - (line.top ?? 0));
-    const vpt = line.canvas?.viewportTransform;
-    const m = vpt
-      ? util.multiplyTransformMatrices(vpt, line.calcTransformMatrix())
-      : line.calcTransformMatrix();
-    return local.transform(m);
-  };
+  fabricObject: any,
+): Point {
+  const idx = (this as unknown as Record<string, number>).pointIndex ?? 0;
+  const p = fabricObject.points[idx] ?? fabricObject.points[0];
+  const x = p.x - fabricObject.pathOffset.x;
+  const y = p.y - fabricObject.pathOffset.y;
+  const vpt = fabricObject.canvas?.viewportTransform;
+  const m = vpt
+    ? util.multiplyTransformMatrices(vpt, fabricObject.calcTransformMatrix())
+    : fabricObject.calcTransformMatrix();
+  return new Point(x, y).transform(m);
 }
 
-function endpointAction(which: 'start' | 'end') {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function polyActionHandler(_eventData: unknown, transform: any, x: number, y: number): boolean {
+  const polygon = transform.target;
+  const currentControl = polygon.controls[polygon.__corner];
+  const idx = (currentControl as Record<string, number>).pointIndex ?? 0;
+  const mouseLocalPosition = polygon.toLocalPoint(new Point(x, y), 'center', 'center');
+  const polygonBaseSize = polygon._getNonTransformedDimensions();
+  const size = polygon._getTransformedDimensions();
+  const finalX = (mouseLocalPosition.x * polygonBaseSize.x) / size.x + polygon.pathOffset.x;
+  const finalY = (mouseLocalPosition.y * polygonBaseSize.y) / size.y + polygon.pathOffset.y;
+  polygon.points[idx] = new Point(finalX, finalY);
+  return true;
+}
+
+function anchorWrapper(
+  anchorIndex: number,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return function (_eventData: unknown, transform: any, x: number, y: number): boolean {
-    const line = transform.target as Connector;
-    if (!line.pointsData?.length) return false;
-    if (which === 'start') line.pointsData[0] = { x, y };
-    else line.pointsData[line.pointsData.length - 1] = { x, y };
-    line.updateLineFromPoints();
-    return true;
+  fn: (eventData: unknown, transform: any, x: number, y: number) => boolean,
+) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return function (eventData: unknown, transform: any, x: number, y: number): boolean {
+    const fabricObject = transform.target;
+    const idx = Math.min(anchorIndex, fabricObject.points.length - 1);
+    const absolutePoint = new Point(
+      fabricObject.points[idx].x - fabricObject.pathOffset.x,
+      fabricObject.points[idx].y - fabricObject.pathOffset.y,
+    ).transform(fabricObject.calcTransformMatrix());
+    const actionPerformed = fn(eventData, transform, x, y);
+    fabricObject.setBoundingBox();
+    const polygonBaseSize = fabricObject._getNonTransformedDimensions();
+    const newX = (fabricObject.points[idx].x - fabricObject.pathOffset.x) / polygonBaseSize.x;
+    const newY = (fabricObject.points[idx].y - fabricObject.pathOffset.y) / polygonBaseSize.y;
+    fabricObject.setPositionByOrigin(absolutePoint, newX + 0.5, newY + 0.5);
+    fabricObject.rebuildVertexControls?.();
+    return actionPerformed;
   };
 }
 
 classRegistry.setClass(Connector);
 classRegistry.setClass(Connector, 'connector');
-
-function vertexPosition(idx: number) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return function (_dim: Point, _finalMatrix: unknown, fabricObject: any): Point {
-    const line = fabricObject as Connector;
-    const p = line.pointsData[idx] ?? line.pointsData[0];
-    const local = new Point((p?.x ?? 0) - (line.left ?? 0), (p?.y ?? 0) - (line.top ?? 0));
-    const vpt = line.canvas?.viewportTransform;
-    const m = vpt
-      ? util.multiplyTransformMatrices(vpt, line.calcTransformMatrix())
-      : line.calcTransformMatrix();
-    return local.transform(m);
-  };
-}
-
-function vertexAction(idx: number) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return function (_eventData: unknown, transform: any, x: number, y: number): boolean {
-    const line = transform.target as Connector;
-    if (!line.pointsData[idx]) return false;
-    line.pointsData[idx] = { x, y };
-    if (line.connectorKind === 'elbow' && line.pointsData.length >= 3) {
-      // Maintain orthogonal route on immediate neighbors.
-      if (idx > 0) line.pointsData[idx - 1] = { ...line.pointsData[idx - 1], y: y };
-      if (idx < line.pointsData.length - 1) line.pointsData[idx + 1] = { ...line.pointsData[idx + 1], x: x };
-    }
-    line.updateLineFromPoints();
-    return true;
-  };
-}
