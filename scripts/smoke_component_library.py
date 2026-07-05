@@ -462,6 +462,49 @@ def main() -> int:
     else:
         print("page-scope check skipped (set SINGH360_SA31_WORKBOOK to a workbook to enable it)")
 
+    # 6. Component Library V2 — approved builder export wiring (/api/lib).
+    v2 = c.get("/api/lib").get_json()
+    if v2.get("usingBuilderExport"):
+        v2comps = v2.get("components", [])
+        with_symbol = [x for x in v2comps if x.get("symbolFile") and x.get("hasSymbol")]
+        print(
+            f"V2 builder export: total={len(v2comps)} withSymbol={len(with_symbol)} "
+            f"legacyHidden={v2.get('legacyCount')}"
+        )
+        if not v2comps:
+            problems.append("V2 builder export produced zero components")
+        if not with_symbol:
+            problems.append("V2 builder export exposed no B/W symbols (hasSymbol)")
+        # Approved items must expose hasSource/hasSymbol booleans.
+        if any("hasSymbol" not in x or "hasSource" not in x for x in v2comps):
+            problems.append("V2 components missing hasSource/hasSymbol flags")
+        # No stale hash-name junk in the default view.
+        import re as _re
+        stale = [x for x in v2comps if _re.search(r"_[0-9a-f]{8,}\b", str(x.get("id") or ""))]
+        if stale:
+            problems.append(f"V2 default view still shows {len(stale)} stale hash-name items")
+        # A component with a symbol must serve it through the asset route.
+        if with_symbol:
+            sym_rel = with_symbol[0]["symbolFile"]
+            ar = c.get(f"/api/lib/asset/{sym_rel}")
+            if ar.status_code != 200:
+                problems.append(f"V2 symbol asset did not resolve ({ar.status_code}) for {sym_rel}")
+        # PATCH persistence for an export-derived id (override entry).
+        if v2comps:
+            tid = v2comps[0]["id"]
+            orig_label = v2comps[0].get("defaultLabel", "")
+            pr = c.patch(f"/api/lib/components/{tid}", json={"defaultLabel": "SMOKE_LABEL"})
+            if pr.status_code != 200:
+                problems.append(f"V2 PATCH failed ({pr.status_code})")
+            else:
+                again = next((x for x in c.get("/api/lib").get_json().get("components", []) if x.get("id") == tid), None)
+                if not again or again.get("defaultLabel") != "SMOKE_LABEL":
+                    problems.append("V2 PATCH defaultLabel did not persist for export item")
+                # Restore so the smoke does not pollute the real approved manifest.
+                c.patch(f"/api/lib/components/{tid}", json={"defaultLabel": orig_label})
+    else:
+        print("V2 builder export: component_builder_export.json NOT present (manifest fallback in use)")
+
     if problems:
         print("COMPONENT LIBRARY PROBLEMS:")
         for pr in problems:

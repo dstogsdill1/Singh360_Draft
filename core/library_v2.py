@@ -475,7 +475,11 @@ class LibraryV2:
         manifest = self._read_manifest()
         comp = next((c for c in manifest["components"] if c.get("id") == comp_id), None)
         if comp is None:
-            return {"ok": False, "error": "Component not found."}
+            # Component-builder-export items are not stored in the manifest; create
+            # a sparse OVERRIDE entry keyed by the export id so edits persist and
+            # overlay the export on the next load().
+            comp = {"id": comp_id, "origin": "override"}
+            manifest["components"].append(comp)
         for key, val in patch.items():
             if key in EDITABLE_FIELDS:
                 comp[key] = val
@@ -772,8 +776,26 @@ class LibraryV2:
     # ---- read ------------------------------------------------------------
     def load(self) -> dict:
         self.ensure()
-        manifest = self._read_manifest()
-        comps = manifest["components"]
+        export = self._load_builder_export()
+        legacy_count = 0
+        if export is not None:
+            comps = export
+            # Count stale manifest entries that the approved export supersedes.
+            export_ids = {c.get("id") for c in export}
+            manifest = self._read_manifest()
+            legacy_count = sum(
+                1
+                for c in manifest.get("components", [])
+                if c.get("id") not in export_ids and c.get("origin") != "override" and c.get("sourceFile")
+            )
+        else:
+            manifest = self._read_manifest()
+            comps = manifest["components"]
+            for c in comps:
+                sf = c.get("sourceFile", "")
+                syf = c.get("symbolFile", "")
+                c["hasSource"] = bool(sf) and (self.root / sf).exists()
+                c["hasSymbol"] = bool(syf) and (self.root / syf).exists()
         counts: dict[str, int] = {}
         for c in comps:
             counts[c.get("category", "custom")] = counts.get(c.get("category", "custom"), 0) + 1
@@ -785,19 +807,109 @@ class LibraryV2:
             "components": comps,
             "categories": categories,
             "hasLegacy": self.has_legacy(),
+            "legacyCount": legacy_count,
+            "usingBuilderExport": export is not None,
             "libraryRoot": str(self.components),
             "counts": {
                 "total": len(comps),
                 "favorites": sum(1 for c in comps if c.get("favorite")),
                 "needsReview": sum(1 for c in comps if c.get("needsReview")),
-                "withSymbol": sum(
-                    1
-                    for c in comps
-                    if c.get("symbolFile") and (self.root / c.get("symbolFile", "")).exists()
-                ),
+                "withSymbol": sum(1 for c in comps if c.get("hasSymbol")),
             },
             "connectorStyles": self._read_connectors(),
         }
+
+    # ---- approved component-builder export (source of truth) -------------
+    def _builder_export_path(self) -> Path:
+        return self.root / "component_builder_export.json"
+
+    def _rel_from_any(self, raw: str) -> str:
+        """Normalize a builder-export asset path to a library-relative posix path.
+
+        Accepts absolute paths, backslashes, or a `.docs/library/...` prefix and
+        returns the path relative to `.docs/library` (so resolve_asset can serve it).
+        """
+        if not raw:
+            return ""
+        parts = Path(raw.replace("\\", "/")).parts
+        lib_idx = [i for i, seg in enumerate(parts) if seg.lower() == "library"]
+        if lib_idx:
+            return Path(*parts[lib_idx[-1] + 1:]).as_posix()
+        return Path(*parts).as_posix()
+
+    def _load_builder_export(self) -> list[dict] | None:
+        """Build the authoritative component list from `component_builder_export.json`.
+
+        Returns None when the export is absent (caller falls back to the manifest).
+        Manifest entries with a matching id overlay their editable fields, so
+        in-app edits (rename/category/label) persist across reloads.
+        """
+        path = self._builder_export_path()
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            return None
+        entries = data.get("components") if isinstance(data, dict) else data
+        if not isinstance(entries, list) or not entries:
+            return None
+
+        overrides = {c.get("id"): c for c in self._read_manifest().get("components", [])}
+        out: list[dict] = []
+        seen_ids: set[str] = set()
+        for e in entries:
+            raw_cat = (e.get("category") or "custom").lower()
+            category = LEGACY_CATEGORY_MAP.get(raw_cat, raw_cat)
+            if category not in LIBRARY_CATEGORIES:
+                category = "custom"
+            source_rel = self._rel_from_any(e.get("sourceComponent", ""))
+            symbol_rel = self._rel_from_any(e.get("symbol", ""))
+            has_source = bool(source_rel) and (self.root / source_rel).exists()
+            has_symbol = bool(symbol_rel) and (self.root / symbol_rel).exists()
+            cid = e.get("id") or _slug(e.get("displayName", "") or Path(source_rel).stem)
+            if cid in seen_ids:
+                cid = f"{cid}_{uuid.uuid4().hex[:6]}"
+            seen_ids.add(cid)
+            display = e.get("displayName") or Path(source_rel).stem.replace("_", " ") or cid
+            part = e.get("partNumber", "") or ""
+            cd = category_default(category)
+            comp = {
+                "id": cid,
+                "displayName": display,
+                "category": category,
+                "subcategory": "",
+                "manufacturer": e.get("manufacturer", "") or "",
+                "partNumber": part,
+                "aliases": e.get("aliases", []) or [],
+                "sourceFile": source_rel if has_source else "",
+                "thumbnailFile": "",
+                "symbolFile": symbol_rel if has_symbol else "",
+                "symbolStatus": "built" if has_symbol else "not_built",
+                "type": cd.type,
+                "defaultLabel": part or display,
+                "defaultWidth": cd.width,
+                "defaultHeight": cd.height,
+                "labelPosition": cd.label_position,
+                "ports": [dict(p) for p in cd.ports],
+                "approved": True,
+                "needsReview": False,
+                "favorite": False,
+                "notes": e.get("notes", "") or "",
+                "status": "approved",
+                "hasSource": has_source,
+                "hasSymbol": has_symbol,
+                "origin": "builder_export",
+            }
+            ov = overrides.get(cid)
+            if ov:
+                for key in EDITABLE_FIELDS:
+                    if key in ov and ov[key] not in (None, ""):
+                        comp[key] = ov[key]
+                if ov.get("favorite"):
+                    comp["favorite"] = True
+            out.append(comp)
+        return out
 
     def _read_connectors(self) -> dict:
         try:

@@ -529,6 +529,9 @@ export interface LibV2Component {
   needsReview?: boolean;
   favorite?: boolean;
   notes?: string;
+  hasSource?: boolean;
+  hasSymbol?: boolean;
+  status?: string;
 }
 
 export interface LibV2Category { id: string; label: string; count: number }

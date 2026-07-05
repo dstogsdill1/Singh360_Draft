@@ -111,10 +111,7 @@ export default function LibraryPanelV2({ onInsert, onInsertBoth, canInsert }: Pr
   }, [components, query, category, mode]);
 
   const sourceUrlFor = (c: LibV2Component) => libV2AssetUrl(c.sourceFile);
-  const bwFallbackUrl = (c: LibV2Component) => {
-    const src = libV2AssetUrl(c.sourceFile);
-    return `${src}${src.includes('?') ? '&' : '?'}bw=1`;
-  };
+  const hasSymbol = (c: LibV2Component) => !!c.symbolFile;
 
   // Insert Source: always the full-colour original (never the thumbnail).
   const doInsertSource = (c: LibV2Component) => {
@@ -122,33 +119,17 @@ export default function LibraryPanelV2({ onInsert, onInsertBoth, canInsert }: Pr
     onInsert(displayNameFor(c), sourceUrlFor(c), labelFor(c));
   };
 
-  // Insert B/W: the real symbol if one exists; otherwise WARN and offer a
-  // grayscale-of-source fallback rather than silently inserting the wrong asset.
+  // Insert B/W: the approved symbol. Button is disabled when none exists, so no
+  // popup and no silent grayscale fallback.
   const doInsertBw = (c: LibV2Component) => {
-    if (!canInsert) return;
-    if (c.symbolFile) {
-      onInsert(displayNameFor(c), libV2AssetUrl(c.symbolFile), labelFor(c));
-      return;
-    }
-    const ok = window.confirm(
-      `No B/W symbol exists for "${displayNameFor(c)}".\n\nInsert the Source image in black & white instead?`,
-    );
-    if (ok) onInsert(displayNameFor(c), bwFallbackUrl(c), labelFor(c));
+    if (!canInsert || !c.symbolFile) return;
+    onInsert(displayNameFor(c), libV2AssetUrl(c.symbolFile), labelFor(c));
   };
 
-  // Insert Both: source + B/W symbol side-by-side. Needs a real symbol; if none,
-  // offer the grayscale-of-source fallback as the "symbol" half.
+  // Insert Both: source + approved B/W symbol side-by-side. Requires a symbol.
   const doInsertBoth = (c: LibV2Component) => {
-    if (!canInsert) return;
-    const symbol = c.symbolFile ? libV2AssetUrl(c.symbolFile) : null;
-    if (symbol) {
-      onInsertBoth(displayNameFor(c), sourceUrlFor(c), symbol, labelFor(c));
-      return;
-    }
-    const ok = window.confirm(
-      `No B/W symbol exists for "${displayNameFor(c)}".\n\nInsert Source plus a black & white copy of it?`,
-    );
-    if (ok) onInsertBoth(displayNameFor(c), sourceUrlFor(c), bwFallbackUrl(c), labelFor(c));
+    if (!canInsert || !c.symbolFile) return;
+    onInsertBoth(displayNameFor(c), sourceUrlFor(c), libV2AssetUrl(c.symbolFile), labelFor(c));
   };
 
   // The main Insert button honours the current Source / B&W / Both mode.
@@ -305,15 +286,17 @@ export default function LibraryPanelV2({ onInsert, onInsertBoth, canInsert }: Pr
               {c.partNumber ? <div className="libv2-part">{c.partNumber}</div> : null}
               <div className="libv2-cat">
                 {c.category}
-                {c.symbolFile ? <span className="libv2-badge" title="Black/white symbol available">B/W</span> : null}
+                {c.symbolFile
+                  ? <span className="libv2-badge" title="Approved source + B/W symbol">Source + B/W</span>
+                  : <span className="libv2-badge libv2-badge-src" title="Source image only — no approved B/W symbol">Source only</span>}
               </div>
               <div className="libv2-actions">
-                <button onClick={(e) => { e.stopPropagation(); doInsert(c); }} disabled={!canInsert} title={`Insert (${rep === 'source' ? 'Source' : rep === 'symbol' ? 'B/W' : 'Both'}) onto the active page`}>Insert</button>
+                <button onClick={(e) => { e.stopPropagation(); doInsert(c); }} disabled={!canInsert || (rep !== 'source' && !c.symbolFile)} title={`Insert (${rep === 'source' ? 'Source' : rep === 'symbol' ? 'B/W' : 'Both'}) onto the active page`}>Insert</button>
                 <button onClick={(e) => { e.stopPropagation(); doInsertSource(c); }} disabled={!canInsert} title="Insert the full-colour source image">Src</button>
                 <button
                   onClick={(e) => { e.stopPropagation(); doInsertBw(c); }}
-                  disabled={!canInsert}
-                  title={c.symbolFile ? 'Insert the black/white symbol' : 'No B/W symbol — offers a black/white copy of the source'}
+                  disabled={!canInsert || !c.symbolFile}
+                  title={c.symbolFile ? 'Insert the approved black/white symbol' : 'No approved B/W symbol for this component'}
                 >
                   B/W
                 </button>

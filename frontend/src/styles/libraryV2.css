@@ -25,7 +25,8 @@
 .libv2-both > * { flex: 1; height: 72px; }
 .libv2-grid.list .libv2-both > * { height: 48px; }
 
-.libv2-badge { display: inline-block; margin-left: 6px; padding: 0 4px; font-size: 9px; font-weight: 700; color: #111; background: #e7e7e7; border: 1px solid #bbb; border-radius: 3px; }
+.libv2-badge { display: inline-block; margin-left: 6px; padding: 0 4px; font-size: 9px; font-weight: 700; color: #0f5132; background: #d1e7dd; border: 1px solid #a3cfbb; border-radius: 3px; }
+.libv2-badge-src { color: #7a5a00; background: #fff3cd; border-color: #ffe69c; }
 .libv2-rep-label { align-self: center; font-size: 11px; color: #666; margin-right: 2px; }
 
 .libv2-meta { min-width: 0; flex: 1; }
