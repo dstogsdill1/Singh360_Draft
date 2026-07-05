@@ -48,11 +48,11 @@ function sourceUrl(c: LibV2Component): string {
 }
 
 function edgeUrl(c: LibV2Component): string {
-  return c.edgeUrl || c.edgeFile ? libV2AssetUrl(c.edgeFile || '') : '';
+  return c.edgeUrl || (c.edgeFile ? libV2AssetUrl(c.edgeFile) : '');
 }
 
 function bwUrl(c: LibV2Component): string {
-  return c.bwUrl || c.bwFile ? libV2AssetUrl(c.bwFile || '') : '';
+  return c.bwUrl || (c.bwFile ? libV2AssetUrl(c.bwFile) : '');
 }
 
 function previewUrl(c: LibV2Component, rep: ViewRep): string {
@@ -265,14 +265,27 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
                 {!canCurrent && rep === 'edge' ? <div className="libv2-missing">No edge drawing</div> : null}
                 {!canCurrent && rep === 'bw' ? <div className="libv2-missing">No B/W representation</div> : null}
                 <div className="libv2-actions">
-                  <button onClick={() => insertAs(c, rep)} disabled={!canInsert || !canCurrent}>Insert</button>
+                  <button
+                    onClick={() => insertAs(c, rep)}
+                    disabled={!canInsert || !canCurrent}
+                    title={
+                      !canCurrent && rep === 'edge'
+                        ? 'No approved Edge drawing.'
+                        : !canCurrent && rep === 'bw'
+                          ? 'No B/W representation.'
+                          : `Insert ${rep === 'edge' ? 'Edge' : rep === 'bw' ? 'B/W' : 'Source'}`
+                    }
+                  >
+                    Insert
+                  </button>
                   <details className="libv2-insert-menu">
                     <summary>▼</summary>
                     <div>
-                      <button onClick={() => insertAs(c, 'source')} disabled={!canInsertRep(c, 'source')}>Insert Source</button>
-                      <button onClick={() => insertAs(c, 'edge')} disabled={!canInsertRep(c, 'edge')}>Insert Edge</button>
-                      <button onClick={() => insertAs(c, 'bw')} disabled={!canInsertRep(c, 'bw')}>Insert B/W</button>
+                      <button onClick={() => insertAs(c, 'source')} disabled={!canInsertRep(c, 'source')} title={canInsertRep(c, 'source') ? 'Insert the colour source image' : 'No source image.'}>Insert Source</button>
+                      <button onClick={() => insertAs(c, 'edge')} disabled={!canInsertRep(c, 'edge')} title={canInsertRep(c, 'edge') ? 'Insert the approved edge/lineart drawing' : 'No approved Edge drawing.'}>Insert Edge</button>
+                      <button onClick={() => insertAs(c, 'bw')} disabled={!canInsertRep(c, 'bw')} title={canInsertRep(c, 'bw') ? 'Insert the B/W representation' : 'No B/W representation.'}>Insert B/W</button>
                       <button onClick={() => insertAs(c, rep, true)} disabled={!canCurrent}>Insert with Label</button>
+                      <button onClick={() => { setSelectedId(c.id); setBuilderTab('components'); setShowBuilder(true); }}>Edit Component</button>
                     </div>
                   </details>
                 </div>

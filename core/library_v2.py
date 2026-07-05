@@ -925,8 +925,20 @@ class LibraryV2:
             category = LEGACY_CATEGORY_MAP.get(raw_cat, raw_cat)
             if category not in LIBRARY_CATEGORIES:
                 category = "custom"
-            source_rel = self._rel_from_any(e.get("sourceComponent", ""))
-            symbol_rel = self._rel_from_any(e.get("symbol", ""))
+            # v0.3 exposes explicit representation paths; fall back to the older
+            # v0.2 field names only when the explicit ones are absent.
+            source_rel = self._rel_from_any(e.get("sourcePath") or e.get("sourceComponent") or "")
+            edge_rel = self._rel_from_any(e.get("edgePath") or "")
+            bw_rel = self._rel_from_any(e.get("bwPath") or "")
+            symbol_rel = self._rel_from_any(e.get("symbolPath") or "")
+            # v0.2 compatibility: when no explicit edgePath exists but the legacy
+            # `symbol` field points at an image-derived stencil, treat it as edge.
+            if not edge_rel and not symbol_rel:
+                legacy_symbol = self._rel_from_any(e.get("symbol") or "")
+                if legacy_symbol and "/symbols/" in f"/{legacy_symbol}":
+                    symbol_rel = legacy_symbol
+                elif legacy_symbol:
+                    edge_rel = legacy_symbol
             cid = e.get("id") or _slug(e.get("displayName", "") or Path(source_rel).stem)
             if cid in seen_ids:
                 cid = f"{cid}_{uuid.uuid4().hex[:6]}"
@@ -945,11 +957,11 @@ class LibraryV2:
                 "sourceFile": source_rel,
                 "thumbnailFile": "",
                 "symbolFile": symbol_rel,
-                "edgeFile": "",
-                "bwFile": "",
+                "edgeFile": edge_rel,
+                "bwFile": bw_rel,
                 "symbolStatus": "built" if symbol_rel else "not_built",
                 "type": cd.type,
-                "defaultLabel": part or display,
+                "defaultLabel": e.get("defaultLabel") or part or display,
                 "defaultWidth": cd.width,
                 "defaultHeight": cd.height,
                 "labelPosition": cd.label_position,
@@ -961,6 +973,7 @@ class LibraryV2:
                 "status": "approved",
                 "chosenVariant": e.get("chosenVariant", ""),
                 "preferredEdgeVariant": e.get("preferredEdgeVariant", ""),
+                "hasProcedural": bool(e.get("hasProcedural")),
                 "origin": "builder_export",
             }
             out.append(comp)
@@ -1060,6 +1073,8 @@ class LibraryV2:
         if category not in LIBRARY_CATEGORIES:
             category = "custom"
 
+        is_export = raw.get("origin") == "builder_export"
+
         source_rel = self._rel_from_any(raw.get("sourceFile") or raw.get("sourceComponent") or "")
         edge_override = self._rel_from_any(raw.get("edgeFile") or "")
         bw_override = self._rel_from_any(raw.get("bwFile") or "")
@@ -1078,22 +1093,27 @@ class LibraryV2:
         if bw_override and not (self.root / bw_override).exists():
             bw_override = ""
 
-        variants = self._variant_candidates(category, symbol_rel, source_rel)
+        # Variant scanning is an inference fallback for manifest-only items. When
+        # the builder export supplies explicit representation paths we trust them
+        # verbatim and never infer Edge from a procedural symbol.
+        variants = {} if is_export else self._variant_candidates(category, symbol_rel, source_rel)
         chosen_variant = str(raw.get("chosenVariant") or "").strip().lower()
         preferred_variant = str(raw.get("preferredEdgeVariant") or "").strip().lower()
 
         edge_rel = ""
         if edge_override:
+            # Explicit approved edge/lineart stencil (edgePath) — highest priority.
             edge_rel = edge_override
         elif preferred_variant and preferred_variant in variants:
             edge_rel = variants[preferred_variant]
         elif chosen_variant in EDGE_PREFERRED_NAMES and chosen_variant in variants:
             edge_rel = variants[chosen_variant]
-        else:
+        elif not is_export:
             for v in EDGE_VARIANT_PRIORITY:
                 if v in variants:
                     edge_rel = variants[v]
                     break
+            # Only a non-export/manifest item may borrow a symbol as its edge.
             if not edge_rel and symbol_rel:
                 edge_rel = symbol_rel
 
@@ -1101,7 +1121,7 @@ class LibraryV2:
         can_bw_fallback = False
         if bw_override:
             bw_rel = bw_override
-        else:
+        elif not is_export:
             for v in BW_VARIANT_PRIORITY:
                 if v in variants:
                     bw_rel = variants[v]
@@ -1110,8 +1130,9 @@ class LibraryV2:
                 bw_rel = variants[chosen_variant]
             if not bw_rel and symbol_rel and chosen_variant in BW_PREFERRED_NAMES:
                 bw_rel = symbol_rel
-            if not bw_rel and source_rel:
-                can_bw_fallback = True
+        if not bw_rel and source_rel:
+            # B/W falls back to a grayscale of the source when no B/W asset exists.
+            can_bw_fallback = True
 
         thumb_rel = self._rel_from_any(raw.get("thumbnailFile") or "")
         if not thumb_rel or not (self.root / thumb_rel).exists():
@@ -1122,6 +1143,7 @@ class LibraryV2:
         bw_url = self._url_for_asset(bw_rel)
         if not bw_url and can_bw_fallback and source_rel:
             bw_url = self._url_for_asset(source_rel) + "?bw=1"
+        symbol_url = self._url_for_asset(symbol_rel)
         thumb_url = self._url_for_asset(thumb_rel)
 
         cid = raw.get("id") or _slug(raw.get("displayName") or Path(source_rel or edge_rel or "").stem)
@@ -1139,6 +1161,8 @@ class LibraryV2:
         if category in NO_LABEL_CATEGORIES:
             label = ""
 
+        variant_options = sorted(set(variants.keys()) | ({chosen_variant} if chosen_variant else set()))
+
         return {
             **raw,
             "id": cid,
@@ -1150,11 +1174,12 @@ class LibraryV2:
             "searchTerms": [x for x in search_terms if x],
             "sourceFile": source_rel,
             "symbolFile": symbol_rel,
-            "edgeFile": edge_override,
-            "bwFile": bw_override,
+            "edgeFile": edge_rel,
+            "bwFile": bw_rel,
             "sourceUrl": source_url,
             "edgeUrl": edge_url,
             "bwUrl": bw_url,
+            "symbolUrl": symbol_url,
             "thumbnailUrl": thumb_url,
             "hasSource": bool(source_url),
             "hasEdge": bool(edge_url),
@@ -1162,7 +1187,7 @@ class LibraryV2:
             "canBwFallback": can_bw_fallback,
             "hasSymbol": bool(symbol_rel),
             "preferredEdgeVariant": preferred_variant or "",
-            "edgeVariantOptions": sorted(list(variants.keys())),
+            "edgeVariantOptions": variant_options,
             "chosenVariant": chosen_variant,
             "retired": bool(raw.get("retired", False)),
         }

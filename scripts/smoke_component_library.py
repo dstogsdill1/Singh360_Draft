@@ -496,6 +496,56 @@ def main() -> int:
             ar = c.get(edge_u)
             if ar.status_code != 200:
                 problems.append(f"V2 edge asset did not resolve ({ar.status_code})")
+
+        # Edge must be the approved edge/lineart stencil (edgePath), never a
+        # procedural symbol, and must differ from the source when both exist.
+        export_path = server.DOCS_DIR / "library" / "component_builder_export.json"
+        if export_path.exists():
+            raw_export = json.loads(export_path.read_text(encoding="utf-8"))
+            raw_rows = raw_export.get("components", raw_export) if isinstance(raw_export, dict) else raw_export
+            raw_by_id = {r.get("id"): r for r in raw_rows}
+            comp_by_id = {x.get("id"): x for x in v2comps}
+
+            with_edge_path = [r for r in raw_rows if r.get("edgePath")]
+            print(f"V2 edgePath rows: {len(with_edge_path)} of {len(raw_rows)}")
+
+            def _tail(url: str) -> str:
+                return (url or "").split("/api/lib/asset/", 1)[-1]
+
+            # edgePath must map straight through to edgeUrl.
+            for rid, row in raw_by_id.items():
+                comp = comp_by_id.get(rid)
+                if not comp:
+                    continue
+                edge_path = (row.get("edgePath") or "").replace("\\", "/")
+                if edge_path:
+                    if not comp.get("hasEdge"):
+                        problems.append(f"{rid}: edgePath present but hasEdge=false")
+                    if not edge_path.endswith(_tail(comp.get("edgeUrl", ""))):
+                        problems.append(f"{rid}: edgeUrl does not map to edgePath")
+                    # Edge must never point at the procedural /symbols/ folder.
+                    if "/symbols/" in f"/{_tail(comp.get('edgeUrl', ''))}":
+                        problems.append(f"{rid}: edge resolved to procedural symbol path")
+                    # Source and Edge must differ when both exist.
+                    if comp.get("hasSource") and _tail(comp.get("sourceUrl", "")) == _tail(comp.get("edgeUrl", "")):
+                        problems.append(f"{rid}: sourceUrl and edgeUrl are identical")
+
+            # Named acceptance components must resolve Edge from their edgePath.
+            for rid in ("rdm-touchxl", "rdm-mercury", "rdm_pr0650cd_tdb_controller"):
+                comp = comp_by_id.get(rid)
+                row = raw_by_id.get(rid)
+                if not comp or not row:
+                    problems.append(f"acceptance component missing: {rid}")
+                    continue
+                if not comp.get("hasEdge"):
+                    problems.append(f"{rid}: expected an approved Edge drawing")
+                if "__device" in _tail(comp.get("edgeUrl", "")):
+                    problems.append(f"{rid}: Edge still using procedural __device wireframe")
+                if row.get("edgePath") and not comp.get("edgeUrl", "").endswith(
+                    row["edgePath"].replace("\\", "/").split("/api/lib/asset/", 1)[-1].split("/")[-1]
+                ):
+                    problems.append(f"{rid}: Edge filename does not match edgePath")
+
         # PATCH persistence for an export-derived id (override entry), including
         # preferredEdgeVariant.
         if v2comps:

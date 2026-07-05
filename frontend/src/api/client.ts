@@ -526,6 +526,7 @@ export interface LibV2Component {
   sourceUrl?: string;
   edgeUrl?: string;
   bwUrl?: string;
+  symbolUrl?: string;
   thumbnailUrl?: string;
   type?: string;
   defaultLabel?: string;
@@ -542,6 +543,7 @@ export interface LibV2Component {
   hasBw?: boolean;
   canBwFallback?: boolean;
   hasSymbol?: boolean;
+  hasProcedural?: boolean;
   status?: string;
   preferredEdgeVariant?: string;
   edgeVariantOptions?: string[];
