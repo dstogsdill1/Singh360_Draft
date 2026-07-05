@@ -17,8 +17,13 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PACKAGE_DIR = REPO_ROOT / ".docs" / "library" / "singh360_component_master_package"
-CANDIDATES_DIR = REPO_ROOT / ".docs" / "component_builder" / "work" / "symbol_candidates"
+# The curated master package lives inside the workbench, NOT in the production
+# library. .docs/library is reserved for approved production output only.
+CB_ROOT = REPO_ROOT / ".docs" / "component_builder"
+PACKAGE_DIR = CB_ROOT / "master"
+DEFAULT_MANIFEST = PACKAGE_DIR / "Singh360_Component_Master_Catalog.csv"
+DEFAULT_SOURCE_ROOT = PACKAGE_DIR / "sources"
+CANDIDATES_DIR = CB_ROOT / "work" / "symbol_candidates"
 
 
 def slug(text: str) -> str:
@@ -85,10 +90,12 @@ def resolve_manifest(arg: str | None) -> Path | None:
     for t in tries:
         if t.exists() and t.is_file():
             return t.resolve()
-    # last resort: glob by name under the library tree
-    for hit in (REPO_ROOT / ".docs" / "library").rglob(p.name):
-        if hit.is_file():
-            return hit.resolve()
+    # last resort: glob by name under the workbench master folder only
+    # (never scan the production .docs/library tree as an input source)
+    if PACKAGE_DIR.exists():
+        for hit in PACKAGE_DIR.rglob(p.name):
+            if hit.is_file():
+                return hit.resolve()
     return None
 
 

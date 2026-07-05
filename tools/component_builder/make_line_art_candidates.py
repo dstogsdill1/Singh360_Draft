@@ -37,7 +37,7 @@ import _render  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CB_ROOT = REPO_ROOT / ".docs" / "component_builder"
 CANDIDATES_DIR = CB_ROOT / "work" / "symbol_candidates"
-MANIFEST_DEFAULT = CB_ROOT / "approved" / "manifest_review.csv"
+MANIFEST_DEFAULT = _catalog.DEFAULT_MANIFEST
 
 # categories/templates where a procedural device outline meaningfully preserves
 # terminals/screens/ports and is worth generating alongside an image.

@@ -31,7 +31,7 @@ import _catalog  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CB_ROOT = REPO_ROOT / ".docs" / "component_builder"
 CONTACT_DIR = CB_ROOT / "work" / "contact_sheets"
-MANIFEST_DEFAULT = CB_ROOT / "approved" / "manifest_review.csv"
+MANIFEST_DEFAULT = _catalog.DEFAULT_MANIFEST
 
 # Preferred candidate display order.
 VARIANT_ORDER = ["device", "lineart", "outline", "silhouette", "edges",
@@ -40,6 +40,34 @@ VARIANT_ORDER = ["device", "lineart", "outline", "silhouette", "edges",
 
 def _href(target: Path, base: Path) -> str:
     return os.path.relpath(target, base).replace("\\", "/")
+
+
+FULL_DRAWING_WORDS = ("full drawing", "wiring", "schedule", "screenshot",
+                      "riser", "one line", "one-line", "floor plan", "layout sheet")
+
+
+def detect_full_drawing(row: dict) -> str | None:
+    """Heuristic warning if a source looks like a full drawing sheet, not a part."""
+    text = f"{row.get('displayName','')} {row.get('notes','')}".lower()
+    for w in FULL_DRAWING_WORDS:
+        if w in text:
+            return f"name mentions '{w}'"
+    sp = row.get("sourcePath")
+    if not sp:
+        return None
+    try:
+        from PIL import Image  # type: ignore
+
+        with Image.open(sp) as im:
+            w, h = im.size
+    except Exception:
+        return None
+    if w and h:
+        area = w * h
+        aspect = max(w, h) / max(1, min(w, h))
+        if area > 2_500_000 or max(w, h) > 2200 or aspect > 3.0:
+            return f"large/wide image ({w}x{h})"
+    return None
 
 
 def find_candidates(row: dict) -> list[Path]:
@@ -85,6 +113,8 @@ main { padding:20px; display:grid; gap:16px; grid-template-columns:repeat(auto-f
 .decision { display:flex; gap:12px; } .decision label { display:flex; align-items:center; gap:4px; font-weight:600; cursor:pointer; }
 textarea { width:100%; border:1px solid var(--bd); border-radius:8px; padding:6px; font:inherit; resize:vertical; }
 .empty { color:var(--no); font-size:12px; }
+.warn { background:#fff4e5; color:#b54708; border-bottom:1px solid #f5c26b;
+        padding:8px 12px; font-size:12px; font-weight:600; }
 """
 
 JS = r"""
@@ -127,6 +157,10 @@ def build_card(row: dict, base: Path) -> str:
     else:
         cand_html = '<p class="empty">No candidates yet. Run make_line_art_candidates.py.</p>'
 
+    warn = detect_full_drawing(row)
+    warn_html = (f'<div class="warn">&#9888; Reference/full drawing detected ({html.escape(warn)}) '
+                 '&mdash; do not approve as component.</div>') if warn else ""
+
     if src_href:
         src_html = f'<img src="{src_href}">'
     elif row["templateSpecific"]:
@@ -140,6 +174,7 @@ def build_card(row: dict, base: Path) -> str:
 
     return f"""
 <div class="card{' review' if needs else ''}" data-id="{cid}">
+  {warn_html}
   <div class="body">
     <div class="pane"><h3>Source image</h3><div class="imgwrap">{src_html}</div></div>
     <div class="pane"><h3>B/W candidates</h3><div class="cands">{cand_html}</div></div>
@@ -149,7 +184,6 @@ def build_card(row: dict, base: Path) -> str:
     {field('Manufacturer','manufacturer')}
     {field('Category','category')}
     {field('Part number','partNumber')}
-    {field('Template','templateType')}
     <label>Status</label><span class="val">{badge}</span>
     <label>Decision</label>
     <span class="decision">

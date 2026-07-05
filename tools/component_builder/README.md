@@ -1,188 +1,177 @@
 # Component Builder Workbench
 
-A **standalone, local** workbench for turning real RDM / CPC (Emerson) / Niagara /
-H-E-B / Singh360 equipment images into reviewed **black-and-white drawing symbols**
-for the Singh360 component library.
+Turn the curated **Singh360 Component Master** (an editable Excel workbook + a
+`sources/` image folder) into black-and-white drawing-symbol candidates, review
+them on a contact sheet, and later export the approved ones.
 
-> **Boundary:** This workbench does not touch the production app. It never edits
-> `server.py`, `frontend/`, or `core/` production modules. It only writes into
-> `.docs/component_builder/`. The single exception is `export_approved_symbols.py`,
-> which can write into `.docs/library/` **only when run with `--apply`** after human
-> approval.
-
-## Pipeline at a glance
+The master package is the source of truth and lives **inside the workbench**:
 
 ```
-input images/xlsx/pptx/pdf
-        │  inspect_sources.py         (inventory + extract embedded images; read-only on sources)
-        ▼
-reports/source_inventory.json/.csv
-        │  build_inventory.py         (classify by manufacturer/category/part number)
-        ▼
-approved/manifest_review.csv
-        │  make_line_art_candidates.py (grayscale/threshold/edges/silhouette/outline → PNG)
-        ▼
-work/symbol_candidates/<mfr>/<category>/<id>/*.png
-        │  make_contact_sheet.py       (HTML review page, editable decisions)
-        ▼
-work/contact_sheets/index.html  →  review_decisions.csv  (exported from browser)
-        │  export_approved_symbols.py --apply   (ONLY approved items → app library)
-        ▼
-.docs/library/components/<category>/   +   .docs/library/symbols/<category>/
+.docs/component_builder/master/
+  Singh360_Component_Master_Catalog.xlsx   <- the editable master (edit this)
+  Singh360_Component_Master_Catalog.csv    <- generated from the xlsx
+  Singh360_Component_Master_Catalog.html   <- readable catalog
+  sources/<category>/<image>               <- the real component images
+  thumbs/<category>/<image>                <- thumbnails (reference only)
 ```
 
-## Folder layout
+> The production app library at `.docs/library/` is **output only**. Nothing in
+> the normal workflow reads from or writes to it. It is touched only when you
+> explicitly run `export_approved_symbols.py --apply-production`.
+
+---
+
+## Do this (the one command)
+
+```bash
+python tools/component_builder/run_master_pipeline.py --open
+```
+
+That single command will:
+
+1. make sure the workbench folders exist,
+2. sync the Excel workbook to CSV if the workbook is newer,
+3. build the review manifest from the master CSV,
+4. generate B/W symbol candidates from `sources/`,
+5. build the review contact sheet, and
+6. open it in your browser (`--open`).
+
+Then just review the contact sheet.
+
+### Normal workflow
+
+1. **Edit** `.docs/component_builder/master/Singh360_Component_Master_Catalog.xlsx`
+   (add rows, fix display names / categories, drop images into `sources/<category>/`).
+2. **Run** `python tools/component_builder/run_master_pipeline.py --open`.
+3. **Review** the contact sheet that opens.
+4. On the contact sheet, approve/reject each item, pick the best variant, then
+   click **Export decisions CSV**.
+5. **Dry-run** the export (writes nothing):
+   ```bash
+   python tools/component_builder/export_approved_symbols.py --decisions <downloaded>.csv
+   ```
+6. **Stage** approved items into the safe staging area (does NOT touch the app
+   library) once you're happy:
+   ```bash
+   python tools/component_builder/export_approved_symbols.py --decisions <downloaded>.csv --staging
+   ```
+
+Production export happens later, only when explicitly approved (see below).
+
+### Pipeline options
+
+| Flag | Effect |
+| --- | --- |
+| `--open` | Open the contact sheet when done |
+| `--sync-excel` | Force an Excel→CSV sync |
+| `--skip-sync` | Never sync (use the CSV as-is) |
+| `--replace-candidates` | Regenerate candidate PNGs even if they exist |
+| `--manifest <path>` | Use a different master CSV |
+| `--source-root <path>` | Use a different sources root |
+
+---
+
+## Excel is the master, CSV is derived
+
+The Excel workbook is what you (and anyone you share it with) edit. The CSV is
+regenerated from it:
+
+```bash
+python tools/component_builder/sync_master_excel.py [--replace]
+```
+
+- Reads the `Component_Master` sheet.
+- Uses your `displayName`, `category`, `manufacturer`, `templateType` as typed.
+- Blank category → a few keyword rules fill a best guess **and** set
+  `needsReview=TRUE`.
+- Pasted workbook images are extracted into `sources/<category>/` where present;
+  existing curated files are preserved (never overwritten unless `--replace`).
+- Part numbers are never invented.
+- A row with no usable image is kept but flagged `needsReview=TRUE`, unless its
+  `templateType` is specific enough to draw procedurally.
+
+`run_master_pipeline.py` calls this automatically when the workbook is newer than
+the CSV, so you normally don't run it by hand.
+
+---
+
+## Export: staging first, production later
+
+`export_approved_symbols.py` has three safety levels:
+
+| Mode | Command | Writes to |
+| --- | --- | --- |
+| Dry run (default) | `... --decisions d.csv` | nothing (preview JSON only) |
+| **Staging (recommended)** | `... --decisions d.csv --staging` | `.docs/component_builder/export_ready/` |
+| Production | `... --decisions d.csv --apply-production` | `.docs/library/` |
+
+- Only rows marked **approve** (in the decisions CSV) or `symbolStatus=approved`
+  are exported.
+- Existing destination files are never overwritten unless `--replace` is added.
+- `--apply` is a legacy alias for `--apply-production`.
+
+Staging output:
 
 ```
-tools/component_builder/            ← these scripts (code)
-.docs/component_builder/
-  input/                            ← drop your source files here
-  work/
-    extracted_images/               ← images pulled out of xlsx/pptx (+ rendered PDF pages)
-    normalized_sources/             ← reserved for cleaned/normalized copies
-    symbol_candidates/<mfr>/<cat>/<id>/*.png
-    contact_sheets/index.html
-  approved/
-    symbols/
-    manifest_review.csv             ← the classification manifest you review/edit
-  reports/                          ← source_inventory.json/.csv, export_preview.json
+.docs/component_builder/export_ready/
+  components/<category>/<source image>
+  symbols/<category>/<chosen B/W symbol>
+  manifest.json
 ```
+
+**Do not export to production until the components are approved.**
+
+---
+
+## Sharing with another person (no Git required)
+
+1. Send them `Singh360_Component_Master_Catalog.xlsx` (and the `sources/` folder
+   if they need to see or add images).
+2. They edit display names / categories / images and paste new images into the
+   workbook or drop files into `sources/<category>/`.
+3. They send the workbook (and `sources/`) back.
+4. Drop them into `.docs/component_builder/master/`.
+5. Run `python tools/component_builder/sync_master_excel.py` to rebuild the CSV.
+6. Run `python tools/component_builder/run_master_pipeline.py --open` to review.
+
+---
+
+## Contact sheet
+
+`.docs/component_builder/work/contact_sheets/index.html` shows, per item:
+source image, display name, category, manufacturer, part number (if provided),
+the B/W candidate variants, an approve/reject choice, a chosen-variant picker,
+and a notes field. A per-category count summary is shown at the top.
+
+If a source looks like a full drawing sheet rather than a single component, the
+card shows: **"Reference/full drawing detected — do not approve as component."**
+
+Decisions autosave in the browser; **Export decisions CSV** downloads the file
+the export step consumes.
+
+---
+
+## Advanced: `inspect_sources.py`
+
+`inspect_sources.py` is **not** part of the normal master workflow. It only
+exists for pulling images out of arbitrary files (folders, PDFs, xlsx/pptx) when
+you need to build a source set from scratch. The master workflow already has
+curated sources, so you should not need it.
+
+---
 
 ## Requirements
 
-Already present in this repo's environment:
-
-- **Pillow** (PIL) — required for candidate generation.
-- **numpy** — required for silhouette / background removal / high-quality variants.
-- **openpyxl** / **python-pptx** — Office extraction (xlsx/pptx embedded media are
-  also read directly from the OPC zip, so these are optional).
-- **PyMuPDF** (`fitz`) — PDF page counting and optional page rendering.
-- **OpenCV** (`opencv-python`) — *optional*; if present it produces cleaner edge /
-  adaptive-threshold linework. If absent, a PIL + numpy fallback is used.
-
-Install the optional extra for best line art:
-
-```bash
-pip install opencv-python
-```
-
-## Step-by-step
-
-### 0. Place your source workbook / images
-
-Copy `Drawimg_Assets.xlsx` (and any PNG/JPG/SVG/PDF/PPTX sources) into:
-
-```
-.docs/component_builder/input/
-```
-
-On Windows PowerShell, from the repo root:
-
-```powershell
-Copy-Item "C:\path\to\Drawimg_Assets.xlsx" ".docs\component_builder\input\"
-```
-
-Sources are treated as **read-only** — nothing here modifies or deletes them.
-
-### 1. Inventory sources
-
-```bash
-python tools/component_builder/inspect_sources.py
-```
-
-- Walks `.docs/component_builder/input/` (or pass `--input <path>`, repeatable).
-- Extracts embedded images from xlsx/pptx into `work/extracted_images/`.
-- Records SHA256, dimensions, PDF page counts.
-- Writes `reports/source_inventory.json` and `.csv`.
-- PDF page **rendering** is opt-in: add `--render-pdf [--pdf-dpi 150]`.
-
-### 2. Build the classified manifest
-
-```bash
-python tools/component_builder/build_inventory.py
-```
-
-- Reads the inventory, classifies each image by filename/path signals, the RDM
-  part-number alias table (`rdm_aliases.json`), and taxonomy keywords
-  (`component_taxonomy.json`).
-- Writes `approved/manifest_review.csv` with:
-  `id, displayName, manufacturer, category, partNumber, aliases, sourcePath,
-  sourceHash, needsReview, symbolStatus, notes`.
-- **Conservative by design:** anything without a confident part-number match is
-  left with a provisional name and `needsReview=true`. It never asserts a wrong
-  part number with high confidence.
-
-Open `manifest_review.csv`, fix names/categories, and set `symbolStatus=approved`
-for the items you want to export later (or approve them in the contact sheet).
-
-### 3. Generate black/white candidate symbols
-
-```bash
-python tools/component_builder/make_line_art_candidates.py
-```
-
-- For each manifest row, generates variants into
-  `work/symbol_candidates/<manufacturer>/<category>/<id>/`:
-  `grayscale.png`, `nobg.png`, `threshold.png`, `edges.png`, `silhouette.png`,
-  `outline.png`.
-- Aspect ratio preserved; longest edge capped by `--max-size` (default 1024).
-- Options: `--only <id>`, `--variants edges,outline`, `--replace`.
-- Candidates are derived from the **real source pixels**, so they resemble the
-  actual equipment — no generic placeholder rectangles.
-
-### 4. Build the review contact sheet
-
-```bash
-python tools/component_builder/make_contact_sheet.py
-```
-
-- Writes `work/contact_sheets/index.html`. Open it in a browser.
-- Each card shows the source image beside its candidates plus metadata, an
-  Approve/Reject choice, a selectable "chosen variant", and a notes field.
-- Decisions autosave in the browser; click **Export decisions CSV** to download
-  `review_decisions.csv` for the export step.
-
-### 5. Export approved symbols (guarded)
-
-Dry run first (safe, default — writes nothing to the library):
-
-```bash
-python tools/component_builder/export_approved_symbols.py \
-  --decisions .docs/component_builder/work/contact_sheets/review_decisions.csv
-```
-
-Then, after you're happy, actually write into the production library:
-
-```bash
-python tools/component_builder/export_approved_symbols.py \
-  --decisions .docs/component_builder/work/contact_sheets/review_decisions.csv \
-  --apply
-```
-
-- Copies approved **source** → `.docs/library/components/<category>/`.
-- Copies chosen **B/W symbol** → `.docs/library/symbols/<category>/`.
-- Writes an export manifest `.docs/library/component_builder_export.json`.
-- Never overwrites existing files unless `--replace` is also given.
-- Only exports items marked approved (via `symbolStatus=approved` in the manifest
-  or `decision=approve` in the decisions CSV).
-
-## Quality / safety rules honored
-
-- Real source images stay as source images; B/W symbols are separate artifacts.
-- Thumbnails are never used as final symbols (candidates come from full sources).
-- No duplicate component files: destinations are name-based and gated by
-  `--replace`.
-- No writes into `.docs/library` unless `export_approved_symbols.py --apply`.
-- Every destructive / overwrite action requires an explicit flag (`--apply`,
-  `--replace`).
+- **Pillow**, **numpy** — candidate generation (required).
+- **openpyxl** — reading the master Excel workbook (required for sync).
+- **PyMuPDF** — only used by the advanced `inspect_sources.py`.
+- **OpenCV** (`opencv-python`) — *optional*; sharpens `edges`/`lineart`. A
+  PIL+numpy fallback is used when it is absent.
 
 ## Honest flags
 
-- The RDM alias table encodes only the seed part numbers provided. Unknown parts
-  are flagged for human review rather than guessed.
-- The library export manifest schema (`component_builder_export.json`) is a
-  workbench interchange format. Confirm it against the live app library schema
+- The staging `manifest.json` / production `component_builder_export.json` is a
+  workbench interchange format — confirm it against the live app library schema
   before production lock-in.
-- True SVG vector tracing is not produced by the PIL/numpy fallback; candidates
-  are high-resolution PNG. Add a tracer (e.g. `potrace`) if vector output is
-  required.
+- Candidates are high-resolution PNG; true SVG vector tracing is not produced by
+  the fallback pipeline (add a tracer such as `potrace` if you need vectors).

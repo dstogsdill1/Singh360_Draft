@@ -60,9 +60,68 @@ def _fit(im, max_size: int):
     return im.resize((max(1, int(w * s)), max(1, int(h * s))), Image.LANCZOS)
 
 
-def _foreground_mask(rgb, white_thresh: int = 244):
-    lum = rgb[..., :3].mean(axis=2)
-    return lum < white_thresh
+def _foreground_mask(im_rgb, tol: int = 42):
+    """Boolean foreground mask via border flood-fill of the real background.
+
+    Flood-filling inward from the image border removes the *actual* background
+    colour (white OR a coloured/photo studio background), while interior regions
+    that happen to match the background (e.g. a white display panel) are kept
+    because they are not connected to the border. Falls back to a luminance
+    threshold if the fill captured essentially nothing or everything.
+    """
+    from PIL import Image, ImageDraw, ImageFilter  # type: ignore
+
+    rgb = im_rgb.convert("RGB")
+    w, h = rgb.size
+    work = rgb.copy()
+    SENT = (0, 255, 1)  # sentinel colour that won't occur in real imagery
+    seeds = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1),
+             (w // 2, 0), (w // 2, h - 1), (0, h // 2), (w - 1, h // 2)]
+    for s in seeds:
+        try:
+            ImageDraw.floodfill(work, s, SENT, thresh=tol)
+        except Exception:
+            pass
+    arr = np.array(work)
+    bg = (arr[..., 0] == SENT[0]) & (arr[..., 1] == SENT[1]) & (arr[..., 2] == SENT[2])
+    mask = ~bg
+
+    frac = mask.mean()
+    if frac > 0.985 or frac < 0.02:  # fill grabbed nothing / everything -> fallback
+        lum = np.array(rgb).mean(axis=2)
+        mask = lum < 244
+
+    # morphology: close pinholes then open specks
+    m = Image.fromarray((mask.astype("uint8")) * 255, "L")
+    m = m.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.MinFilter(3))
+    m = m.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
+    return np.array(m) > 127
+
+
+def _drop_specks(ink: "np.ndarray", area_frac: float = 2e-5):
+    """Remove tiny connected blobs from a binary ink image (255 = ink)."""
+    if not HAVE_CV2:
+        return ink
+    num, lab, stats, _ = cv2.connectedComponentsWithStats((ink > 0).astype("uint8"), 8)
+    out = np.zeros_like(ink)
+    min_area = max(8, int(ink.size * area_frac))
+    for i in range(1, num):
+        if stats[i, cv2.CC_STAT_AREA] >= min_area:
+            out[lab == i] = 255
+    return out
+
+
+def _silhouette_boundary(mask: "np.ndarray", thickness: int = 2):
+    """Closed outline of the mask via morphological gradient (255 = ink)."""
+    from PIL import Image, ImageChops, ImageFilter  # type: ignore
+
+    m = Image.fromarray((mask.astype("uint8")) * 255, "L")
+    dil = m.filter(ImageFilter.MaxFilter(3))
+    ero = m.filter(ImageFilter.MinFilter(3))
+    grad = ImageChops.difference(dil, ero)
+    for _ in range(max(0, thickness - 1)):
+        grad = grad.filter(ImageFilter.MaxFilter(3))
+    return (np.array(grad) > 60).astype("uint8") * 255
 
 
 def generate_image_variants(src_path: Path, out_dir: Path, variants: list[str],
@@ -93,49 +152,59 @@ def generate_image_variants(src_path: Path, out_dir: Path, variants: list[str],
         save("grayscale", gray)
 
     if "highcontrast" in variants:
-        hc = ImageOps.autocontrast(gray, cutoff=2)
-        save("highcontrast", hc)
+        save("highcontrast", ImageOps.autocontrast(gray, cutoff=2))
 
-    mask = _foreground_mask(rgba) if HAVE_NUMPY else None
+    mask = _foreground_mask(im) if HAVE_NUMPY else None
 
-    if "nobg" in variants and HAVE_NUMPY:
+    # background-removed grayscale (background forced to white) so edge detection
+    # only ever sees the object, never studio-background clutter.
+    gray_arr = np.array(gray)
+    gray_fg = np.where(mask, gray_arr, 255).astype("uint8") if mask is not None else gray_arr
+
+    if "nobg" in variants and mask is not None:
         out = rgba.copy()
         out[..., 3] = np.where(mask, 255, 0).astype("uint8")
         save("nobg", Image.fromarray(out, "RGBA"))
 
+    # internal detail edges (Canny on the background-removed image)
+    internal = None
+    if HAVE_CV2 and mask is not None:
+        internal = cv2.Canny(cv2.GaussianBlur(gray_fg, (3, 3), 0), 50, 150)
+        internal = cv2.dilate(internal, np.ones((2, 2), "uint8"))
+        internal = _drop_specks(internal)
+
+    boundary = _silhouette_boundary(mask, thickness=2) if mask is not None else None
+
     if "edges" in variants:
-        if HAVE_CV2 and HAVE_NUMPY:
-            g = np.array(gray)
-            e = cv2.Canny(g, 60, 160)
-            save("edges", Image.fromarray(255 - e))
+        if internal is not None:
+            save("edges", Image.fromarray(255 - internal))
         else:
             e = ImageOps.autocontrast(gray).filter(ImageFilter.FIND_EDGES)
             e = ImageOps.invert(e).point(lambda p: 0 if p < 170 else 255)
             save("edges", e)
 
     if "lineart" in variants:
-        # cleaned technical line-art: crisp black strokes on white, denoised
-        base = ImageOps.autocontrast(gray, cutoff=1)
-        edge = base.filter(ImageFilter.FIND_EDGES)
-        edge = ImageOps.invert(edge)
-        edge = edge.filter(ImageFilter.MedianFilter(size=3))
-        edge = edge.point(lambda p: 0 if p < 165 else 255)
-        save("lineart", edge)
+        # clean technical line art: internal edges + closed silhouette outline,
+        # denoised, solid black on a white background.
+        if internal is not None and boundary is not None:
+            combined = np.maximum(internal, boundary)
+            combined = _drop_specks(combined)
+            save("lineart", Image.fromarray(255 - combined))
+        else:
+            base = ImageOps.autocontrast(gray, cutoff=1)
+            edge = ImageOps.invert(base.filter(ImageFilter.FIND_EDGES))
+            edge = edge.filter(ImageFilter.MedianFilter(3)).point(lambda p: 0 if p < 165 else 255)
+            save("lineart", edge)
 
-    if ("silhouette" in variants or "outline" in variants) and HAVE_NUMPY:
+    if "silhouette" in variants and mask is not None:
         sil = np.zeros(rgba.shape[:2] + (4,), dtype="uint8")
         sil[mask] = (0, 0, 0, 255)
-        sil_img = Image.fromarray(sil, "RGBA")
-        if "silhouette" in variants:
-            save("silhouette", sil_img)
-        if "outline" in variants:
-            alpha = sil_img.split()[3]
-            edge = alpha.filter(ImageFilter.FIND_EDGES)
-            # thicken the outline slightly for visibility
-            edge = edge.filter(ImageFilter.MaxFilter(3))
-            black = Image.new("RGBA", sil_img.size, (0, 0, 0, 255))
-            black.putalpha(edge)
-            save("outline", black)
+        save("silhouette", Image.fromarray(sil, "RGBA"))
+
+    if "outline" in variants and boundary is not None:
+        out = np.zeros(boundary.shape + (4,), dtype="uint8")
+        out[..., 3] = boundary  # black lines, transparent elsewhere
+        save("outline", Image.fromarray(out, "RGBA"))
 
     return written
 
