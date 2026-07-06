@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PageBlock } from '../../model/types';
+import { BODY_H } from '../../model/sheetGeometry';
 import SheetContextMenu from '../SheetContextMenu';
 
 interface Props {
@@ -16,6 +17,8 @@ export default function TablePageRenderer({ block, onChange, onDuplicateTable, v
   const [menu, setMenu] = useState<{ x: number; y: number; r: number; c: number } | null>(null);
   const clipboardRef = useRef('');
   const editStartRef = useRef('');
+  const fitWrapRef = useRef<HTMLDivElement | null>(null);
+  const tableRef = useRef<HTMLTableElement | null>(null);
 
   useEffect(() => {
     const capture = () => {
@@ -31,6 +34,25 @@ export default function TablePageRenderer({ block, onChange, onDuplicateTable, v
     return () => document.removeEventListener('singh360:capture-active-editors', capture);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block.id, headers, rows]);
+
+  useEffect(() => {
+    const wrap = fitWrapRef.current;
+    const table = tableRef.current;
+    if (!wrap || !table) return;
+    const fit = () => {
+      const available = BODY_H - 92; // .np vertical padding + table margins.
+      const measured = table.scrollHeight;
+      const scale = measured > available ? Math.max(0.58, Math.min(1, available / measured)) : 1;
+      wrap.style.setProperty('--table-fit-scale', String(scale));
+      wrap.style.width = scale < 1 ? `${100 / scale}%` : '100%';
+      wrap.style.height = scale < 1 ? `${measured * scale}px` : 'auto';
+      wrap.dataset.fit = scale < 1 ? 'scaled' : 'normal';
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(table);
+    return () => ro.disconnect();
+  }, [headers, rows, variant]);
 
   const updateHeader = (c: number, value: string) => {
     const next = [...headers];
@@ -139,60 +161,62 @@ export default function TablePageRenderer({ block, onChange, onDuplicateTable, v
 
   return (
     <>
-      <table className={variant === 'matrix' ? 'np-matrix' : 'np-table'} data-block-id={block.id}>
-        <thead>
-          <tr>
-            {headers.map((h, c) => (
-              <th
-                key={c}
-                contentEditable
-                suppressContentEditableWarning
-                data-row={-1}
-                data-col={c}
-                tabIndex={0}
-                onFocus={(e) => { editStartRef.current = e.currentTarget.textContent ?? ''; }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setMenu({ x: e.clientX, y: e.clientY, r: -1, c });
-                }}
-                onInput={(e) => updateHeader(c, e.currentTarget.textContent ?? '')}
-                onKeyDown={(e) => onCellKeyDown(e, -1, c)}
-                onBlur={(e) => updateHeader(c, e.currentTarget.textContent ?? '')}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, r) => (
-            <tr key={r}>
-              {row.map((cell, c) => (
-                <td
+      <div className="np-table-fit-wrap" ref={fitWrapRef}>
+        <table ref={tableRef} className={variant === 'matrix' ? 'np-matrix' : 'np-table'} data-block-id={block.id}>
+          <thead>
+            <tr>
+              {headers.map((h, c) => (
+                <th
                   key={c}
                   contentEditable
                   suppressContentEditableWarning
-                  data-row={r}
+                  data-row={-1}
                   data-col={c}
                   tabIndex={0}
                   onFocus={(e) => { editStartRef.current = e.currentTarget.textContent ?? ''; }}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setMenu({ x: e.clientX, y: e.clientY, r, c });
+                    setMenu({ x: e.clientX, y: e.clientY, r: -1, c });
                   }}
-                  onInput={(e) => updateCell(r, c, e.currentTarget.textContent ?? '')}
-                  onKeyDown={(e) => onCellKeyDown(e, r, c)}
-                  onBlur={(e) => updateCell(r, c, e.currentTarget.textContent ?? '')}
+                  onInput={(e) => updateHeader(c, e.currentTarget.textContent ?? '')}
+                  onKeyDown={(e) => onCellKeyDown(e, -1, c)}
+                  onBlur={(e) => updateHeader(c, e.currentTarget.textContent ?? '')}
                 >
-                  {cell}
-                </td>
+                  {h}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row, r) => (
+              <tr key={r}>
+                {row.map((cell, c) => (
+                  <td
+                    key={c}
+                    contentEditable
+                    suppressContentEditableWarning
+                    data-row={r}
+                    data-col={c}
+                    tabIndex={0}
+                    onFocus={(e) => { editStartRef.current = e.currentTarget.textContent ?? ''; }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setMenu({ x: e.clientX, y: e.clientY, r, c });
+                    }}
+                    onInput={(e) => updateCell(r, c, e.currentTarget.textContent ?? '')}
+                    onKeyDown={(e) => onCellKeyDown(e, r, c)}
+                    onBlur={(e) => updateCell(r, c, e.currentTarget.textContent ?? '')}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {menu && (
         <SheetContextMenu

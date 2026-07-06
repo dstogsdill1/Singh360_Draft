@@ -157,3 +157,21 @@ Update statuses here as work progresses. `In Progress` = actively being built,
   still needs the requested manual browser QA pass.
 - Column resize handles and table-cell editing from the Properties panel are not fully
   implemented; right-click menu clearly disables Resize Columns with a reason.
+
+## Emergency 3G — Table overflow / clipped rows
+
+| Item | Status |
+| ---- | ------ |
+| Content-aware backend table pagination for wrapped schedule/matrix rows | Done |
+| Oversized table branch fixed so table blocks split before being treated as full-page blocks | Done |
+| Frontend auto-fit safety net for existing/manual table pages that still exceed body height | Done |
+| Smoke coverage `scripts/smoke_table_overflow_pagination.py` | Done |
+
+### 3G honest flags
+
+- New workbook uploads/reimports get deterministic continuation pages when a wrapped
+  table would collide with the title block.
+- Existing already-open projects also get a renderer-side auto-fit warning/scale so
+  rows are not buried under the title block while the user decides whether to reimport
+  or manually split the sheet.
+- This does not add drag-resizable columns yet; it prevents clipping first.

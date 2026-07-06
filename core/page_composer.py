@@ -21,6 +21,8 @@ from typing import Any
 BODY_BUDGET = 820
 TABLE_HEADER_H = 46
 TABLE_ROW_H = 30
+TABLE_ROW_EXTRA_LINE_H = 14
+TABLE_ROW_MAX_H = 92
 
 
 # --------------------------------------------------------------------------
@@ -92,30 +94,66 @@ def _estimate_height(block: dict[str, Any]) -> int:
     if t == "bulletList":
         return 26 * len(block.get("items") or []) + 12
     if t in ("table", "matrix"):
-        return TABLE_HEADER_H + TABLE_ROW_H * len(block.get("rows") or [])
+        return TABLE_HEADER_H + sum(_estimate_table_row_height(r, block) for r in (block.get("rows") or []))
     if t in ("imagePlaceholder", "underlayPlaceholder"):
         return 150
     return 40
 
 
+def _estimate_table_row_height(row: list[Any], block: dict[str, Any]) -> int:
+    """Estimate rendered row height for wrapped normalized tables.
+
+    The previous paginator assumed every row was 30px tall. Real Excel-derived
+    schedules often have narrow columns and wrapped cells (for example lighting
+    matrices with DESCRIPTION / FROM / OFFSET columns), so 10 logical rows can
+    render as 15-20 visual lines and collide with the title block. This estimate
+    intentionally errs conservative: if a row might wrap, split earlier.
+    """
+    headers = block.get("headers") or []
+    ncols = max(len(headers), len(row or []), 1)
+    kind = block.get("type")
+    # Approximate characters that fit in an average column at the renderer's
+    # default font. Matrix tables usually have more/narrower columns.
+    base_chars = 110 if kind == "matrix" else 145
+    chars_per_line = max(6 if kind == "matrix" else 9, base_chars // ncols)
+    max_lines = 1
+    for cell in row or []:
+        text = " ".join(str(cell or "").split())
+        if not text:
+            continue
+        longest_token = max((len(tok) for tok in text.split(" ")), default=0)
+        wrapped = max(1, -(-len(text) // chars_per_line), -(-longest_token // max(chars_per_line, 1)))
+        max_lines = max(max_lines, wrapped)
+    return min(TABLE_ROW_MAX_H, TABLE_ROW_H + TABLE_ROW_EXTRA_LINE_H * (max_lines - 1))
+
+
 def _split_table_block(block: dict[str, Any], first_budget: int) -> list[dict[str, Any]]:
     """Split a large table/matrix into row-chunks that each fit a page body."""
     rows = block.get("rows") or []
-    per_full = max(1, (BODY_BUDGET - TABLE_HEADER_H) // TABLE_ROW_H)
-    per_first = max(1, (first_budget - TABLE_HEADER_H) // TABLE_ROW_H)
 
     chunks: list[list[list[str]]] = []
-    i = 0
-    if rows:
-        end = min(len(rows), per_first)
-        chunks.append(rows[i:end])
-        i = end
-        while i < len(rows):
-            end = min(len(rows), i + per_full)
-            chunks.append(rows[i:end])
-            i = end
-    else:
+    if not rows:
         chunks.append([])
+    else:
+        i = 0
+        budget = max(TABLE_HEADER_H + TABLE_ROW_H, first_budget)
+        while i < len(rows):
+            used = TABLE_HEADER_H
+            chunk: list[list[str]] = []
+            while i < len(rows):
+                row_h = _estimate_table_row_height(rows[i], block)
+                if chunk and used + row_h > budget:
+                    break
+                chunk.append(rows[i])
+                used += row_h
+                i += 1
+            if not chunk:
+                # A single monster row gets its own continuation rather than
+                # disappearing; renderer will scale as a last resort.
+                chunk.append(rows[i])
+                i += 1
+            chunks.append(chunk)
+            budget = BODY_BUDGET
 
     out: list[dict[str, Any]] = []
     for ci, chunk in enumerate(chunks):
@@ -142,6 +180,11 @@ def _paginate_blocks(blocks: list[dict[str, Any]]) -> list[list[dict[str, Any]]]
     for block in blocks:
         h = _estimate_height(block)
         if h >= BODY_BUDGET + 1:
+            if block.get("type") in ("table", "matrix"):
+                flush()
+                for part in _split_table_block(block, BODY_BUDGET):
+                    pages.append([part])
+                continue
             # full-page block (canvas/cover) — own page
             flush()
             pages.append([block])
