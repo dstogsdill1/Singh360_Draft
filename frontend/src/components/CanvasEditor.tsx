@@ -239,6 +239,8 @@ export default function CanvasEditor({
   const finalizeRef = useRef<(() => void) | null>(null);
   // Transient alignment guide lines (never serialized/exported).
   const guidesRef = useRef<FabricObject[]>([]);
+  // Transient snap-port dots shown while a connector tool is active.
+  const snapDotsRef = useRef<FabricObject[]>([]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -251,6 +253,26 @@ export default function CanvasEditor({
       perPixelTargetFind: false,
     });
     fabricRef.current = canvas;
+
+    // Robust pointer → scene mapping. The sheet is rendered inside a CSS
+    // `transform: scale(...)` wrapper (the zoom), and Fabric's own
+    // getScenePoint can return stale/wrong coordinates because it does not
+    // observe an ancestor's CSS transform. We map from the live on-screen
+    // bounding rect of the upper canvas straight to internal canvas units,
+    // which is always correct regardless of zoom or device pixel ratio.
+    const scenePoint = (e: MouseEvent | PointerEvent | TouchEvent): { x: number; y: number } => {
+      const el = canvas.upperCanvasEl;
+      const rect = el.getBoundingClientRect();
+      const evt = e as MouseEvent;
+      const clientX = evt.clientX ?? 0;
+      const clientY = evt.clientY ?? 0;
+      // rect is the on-screen (CSS-scaled) size; CANVAS_W/H are the internal
+      // logical units. Their ratio is exactly the current zoom scale.
+      const scaleX = rect.width > 0 ? CANVAS_W / rect.width : 1;
+      const scaleY = rect.height > 0 ? CANVAS_H / rect.height : 1;
+      return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    };
+
     const persist = () => {
       if (restoringRef.current) return;
       onSerRef.current((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
@@ -299,6 +321,47 @@ export default function CanvasEditor({
       guidesRef.current.forEach((g) => canvas.remove(g));
       guidesRef.current = [];
     };
+
+    // ── Visible port snap dots (feedback while a connector tool is active) ──
+    const clearSnapDots = () => {
+      if (!snapDotsRef.current.length) return;
+      snapDotsRef.current.forEach((d) => canvas.remove(d));
+      snapDotsRef.current = [];
+    };
+    const updateSnapDots = (px: number, py: number) => {
+      clearSnapDots();
+      const ports: Array<{ x: number; y: number }> = [];
+      for (const o of canvas.getObjects()) {
+        if (o === creatingPolyRef.current) continue;
+        if ((o as unknown as Record<string, unknown>).excludeFromExport) continue;
+        const bb = o.getBoundingRect();
+        const ocx = bb.left + bb.width / 2;
+        const ocy = bb.top + bb.height / 2;
+        // Only decorate objects reasonably close to the cursor (keeps it light).
+        if (Math.hypot(ocx - px, ocy - py) > Math.max(bb.width, bb.height) / 2 + 200) continue;
+        for (const pt of objectSnapPoints(o)) ports.push(pt);
+      }
+      // Find the single nearest port so we can highlight it green.
+      let nearest: { x: number; y: number } | null = null;
+      let nd = 18;
+      for (const pt of ports) {
+        const d = Math.hypot(pt.x - px, pt.y - py);
+        if (d < nd) { nd = d; nearest = pt; }
+      }
+      for (const pt of ports) {
+        const isNear = !!nearest && pt.x === nearest.x && pt.y === nearest.y;
+        const dot = new Circle({
+          left: pt.x, top: pt.y, radius: isNear ? 7 : 4,
+          fill: isNear ? '#16a34a' : '#2563eb', stroke: '#ffffff', strokeWidth: 1.5,
+          originX: 'center', originY: 'center', selectable: false, evented: false,
+        });
+        (dot as unknown as Record<string, unknown>).excludeFromExport = true;
+        snapDotsRef.current.push(dot);
+        canvas.add(dot);
+      }
+      canvas.requestRenderAll();
+    };
+
     const addVGuide = (x: number) => {
       const ln = new Line([x, 0, x, CANVAS_H], { stroke: '#e5006d', strokeWidth: 1, selectable: false, evented: false });
       (ln as unknown as Record<string, unknown>).excludeFromExport = true;
@@ -378,7 +441,7 @@ export default function CanvasEditor({
       const poly = creatingPolyRef.current;
       const start = dragStartRef.current;
       if (poly && start && (poly.connectorKind === 'line' || poly.connectorKind === 'arrow')) {
-        const p = canvas.getScenePoint(opt.e);
+        const p = scenePoint(opt.e);
         const moved = Math.hypot(p.x - start.x, p.y - start.y);
         if (moved > 10) {
           const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
@@ -441,7 +504,7 @@ export default function CanvasEditor({
       // in certain Fabric v6 builds when clicking near existing objects).
       const isDrawTool = isLineTool(tool) || tool === 'text' || tool === 'rectangle' || tool === 'circle';
       if (!building && !isDrawTool) return; // only exit in pure select mode
-      const p = canvas.getScenePoint(opt.e);
+      const p = scenePoint(opt.e);
       const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
 
       if (isLineTool(tool) || building) {
@@ -500,9 +563,20 @@ export default function CanvasEditor({
       consumeRef.current();
     });
     canvas.on('mouse:move', (opt) => {
+      const tool = toolRef.current;
+      // Show port snap dots whenever a connector tool is active (hover feedback),
+      // even before the first click so the user can see where things will snap.
+      if (isLineTool(tool)) {
+        const hp = scenePoint(opt.e);
+        const gx = snapRef.current ? Math.round(hp.x / SNAP) * SNAP : hp.x;
+        const gy = snapRef.current ? Math.round(hp.y / SNAP) * SNAP : hp.y;
+        try { updateSnapDots(gx, gy); } catch { /* never block drawing */ }
+      } else if (snapDotsRef.current.length) {
+        clearSnapDots();
+      }
       const poly = creatingPolyRef.current;
       if (!poly) return;
-      const p = canvas.getScenePoint(opt.e);
+      const p = scenePoint(opt.e);
       const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
       // Port-snap the preview endpoint too.
       const gridX = sp(p.x);
@@ -633,8 +707,14 @@ export default function CanvasEditor({
     canvas.skipTargetFind = drawing;
     canvas.defaultCursor = drawing ? 'crosshair' : 'default';
     canvas.hoverCursor = drawing ? 'crosshair' : 'move';
+    // Keep pointer→scene mapping correct after any zoom/layout change.
+    canvas.calcOffset();
     if (drawing) {
       canvas.discardActiveObject();
+    } else if (snapDotsRef.current.length) {
+      // Leaving a draw tool: remove any lingering snap dots.
+      snapDotsRef.current.forEach((d) => canvas.remove(d));
+      snapDotsRef.current = [];
     }
     canvas.requestRenderAll();
   }, [activeTool]);
