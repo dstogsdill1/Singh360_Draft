@@ -234,6 +234,10 @@ export default function CanvasEditor({
   // Drag-to-draw: the scene point where a Line/Arrow drag started, so we can
   // finish the line on mouse-up when the user drags rather than click-clicks.
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  // RAW (un-snapped) mouse-down position — used ONLY to tell a click apart from
+  // a drag. Comparing the release against the snapped start caused lines near
+  // components to finish instantly (the snap offset looked like a drag).
+  const downRawRef = useRef<{ x: number; y: number } | null>(null);
   // Finalizes any in-progress line (set inside the mount effect). Called when the
   // tool changes so the user can NEVER get stuck mid-draw.
   const finalizeRef = useRef<(() => void) | null>(null);
@@ -440,10 +444,15 @@ export default function CanvasEditor({
       // while still allowing two-click placement for people who prefer it.
       const poly = creatingPolyRef.current;
       const start = dragStartRef.current;
-      if (poly && start && (poly.connectorKind === 'line' || poly.connectorKind === 'arrow')) {
-        const p = scenePoint(opt.e);
-        const moved = Math.hypot(p.x - start.x, p.y - start.y);
-        if (moved > 10) {
+      const downRaw = downRawRef.current;
+      if (poly && start && downRaw && (poly.connectorKind === 'line' || poly.connectorKind === 'arrow')) {
+        // Compare RAW SCREEN positions: a real drag moves the cursor >8px on
+        // screen. A click (even one that snapped its start to a port) stays put,
+        // so it is NOT mistaken for a drag and waits for the 2nd click instead.
+        const ue = opt.e as MouseEvent;
+        const movedScreen = Math.hypot((ue.clientX ?? 0) - downRaw.x, (ue.clientY ?? 0) - downRaw.y);
+        if (movedScreen > 8) {
+          const p = scenePoint(opt.e);
           const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
           let end = { x: sp(p.x), y: sp(p.y) };
           try {
@@ -452,11 +461,14 @@ export default function CanvasEditor({
           polyCommittedRef.current = [start, end];
           poly.setAbsPoints([start, end]);
           dragStartRef.current = null;
+          downRawRef.current = null;
           finishLine(true);
           return;
         }
       }
-      dragStartRef.current = null;
+      // Not a drag → keep the in-progress line alive and wait for the second
+      // click (two-click placement). Only the drag-detection state is reset.
+      downRawRef.current = null;
       canvas.requestRenderAll();
     });
     // ---- Simple multi-point line placement ---------------------------------
@@ -523,6 +535,10 @@ export default function CanvasEditor({
           // First click: start the line at this point.
           polyCommittedRef.current = [{ x: px, y: py }];
           dragStartRef.current = { x: px, y: py };
+          // Store the RAW SCREEN position (client px) so click-vs-drag detection
+          // is independent of zoom and unaffected by port snapping.
+          const de = opt.e as MouseEvent;
+          downRawRef.current = { x: de.clientX ?? 0, y: de.clientY ?? 0 };
           const conn = new Connector([{ x: px, y: py }, { x: px, y: py }], {
             ...styleForNewLine(tool),
             pointsData: [{ x: px, y: py }, { x: px, y: py }],
@@ -607,6 +623,7 @@ export default function CanvasEditor({
       if (!poly) return;
       creatingPolyRef.current = null;
       dragStartRef.current = null;
+      downRawRef.current = null;
       const committed = polyCommittedRef.current;
       const finalPts = committed.length >= 2 ? committed : poly.getAbsPoints();
       poly.setAbsPoints(finalPts);
@@ -623,6 +640,7 @@ export default function CanvasEditor({
       const poly = creatingPolyRef.current;
       if (!poly) return;
       dragStartRef.current = null;
+      downRawRef.current = null;
       const committed = polyCommittedRef.current;
       if (committed.length >= 2) {
         creatingPolyRef.current = null;
