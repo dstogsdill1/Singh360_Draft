@@ -196,6 +196,25 @@ export default function App() {
     return flushSave();
   }, [captureActivePage, flushSave]);
 
+  // Hard gate for navigation: do not switch pages/projects unless the current
+  // active canvas has been captured AND the server confirms persistence.
+  const ensureSavedBeforeNavigation = useCallback(async (): Promise<boolean> => {
+    const ok = await captureAndSave();
+    if (!ok) {
+      window.alert('Save failed. Staying on the current page so your drawing is not lost.');
+      return false;
+    }
+    return true;
+  }, [captureAndSave]);
+
+  const switchPageSafely = useCallback(async (id: string) => {
+    if (id === activePageRef.current?.id) return;
+    const ok = await ensureSavedBeforeNavigation();
+    if (!ok) return;
+    setActivePageId(id);
+    setSelection(null);
+  }, [ensureSavedBeforeNavigation]);
+
   // Explicit "Save Now": capture the live canvas, then contact the server.
   const saveNow = useCallback(async (): Promise<boolean> => {
     captureActivePage(); // sync canvas capture MUST happen before any read of projectRef
@@ -704,7 +723,8 @@ export default function App() {
   };
 
   const onUploadWorkbook = async (file: File) => {
-    await captureAndSave();
+    const ok = await ensureSavedBeforeNavigation();
+    if (!ok) return;
     const { id } = await createProjectFromWorkbook(file);
     const p = await getProject(id);
     lastSavedJsonRef.current = JSON.stringify(p);
@@ -719,7 +739,8 @@ export default function App() {
 
   const openProjectById = async (id: string) => {
     try {
-      await captureAndSave();
+      const ok = await ensureSavedBeforeNavigation();
+      if (!ok) return;
       const p = await getProject(id);
       lastSavedJsonRef.current = JSON.stringify(p);
       projectRef.current = p;
@@ -1008,7 +1029,7 @@ export default function App() {
       left={
         <>
           <CollapsibleSection title="Output Pages" hint="The pages that make up your drawing package. Drag to reorder; right-click for actions.">
-            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void captureAndSave(); setActivePageId(id); }} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
+            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void switchPageSafely(id); }} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
           </CollapsibleSection>
           <CollapsibleSection title="Source Tabs" defaultOpen={false} hint="The original workbook worksheets, for reference.">
             <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
@@ -1036,9 +1057,7 @@ export default function App() {
           onSelectionChange={onSelectionChange}
           onBlockChange={onBlockChange}
           onSelectPage={(id) => {
-            void captureAndSave();
-            setActivePageId(id);
-            setSelection(null);
+            void switchPageSafely(id);
           }}
           onReorderPages={(pages) => void updatePages(pages)}
           onRenamePageTitle={onRenamePageTitle}
