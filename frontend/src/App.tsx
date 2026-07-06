@@ -30,7 +30,7 @@ import ImportWorksheetModal from './components/ImportWorksheetModal';
 import AddSheetModal from './components/AddSheetModal';
 import SheetContextMenu from './components/SheetContextMenu';
 import ExportModal from './components/ExportModal';
-import PdfInsertModal from './components/PdfInsertModal';
+import PdfCropModal from './components/PdfCropModal';
 import BackupRecoveryModal from './components/BackupRecoveryModal';
 import BusModal from './components/BusModal';
 import CollapsibleSection from './components/CollapsibleSection';
@@ -100,7 +100,7 @@ export default function App() {
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [pdfInsertOpen, setPdfInsertOpen] = useState(false);
+  const [pdfCropOpen, setPdfCropOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [busOpen, setBusOpen] = useState(false);
   const [addSheetPending, setAddSheetPending] = useState<{ refId: string; where: 'before' | 'after' } | null>(null);
@@ -899,7 +899,7 @@ export default function App() {
       onUploadFile={(f) => void onUploadWorkbook(f)}
       onUploadCsv={(f) => void onUploadCsv(f)}
       onInsertImage={(f) => void onDropImageFile(f)}
-      onInsertPdfPage={() => setPdfInsertOpen(true)}
+      onInsertPdfPage={() => setPdfCropOpen(true)}
       onSaveNow={() => void saveNow()}
       onOpenBackups={() => setBackupOpen(true)}
       onExportPdf={() => setExportOpen(true)}
@@ -1171,15 +1171,20 @@ export default function App() {
         onCancel={() => setExportOpen(false)}
       />
     )}
-    {pdfInsertOpen && (
-      <PdfInsertModal
+    {pdfCropOpen && (
+      <PdfCropModal
         projectId={project.id}
-        onInsertImage={(url, name) => {
+        onInsert={(url, name, meta, mode) => {
           setOverlayMode(true);
-          canvasApiRef.current?.addImage(url, name);
-          setPdfInsertOpen(false);
+          // Current-page placement is implemented now. "Create new page" is
+          // intentionally disabled in the modal for this pass.
+          canvasApiRef.current?.addPdfCrop(url, name, {
+            underlay: mode === 'underlay',
+            meta,
+          });
+          setPdfCropOpen(false);
         }}
-        onCancel={() => setPdfInsertOpen(false)}
+        onCancel={() => setPdfCropOpen(false)}
       />
     )}
     {backupOpen && (

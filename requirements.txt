@@ -8,4 +8,4 @@ flask>=3.0,<4
 playwright>=1.40
 
 # PDF component conversion (library PDF -> rendered PNG component)
-PyMuPDF>=1.24
+pymupdf>=1.24

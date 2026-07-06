@@ -130,6 +130,10 @@ export interface CanvasSelection {
   pointsCount?: number;
   label?: string;
   isImage?: boolean;
+  pdfSource?: string;
+  pdfPage?: number;
+  pdfDpi?: number;
+  pdfCrop?: string;
   dash?: string;
   arrowStart?: boolean;
   arrowEnd?: boolean;
@@ -160,6 +164,13 @@ export interface BusOptions {
   orthogonal: boolean;
 }
 
+export interface PdfCropInsertMeta {
+  pdfSource: string;
+  pdfPage: number;
+  pdfDpi: number;
+  pdfCrop?: string; // "x0,y0,x1,y1" in PDF points
+}
+
 export interface CanvasApi {
   addText: () => void;
   addRect: () => void;
@@ -171,6 +182,7 @@ export interface CanvasApi {
   setLineStyle: (style: LineStyle) => void;
   startBus: (opts: BusOptions) => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
+  addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; meta?: PdfCropInsertMeta }) => void;
   addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addLegend: (presetIds?: string[]) => void;

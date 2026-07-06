@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CanvasSelection, PageModel } from '../model/types';
 import { PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
+import { BODY_H, BODY_W } from '../model/sheetGeometry';
 
 interface Props {
   page: PageModel;
@@ -150,6 +151,30 @@ export default function PropertiesPanel({
                 <input id="sel-points" value={selection.pointsCount ?? 2} readOnly />
               </div>
             )}
+            {selection.pdfSource && (
+              <div className="props-subgroup">
+                <div className="field">
+                  <label htmlFor="sel-pdf-src" title="The source PDF this crop was rendered from">Source PDF</label>
+                  <input id="sel-pdf-src" value={selection.pdfSource} readOnly title={selection.pdfSource} />
+                </div>
+                <div className="field-row">
+                  <div className="field">
+                    <label htmlFor="sel-pdf-page" title="1-based PDF page">Page</label>
+                    <input id="sel-pdf-page" value={(selection.pdfPage ?? 0) + 1} readOnly />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="sel-pdf-dpi" title="Render resolution of this crop">Crop DPI</label>
+                    <input id="sel-pdf-dpi" value={selection.pdfDpi ?? ''} readOnly />
+                  </div>
+                </div>
+                {selection.pdfCrop && (
+                  <div className="field">
+                    <label htmlFor="sel-pdf-crop" title="Crop rectangle in PDF points (x0,y0,x1,y1)">Crop Rectangle (pt)</label>
+                    <input id="sel-pdf-crop" value={selection.pdfCrop} readOnly title={selection.pdfCrop} />
+                  </div>
+                )}
+              </div>
+            )}
             {selection.name !== undefined && (
               <div className="field">
                 <label htmlFor="sel-name">Object Name</label>
@@ -178,6 +203,35 @@ export default function PropertiesPanel({
                     <input id="sel-h" type="number" value={selection.height ?? 0} onChange={(e) => onUpdateSelection({ height: Number(e.target.value) })} />
                   </div>
                 </div>
+                {selection.isImage && selection.pdfSource && (
+                  <div className="field-row">
+                    <button
+                      className="props-btn"
+                      title="Scale this PDF crop to the full printable sheet width"
+                      onClick={() => {
+                        const w = Math.max(1, selection.width ?? 1);
+                        const h = Math.max(1, selection.height ?? 1);
+                        const ratio = h / w;
+                        const fitW = BODY_W * 0.95;
+                        onUpdateSelection({ width: fitW, height: fitW * ratio });
+                      }}
+                    >
+                      Fit Width
+                    </button>
+                    <button
+                      className="props-btn"
+                      title="Scale this PDF crop to fit inside the printable sheet body"
+                      onClick={() => {
+                        const w = Math.max(1, selection.width ?? 1);
+                        const h = Math.max(1, selection.height ?? 1);
+                        const s = Math.min((BODY_W * 0.95) / w, (BODY_H * 0.95) / h);
+                        onUpdateSelection({ width: w * s, height: h * s });
+                      }}
+                    >
+                      Fit to Sheet Body
+                    </button>
+                  </div>
+                )}
                 <div className="field">
                   <label htmlFor="sel-angle" title="Rotation in degrees">Rotation</label>
                   <input id="sel-angle" type="number" step={1} value={selection.angle ?? 0} onChange={(e) => onUpdateSelection({ angle: Number(e.target.value) })} />

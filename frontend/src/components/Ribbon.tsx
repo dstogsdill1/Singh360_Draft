@@ -256,7 +256,7 @@ export default function Ribbon({
                   onChange={(e) => { if (e.target.files?.[0]) { onInsertImage(e.target.files[0]); e.currentTarget.value = ''; } }}
                 />
               </label>
-              <button className="ribbon-btn" disabled={!cx} onClick={onInsertPdfPage} title="Render a PDF page at high resolution and insert it on the active drawing page">PDF Page</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={onInsertPdfPage} title="Best quality: open PDF Crop, select a region, and render at 300/400/600 DPI">PDF Crop</button>
               <PlaceholderBtn label="Callout" />
             </Group>
             <Group title="Headings">

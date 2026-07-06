@@ -249,6 +249,75 @@ export async function renderPdfPage(
   return res.json();
 }
 
+// ── PDF Crop importer (point-accurate, high DPI) ──
+export interface PdfPreviewPage {
+  page: number;
+  widthPt: number;
+  heightPt: number;
+  widthIn: number;
+  heightIn: number;
+  rotation: number;
+  previewDpi: number;
+  previewWidth: number;
+  previewHeight: number;
+  previewDataUrl: string;
+}
+
+export interface PdfCropMeta {
+  sourcePdf: string;
+  page: number;
+  dpi: number;
+  cropPoints?: { x0: number; y0: number; x1: number; y1: number };
+  cropWidthIn?: number;
+  cropHeightIn?: number;
+  autocropped?: boolean;
+  outputWidth: number;
+  outputHeight: number;
+}
+
+export async function uploadPdfPreview(
+  projectId: string,
+  file: File,
+): Promise<{ ok: boolean; pdfFile: string; pageCount: number; pages: PdfPreviewPage[] }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`/api/projects/${projectId}/pdf/upload-preview`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function renderPdfFullPage(
+  projectId: string,
+  opts: { pdfFile: string; page: number; dpi: number },
+): Promise<{ ok: boolean; asset: { id: string; name: string; url: string }; meta: PdfCropMeta }> {
+  const res = await fetch(`/api/projects/${projectId}/pdf/render-page`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function renderPdfCrop(
+  projectId: string,
+  opts: {
+    pdfFile: string;
+    page: number;
+    dpi: number;
+    clip: { x0: number; y0: number; x1: number; y1: number };
+    autocrop?: boolean;
+  },
+): Promise<{ ok: boolean; asset: { id: string; name: string; url: string }; meta: PdfCropMeta }> {
+  const res = await fetch(`/api/projects/${projectId}/pdf/render-crop`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // ── Component Library ──
 export interface LibraryComponent {
   id: string;

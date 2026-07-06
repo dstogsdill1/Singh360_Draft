@@ -19,7 +19,7 @@ interface Props {
 const CANVAS_W = BODY_W;
 const CANVAS_H = BODY_H;
 const SNAP = 16;
-const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer'];
+const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop'];
 
 function summarize(obj: FabricObject): CanvasSelection {
   const anyObj = obj as unknown as Record<string, unknown>;
@@ -50,6 +50,10 @@ function summarize(obj: FabricObject): CanvasSelection {
     pointsCount: Array.isArray(anyObj.pointsData) ? anyObj.pointsData.length : (isConnector ? 2 : undefined),
     label: typeof anyObj.label === 'string' ? (anyObj.label as string) : undefined,
     isImage,
+    pdfSource: typeof anyObj.pdfSource === 'string' ? (anyObj.pdfSource as string) : undefined,
+    pdfPage: typeof anyObj.pdfPage === 'number' ? (anyObj.pdfPage as number) : undefined,
+    pdfDpi: typeof anyObj.pdfDpi === 'number' ? (anyObj.pdfDpi as number) : undefined,
+    pdfCrop: typeof anyObj.pdfCrop === 'string' ? (anyObj.pdfCrop as string) : undefined,
     dash: isConnector ? dash : undefined,
     arrowStart: anyObj.arrowStart === true,
     arrowEnd: anyObj.arrowEnd === true,
@@ -658,6 +662,39 @@ export default function CanvasEditor({
           (img as unknown as Record<string, unknown>).objName = name || 'image';
           styleForSelection(img);
           c.add(img);
+          c.setActiveObject(img);
+          c.requestRenderAll();
+        });
+      },
+      addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; meta?: { pdfSource: string; pdfPage: number; pdfDpi: number; pdfCrop?: string } }) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        void FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
+          const iw = img.width || 1;
+          const ih = img.height || 1;
+          // Fit a crisp crop to ~70% of the sheet body; a locked underlay fills
+          // the whole body faintly and sits behind everything.
+          const underlay = !!opts?.underlay;
+          const maxW = CANVAS_W * (underlay ? 0.98 : 0.7);
+          const maxH = CANVAS_H * (underlay ? 0.98 : 0.7);
+          const scale = Math.min(1, maxW / iw, maxH / ih);
+          const left = (CANVAS_W - iw * scale) / 2;
+          const top = (CANVAS_H - ih * scale) / 2;
+          img.set({ left, top, scaleX: scale, scaleY: scale });
+          const anyImg = img as unknown as Record<string, unknown>;
+          anyImg.objName = name;
+          if (opts?.meta) {
+            anyImg.pdfSource = opts.meta.pdfSource;
+            anyImg.pdfPage = opts.meta.pdfPage;
+            anyImg.pdfDpi = opts.meta.pdfDpi;
+            if (opts.meta.pdfCrop) anyImg.pdfCrop = opts.meta.pdfCrop;
+          }
+          styleForSelection(img);
+          if (underlay) {
+            img.set({ opacity: 0.85, lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, selectable: true });
+          }
+          c.add(img);
+          if (underlay) c.sendObjectToBack(img);
           c.setActiveObject(img);
           c.requestRenderAll();
         });

@@ -34,7 +34,13 @@ from core.drawing_generators import (
 from core.sheet_numbering import default_sheet_index
 from engines.ems_sheet import render_layout_sheet, render_schedule_sheets
 from core.page_composer import compose_pages
-from core.pdf_renderer import get_page_thumbnails, render_page_to_png, is_available as pdf_renderer_available
+from core.pdf_renderer import (
+    get_page_thumbnails,
+    get_page_previews,
+    render_page_to_png,
+    render_crop_points,
+    is_available as pdf_renderer_available,
+)
 from core.pdf_importer import import_pdf
 from core.project_model import ensure_project_shape, recalc_page_numbers
 from core.project_store import ProjectStore, slugify
@@ -1424,6 +1430,171 @@ def render_pdf_page_route(project_id: str):
             "renderDpi": result["renderDpi"],
             "pageWidth": result["pageWidth"],
             "pageHeight": result["pageHeight"],
+            "outputWidth": result["outputWidth"],
+            "outputHeight": result["outputHeight"],
+        },
+    })
+
+
+# --------------------------------------------------------------------------
+# Insert PDF Crop — high-DPI region importer (PyMuPDF)
+# --------------------------------------------------------------------------
+
+_PDF_CROP_DPI = {300, 400, 500, 600}
+_PDF_FILE_RE = re.compile(r"[A-Za-z0-9._-]{1,120}\.pdf$", re.IGNORECASE)
+
+
+def _project_pdf_path(project_id: str, pdf_file: str):
+    """Resolve + guard a project-relative source PDF path, or None if invalid."""
+    if not pdf_file or not _PDF_FILE_RE.fullmatch(pdf_file):
+        return None
+    sources_dir = store.sources_dir(project_id, "pdf")
+    pdf_path = (sources_dir / pdf_file).resolve()
+    if sources_dir.resolve() not in pdf_path.parents:
+        return None
+    return pdf_path if pdf_path.is_file() else None
+
+
+@app.post("/api/projects/<project_id>/pdf/upload-preview")
+def pdf_upload_preview(project_id: str):
+    """Upload a PDF into the project and return page dimensions (points + inches)
+    plus a crop-selection preview image per page."""
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    if not pdf_renderer_available():
+        return jsonify(_err("PDF rendering requires PyMuPDF. Run: python -m pip install pymupdf")), 501
+    if "file" not in request.files:
+        return jsonify(_err("No PDF uploaded.")), 400
+    upload = request.files["file"]
+    if not (upload.filename or "").lower().endswith(".pdf"):
+        return jsonify(_err("Only .pdf files are supported.")), 400
+
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", upload.filename)[:80] or "uploaded.pdf"
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name += ".pdf"
+    sources_dir = store.sources_dir(project_id, "pdf")
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = sources_dir / safe_name
+    upload.save(pdf_path)
+
+    try:
+        previews = get_page_previews(pdf_path)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("PDF preview render failed for %s: %s", project_id, exc)
+        return jsonify(_err("Could not render PDF preview.", str(exc))), 500
+
+    return jsonify({
+        "ok": True,
+        "pdfFile": safe_name,
+        "pageCount": len(previews),
+        "pages": previews,
+    })
+
+
+@app.post("/api/projects/<project_id>/pdf/render-page")
+def pdf_render_page(project_id: str):
+    """Render a full PDF page at 300/400/600 DPI into project assets/images."""
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    if not pdf_renderer_available():
+        return jsonify(_err("PDF rendering requires PyMuPDF. Run: python -m pip install pymupdf")), 501
+
+    body = request.get_json(silent=True) or {}
+    pdf_file = str(body.get("pdfFile") or "").strip()
+    pdf_path = _project_pdf_path(project_id, pdf_file)
+    if pdf_path is None:
+        return jsonify(_err("PDF not found. Upload it first via /pdf/upload-preview.")), 404
+
+    page_index = int(body.get("page", body.get("pageIndex", 0)))
+    dpi = int(body.get("dpi", 300))
+    if dpi not in _PDF_CROP_DPI:
+        dpi = 300
+
+    asset_id = uuid.uuid4().hex[:16]
+    assets_dir = store.assets_images_dir(project_id)
+    out_name = f"{asset_id}_pdf_p{page_index + 1}_{dpi}dpi.png"
+    out_path = assets_dir / out_name
+    result = render_page_to_png(pdf_path, page_index, out_path, dpi=dpi)
+    if not result.get("ok"):
+        return jsonify(_err("Render failed.", result.get("error", ""))), 500
+
+    return jsonify({
+        "ok": True,
+        "asset": {"id": asset_id, "name": out_name, "url": f"/api/assets/{project_id}/{out_name}"},
+        "meta": {
+            "sourcePdf": pdf_file,
+            "page": page_index,
+            "dpi": dpi,
+            "outputWidth": result["outputWidth"],
+            "outputHeight": result["outputHeight"],
+        },
+    })
+
+
+@app.post("/api/projects/<project_id>/pdf/render-crop")
+def pdf_render_crop(project_id: str):
+    """Render a crop rectangle (PDF point coordinates) at 300/400/600 DPI into
+    project assets/images. Optionally trims residual white margins."""
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    if not pdf_renderer_available():
+        return jsonify(_err("PDF rendering requires PyMuPDF. Run: python -m pip install pymupdf")), 501
+
+    body = request.get_json(silent=True) or {}
+    pdf_file = str(body.get("pdfFile") or "").strip()
+    pdf_path = _project_pdf_path(project_id, pdf_file)
+    if pdf_path is None:
+        return jsonify(_err("PDF not found. Upload it first via /pdf/upload-preview.")), 404
+
+    page_index = int(body.get("page", body.get("pageIndex", 0)))
+    dpi = int(body.get("dpi", 400))
+    if dpi not in _PDF_CROP_DPI:
+        dpi = 400
+    clip = body.get("clip") or {}
+    if not isinstance(clip, dict):
+        return jsonify(_err("clip must be an object with x0,y0,x1,y1 in PDF points.")), 400
+    autocrop = bool(body.get("autocrop", False))
+
+    asset_id = uuid.uuid4().hex[:16]
+    assets_dir = store.assets_images_dir(project_id)
+    out_name = f"{asset_id}_pdfcrop_p{page_index + 1}_{dpi}dpi.png"
+    out_path = assets_dir / out_name
+    try:
+        result = render_crop_points(pdf_path, page_index, out_path, dpi=dpi, clip_points=clip)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("PDF crop render failed for %s: %s", project_id, exc)
+        return jsonify(_err("Crop render failed.", str(exc))), 500
+    if not result.get("ok"):
+        return jsonify(_err("Crop render failed.", result.get("error", ""))), 500
+
+    crop_meta = {}
+    if autocrop:
+        try:
+            crop_meta = pdf_import_v2._autocrop_png(out_path)  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            crop_meta = {}
+        # Re-read output dims after autocrop.
+        try:
+            from PIL import Image as _PILImage
+            with _PILImage.open(out_path) as _im:
+                result["outputWidth"], result["outputHeight"] = _im.size
+        except Exception:  # noqa: BLE001
+            pass
+
+    return jsonify({
+        "ok": True,
+        "asset": {"id": asset_id, "name": out_name, "url": f"/api/assets/{project_id}/{out_name}"},
+        "meta": {
+            "sourcePdf": pdf_file,
+            "page": page_index,
+            "dpi": dpi,
+            "cropPoints": result.get("cropPoints"),
+            "cropWidthIn": result.get("cropWidthIn"),
+            "cropHeightIn": result.get("cropHeightIn"),
+            "autocropped": bool(crop_meta.get("cropped")),
             "outputWidth": result["outputWidth"],
             "outputHeight": result["outputHeight"],
         },
