@@ -127,3 +127,33 @@ Update statuses here as work progresses. `In Progress` = actively being built,
   Alt-drag, bus placement) is not driven by CI — verify via `docs/VISUAL_QA.md`.
 - Ports (E), trunk/branch bus (F "better"), and per-region label editing (H) are
   deferred, not faked.
+
+## Emergency 3F — Active page save, editable sheets, selection safety
+
+| Phase | Item | Status |
+| ----- | ---- | ------ |
+| 0 | Audit + `docs/BUGLIST_SAVE_TABLE_SELECTION_3F.md` | Done |
+| A | `captureActivePageState()` authority for active canvas/table/page metadata saves | Done |
+| B | Server project backups + per-page snapshots + recovery UI entries | Done |
+| C | Imported normalized tables editable with Enter/Esc/Tab + right-click row/column/cell tools | Done |
+| D | No-scroll printed sheets | Deferred (existing renderer behavior; not expanded this pass) |
+| E | Ctrl/Shift multi-select, marquee, duplicate/delete/group baseline via Fabric + smoke data model | Done (manual UX still recommended) |
+| F | Real lock/unlock enforcement for move/edit/delete/z-order/group operations | Done |
+| G | Copy/paste/duplicate/group/ungroup object operations | Done |
+| H | Connector serialization/reload with route/style/labels/lock props | Done |
+| I | Connector drawing polish/snapping | Not prioritized beyond existing behavior |
+| J | Properties panel selected-object edits | Done for object/connector properties; table-cell properties deferred |
+| K | Context menus table/object/empty-page | Done baseline; disabled resize-columns documents why |
+| L | Smoke tests `smoke_save_active_page.py`, `smoke_table_editing.py`, `smoke_selection_editing.py`, connector snapshot update | Done |
+
+### 3F honest flags
+
+- Project JSON is the editable source of truth after workbook import; source XLSX files
+  are preserved as import provenance and are not rewritten.
+- Page snapshots are backend JSON recovery points under `.docs/projects/<project>/page_snapshots/`
+  and are intentionally gitignored runtime data.
+- Automated tests prove persistence, snapshots, lock/group/connector serialized state,
+  and package JSON contents through Flask test clients. True Ctrl-click/marquee drag UX
+  still needs the requested manual browser QA pass.
+- Column resize handles and table-cell editing from the Properties panel are not fully
+  implemented; right-click menu clearly disables Resize Columns with a reason.

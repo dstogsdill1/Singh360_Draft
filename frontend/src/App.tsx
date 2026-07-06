@@ -127,6 +127,15 @@ export default function App() {
   saveStatusRef.current = saveStatus;
   const savingRef = useRef(false);
 
+  const setProjectSync = useCallback((updater: ProjectModel | null | ((prev: ProjectModel | null) => ProjectModel | null)) => {
+    const next = typeof updater === 'function'
+      ? (updater as (prev: ProjectModel | null) => ProjectModel | null)(projectRef.current)
+      : updater;
+    projectRef.current = next;
+    setProject(next);
+    return next;
+  }, []);
+
   const markSaved = () => {
     const d = new Date();
     const p = (n: number) => String(n).padStart(2, '0');
@@ -159,42 +168,52 @@ export default function App() {
     } catch {
       savingRef.current = false;
       setSaveStatus('failed');
+      writeRecoverySnapshot(p);
       return false;
     }
   }, [printMode]);
 
-  // ── captureActivePage ──────────────────────────────────────────────────────
+  // ── captureActivePageState ─────────────────────────────────────────────────
   // THE CRITICAL FIX: synchronously read the live Fabric canvas and write the
   // result into projectRef BEFORE any save or page-switch so flushSave always
-  // gets the freshest canvas state — not a stale React snapshot.
+  // gets the freshest editor state — not a stale React snapshot.
   //
   // React's setProject is async (batched). When the user draws something and
   // immediately clicks Save Now or another page tab, the onSerializedChange →
-  // setProject update hasn't been committed yet.  captureActivePage bypasses
-  // that by going straight to the Fabric canvas via canvasApiRef.
-  const captureActivePage = useCallback(() => {
+  // setProject update hasn't been committed yet. captureActivePageState bypasses
+  // that by going straight to live editors and projectRef.
+  const captureActivePageState = useCallback(() => {
+    try {
+      document.dispatchEvent(new CustomEvent('singh360:capture-active-editors'));
+      const el = document.activeElement as HTMLElement | null;
+      if (el?.isContentEditable) el.blur();
+    } catch {
+      /* capture is best effort for DOM editors; projectRef remains authoritative */
+    }
     const canvas = canvasApiRef.current;
     const pageId = activePageRef.current?.id;
-    if (!canvas || !pageId || !projectRef.current) return;
-    const objects = canvas.captureCanvas();
+    if (!pageId || !projectRef.current) return projectRef.current;
+    const objects = canvas?.captureCanvas();
     const updated: ProjectModel = {
       ...projectRef.current,
       pages: projectRef.current.pages.map((p) =>
-        p.id === pageId ? { ...p, canvasObjects: objects } : p,
+        p.id === pageId && objects ? { ...p, canvasObjects: objects } : p,
       ),
     };
     // Synchronously update the mutable ref so flushSave reads the right data.
     projectRef.current = updated;
     // Also schedule the React state update so the UI stays consistent.
     setProject(updated);
+    writeRecoverySnapshot(updated);
+    return updated;
   }, []);
 
   // Capture then save. Every explicit save (Save Now, Ctrl+S) and every
   // page/project switch must call this before doing anything else.
   const captureAndSave = useCallback(async (): Promise<boolean> => {
-    captureActivePage();
+    captureActivePageState();
     return flushSave();
-  }, [captureActivePage, flushSave]);
+  }, [captureActivePageState, flushSave]);
 
   // Hard gate for navigation: do not switch pages/projects unless the current
   // active canvas has been captured AND the server confirms persistence.
@@ -217,7 +236,7 @@ export default function App() {
 
   // Explicit "Save Now": capture the live canvas, then contact the server.
   const saveNow = useCallback(async (): Promise<boolean> => {
-    captureActivePage(); // sync canvas capture MUST happen before any read of projectRef
+    captureActivePageState(); // sync active-page capture MUST happen before any read of projectRef
     const p = projectRef.current;
     if (!p || printMode) return true;
     const json = JSON.stringify(p);
@@ -236,20 +255,20 @@ export default function App() {
     } catch {
       savingRef.current = false;
       setSaveStatus('failed');
+      writeRecoverySnapshot(p);
       return false;
     }
-  }, [printMode, captureActivePage]);
+  }, [printMode, captureActivePageState]);
 
   useEffect(() => {
     if (!initialProjectId) return;
     void getProject(initialProjectId).then((p) => {
       lastSavedJsonRef.current = JSON.stringify(p); // loaded == clean baseline
-      projectRef.current = p;
-      setProject(p);
+      setProjectSync(p);
       setActivePageId(p.pages?.[0]?.id ?? null);
       setSelectedWorksheetId(p.worksheets?.[0]?.id);
     });
-  }, [initialProjectId]);
+  }, [initialProjectId, setProjectSync]);
 
   // Debounced autosave driven by real changes. Marks Unsaved Changes immediately,
   // writes a local recovery snapshot, then persists after a short quiet period.
@@ -312,8 +331,10 @@ export default function App() {
   // Refs so global paste/keyboard handlers read current values.
   const activePageRef = useRef(activePage);
   const viewModeRef = useRef(viewMode);
+  const selectionRef = useRef(selection);
   activePageRef.current = activePage;
   viewModeRef.current = viewMode;
+  selectionRef.current = selection;
 
   // Keep the mutable project ref in sync with committed React state only.
   // Do NOT assign this during render: a page-switch render can otherwise
@@ -500,6 +521,16 @@ export default function App() {
       } else if ((e.ctrlKey || e.metaKey) && k === 'y') {
         e.preventDefault();
         canvasApiRef.current?.redo();
+      } else if ((e.ctrlKey || e.metaKey) && k === 'c') {
+        if (selectionRef.current) {
+          e.preventDefault();
+          canvasApiRef.current?.copySelected();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && k === 'v') {
+        if (selectionRef.current) {
+          e.preventDefault();
+          canvasApiRef.current?.pasteCopied();
+        }
       } else if ((e.ctrlKey || e.metaKey) && k === 'd') {
         e.preventDefault();
         canvasApiRef.current?.duplicateSelected();
@@ -564,11 +595,12 @@ export default function App() {
   }
 
   const updatePages = async (pages: PageModel[]) => {
-    if (!project) return;
+    captureActivePageState();
+    const cur = projectRef.current;
+    if (!cur) return;
     const numbered = withPageNumbers(pages);
-    const next: ProjectModel = { ...project, pages: numbered };
-    projectRef.current = next;
-    setProject(next);
+    const next: ProjectModel = { ...cur, pages: numbered };
+    setProjectSync(next);
     await flushSave();
   };
 
@@ -576,7 +608,7 @@ export default function App() {
   // list, page heading, right panel) funnels through here so all views stay in
   // sync, page numbering stays correct, and the change autosaves.
   const patchPage = (pageId: string, patch: Partial<PageModel>) => {
-    setProject((prev) => {
+    setProjectSync((prev) => {
       if (!prev) return prev;
       const pages = withPageNumbers(prev.pages.map((p) => (p.id === pageId ? { ...p, ...patch } : p)));
       return { ...prev, pages };
@@ -589,11 +621,12 @@ export default function App() {
   const newPageId = () => `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
   const mutatePages = (fn: (pages: PageModel[]) => PageModel[]) => {
-    if (!project) return;
-    const next = withPageNumbers(fn(project.pages).map((p, i) => ({ ...p, order: i + 1 })));
-    const nextProject = { ...project, pages: next };
-    projectRef.current = nextProject;
-    setProject(nextProject);
+    captureActivePageState();
+    const cur = projectRef.current;
+    if (!cur) return;
+    const next = withPageNumbers(fn(cur.pages).map((p, i) => ({ ...p, order: i + 1 })));
+    const nextProject = { ...cur, pages: next };
+    setProjectSync(nextProject);
     void flushSave();
   };
 
@@ -735,8 +768,7 @@ export default function App() {
     const { id } = await createProjectFromWorkbook(file);
     const p = await getProject(id);
     lastSavedJsonRef.current = JSON.stringify(p);
-    projectRef.current = p;
-    setProject(p);
+    setProjectSync(p);
     setSaveStatus('idle');
     setActivePageId(p.pages?.[0]?.id ?? null);
     setSelectedWorksheetId(p.worksheets?.[0]?.id);
@@ -750,8 +782,7 @@ export default function App() {
       if (!ok) return;
       const p = await getProject(id);
       lastSavedJsonRef.current = JSON.stringify(p);
-      projectRef.current = p;
-      setProject(p);
+      setProjectSync(p);
       setSaveStatus('idle');
       setActivePageId(p.pages?.[0]?.id ?? null);
       setSelectedWorksheetId(p.worksheets?.[0]?.id);
@@ -770,8 +801,7 @@ export default function App() {
     try {
       const p = await getProject(project.id);
       lastSavedJsonRef.current = JSON.stringify(p);
-      projectRef.current = p;
-      setProject(p);
+      setProjectSync(p);
       // Select the first imported page.
       if (pageIds.length) setActivePageId(pageIds[0]);
       if (renumberSuggested) setRenumberBadge(true);
@@ -784,8 +814,7 @@ export default function App() {
   // live editor and re-baseline the save manager so status is accurate.
   const applyRestoredProject = (p: ProjectModel) => {
     lastSavedJsonRef.current = JSON.stringify(p);
-    projectRef.current = p;
-    setProject(p);
+    setProjectSync(p);
     setActivePageId(p.pages?.[0]?.id ?? activePageId);
     setSelection(null);
     setSaveStatus('idle');
@@ -799,7 +828,7 @@ export default function App() {
     try {
       const res = await archiveProject(project.id);
       window.alert(`Project archived to:\n${res.archivedTo}`);
-      setProject(null);
+      setProjectSync(null);
       setActivePageId(null);
       window.history.replaceState({}, '', '/app');
     } catch (err) {
@@ -813,7 +842,7 @@ export default function App() {
       setSaveStatus('saving');
       await attachCsv(project.id, file);
       const p = await getProject(project.id);
-      setProject(p);
+      setProjectSync(p);
       setSaveStatus('saved');
     } catch (err) {
       console.error('CSV attach failed', err);
@@ -840,10 +869,11 @@ export default function App() {
         metadata: { ...project.metadata, revision: rev.newRevision, issueDate: today },
       };
       projectRef.current = proj;
-      setProject(proj);
+      setProjectSync(proj);
     }
     // Make sure the freshest canvas state is on the server before we render it.
-    await captureAndSave();
+    const ok = await captureAndSave();
+    if (!ok) return;
     const base = proj.metadata.drawingPackageFileName || proj.projectDisplayName || proj.metadata.projectName || proj.id;
     const revSuffix = rev.updateRevision ? `_${rev.newRevision.replace(/\s+/g, '')}` : '';
     const blob = await exportPdf(proj.id, { width, height });
@@ -857,7 +887,8 @@ export default function App() {
 
   const onExportPackage = async () => {
     if (!project) return;
-    await captureAndSave();
+    const ok = await captureAndSave();
+    if (!ok) return;
     const blob = await exportPackage(project.id);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -882,7 +913,7 @@ export default function App() {
     try {
       setSaveStatus('saving');
       const res = await renameProject(project.id, name.trim());
-      setProject((prev) =>
+      setProjectSync((prev) =>
         prev
           ? {
               ...prev,
@@ -900,7 +931,7 @@ export default function App() {
   };
 
   const onBlockChange = (pageId: string, blockId: string, patch: Partial<PageBlock>) => {
-    setProject((prev) => {
+    setProjectSync((prev) => {
       if (!prev) return prev;
       return {
         ...prev,
@@ -909,6 +940,28 @@ export default function App() {
             ? { ...pg, blocks: (pg.blocks ?? []).map((b) => (b.id === blockId ? { ...b, ...patch } : b)) }
             : pg,
         ),
+      };
+    });
+  };
+
+  const onDuplicateBlock = (pageId: string, blockId: string) => {
+    setProjectSync((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        pages: prev.pages.map((pg) => {
+          if (pg.id !== pageId) return pg;
+          const blocks = pg.blocks ?? [];
+          const idx = blocks.findIndex((b) => b.id === blockId);
+          if (idx < 0) return pg;
+          const copy: PageBlock = {
+            ...structuredClone(blocks[idx]),
+            id: `b_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+          };
+          const nextBlocks = [...blocks];
+          nextBlocks.splice(idx + 1, 0, copy);
+          return { ...pg, blocks: nextBlocks };
+        }),
       };
     });
   };
@@ -946,7 +999,10 @@ export default function App() {
         addSectionHeader: () => { setOverlayMode(true); canvasApiRef.current?.addSectionHeader('Section Header'); },
         addNote: () => { setOverlayMode(true); canvasApiRef.current?.addNote('Note'); },
         deleteSelected: () => canvasApiRef.current?.deleteSelected(),
+        copySelected: () => canvasApiRef.current?.copySelected(),
+        pasteCopied: () => canvasApiRef.current?.pasteCopied(),
         duplicateSelected: () => canvasApiRef.current?.duplicateSelected(),
+        unlockAll: () => canvasApiRef.current?.unlockAll(),
         undo: () => canvasApiRef.current?.undo(),
         redo: () => canvasApiRef.current?.redo(),
         group: () => canvasApiRef.current?.group(),
@@ -1063,6 +1119,7 @@ export default function App() {
           onRegisterApi={onRegisterApi}
           onSelectionChange={onSelectionChange}
           onBlockChange={onBlockChange}
+          onDuplicateBlock={onDuplicateBlock}
           onSelectPage={(id) => {
             void switchPageSafely(id);
           }}
@@ -1073,9 +1130,12 @@ export default function App() {
           onDropComponent={onDropComponent}
           onScaleChange={onScaleChange}
           onGridChange={(wsId, grid) => {
-            setProject({
-              ...project,
-              worksheets: project.worksheets.map((ws) => (ws.id === wsId ? { ...ws, grid } : ws)),
+            setProjectSync((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                worksheets: prev.worksheets.map((ws) => (ws.id === wsId ? { ...ws, grid } : ws)),
+              };
             });
           }}
           onCanvasChange={(pageId, objects) => {
@@ -1085,7 +1145,7 @@ export default function App() {
             // drawings vanishing: if `project` was a stale closure from before
             // the objects were drawn, this would silently overwrite the live
             // canvas state with an empty canvasObjects array.
-            setProject((prev) => {
+            setProjectSync((prev) => {
               if (!prev) return prev;
               return {
                 ...prev,
@@ -1107,7 +1167,7 @@ export default function App() {
                 id="proj-name"
                 title="User-facing project name shown in the title block"
                 value={project.metadata.projectName || ''}
-                onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, projectName: e.target.value } })}
+                onChange={(e) => setProjectSync((prev) => prev ? { ...prev, metadata: { ...prev.metadata, projectName: e.target.value } } : prev)}
               />
             </div>
             <div className="field">
@@ -1117,7 +1177,7 @@ export default function App() {
                 title="Output package / export filename, e.g. SA31_EMS_Lighting_V1"
                 placeholder="SA31_EMS_Lighting_V1"
                 value={project.metadata.drawingPackageFileName || ''}
-                onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, drawingPackageFileName: e.target.value } })}
+                onChange={(e) => setProjectSync((prev) => prev ? { ...prev, metadata: { ...prev.metadata, drawingPackageFileName: e.target.value } } : prev)}
               />
             </div>
             <div className="field">
@@ -1126,7 +1186,7 @@ export default function App() {
                 id="proj-loc"
                 title="Project location / store address"
                 value={project.metadata.location || ''}
-                onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, location: e.target.value } })}
+                onChange={(e) => setProjectSync((prev) => prev ? { ...prev, metadata: { ...prev.metadata, location: e.target.value } } : prev)}
               />
             </div>
             <div className="field-row">
@@ -1137,7 +1197,7 @@ export default function App() {
                   title="Revision / version shown in the title block"
                   placeholder="V1"
                   value={project.metadata.revision || ''}
-                  onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, revision: e.target.value } })}
+                  onChange={(e) => setProjectSync((prev) => prev ? { ...prev, metadata: { ...prev.metadata, revision: e.target.value } } : prev)}
                 />
               </div>
               <div className="field">
@@ -1146,7 +1206,7 @@ export default function App() {
                   id="proj-issue"
                   title="Date this package was issued"
                   value={project.metadata.issueDate || ''}
-                  onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, issueDate: e.target.value } })}
+                  onChange={(e) => setProjectSync((prev) => prev ? { ...prev, metadata: { ...prev.metadata, issueDate: e.target.value } } : prev)}
                 />
               </div>
             </div>
@@ -1157,7 +1217,7 @@ export default function App() {
                   id="proj-drawn"
                   title="Person who drew the package"
                   value={project.metadata.drawnBy || ''}
-                  onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, drawnBy: e.target.value } })}
+                  onChange={(e) => setProjectSync((prev) => prev ? { ...prev, metadata: { ...prev.metadata, drawnBy: e.target.value } } : prev)}
                 />
               </div>
               <div className="field">
@@ -1166,7 +1226,7 @@ export default function App() {
                   id="proj-checked"
                   title="Person who checked the package"
                   value={project.metadata.checkedBy || ''}
-                  onChange={(e) => setProject({ ...project, metadata: { ...project.metadata, checkedBy: e.target.value } })}
+                  onChange={(e) => setProjectSync((prev) => prev ? { ...prev, metadata: { ...prev.metadata, checkedBy: e.target.value } } : prev)}
                 />
               </div>
             </div>
@@ -1295,7 +1355,11 @@ export default function App() {
           { label: 'Add Blank Sheet After', onClick: () => activePageId && addPage(activePageId, 'after') },
           { label: 'Duplicate Current Sheet', onClick: () => activePageId && duplicatePage(activePageId) },
           { label: 'Duplicate', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.duplicateSelected() },
+          { label: 'Copy', disabled: !selection, onClick: () => canvasApiRef.current?.copySelected() },
+          { label: 'Paste', onClick: () => canvasApiRef.current?.pasteCopied() },
           { label: 'Delete', disabled: !selection, onClick: () => canvasApiRef.current?.deleteSelected() },
+          { label: 'Group', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.group() },
+          { label: 'Ungroup', disabled: !selection, onClick: () => canvasApiRef.current?.ungroup() },
           { label: 'Bring to Front', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.bringToFront() },
           { label: 'Send to Back', disabled: !selection, onClick: () => canvasApiRef.current?.sendToBack() },
           { label: 'Add Vertex', divider: true, disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.addVertexToSelected() },
@@ -1306,6 +1370,7 @@ export default function App() {
           { label: 'Convert to Arrow', disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.convertSelectedConnector('arrow') },
           { label: 'Reverse Direction', disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.reverseConnectorDirection() },
           { label: selection?.locked ? 'Unlock' : 'Lock', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.updateSelected({ locked: !selection?.locked }) },
+          { label: 'Unlock All on Page', onClick: () => canvasApiRef.current?.unlockAll() },
         ]}
       />
     )}

@@ -42,6 +42,7 @@ interface Props {
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
   onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
+  onDuplicateBlock: (pageId: string, blockId: string) => void;
   onSelectPage: (id: string) => void;
   onReorderPages: (pages: PageModel[]) => void;
   onRenamePageTitle: (id: string, title: string) => void;
@@ -69,6 +70,7 @@ export default function DocumentView({
   onRegisterApi,
   onSelectionChange,
   onBlockChange,
+  onDuplicateBlock,
   onSelectPage,
   onReorderPages,
   onRenamePageTitle,
@@ -81,6 +83,8 @@ export default function DocumentView({
 }: Props) {
   const worksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const scaleRef = useRef<HTMLDivElement | null>(null);
   const [fitScale, setFitScale] = useState(0.5);
 
   // Recompute fit scale from the actual viewport size (excludes ribbon/tabs/panels).
@@ -117,6 +121,18 @@ export default function DocumentView({
   useEffect(() => {
     onScaleChange(scale);
   }, [scale, onScaleChange]);
+
+  useEffect(() => {
+    if (stageRef.current) {
+      stageRef.current.style.width = `${SHEET_W * scale}px`;
+      stageRef.current.style.height = `${SHEET_H * scale}px`;
+    }
+    if (scaleRef.current) {
+      scaleRef.current.style.width = `${SHEET_W}px`;
+      scaleRef.current.style.height = `${SHEET_H}px`;
+      scaleRef.current.style.transform = `scale(${scale})`;
+    }
+  }, [scale]);
 
   // Reset scroll to top-left when fitting the whole page.
   useEffect(() => {
@@ -157,10 +173,10 @@ export default function DocumentView({
           }
         }}
       >
-        <div className="sheet-stage" style={{ width: SHEET_W * scale, height: SHEET_H * scale }}>
+        <div className="sheet-stage" ref={stageRef}>
           <div
             className={`sheet-scale ${view.showGrid ? 'show-grid' : ''}`}
-            style={{ transform: `scale(${scale})`, width: SHEET_W, height: SHEET_H }}
+            ref={scaleRef}
           >
             <SheetFrame titleBlock={<TitleBlock project={project} page={activePage} />} sourceView={viewMode === 'source'}>
               <PageRenderer
@@ -175,6 +191,7 @@ export default function DocumentView({
                 onRegisterApi={onRegisterApi}
                 onSelectionChange={onSelectionChange}
                 onBlockChange={onBlockChange}
+                onDuplicateBlock={onDuplicateBlock}
                 onGridChange={onGridChange}
                 onCanvasChange={onCanvasChange}
               />

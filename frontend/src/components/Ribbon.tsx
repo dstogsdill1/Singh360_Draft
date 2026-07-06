@@ -38,7 +38,10 @@ interface Props {
     addSectionHeader: () => void;
     addNote: () => void;
     deleteSelected: () => void;
+    copySelected: () => void;
+    pasteCopied: () => void;
     duplicateSelected: () => void;
+    unlockAll: () => void;
     undo: () => void;
     redo: () => void;
     group: () => void;
@@ -227,11 +230,14 @@ export default function Ribbon({
             </Group>
             <Group title="Edit">
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.deleteSelected} title="Delete selected object (Del)">Delete</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.copySelected} title="Copy selected object(s) (Ctrl+C)">Copy</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.pasteCopied} title="Paste copied object(s) (Ctrl+V)">Paste</button>
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.duplicateSelected} title="Duplicate selected object (Ctrl+D)">Duplicate</button>
             </Group>
             <Group title="Group">
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.group} title="Group selected objects">Group</button>
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.ungroup} title="Ungroup selected group">Ungroup</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.unlockAll} title="Unlock all objects on this page">Unlock All</button>
             </Group>
           </>
         )}

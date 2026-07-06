@@ -195,7 +195,10 @@ export interface CanvasApi {
   addSectionHeader: (text: string) => void;
   addNote: (text: string) => void;
   deleteSelected: () => void;
+  copySelected: () => void;
+  pasteCopied: () => void;
   duplicateSelected: () => void;
+  unlockAll: () => void;
   undo: () => void;
   redo: () => void;
   group: () => void;

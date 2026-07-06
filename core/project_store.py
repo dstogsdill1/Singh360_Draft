@@ -141,6 +141,7 @@ class ProjectStore:
         target.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        self.write_page_snapshots(project_dir, data)
         # Migrate: drop legacy flat file once saved into the folder structure.
         legacy = self.legacy_json(project_id)
         try:
@@ -155,6 +156,11 @@ class ProjectStore:
 
     def backups_dir(self, project_dir: Path) -> Path:
         p = project_dir / "backups"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def page_snapshots_root(self, project_dir: Path) -> Path:
+        p = project_dir / "page_snapshots"
         p.mkdir(parents=True, exist_ok=True)
         return p
 
@@ -180,6 +186,133 @@ class ProjectStore:
                 old.unlink()
             except OSError:
                 pass
+
+    def _safe_page_id(self, page_id: str) -> str | None:
+        if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", page_id or ""):
+            return page_id
+        return None
+
+    def _page_counts(self, page: dict[str, Any]) -> dict[str, int]:
+        canvas = page.get("canvasObjects") if isinstance(page.get("canvasObjects"), list) else []
+        blocks = page.get("blocks") if isinstance(page.get("blocks"), list) else []
+        connectors = 0
+        for obj in canvas:
+            if not isinstance(obj, dict):
+                continue
+            typ = str(obj.get("type") or obj.get("connectorKind") or "").lower()
+            if typ == "connector" or obj.get("connectorKind") or "pointsData" in obj:
+                connectors += 1
+        table_blocks = [b for b in blocks if isinstance(b, dict) and b.get("type") in {"table", "matrix"}]
+        table_cells = 0
+        for block in table_blocks:
+            rows = block.get("rows") if isinstance(block.get("rows"), list) else []
+            table_cells += sum(len(r) for r in rows if isinstance(r, list))
+            headers = block.get("headers") if isinstance(block.get("headers"), list) else []
+            table_cells += len(headers)
+        return {
+            "canvasObjects": len(canvas),
+            "connectors": connectors,
+            "tableBlocks": len(table_blocks),
+            "tableCells": table_cells,
+        }
+
+    def write_page_snapshots(self, project_dir: Path, data: dict[str, Any]) -> None:
+        """Write one compact-but-restorable snapshot per page after each save."""
+        pages = data.get("pages") if isinstance(data.get("pages"), list) else []
+        if not pages:
+            return
+        root = self.page_snapshots_root(project_dir)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        for page in pages:
+            if not isinstance(page, dict):
+                continue
+            page_id = self._safe_page_id(str(page.get("id") or ""))
+            if not page_id:
+                continue
+            page_dir = root / page_id
+            page_dir.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "projectId": data.get("id", ""),
+                "pageId": page_id,
+                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "sheetTitle": page.get("sheetTitle", ""),
+                "sheetCode": page.get("displaySheetCode") or page.get("sheetCode") or "",
+                "counts": self._page_counts(page),
+                "page": page,
+            }
+            try:
+                (page_dir / f"page_{stamp}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+                self._prune_page_snapshots(page_dir)
+            except OSError:
+                continue
+
+    def _prune_page_snapshots(self, page_dir: Path) -> None:
+        snaps = sorted(page_dir.glob("page_*.json"), key=lambda p: p.name)
+        excess = len(snaps) - self._MAX_BACKUPS
+        for old in snaps[: max(0, excess)]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+
+    def list_page_snapshots(self, project_id: str) -> list[dict[str, Any]]:
+        d = self.find_dir(project_id)
+        if not d:
+            return []
+        root = d / "page_snapshots"
+        if not root.is_dir():
+            return []
+        out: list[dict[str, Any]] = []
+        for p in sorted(root.glob("*/page_*.json"), key=lambda x: x.name, reverse=True):
+            try:
+                payload = json.loads(p.read_text("utf-8"))
+                stat = p.stat()
+            except (json.JSONDecodeError, OSError):
+                continue
+            out.append({
+                "name": p.name,
+                "pageId": payload.get("pageId", p.parent.name),
+                "savedAt": payload.get("timestamp") or datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "sheetTitle": payload.get("sheetTitle", ""),
+                "sheetCode": payload.get("sheetCode", ""),
+                "counts": payload.get("counts", {}),
+                "sizeBytes": stat.st_size,
+            })
+        return out
+
+    def restore_page_snapshot(self, project_id: str, page_id: str, snapshot_name: str) -> dict[str, Any] | None:
+        safe_page_id = self._safe_page_id(page_id)
+        if not safe_page_id:
+            return None
+        if not re.fullmatch(r"page_[0-9]{8}-[0-9]{6}-[0-9]{1,6}\.json", snapshot_name or ""):
+            return None
+        d = self.find_dir(project_id)
+        if not d:
+            return None
+        src = d / "page_snapshots" / safe_page_id / snapshot_name
+        if not src.is_file():
+            return None
+        try:
+            payload = json.loads(src.read_text("utf-8"))
+            page = payload.get("page")
+            data = self.load(project_id)
+        except (json.JSONDecodeError, OSError):
+            return None
+        if not isinstance(page, dict) or not isinstance(data, dict):
+            return None
+        pages = data.get("pages") if isinstance(data.get("pages"), list) else []
+        replaced = False
+        next_pages = []
+        for existing in pages:
+            if isinstance(existing, dict) and existing.get("id") == safe_page_id:
+                next_pages.append(page)
+                replaced = True
+            else:
+                next_pages.append(existing)
+        if not replaced:
+            return None
+        data["pages"] = next_pages
+        return data if self.save(project_id, data) else None
 
     def list_backups(self, project_id: str) -> list[dict[str, Any]]:
         """Return newest-first backup snapshots for a project."""

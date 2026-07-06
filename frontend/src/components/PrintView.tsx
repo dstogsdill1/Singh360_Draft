@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ProjectModel } from '../model/types';
 import SheetFrame from './SheetFrame';
 import TitleBlock from './TitleBlock';
@@ -22,6 +22,27 @@ function paperFromUrl(): { wPx: number; hPx: number; scale: number } {
   // Fit the fixed-design 17x11 sheet onto the chosen paper, preserving aspect.
   const scale = Math.min(wPx / SHEET_W, hPx / SHEET_H);
   return { wPx, hPx, scale };
+}
+
+function PrintPageShell({ pageId, wPx, hPx, scale, children }: { pageId: string; wPx: number; hPx: number; scale: number; children: React.ReactNode }) {
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const fitRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (pageRef.current) {
+      pageRef.current.style.width = `${wPx}px`;
+      pageRef.current.style.height = `${hPx}px`;
+    }
+    if (fitRef.current) {
+      fitRef.current.style.width = `${SHEET_W}px`;
+      fitRef.current.style.height = `${SHEET_H}px`;
+      fitRef.current.style.transform = `scale(${scale})`;
+    }
+  }, [wPx, hPx, scale]);
+  return (
+    <div className="print-page" key={pageId} ref={pageRef}>
+      <div className="print-sheet-fit" ref={fitRef}>{children}</div>
+    </div>
+  );
 }
 
 /**
@@ -66,15 +87,7 @@ export default function PrintView({ project }: Props) {
       {includedPages.map((page) => {
         const worksheet = project.worksheets.find((w) => w.id === page.linkedWorksheetId);
         return (
-          <div
-            className="print-page"
-            key={page.id}
-            style={{ width: wPx, height: hPx }}
-          >
-            <div
-              className="print-sheet-fit"
-              style={{ width: SHEET_W, height: SHEET_H, transform: `scale(${scale})` }}
-            >
+          <PrintPageShell pageId={page.id} key={page.id} wPx={wPx} hPx={hPx} scale={scale}>
               <SheetFrame titleBlock={<TitleBlock project={project} page={page} />}>
                 <PageRenderer
                   page={page}
@@ -89,12 +102,12 @@ export default function PrintView({ project }: Props) {
                   onRegisterApi={noop}
                   onSelectionChange={noop}
                   onBlockChange={noop}
+                  onDuplicateBlock={noop}
                   onGridChange={noop}
                   onCanvasChange={noop}
                 />
               </SheetFrame>
-            </div>
-          </div>
+          </PrintPageShell>
         );
       })}
     </div>

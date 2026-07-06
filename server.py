@@ -1733,6 +1733,30 @@ def restore_project_backup(project_id: str):
     return jsonify({"ok": True, "id": project_id, "restored": name, "project": restored})
 
 
+@app.get("/api/projects/<project_id>/page-snapshots")
+def list_project_page_snapshots(project_id: str):
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    return jsonify({"ok": True, "id": project_id, "snapshots": store.list_page_snapshots(project_id)})
+
+
+@app.post("/api/projects/<project_id>/restore-page-snapshot")
+def restore_project_page_snapshot(project_id: str):
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    page_id = str(body.get("pageId") or "").strip()
+    name = str(body.get("name") or "").strip()
+    if not page_id or not name:
+        return jsonify(_err("Page id and snapshot name are required.")), 400
+    restored = store.restore_page_snapshot(project_id, page_id, name)
+    if restored is None:
+        return jsonify(_err("Page snapshot not found or could not be restored.")), 404
+    return jsonify({"ok": True, "id": project_id, "pageId": page_id, "restored": name, "project": restored})
+
+
 @app.post("/api/projects/<project_id>/archive-duplicate-folders")
 def archive_duplicate_folders(project_id: str):
     _safe_id(project_id)

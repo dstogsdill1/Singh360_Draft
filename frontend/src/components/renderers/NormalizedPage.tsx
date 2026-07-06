@@ -19,6 +19,7 @@ interface Props {
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
   onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
+  onDuplicateBlock: (pageId: string, blockId: string) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
 }
 
@@ -42,6 +43,7 @@ export default function NormalizedPage({
   onRegisterApi,
   onSelectionChange,
   onBlockChange,
+  onDuplicateBlock,
   onCanvasChange,
 }: Props) {
   const blocks = page.blocks ?? [];
@@ -97,9 +99,9 @@ export default function NormalizedPage({
             case 'cover':
               return <CoverPageRenderer key={b.id} block={b} project={project} />;
             case 'table':
-              return <TablePageRenderer key={b.id} block={b} onChange={patch} />;
+              return <TablePageRenderer key={b.id} block={b} onChange={patch} onDuplicateTable={() => onDuplicateBlock(page.id, b.id)} />;
             case 'matrix':
-              return <MatrixPageRenderer key={b.id} block={b} onChange={patch} />;
+              return <MatrixPageRenderer key={b.id} block={b} onChange={patch} onDuplicateTable={() => onDuplicateBlock(page.id, b.id)} />;
             case 'imagePlaceholder':
             case 'underlayPlaceholder':
               return <ImagePlaceholderRenderer key={b.id} block={b} />;

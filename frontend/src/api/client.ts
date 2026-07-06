@@ -199,6 +199,21 @@ export interface ProjectBackup {
   sizeBytes: number;
 }
 
+export interface PageSnapshot {
+  name: string;
+  pageId: string;
+  savedAt: string;
+  sheetTitle: string;
+  sheetCode: string;
+  sizeBytes: number;
+  counts: {
+    canvasObjects?: number;
+    connectors?: number;
+    tableBlocks?: number;
+    tableCells?: number;
+  };
+}
+
 export async function listProjectBackups(projectId: string): Promise<ProjectBackup[]> {
   const res = await fetch(`/api/projects/${projectId}/backups`);
   if (!res.ok) throw new Error(await res.text());
@@ -211,6 +226,24 @@ export async function restoreProjectBackup(projectId: string, name: string): Pro
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.project;
+}
+
+export async function listPageSnapshots(projectId: string): Promise<PageSnapshot[]> {
+  const res = await fetch(`/api/projects/${projectId}/page-snapshots`);
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.snapshots ?? [];
+}
+
+export async function restorePageSnapshot(projectId: string, pageId: string, name: string): Promise<ProjectModel> {
+  const res = await fetch(`/api/projects/${projectId}/restore-page-snapshot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pageId, name }),
   });
   if (!res.ok) throw new Error(await res.text());
   const json = await res.json();

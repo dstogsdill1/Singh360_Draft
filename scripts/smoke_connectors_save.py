@@ -162,6 +162,12 @@ def main() -> int:
         else:
             print(f"disk project.json connectors: {len(disk_conns)} OK")
 
+    # 7. Page snapshots must include connector counts for recovery.
+    snaps = c.get(f"/api/projects/{pid}/page-snapshots").get_json().get("snapshots", [])
+    print(f"page snapshots: {len(snaps)}")
+    if not any((s.get("counts") or {}).get("connectors", 0) >= 3 for s in snaps):
+        problems.append("no page snapshot recorded connector count >= 3")
+
     c.delete(f"/api/projects/{pid}")
 
     if problems:

@@ -19,7 +19,7 @@ interface Props {
 const CANVAS_W = BODY_W;
 const CANVAS_H = BODY_H;
 const SNAP = 16;
-const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop'];
+const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented'];
 
 function summarize(obj: FabricObject): CanvasSelection {
   const anyObj = obj as unknown as Record<string, unknown>;
@@ -247,6 +247,7 @@ export default function CanvasEditor({
   // render-overlay snap dots which are DRAWN directly on the canvas context and
   // never added as objects, so they cannot interfere with click hit-testing.
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
+  const objectClipboardRef = useRef<FabricObject | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -255,6 +256,8 @@ export default function CanvasEditor({
       width: CANVAS_W,
       height: CANVAS_H,
       selection: true,
+      selectionKey: 'ctrlKey',
+      altSelectionKey: 'shiftKey',
       backgroundColor: '',
       targetFindTolerance: 12,
       perPixelTargetFind: false,
@@ -302,6 +305,7 @@ export default function CanvasEditor({
 
     if (serialized.length) {
       void canvas.loadFromJSON({ version: '6', objects: serialized }).then(() => {
+        canvas.getObjects().forEach((o) => styleForSelection(o));
         canvas.renderAll();
         historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
         histIdxRef.current = 0;
@@ -386,6 +390,11 @@ export default function CanvasEditor({
     canvas.on('object:moving', (e) => {
       const t = e.target;
       if (!t) return;
+      if (t.lockMovementX || t.lockMovementY) {
+        t.setCoords();
+        canvas.requestRenderAll();
+        return;
+      }
       // Connectors are native Polylines — let Fabric translate the whole object
       // (its absolute vertices are derived from the object transform).
       if (t instanceof Connector) {
@@ -1065,22 +1074,70 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         const o = c?.getActiveObject();
         if (c && o) {
-          c.remove(o);
+          const objs = o.type === 'activeselection'
+            ? (o as unknown as { getObjects: () => FabricObject[] }).getObjects()
+            : [o];
+          const locked = objs.filter((obj) => obj.lockMovementX || obj.lockScalingX || obj.lockRotation);
+          if (locked.length) {
+            window.alert('Locked objects were not deleted. Unlock them first.');
+          }
+          objs.filter((obj) => !(obj.lockMovementX || obj.lockScalingX || obj.lockRotation)).forEach((obj) => c.remove(obj));
           c.discardActiveObject();
           c.requestRenderAll();
+          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
         }
+      },
+      copySelected: () => {
+        const c = fabricRef.current;
+        const o = c?.getActiveObject();
+        if (!c || !o) return;
+        void o.clone(SER_PROPS).then((clone: FabricObject) => {
+          objectClipboardRef.current = clone;
+        });
+      },
+      pasteCopied: () => {
+        const c = fabricRef.current;
+        if (!c || !objectClipboardRef.current) return;
+        void objectClipboardRef.current.clone(SER_PROPS).then((pasted: FabricObject) => {
+          pasted.set({ left: (pasted.left ?? 0) + 24, top: (pasted.top ?? 0) + 24 });
+          styleForSelection(pasted);
+          c.add(pasted);
+          c.setActiveObject(pasted);
+          c.requestRenderAll();
+          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        });
       },
       duplicateSelected: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
         if (!c || !o) return;
+        const objs = o.type === 'activeselection'
+          ? (o as unknown as { getObjects: () => FabricObject[] }).getObjects()
+          : [o];
+        if (objs.some((obj) => obj.lockMovementX || obj.lockScalingX || obj.lockRotation)) {
+          window.alert('Locked objects were not duplicated. Unlock them first.');
+          return;
+        }
         void o.clone(SER_PROPS).then((clone: FabricObject) => {
           clone.set({ left: (o.left ?? 0) + 12, top: (o.top ?? 0) + 12 });
           (clone as unknown as Record<string, unknown>).objName = (o as unknown as Record<string, unknown>).objName;
+          styleForSelection(clone);
           c.add(clone);
           c.setActiveObject(clone);
           c.requestRenderAll();
+          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
         });
+      },
+      unlockAll: () => {
+        const c = fabricRef.current;
+        if (!c) return;
+        c.getObjects().forEach((o) => {
+          o.set({ lockMovementX: false, lockMovementY: false, lockScalingX: false, lockScalingY: false, lockRotation: false });
+          if ('editable' in o) o.set('editable', true);
+          o.setCoords();
+        });
+        c.requestRenderAll();
+        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
       },
       undo: () => restore(histIdxRef.current - 1),
       redo: () => restore(histIdxRef.current + 1),
@@ -1091,11 +1148,16 @@ export default function CanvasEditor({
         if (active && active.type === 'activeselection') {
           const sel = active as ActiveSelection;
           const objs = sel.getObjects();
+          if (objs.some((o) => o.lockMovementX || o.lockScalingX || o.lockRotation)) {
+            window.alert('Locked objects cannot be grouped. Unlock them first.');
+            return;
+          }
           const grp = new Group(objs);
           objs.forEach((o) => c.remove(o));
           c.add(grp);
           c.setActiveObject(grp);
           c.requestRenderAll();
+          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
         }
       },
       ungroup: () => {
@@ -1108,27 +1170,28 @@ export default function CanvasEditor({
           c.remove(grp);
           items.forEach((o) => c.add(o as FabricObject));
           c.requestRenderAll();
+          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
         }
       },
       bringForward: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
-        if (c && o) { c.bringObjectForward(o); c.requestRenderAll(); }
+        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.bringObjectForward(o); c.requestRenderAll(); onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]); }
       },
       sendBackward: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
-        if (c && o) { c.sendObjectBackwards(o); c.requestRenderAll(); }
+        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.sendObjectBackwards(o); c.requestRenderAll(); onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]); }
       },
       bringToFront: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
-        if (c && o) { c.bringObjectToFront(o); c.requestRenderAll(); }
+        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.bringObjectToFront(o); c.requestRenderAll(); onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]); }
       },
       sendToBack: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
-        if (c && o) { c.sendObjectToBack(o); c.requestRenderAll(); }
+        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.sendObjectToBack(o); c.requestRenderAll(); onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]); }
       },
       alignObjects: (direction) => {
         const c = fabricRef.current;
@@ -1221,6 +1284,7 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         const o = c?.getActiveObject();
         if (!c || !o) return;
+        if ((o.lockMovementX || o.lockScalingX || o.lockRotation) && patch.locked !== false) return;
         const anyO = o as unknown as Record<string, unknown>;
         if (patch.fill !== undefined) o.set('fill', patch.fill);
         if (patch.stroke !== undefined) o.set('stroke', patch.stroke);
@@ -1259,6 +1323,7 @@ export default function CanvasEditor({
             lockScalingY: patch.locked,
             lockRotation: patch.locked,
           });
+          if ('editable' in o) o.set('editable', !patch.locked);
         }
         o.set('dirty', true);
         o.setCoords();

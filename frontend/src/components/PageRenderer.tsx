@@ -15,6 +15,7 @@ interface Props {
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
   onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
+  onDuplicateBlock: (pageId: string, blockId: string) => void;
   onGridChange: (worksheetId: string, grid: string[][]) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
 }
@@ -32,6 +33,7 @@ export default function PageRenderer({
   onRegisterApi,
   onSelectionChange,
   onBlockChange,
+  onDuplicateBlock,
   onGridChange,
   onCanvasChange,
 }: Props) {
@@ -60,6 +62,7 @@ export default function PageRenderer({
       onRegisterApi={onRegisterApi}
       onSelectionChange={onSelectionChange}
       onBlockChange={onBlockChange}
+      onDuplicateBlock={onDuplicateBlock}
       onCanvasChange={onCanvasChange}
     />
   );
