@@ -52,10 +52,17 @@ export default function NormalizedPage({
   const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
   const isIndexPage = page.pageType === 'index';
   const hasOverlay = (page.canvasObjects?.length ?? 0) > 0;
+  // A page has an editable base when it renders editable table/matrix/text cells
+  // (schedules, matrices, hybrid sheets, the generated index). For those pages
+  // we must NOT let the overlay steal pointer events just because annotations
+  // exist — otherwise the table underneath becomes unclickable/uneditable.
+  const baseTypes = ['table', 'matrix', 'title', 'subtitle', 'paragraph', 'bulletList', 'sectionHeading', 'note', 'cover'];
+  const hasEditableBase = isIndexPage || (!isImageType && blocks.some((b) => baseTypes.includes(b.type)));
   // The overlay must capture clicks when: overlay-edit mode is on, a draw tool is
-  // active, OR the page already has overlay objects (so a line you just drew stays
-  // selectable/movable instead of going click-through).
-  const overlayInteractive = overlayMode || activeTool !== 'select' || hasOverlay;
+  // active, OR (on pure drawing pages) the page already has overlay objects so a
+  // line you just drew stays selectable/movable. On pages with an editable base
+  // the overlay stays click-through unless the user explicitly turns it on.
+  const overlayInteractive = overlayMode || activeTool !== 'select' || (hasOverlay && !hasEditableBase);
 
   const base = (() => {
     // Generated sheet index / TOC — live-computed from current project pages.

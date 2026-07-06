@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import type { PageModel, ProjectModel } from '../../model/types';
-import { classifyPageFamily } from '../../model/emsNumbering';
 
 interface Props {
   project: ProjectModel;
@@ -72,15 +71,10 @@ export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) 
             <th className="ni-code">Sheet Code</th>
             <th className="ni-title">Sheet Title</th>
             <th className="ni-pg">Page</th>
-            <th className="ni-fam">Family</th>
           </tr>
         </thead>
         <tbody>
           {included.map((p) => {
-            const fam = classifyPageFamily(p);
-            const famLabel = fam.kind === 'front' ? `0.x · ${fam.label}`
-              : fam.kind === 'family' ? `${fam.series}.x · ${fam.label}`
-              : fam.label;
             return (
               <tr key={p.id} className={p.generatedContinuation ? 'ni-cont' : ''}>
                 <td
@@ -111,7 +105,6 @@ export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) 
                   {p.generatedContinuation && <span className="ni-cont-mark"> — CONTINUED</span>}
                 </td>
                 <td className="ni-pg">{p.pageNumber ?? '—'}</td>
-                <td className="ni-fam">{famLabel}</td>
               </tr>
             );
           })}

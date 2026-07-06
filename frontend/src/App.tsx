@@ -300,16 +300,21 @@ export default function App() {
     return project.pages.find((p) => p.id === activePageId) ?? null;
   }, [project, activePageId]);
 
-  // Auto-enable overlay edit mode when the active page has overlay objects or is
-  // a drawing page, so existing objects are immediately selectable/movable and
-  // the Text/Draw toolbars unlock. On empty content pages, leave the base
-  // editable (overlay off). Runs only on page change.
+  // Auto-enable overlay edit mode only for pages whose *base* is not itself
+  // editable (pure image/canvas/underlay sheets, or pages that already carry
+  // annotations but have no editable table/text underneath). Pages with an
+  // editable table/matrix/text base (including hybrid schedule sheets) default
+  // to overlay OFF so the table cells are immediately clickable and editable.
   useEffect(() => {
     const p = activePage;
     if (!p) return;
     const hasObjects = (p.canvasObjects?.length ?? 0) > 0;
-    const drawingPage = p.pageType === 'canvas' || p.pageType === 'hybrid' || p.pageType === 'underlay';
-    setOverlayMode(hasObjects || drawingPage);
+    const baseTypes = ['table', 'matrix', 'title', 'subtitle', 'paragraph', 'bulletList', 'sectionHeading', 'note', 'cover'];
+    const hasEditableBase = p.pageType === 'index' || (p.blocks ?? []).some((b) => baseTypes.includes(b.type));
+    const pureDrawingPage = p.pageType === 'canvas' || p.pageType === 'underlay';
+    // Keep the editable base clickable by default; only auto-open overlay when
+    // there is nothing editable underneath to protect.
+    setOverlayMode(!hasEditableBase && (hasObjects || pureDrawingPage));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePageId]);
 
