@@ -188,7 +188,6 @@ export default function TablePageRenderer({ block, onChange, onDuplicateTable, v
                     e.stopPropagation();
                     setMenu({ x: e.clientX, y: e.clientY, r: -1, c });
                   }}
-                  onInput={(e) => updateHeader(c, e.currentTarget.textContent ?? '')}
                   onKeyDown={(e) => onCellKeyDown(e, -1, c)}
                   onBlur={(e) => updateHeader(c, e.currentTarget.textContent ?? '')}
                 >
@@ -214,7 +213,6 @@ export default function TablePageRenderer({ block, onChange, onDuplicateTable, v
                       e.stopPropagation();
                       setMenu({ x: e.clientX, y: e.clientY, r, c });
                     }}
-                    onInput={(e) => updateCell(r, c, e.currentTarget.textContent ?? '')}
                     onKeyDown={(e) => onCellKeyDown(e, r, c)}
                     onBlur={(e) => updateCell(r, c, e.currentTarget.textContent ?? '')}
                   >
