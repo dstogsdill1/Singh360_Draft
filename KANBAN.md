@@ -175,3 +175,17 @@ Update statuses here as work progresses. `In Progress` = actively being built,
   rows are not buried under the title block while the user decides whether to reimport
   or manually split the sheet.
 - This does not add drag-resizable columns yet; it prevents clipping first.
+
+## Emergency 3H — Auto-fit jitter ("vibrating" page)
+
+| Item | Status |
+| ---- | ------ |
+| Remove auto-fit feedback loop from table wrapper sizing | Done |
+| Throttle auto-fit recalculation with requestAnimationFrame | Done |
+| Ignore micro-scale deltas to prevent oscillation | Done |
+
+### 3H honest flags
+
+- The hotfix stabilizes rendering by avoiding resize-observer self-feedback on
+  transformed table wrappers. If a workbook still appears unstable after this,
+  capture the exact tab/page name so we can isolate any non-table animation path.

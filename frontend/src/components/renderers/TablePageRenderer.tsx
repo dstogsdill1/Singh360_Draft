@@ -39,19 +39,28 @@ export default function TablePageRenderer({ block, onChange, onDuplicateTable, v
     const wrap = fitWrapRef.current;
     const table = tableRef.current;
     if (!wrap || !table) return;
+    let lastScale = -1;
+    let raf = 0;
     const fit = () => {
       const available = BODY_H - 92; // .np vertical padding + table margins.
       const measured = table.scrollHeight;
       const scale = measured > available ? Math.max(0.58, Math.min(1, available / measured)) : 1;
+      if (Math.abs(scale - lastScale) < 0.004) return;
+      lastScale = scale;
       wrap.style.setProperty('--table-fit-scale', String(scale));
-      wrap.style.width = scale < 1 ? `${100 / scale}%` : '100%';
-      wrap.style.height = scale < 1 ? `${measured * scale}px` : 'auto';
       wrap.dataset.fit = scale < 1 ? 'scaled' : 'normal';
     };
+    const scheduleFit = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(fit);
+    };
     fit();
-    const ro = new ResizeObserver(fit);
+    const ro = new ResizeObserver(scheduleFit);
     ro.observe(table);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
   }, [headers, rows, variant]);
 
   const updateHeader = (c: number, value: string) => {
