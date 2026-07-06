@@ -312,9 +312,16 @@ export default function App() {
   // Refs so global paste/keyboard handlers read current values.
   const activePageRef = useRef(activePage);
   const viewModeRef = useRef(viewMode);
-  projectRef.current = project;
   activePageRef.current = activePage;
   viewModeRef.current = viewMode;
+
+  // Keep the mutable project ref in sync with committed React state only.
+  // Do NOT assign this during render: a page-switch render can otherwise
+  // overwrite a freshly captured project snapshot with a stale one before the
+  // save completes.
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
 
   const isCanvasContext = () =>
     !!activePageRef.current &&
