@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Worksheet } from '../../model/types';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 export default function RawGridRenderer({ worksheet, onGridChange }: Props) {
   const grid = worksheet?.grid ?? [];
   const styles = worksheet?.styles ?? {};
+  const [activeCol, setActiveCol] = useState<number | null>(null);
 
   if (!grid.length) {
     return <div className="np-empty">No source grid data.</div>;
@@ -25,6 +27,13 @@ export default function RawGridRenderer({ worksheet, onGridChange }: Props) {
     return s;
   };
 
+  const updateCell = (r: number, c: number, value: string) => {
+    const clone = grid.map((x) => [...x]);
+    while ((clone[r] ?? []).length <= c) clone[r].push('');
+    clone[r][c] = value;
+    onGridChange(clone);
+  };
+
   return (
     <table className="grid-table">
       <tbody>
@@ -36,20 +45,19 @@ export default function RawGridRenderer({ worksheet, onGridChange }: Props) {
                 st?.bold ? 'gc-bold' : '',
                 st?.italic ? 'gc-italic' : '',
                 st?.fill ? 'gc-fill' : '',
+                activeCol === c ? 'gc-col-active' : '',
               ].join(' ').trim();
               return (
-                <td
-                  key={c}
-                  className={cls || undefined}
-                  contentEditable
-                  suppressContentEditableWarning
-                  onBlur={(e) => {
-                    const clone = grid.map((x) => [...x]);
-                    clone[r][c] = e.currentTarget.textContent ?? '';
-                    onGridChange(clone);
-                  }}
-                >
-                  {cell}
+                <td key={c} className={cls || undefined}>
+                  <input
+                    className="grid-cell-input"
+                    value={cell ?? ''}
+                    title={`Cell ${colLetter(c)}${r + 1}`}
+                    aria-label={`Cell ${colLetter(c)}${r + 1}`}
+                    onFocus={() => setActiveCol(c)}
+                    onBlur={() => setActiveCol(null)}
+                    onChange={(e) => updateCell(r, c, e.currentTarget.value)}
+                  />
                 </td>
               );
             })}

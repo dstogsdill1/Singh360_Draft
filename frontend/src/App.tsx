@@ -971,6 +971,32 @@ export default function App() {
     });
   };
 
+  const trimTrailingEmptyColumns = (grid: string[][]): string[][] => {
+    const maxCol = grid.reduce((m, row) => {
+      let last = -1;
+      for (let i = 0; i < row.length; i += 1) {
+        if ((row[i] ?? '').trim() !== '') last = i;
+      }
+      return Math.max(m, last + 1);
+    }, 0);
+    const cols = Math.max(1, maxCol);
+    return grid.map((row) => {
+      const out = row.slice(0, cols);
+      while (out.length < cols) out.push('');
+      return out;
+    });
+  };
+
+  const syncBlocksFromGrid = (page: PageModel, grid: string[][]): PageBlock[] => {
+    const blocks = page.blocks ?? [];
+    const tableIdx = blocks.findIndex((b) => b.type === 'matrix' || b.type === 'table');
+    if (tableIdx < 0) return blocks;
+    const normalized = trimTrailingEmptyColumns(grid);
+    const headers = (normalized[0] ?? []).map((x) => x ?? '');
+    const rows = normalized.slice(1).map((r) => r.map((x) => x ?? ''));
+    return blocks.map((b, i) => (i === tableIdx ? { ...b, headers, rows } : b));
+  };
+
   const canvasEnabled =
     !!activePage && viewMode === 'normalized';
 
@@ -1141,6 +1167,11 @@ export default function App() {
               return {
                 ...prev,
                 worksheets: prev.worksheets.map((ws) => (ws.id === wsId ? { ...ws, grid } : ws)),
+                pages: prev.pages.map((pg) =>
+                  pg.linkedWorksheetId === wsId
+                    ? { ...pg, blocks: syncBlocksFromGrid(pg, grid) }
+                    : pg,
+                ),
               };
             });
           }}
