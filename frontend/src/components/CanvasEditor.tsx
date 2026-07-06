@@ -138,6 +138,53 @@ function wantsBw(url: string): boolean {
   }
 }
 
+/** Compute the 9 canonical snap points for an object (8 edge/corner + centre). */
+function objectSnapPoints(obj: FabricObject): Array<{ x: number; y: number }> {
+  const bb = obj.getBoundingRect();
+  const x0 = bb.left;
+  const y0 = bb.top;
+  const x1 = bb.left + bb.width;
+  const y1 = bb.top + bb.height;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  return [
+    { x: cx, y: y0 }, // top-center
+    { x: cx, y: y1 }, // bottom-center
+    { x: x0, y: cy }, // left-center
+    { x: x1, y: cy }, // right-center
+    { x: x0, y: y0 }, // top-left
+    { x: x1, y: y0 }, // top-right
+    { x: x0, y: y1 }, // bottom-left
+    { x: x1, y: y1 }, // bottom-right
+    { x: cx, y: cy }, // centre
+  ];
+}
+
+/** If `px,py` is within `threshold` pixels of any snap point on any object in
+ *  `canvas` (excluding guide lines and the object being drawn), return the snap
+ *  point; otherwise return `{x:px, y:py}` unchanged. */
+function snapToNearestPort(
+  canvas: Canvas,
+  px: number,
+  py: number,
+  exclude: FabricObject | null,
+  excludeGuides: FabricObject[],
+  threshold = 18,
+): { x: number; y: number } {
+  let best = { x: px, y: py };
+  let bestDist = threshold;
+  for (const obj of canvas.getObjects()) {
+    if (obj === exclude) continue;
+    if (excludeGuides.includes(obj)) continue;
+    if ((obj as unknown as Record<string, unknown>).excludeFromExport) continue;
+    for (const pt of objectSnapPoints(obj)) {
+      const d = Math.hypot(pt.x - px, pt.y - py);
+      if (d < bestDist) { bestDist = d; best = pt; }
+    }
+  }
+  return best;
+}
+
 function applyBwIfRequested(img: FabricImage, url: string) {
   if (!wantsBw(url)) return;
   img.filters = [new filters.Grayscale()];
@@ -361,12 +408,16 @@ export default function CanvasEditor({
       if (!building && (tool === 'select' || opt.target)) return;
       const p = canvas.getScenePoint(opt.e);
       const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
-      const px = sp(p.x);
-      const py = sp(p.y);
 
       if (isLineTool(tool) || building) {
         const kind = (creatingPolyRef.current?.connectorKind ?? tool) as string;
         const isElbow = kind === 'elbow';
+        // Port-snap: snap to object connection points first, then grid.
+        const gridX = sp(p.x);
+        const gridY = sp(p.y);
+        const snapped = snapToNearestPort(canvas, gridX, gridY, creatingPolyRef.current, guidesRef.current);
+        const px = snapped.x;
+        const py = snapped.y;
         if (!creatingPolyRef.current) {
           // First click: start the line at this point.
           polyCommittedRef.current = [{ x: px, y: py }];
@@ -414,8 +465,12 @@ export default function CanvasEditor({
       if (!poly) return;
       const p = canvas.getScenePoint(opt.e);
       const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
-      const px = sp(p.x);
-      const py = sp(p.y);
+      // Port-snap the preview endpoint too.
+      const gridX = sp(p.x);
+      const gridY = sp(p.y);
+      const snapped = snapToNearestPort(canvas, gridX, gridY, poly, guidesRef.current);
+      const px = snapped.x;
+      const py = snapped.y;
       const committed = polyCommittedRef.current;
       const display = [...committed];
       const prev = committed[committed.length - 1];
@@ -580,6 +635,11 @@ export default function CanvasEditor({
 
   useEffect(() => {
     const api: CanvasApi = {
+      captureCanvas: () => {
+        const c = fabricRef.current;
+        if (!c) return [];
+        return (c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[];
+      },
       addText: () => addObj(makeText(200, 160)),
       addRect: () => addObj(makeRect(200, 200)),
       addCircle: () => addObj(makeCircle(200, 200)),

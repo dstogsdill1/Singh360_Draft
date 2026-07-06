@@ -163,8 +163,42 @@ export default function App() {
     }
   }, [printMode]);
 
-  // Explicit "Save Now": always contacts the server and reports the true result.
+  // ── captureActivePage ──────────────────────────────────────────────────────
+  // THE CRITICAL FIX: synchronously read the live Fabric canvas and write the
+  // result into projectRef BEFORE any save or page-switch so flushSave always
+  // gets the freshest canvas state — not a stale React snapshot.
+  //
+  // React's setProject is async (batched). When the user draws something and
+  // immediately clicks Save Now or another page tab, the onSerializedChange →
+  // setProject update hasn't been committed yet.  captureActivePage bypasses
+  // that by going straight to the Fabric canvas via canvasApiRef.
+  const captureActivePage = useCallback(() => {
+    const canvas = canvasApiRef.current;
+    const pageId = activePageRef.current?.id;
+    if (!canvas || !pageId || !projectRef.current) return;
+    const objects = canvas.captureCanvas();
+    const updated: ProjectModel = {
+      ...projectRef.current,
+      pages: projectRef.current.pages.map((p) =>
+        p.id === pageId ? { ...p, canvasObjects: objects } : p,
+      ),
+    };
+    // Synchronously update the mutable ref so flushSave reads the right data.
+    projectRef.current = updated;
+    // Also schedule the React state update so the UI stays consistent.
+    setProject(updated);
+  }, []);
+
+  // Capture then save. Every explicit save (Save Now, Ctrl+S) and every
+  // page/project switch must call this before doing anything else.
+  const captureAndSave = useCallback(async (): Promise<boolean> => {
+    captureActivePage();
+    return flushSave();
+  }, [captureActivePage, flushSave]);
+
+  // Explicit "Save Now": capture the live canvas, then contact the server.
   const saveNow = useCallback(async (): Promise<boolean> => {
+    captureActivePage(); // sync canvas capture MUST happen before any read of projectRef
     const p = projectRef.current;
     if (!p || printMode) return true;
     const json = JSON.stringify(p);
@@ -185,7 +219,7 @@ export default function App() {
       setSaveStatus('failed');
       return false;
     }
-  }, [printMode]);
+  }, [printMode, captureActivePage]);
 
   useEffect(() => {
     if (!initialProjectId) return;
@@ -443,6 +477,9 @@ export default function App() {
       } else if ((e.ctrlKey || e.metaKey) && k === 'd') {
         e.preventDefault();
         canvasApiRef.current?.duplicateSelected();
+      } else if ((e.ctrlKey || e.metaKey) && k === 's') {
+        e.preventDefault();
+        void saveNow();
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         // Quick-draw tool shortcuts (Visio-style): L line, P polyline, E elbow,
         // B bus/harness. Ignored while typing (guarded above).
@@ -667,7 +704,7 @@ export default function App() {
   };
 
   const onUploadWorkbook = async (file: File) => {
-    await flushSave();
+    await captureAndSave();
     const { id } = await createProjectFromWorkbook(file);
     const p = await getProject(id);
     lastSavedJsonRef.current = JSON.stringify(p);
@@ -682,7 +719,7 @@ export default function App() {
 
   const openProjectById = async (id: string) => {
     try {
-      await flushSave();
+      await captureAndSave();
       const p = await getProject(id);
       lastSavedJsonRef.current = JSON.stringify(p);
       projectRef.current = p;
@@ -778,7 +815,7 @@ export default function App() {
       setProject(proj);
     }
     // Make sure the freshest canvas state is on the server before we render it.
-    await flushSave();
+    await captureAndSave();
     const base = proj.metadata.drawingPackageFileName || proj.projectDisplayName || proj.metadata.projectName || proj.id;
     const revSuffix = rev.updateRevision ? `_${rev.newRevision.replace(/\s+/g, '')}` : '';
     const blob = await exportPdf(proj.id, { width, height });
@@ -792,7 +829,7 @@ export default function App() {
 
   const onExportPackage = async () => {
     if (!project) return;
-    await flushSave();
+    await captureAndSave();
     const blob = await exportPackage(project.id);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -971,7 +1008,7 @@ export default function App() {
       left={
         <>
           <CollapsibleSection title="Output Pages" hint="The pages that make up your drawing package. Drag to reorder; right-click for actions.">
-            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void flushSave(); setActivePageId(id); }} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
+            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void captureAndSave(); setActivePageId(id); }} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
           </CollapsibleSection>
           <CollapsibleSection title="Source Tabs" defaultOpen={false} hint="The original workbook worksheets, for reference.">
             <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
@@ -999,7 +1036,7 @@ export default function App() {
           onSelectionChange={onSelectionChange}
           onBlockChange={onBlockChange}
           onSelectPage={(id) => {
-            void flushSave();
+            void captureAndSave();
             setActivePageId(id);
             setSelection(null);
           }}

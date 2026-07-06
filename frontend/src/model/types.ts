@@ -172,6 +172,11 @@ export interface PdfCropInsertMeta {
 }
 
 export interface CanvasApi {
+  /** Synchronously read and return the current Fabric canvas serialisation.
+   *  Call this before any page-switch or save so you always capture the
+   *  live canvas state — React's async setProject may not have committed
+   *  the latest changes to projectRef yet. */
+  captureCanvas: () => Record<string, unknown>[];
   addText: () => void;
   addRect: () => void;
   addCircle: () => void;
