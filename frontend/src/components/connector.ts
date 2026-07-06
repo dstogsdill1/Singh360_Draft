@@ -49,6 +49,7 @@ export class Connector extends Polyline {
 
   constructor(input: unknown, options: AnyOpts = {}) {
     const pts = normalizePoints(input, options);
+    const { pointsData: _pointsData, ...fabricOptions } = options;
     super(pts, {
       stroke: options.stroke ?? '#111',
       strokeWidth: options.strokeWidth ?? 2,
@@ -66,7 +67,7 @@ export class Connector extends Polyline {
       cornerStyle: 'circle',
       cornerSize: 10,
       transparentCorners: false,
-      ...options,
+      ...fabricOptions,
       fill: '',
     });
     this.arrowStart = options.arrowStart ?? false;
@@ -98,6 +99,9 @@ export class Connector extends Polyline {
 
   // ---- absolute scene coordinates -----------------------------------------
   getAbsPoints(): XY[] {
+    if (!Array.isArray(this.points) || this.points.length < 2 || !this.pathOffset) {
+      return normalizePoints([], {});
+    }
     const m = this.calcTransformMatrix();
     return (this.points as XY[]).map((p) => {
       const t = new Point(p.x - this.pathOffset.x, p.y - this.pathOffset.y).transform(m);
