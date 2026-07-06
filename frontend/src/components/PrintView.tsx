@@ -102,6 +102,7 @@ export default function PrintView({ project }: Props) {
                   onRegisterApi={noop}
                   onSelectionChange={noop}
                   onBlockChange={noop}
+                  onPatchPage={noop}
                   onDuplicateBlock={noop}
                   onGridChange={noop}
                   onCanvasChange={noop}

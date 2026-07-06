@@ -42,6 +42,7 @@ interface Props {
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
   onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
+  onPatchPage: (pageId: string, patch: Partial<PageModel>) => void;
   onDuplicateBlock: (pageId: string, blockId: string) => void;
   onSelectPage: (id: string) => void;
   onReorderPages: (pages: PageModel[]) => void;
@@ -70,6 +71,7 @@ export default function DocumentView({
   onRegisterApi,
   onSelectionChange,
   onBlockChange,
+  onPatchPage,
   onDuplicateBlock,
   onSelectPage,
   onReorderPages,
@@ -191,6 +193,7 @@ export default function DocumentView({
                 onRegisterApi={onRegisterApi}
                 onSelectionChange={onSelectionChange}
                 onBlockChange={onBlockChange}
+                onPatchPage={onPatchPage}
                 onDuplicateBlock={onDuplicateBlock}
                 onGridChange={onGridChange}
                 onCanvasChange={onCanvasChange}

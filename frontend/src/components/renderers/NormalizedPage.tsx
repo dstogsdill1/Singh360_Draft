@@ -19,6 +19,7 @@ interface Props {
   onRegisterApi: (api: CanvasApi | null) => void;
   onSelectionChange: (sel: CanvasSelection | null) => void;
   onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
+  onPatchPage: (pageId: string, patch: Partial<PageModel>) => void;
   onDuplicateBlock: (pageId: string, blockId: string) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
 }
@@ -43,6 +44,7 @@ export default function NormalizedPage({
   onRegisterApi,
   onSelectionChange,
   onBlockChange,
+  onPatchPage,
   onDuplicateBlock,
   onCanvasChange,
 }: Props) {
@@ -58,7 +60,7 @@ export default function NormalizedPage({
   const base = (() => {
     // Generated sheet index / TOC — live-computed from current project pages.
     if (isIndexPage) {
-      return <GeneratedIndexRenderer project={project} page={page} />;
+      return <GeneratedIndexRenderer project={project} page={page} onPatchPage={onPatchPage} />;
     }
 
     if (isImageType) {

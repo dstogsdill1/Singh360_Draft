@@ -556,8 +556,8 @@ export default function App() {
     const onCtx = (e: MouseEvent) => {
       const t = e.target as HTMLElement | null;
       if (!t || !t.closest('.sheet-viewport')) return;
-      // Tables/matrices provide their own row/column context menu.
-      if (t.closest('.np-table, .np-matrix')) return;
+      // Tables/matrices/generated sheet index provide their own editing surface.
+      if (t.closest('.np-table, .np-matrix, .np-index-table')) return;
       if (!isCanvasContext()) return;
       e.preventDefault();
       setCtxMenu({ x: e.clientX, y: e.clientY });
@@ -1119,6 +1119,7 @@ export default function App() {
           onRegisterApi={onRegisterApi}
           onSelectionChange={onSelectionChange}
           onBlockChange={onBlockChange}
+          onPatchPage={patchPage}
           onDuplicateBlock={onDuplicateBlock}
           onSelectPage={(id) => {
             void switchPageSafely(id);
