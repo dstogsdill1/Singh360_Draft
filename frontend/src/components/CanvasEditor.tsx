@@ -250,6 +250,7 @@ export default function CanvasEditor({
 
   useEffect(() => {
     if (!canvasRef.current) return;
+    let isTearingDown = false;
     const canvas = new Canvas(canvasRef.current, {
       width: CANVAS_W,
       height: CANVAS_H,
@@ -280,11 +281,11 @@ export default function CanvasEditor({
     };
 
     const persist = () => {
-      if (restoringRef.current) return;
+      if (restoringRef.current || isTearingDown) return;
       onSerRef.current((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
     };
     const pushHistory = () => {
-      if (restoringRef.current) return;
+      if (restoringRef.current || isTearingDown) return;
       const snapshot = JSON.stringify(canvas.toObject(SER_PROPS));
       const hist = historyRef.current.slice(0, histIdxRef.current + 1);
       hist.push(snapshot);
@@ -292,6 +293,7 @@ export default function CanvasEditor({
       histIdxRef.current = hist.length - 1;
     };
     const onChanged = () => {
+      if (isTearingDown) return;
       persist();
       pushHistory();
     };
@@ -310,8 +312,8 @@ export default function CanvasEditor({
     }
 
     canvas.on('object:modified', onChanged);
-    canvas.on('object:added', (e) => { if (isGuideObj(e?.target)) return; onChanged(); });
-    canvas.on('object:removed', (e) => { if (isGuideObj(e?.target)) return; onChanged(); });
+    canvas.on('object:added', (e) => { if (isTearingDown || isGuideObj(e?.target)) return; onChanged(); });
+    canvas.on('object:removed', (e) => { if (isTearingDown || isGuideObj(e?.target)) return; onChanged(); });
     canvas.on('selection:created', () => {
       const o = canvas.getActiveObject();
       if (o) onSelRef.current(summarize(o));
@@ -713,6 +715,7 @@ export default function CanvasEditor({
     canvas.upperCanvasEl?.addEventListener('dblclick', onDblClick);
 
     return () => {
+      isTearingDown = true;
       window.removeEventListener('keydown', onKeyDown);
       canvas.upperCanvasEl?.removeEventListener('dblclick', onDblClick);
       void canvas.dispose();
