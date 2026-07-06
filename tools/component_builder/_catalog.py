@@ -146,9 +146,105 @@ def is_catalog(fieldnames: list[str] | None) -> bool:
 
 def rel_to_repo(path: Path) -> str:
     try:
-        return str(path.relative_to(REPO_ROOT))
+        return str(path.relative_to(REPO_ROOT)).replace("\\", "/")
     except ValueError:
-        return str(path)
+        return str(path).replace("\\", "/")
+
+
+# ---------------------------------------------------------------------------
+# Export variant resolution — image-derived edge/lineart NEVER defaults to
+# procedural wireframes unless explicitly chosen or no image-derived exists.
+# ---------------------------------------------------------------------------
+IMAGE_DERIVED_VARIANTS = frozenset({
+    "lineart", "edges", "outline", "silhouette", "highcontrast", "nobg", "grayscale",
+})
+PROCEDURAL_VARIANTS = frozenset({"device", "device_outline", "procedural", "spec"})
+DEFAULT_EDGE_PRIORITY = ("lineart", "edges", "outline", "silhouette", "highcontrast", "grayscale")
+_VARIANT_ALIASES = {"edge": "edges", "device_outline": "device", "spec": "device"}
+
+
+def normalize_chosen_variant(raw: str | None) -> str:
+    v = (raw or "").strip().lower()
+    return _VARIANT_ALIASES.get(v, v)
+
+
+def list_candidate_files(row: dict) -> dict[str, Path]:
+    cdir = candidate_dir(row)
+    if not cdir.exists():
+        return {}
+    return {p.stem: p for p in sorted(cdir.glob("*.png"))}
+
+
+def resolve_export_representation(row: dict, decision: dict) -> dict:
+    """Pick source + edge + bw + procedural paths for export.
+
+    Returns dict with keys: edge, edgeVariant, bw, bwVariant, procedural,
+    proceduralVariant, available (set), warnings (list).
+    """
+    available = list_candidate_files(row)
+    chosen = normalize_chosen_variant(decision.get("chosenVariant"))
+    warnings: list[str] = []
+
+    edge_path: Path | None = None
+    edge_variant = ""
+    proc_path: Path | None = None
+    proc_variant = ""
+
+    def _pick_image_derived(preferred: tuple[str, ...]) -> tuple[Path | None, str]:
+        for name in preferred:
+            if name in available and name in IMAGE_DERIVED_VARIANTS:
+                return available[name], name
+        return None, ""
+
+    # --- explicit procedural request ---
+    if chosen in PROCEDURAL_VARIANTS:
+        if chosen in available:
+            proc_path, proc_variant = available[chosen], chosen
+        elif "device" in available:
+            proc_path, proc_variant = available["device"], "device"
+        else:
+            warnings.append(f"requested procedural '{chosen}' but no procedural candidate exists")
+        return _pack(available, edge_path, edge_variant, proc_path, proc_variant, warnings)
+
+    # --- explicit image-derived request ---
+    if chosen:
+        if chosen in available and chosen in IMAGE_DERIVED_VARIANTS:
+            edge_path, edge_variant = available[chosen], chosen
+        elif chosen in available and chosen in PROCEDURAL_VARIANTS:
+            proc_path, proc_variant = available[chosen], chosen
+        else:
+            warnings.append(f"requested variant '{chosen}' not found; using default priority")
+            edge_path, edge_variant = _pick_image_derived(DEFAULT_EDGE_PRIORITY)
+    else:
+        edge_path, edge_variant = _pick_image_derived(DEFAULT_EDGE_PRIORITY)
+
+    # procedural only when no image-derived edge exists, unless already explicit above
+    if not edge_path and not proc_path:
+        for name in ("device", "device_outline", "procedural", "spec"):
+            if name in available:
+                proc_path, proc_variant = available[name], name
+                break
+
+    return _pack(available, edge_path, edge_variant, proc_path, proc_variant, warnings)
+
+
+def _pack(available, edge_path, edge_variant, proc_path, proc_variant, warnings):
+    bw_path: Path | None = None
+    bw_variant = ""
+    if "grayscale" in available:
+        bw_path, bw_variant = available["grayscale"], "grayscale"
+    elif "highcontrast" in available:
+        bw_path, bw_variant = available["highcontrast"], "highcontrast"
+    return {
+        "edge": edge_path,
+        "edgeVariant": edge_variant,
+        "bw": bw_path,
+        "bwVariant": bw_variant,
+        "procedural": proc_path,
+        "proceduralVariant": proc_variant,
+        "available": set(available),
+        "warnings": warnings,
+    }
 
 
 def _normalize_catalog_row(row: dict, manifest_dir: Path, source_root: Path) -> dict:
