@@ -142,15 +142,6 @@
   transform-origin: top left;
   margin: 8px 0 16px;
 }
-.np-table-fit-wrap[data-fit='scaled']::before {
-  content: 'Auto-fit applied to keep this table above the title block';
-  display: block;
-  margin: 0 0 3px;
-  color: #a5661a;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
 .np-table, .np-matrix { border-collapse: collapse; width: 100%; margin: 0; font-size: 13px; }
 .np-table th, .np-matrix th {
   background: #24282e; color: #fff; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em;
