@@ -192,6 +192,31 @@ export async function exportPackage(projectId: string): Promise<Blob> {
   return res.blob();
 }
 
+// ── Backups / recovery ──
+export interface ProjectBackup {
+  name: string;
+  savedAt: string;
+  sizeBytes: number;
+}
+
+export async function listProjectBackups(projectId: string): Promise<ProjectBackup[]> {
+  const res = await fetch(`/api/projects/${projectId}/backups`);
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.backups ?? [];
+}
+
+export async function restoreProjectBackup(projectId: string, name: string): Promise<ProjectModel> {
+  const res = await fetch(`/api/projects/${projectId}/restore-backup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.project;
+}
+
 // ── PDF Page Renderer ──
 export interface PdfPageInfo {
   page: number;

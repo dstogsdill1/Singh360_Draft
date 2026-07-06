@@ -103,6 +103,12 @@ def main() -> int:
         if "Connector" not in types:
             problems.append("connector object did not persist")
 
+    # 6b. A server backup snapshot must exist after saving over an existing project.
+    backups = client.get(f"/api/projects/{pid}/backups").get_json().get("backups", [])
+    print(f"server backups: {len(backups)}")
+    if not backups:
+        problems.append("no server backup snapshot created after save")
+
     # 7. Export package ZIP.
     res = client.post(f"/api/projects/{pid}/export/package")
     if res.status_code != 200:

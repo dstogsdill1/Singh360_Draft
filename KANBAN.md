@@ -98,3 +98,32 @@ Update statuses here as work progresses. `In Progress` = actively being built,
 | 4 | Open Component Builder modal (Components + Advanced) | Done |
 | 5 | Edge-first defaults + clean label priority | Done |
 | 6 | Smoke coverage updates | Done |
+
+## Milestone 3E — Save hardening + connector routing tools
+
+| Phase | Item | Status |
+| ----- | ---- | ------ |
+| 0 | Audit + `docs/BUGLIST_CONNECTORS_SAVE.md` | Done |
+| A | Trustworthy save (Unsaved/Saving/Saved/Failed) + flush + beforeunload | Done |
+| A | Server backups before overwrite (keep 20) + list/restore API | Done |
+| A | Local recovery snapshots (localStorage, keep 10) | Done |
+| B | Connector model extended (stylePreset/wireNumber/labels/layer); pointsData authoritative | Done |
+| C | Easier connectors: bigger hit band, Alt-drag duplicate, 12px offset | Done |
+| D | Polyline + elbow tools (orthogonal), live preview, Esc/Enter/Backspace | Done |
+| F | Bus / Harness (minimal parallel wires + labels + preset) | Done (minimal) |
+| G | Connector style presets (B&W-safe) | Done (verified) |
+| I | Shortcuts L/P/E/B + drawing hint in status bar | Done |
+| K | Backups / recovery modal | Done |
+| L | `smoke_connectors.py` + smoke updates | Done |
+| M | `docs/VISUAL_QA.md` connector QA | Done |
+| E | Component ports / terminal-row pin snapping | Deferred (honest) |
+| F | Trunk + branch bus with fan-out | Deferred (honest) |
+| H | Per-region double-click label editing | Deferred (honest) |
+
+### 3E honest flags
+
+- Save/backup/recovery + connector persistence are proven by `smoke_connectors.py`
+  and `smoke_editor_browser.py` (Flask test client). Fabric-side UX (drag, snap,
+  Alt-drag, bus placement) is not driven by CI — verify via `docs/VISUAL_QA.md`.
+- Ports (E), trunk/branch bus (F "better"), and per-region label editing (H) are
+  deferred, not faked.

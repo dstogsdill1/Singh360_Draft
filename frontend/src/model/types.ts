@@ -149,6 +149,17 @@ export interface LineStyle {
   arrowEnd: boolean;
 }
 
+export interface BusOptions {
+  count: number;
+  labels: string[];
+  presetId: string;
+  stroke: string;
+  strokeWidth: number;
+  dash: 'solid' | 'dashed' | 'dotted' | 'dash-dot' | 'long-dash';
+  spacing: number;
+  orthogonal: boolean;
+}
+
 export interface CanvasApi {
   addText: () => void;
   addRect: () => void;
@@ -158,6 +169,7 @@ export interface CanvasApi {
   addPolyline: () => void;
   addElbow: () => void;
   setLineStyle: (style: LineStyle) => void;
+  startBus: (opts: BusOptions) => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
   addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;

@@ -37,8 +37,15 @@ export class Connector extends Polyline {
   arrowStart = false;
   arrowEnd = false;
   objName?: string;
-  connectorKind: 'line' | 'arrow' | 'polyline' | 'elbow' = 'line';
+  connectorKind: 'line' | 'arrow' | 'polyline' | 'elbow' | 'bus' = 'line';
   label?: string;
+  // Phase B extended connector model (pointsData stays the route source of truth).
+  stylePreset?: string;
+  wireNumber?: string;
+  labelStart?: string;
+  labelMiddle?: string;
+  labelEnd?: string;
+  layer?: string;
 
   constructor(input: unknown, options: AnyOpts = {}) {
     const pts = normalizePoints(input, options);
@@ -50,9 +57,10 @@ export class Connector extends Polyline {
       strokeLineJoin: 'round',
       objectCaching: false,
       // Easy to grab: clicking anywhere in the line's bounding band selects it
-      // (a hair-thin per-pixel target was nearly impossible to click).
+      // (a hair-thin per-pixel target was nearly impossible to click). A wider
+      // padding gives a ~14px hit band around thin connectors.
       perPixelTargetFind: false,
-      padding: 6,
+      padding: 12,
       hasBorders: false,
       cornerColor: '#12539b',
       cornerStyle: 'circle',
@@ -66,6 +74,12 @@ export class Connector extends Polyline {
     this.objName = options.objName;
     this.connectorKind = options.connectorKind ?? (options.arrowEnd ? 'arrow' : 'line');
     this.label = options.label;
+    this.stylePreset = options.stylePreset;
+    this.wireNumber = options.wireNumber;
+    this.labelStart = options.labelStart;
+    this.labelMiddle = options.labelMiddle ?? options.label;
+    this.labelEnd = options.labelEnd;
+    this.layer = options.layer;
     if (options.strokeDashArray) this.strokeDashArray = options.strokeDashArray;
     this.applyVertexControls();
   }
@@ -120,6 +134,12 @@ export class Connector extends Polyline {
       pointsData: this.getAbsPoints(),
       label: this.label,
       objName: this.objName,
+      stylePreset: this.stylePreset,
+      wireNumber: this.wireNumber,
+      labelStart: this.labelStart,
+      labelMiddle: this.labelMiddle,
+      labelEnd: this.labelEnd,
+      layer: this.layer,
     };
   }
 

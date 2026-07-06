@@ -71,6 +71,21 @@ def main() -> int:
         if pg.get("pageType") not in known_types:
             problems.append(f"unknown pageType '{pg.get('pageType')}' on {pg.get('id')}")
 
+    # Connector integrity: canvasObjects must be a list, and any Connector must
+    # carry a pointsData route with at least two points (single source of truth).
+    for pg in pages:
+        objs = pg.get("canvasObjects")
+        if objs is None:
+            continue
+        if not isinstance(objs, list):
+            problems.append(f"canvasObjects not a list on {pg.get('id')}")
+            continue
+        for o in objs:
+            if isinstance(o, dict) and o.get("type") == "Connector":
+                pts = o.get("pointsData")
+                if not isinstance(pts, list) or len(pts) < 2:
+                    problems.append(f"connector without valid pointsData on {pg.get('id')}")
+
     invalid = find_invalid_scalars(p)
     if invalid:
         problems.append(f"{len(invalid)} invalid scalar(s), first: {invalid[0]}")

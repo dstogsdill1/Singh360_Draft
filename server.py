@@ -1539,6 +1539,29 @@ def duplicate_folders(project_id: str):
     })
 
 
+@app.get("/api/projects/<project_id>/backups")
+def list_project_backups(project_id: str):
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    return jsonify({"ok": True, "id": project_id, "backups": store.list_backups(project_id)})
+
+
+@app.post("/api/projects/<project_id>/restore-backup")
+def restore_project_backup(project_id: str):
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    name = str(body.get("name") or "").strip()
+    if not name:
+        return jsonify(_err("Backup name is required.")), 400
+    restored = store.restore_backup(project_id, name)
+    if restored is None:
+        return jsonify(_err("Backup not found or could not be restored.")), 404
+    return jsonify({"ok": True, "id": project_id, "restored": name, "project": restored})
+
+
 @app.post("/api/projects/<project_id>/archive-duplicate-folders")
 def archive_duplicate_folders(project_id: str):
     _safe_id(project_id)

@@ -133,7 +133,12 @@ class ProjectStore:
         data["projectDisplayName"] = self._display_name(data, project_id)
         data["lastSavedAt"] = _utcnow()
 
-        (project_dir / "project.json").write_text(
+        target = project_dir / "project.json"
+        # Snapshot the prior project.json before overwriting it (keep last 20) so a
+        # bad save or accidental change can always be recovered.
+        self._backup_before_write(project_dir, target)
+
+        target.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         # Migrate: drop legacy flat file once saved into the folder structure.
@@ -144,6 +149,77 @@ class ProjectStore:
         except OSError:
             pass
         return project_dir / "project.json"
+
+    # ── backups / recovery ───────────────────────────────────────────────
+    _MAX_BACKUPS = 20
+
+    def backups_dir(self, project_dir: Path) -> Path:
+        p = project_dir / "backups"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def _backup_before_write(self, project_dir: Path, target: Path) -> Path | None:
+        """Copy the current project.json to backups/project_<ts>.json (keep 20)."""
+        if not target.is_file():
+            return None
+        backups = self.backups_dir(project_dir)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        dest = backups / f"project_{stamp}.json"
+        try:
+            dest.write_bytes(target.read_bytes())
+        except OSError:
+            return None
+        self._prune_backups(backups)
+        return dest
+
+    def _prune_backups(self, backups: Path) -> None:
+        snaps = sorted(backups.glob("project_*.json"), key=lambda p: p.name)
+        excess = len(snaps) - self._MAX_BACKUPS
+        for old in snaps[: max(0, excess)]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+
+    def list_backups(self, project_id: str) -> list[dict[str, Any]]:
+        """Return newest-first backup snapshots for a project."""
+        d = self.find_dir(project_id)
+        if not d:
+            return []
+        backups = d / "backups"
+        if not backups.is_dir():
+            return []
+        out: list[dict[str, Any]] = []
+        for p in sorted(backups.glob("project_*.json"), key=lambda x: x.name, reverse=True):
+            try:
+                stat = p.stat()
+            except OSError:
+                continue
+            out.append(
+                {
+                    "name": p.name,
+                    "savedAt": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "sizeBytes": stat.st_size,
+                }
+            )
+        return out
+
+    def restore_backup(self, project_id: str, backup_name: str) -> dict[str, Any] | None:
+        """Restore a named backup as the live project.json (backing up current first)."""
+        if not re.fullmatch(r"project_[0-9]{8}-[0-9]{6}-[0-9]{1,6}\.json", backup_name or ""):
+            return None
+        d = self.find_dir(project_id)
+        if not d:
+            return None
+        src = d / "backups" / backup_name
+        if not src.is_file():
+            return None
+        try:
+            data = json.loads(src.read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        # Snapshot current, then write the restored copy through the normal path.
+        return data if self.save(project_id, data) else None
 
     def rename(self, project_id: str, new_name: str) -> Path:
         """Rename the display name and move the folder to the new slug.

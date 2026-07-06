@@ -9,12 +9,12 @@ import {
   importWorksheets,
   previewImportWorksheets,
   renameProject,
-  savePages,
   saveProject,
   uploadAssetDataUrl,
   uploadAssetFile,
 } from './api/client';
-import type { CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode } from './model/types';
+import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode } from './model/types';
+import { writeRecoverySnapshot } from './model/recovery';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
@@ -31,6 +31,8 @@ import AddSheetModal from './components/AddSheetModal';
 import SheetContextMenu from './components/SheetContextMenu';
 import ExportModal from './components/ExportModal';
 import PdfInsertModal from './components/PdfInsertModal';
+import BackupRecoveryModal from './components/BackupRecoveryModal';
+import BusModal from './components/BusModal';
 import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 
@@ -76,7 +78,8 @@ export default function App() {
   const [project, setProject] = useState<ProjectModel | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [selectedWorksheetId, setSelectedWorksheetId] = useState<string | undefined>(undefined);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'unsaved' | 'saving' | 'saved' | 'failed'>('idle');
+  const [savedAt, setSavedAt] = useState<string>('');
 
   // Viewport view-state.
   const [fitMode, setFitMode] = useState<FitMode>('page');
@@ -98,6 +101,8 @@ export default function App() {
   const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [pdfInsertOpen, setPdfInsertOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
+  const [busOpen, setBusOpen] = useState(false);
   const [addSheetPending, setAddSheetPending] = useState<{ refId: string; where: 'before' | 'after' } | null>(null);
   const [importWsOpen, setImportWsOpen] = useState<{ afterPageId?: string } | null>(null);
   const [renumberBadge, setRenumberBadge] = useState(false);
@@ -113,28 +118,110 @@ export default function App() {
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; pageId: string } | null>(null);
   const canvasApiRef = useRef<CanvasApi | null>(null);
 
+  // ── Save manager: single source of truth for persistence + status ──
+  // lastSavedJson is the JSON we last confirmed on the server. A project whose
+  // JSON differs from it is genuinely dirty; equality means "hydrated, clean".
+  const lastSavedJsonRef = useRef<string>('');
+  const projectRef = useRef<ProjectModel | null>(project);
+  const saveStatusRef = useRef(saveStatus);
+  saveStatusRef.current = saveStatus;
+  const savingRef = useRef(false);
+
+  const markSaved = () => {
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    setSavedAt(`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`);
+    setSaveStatus('saved');
+  };
+
+  // Persist the freshest project to the server. Returns true only when the
+  // server actually confirmed the write of the CURRENT project snapshot.
+  const flushSave = useCallback(async (): Promise<boolean> => {
+    const p = projectRef.current;
+    if (!p || printMode) return true;
+    const json = JSON.stringify(p);
+    if (json === lastSavedJsonRef.current) return true; // nothing new to save
+    if (savingRef.current) return false; // a save is already in flight
+    savingRef.current = true;
+    setSaveStatus('saving');
+    try {
+      await saveProject(p);
+      lastSavedJsonRef.current = json;
+      savingRef.current = false;
+      // If the user edited again while the save was in flight, stay dirty and
+      // let the change effect reschedule — never falsely report "Saved".
+      if (JSON.stringify(projectRef.current) !== json) {
+        setSaveStatus('unsaved');
+        return false;
+      }
+      markSaved();
+      return true;
+    } catch {
+      savingRef.current = false;
+      setSaveStatus('failed');
+      return false;
+    }
+  }, [printMode]);
+
+  // Explicit "Save Now": always contacts the server and reports the true result.
+  const saveNow = useCallback(async (): Promise<boolean> => {
+    const p = projectRef.current;
+    if (!p || printMode) return true;
+    const json = JSON.stringify(p);
+    savingRef.current = true;
+    setSaveStatus('saving');
+    try {
+      await saveProject(p);
+      lastSavedJsonRef.current = json;
+      savingRef.current = false;
+      if (JSON.stringify(projectRef.current) !== json) {
+        setSaveStatus('unsaved');
+        return false;
+      }
+      markSaved();
+      return true;
+    } catch {
+      savingRef.current = false;
+      setSaveStatus('failed');
+      return false;
+    }
+  }, [printMode]);
+
   useEffect(() => {
     if (!initialProjectId) return;
     void getProject(initialProjectId).then((p) => {
+      lastSavedJsonRef.current = JSON.stringify(p); // loaded == clean baseline
+      projectRef.current = p;
       setProject(p);
       setActivePageId(p.pages?.[0]?.id ?? null);
       setSelectedWorksheetId(p.worksheets?.[0]?.id);
     });
   }, [initialProjectId]);
 
+  // Debounced autosave driven by real changes. Marks Unsaved Changes immediately,
+  // writes a local recovery snapshot, then persists after a short quiet period.
   useEffect(() => {
     if (!project || printMode) return;
-    const t = setTimeout(async () => {
-      try {
-        setSaveStatus('saving');
-        await saveProject(project);
-        setSaveStatus('saved');
-      } catch {
-        setSaveStatus('failed');
-      }
-    }, 600);
+    projectRef.current = project;
+    const json = JSON.stringify(project);
+    if (json === lastSavedJsonRef.current) return; // hydrated / no real change
+    setSaveStatus('unsaved');
+    writeRecoverySnapshot(project);
+    const t = setTimeout(() => { void flushSave(); }, 800);
     return () => clearTimeout(t);
-  }, [project, printMode]);
+  }, [project, printMode, flushSave]);
+
+  // Warn before leaving with unsaved/in-flight changes.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (saveStatusRef.current === 'unsaved' || saveStatusRef.current === 'saving') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
 
   const activePage = useMemo(() => {
     if (!project || !activePageId) return null;
@@ -170,7 +257,6 @@ export default function App() {
   }, [lineStyle]);
 
   // Refs so global paste/keyboard handlers read current values.
-  const projectRef = useRef(project);
   const activePageRef = useRef(activePage);
   const viewModeRef = useRef(viewMode);
   projectRef.current = project;
@@ -357,6 +443,13 @@ export default function App() {
       } else if ((e.ctrlKey || e.metaKey) && k === 'd') {
         e.preventDefault();
         canvasApiRef.current?.duplicateSelected();
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Quick-draw tool shortcuts (Visio-style): L line, P polyline, E elbow,
+        // B bus/harness. Ignored while typing (guarded above).
+        if (k === 'l') { setOverlayMode(true); setActiveTool('line'); }
+        else if (k === 'p') { setOverlayMode(true); setActiveTool('polyline'); }
+        else if (k === 'e') { setOverlayMode(true); setActiveTool('elbow'); }
+        else if (k === 'b') { setBusOpen(true); }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -411,8 +504,9 @@ export default function App() {
     if (!project) return;
     const numbered = withPageNumbers(pages);
     const next: ProjectModel = { ...project, pages: numbered };
+    projectRef.current = next;
     setProject(next);
-    await savePages(project.id, numbered);
+    await flushSave();
   };
 
   // Single source of truth for per-page edits. Every edit surface (tab, left
@@ -434,8 +528,10 @@ export default function App() {
   const mutatePages = (fn: (pages: PageModel[]) => PageModel[]) => {
     if (!project) return;
     const next = withPageNumbers(fn(project.pages).map((p, i) => ({ ...p, order: i + 1 })));
-    setProject({ ...project, pages: next });
-    void savePages(project.id, next);
+    const nextProject = { ...project, pages: next };
+    projectRef.current = nextProject;
+    setProject(nextProject);
+    void flushSave();
   };
 
   const duplicatePage = (id: string) => {
@@ -571,9 +667,13 @@ export default function App() {
   };
 
   const onUploadWorkbook = async (file: File) => {
+    await flushSave();
     const { id } = await createProjectFromWorkbook(file);
     const p = await getProject(id);
+    lastSavedJsonRef.current = JSON.stringify(p);
+    projectRef.current = p;
     setProject(p);
+    setSaveStatus('idle');
     setActivePageId(p.pages?.[0]?.id ?? null);
     setSelectedWorksheetId(p.worksheets?.[0]?.id);
     setSelection(null);
@@ -582,8 +682,12 @@ export default function App() {
 
   const openProjectById = async (id: string) => {
     try {
+      await flushSave();
       const p = await getProject(id);
+      lastSavedJsonRef.current = JSON.stringify(p);
+      projectRef.current = p;
       setProject(p);
+      setSaveStatus('idle');
       setActivePageId(p.pages?.[0]?.id ?? null);
       setSelectedWorksheetId(p.worksheets?.[0]?.id);
       setSelection(null);
@@ -600,6 +704,8 @@ export default function App() {
     if (!project) return;
     try {
       const p = await getProject(project.id);
+      lastSavedJsonRef.current = JSON.stringify(p);
+      projectRef.current = p;
       setProject(p);
       // Select the first imported page.
       if (pageIds.length) setActivePageId(pageIds[0]);
@@ -607,6 +713,18 @@ export default function App() {
     } catch (err) {
       console.error('refresh after import failed', err);
     }
+  };
+
+  // Restore a project (from a server backup or local recovery snapshot) into the
+  // live editor and re-baseline the save manager so status is accurate.
+  const applyRestoredProject = (p: ProjectModel) => {
+    lastSavedJsonRef.current = JSON.stringify(p);
+    projectRef.current = p;
+    setProject(p);
+    setActivePageId(p.pages?.[0]?.id ?? activePageId);
+    setSelection(null);
+    setSaveStatus('idle');
+    setBackupOpen(false);
   };
 
   const onArchiveCurrentProject = async () => {
@@ -656,9 +774,11 @@ export default function App() {
         revisionHistory: history,
         metadata: { ...project.metadata, revision: rev.newRevision, issueDate: today },
       };
+      projectRef.current = proj;
       setProject(proj);
-      try { await saveProject(proj); } catch { /* best-effort */ }
     }
+    // Make sure the freshest canvas state is on the server before we render it.
+    await flushSave();
     const base = proj.metadata.drawingPackageFileName || proj.projectDisplayName || proj.metadata.projectName || proj.id;
     const revSuffix = rev.updateRevision ? `_${rev.newRevision.replace(/\s+/g, '')}` : '';
     const blob = await exportPdf(proj.id, { width, height });
@@ -672,6 +792,7 @@ export default function App() {
 
   const onExportPackage = async () => {
     if (!project) return;
+    await flushSave();
     const blob = await exportPackage(project.id);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -730,9 +851,17 @@ export default function App() {
   const canvasEnabled =
     !!activePage && viewMode === 'normalized';
 
+  const saveLabel =
+    saveStatus === 'saving' ? 'Saving…'
+    : saveStatus === 'unsaved' ? 'Unsaved Changes'
+    : saveStatus === 'failed' ? 'Save Failed'
+    : saveStatus === 'saved' ? (savedAt ? `Saved ${savedAt}` : 'Saved')
+    : 'Ready';
+
   const ribbon = (
     <Ribbon
       saveStatus={saveStatus}
+      saveLabel={saveLabel}
       hasProject={!!project}
       view={view}
       canvasEnabled={canvasEnabled}
@@ -765,12 +894,14 @@ export default function App() {
         distributeObjects: (d) => canvasApiRef.current?.distributeObjects(d),
         matchObjectSize: (w) => canvasApiRef.current?.matchObjectSize(w),
         addLegend: (ids) => { setOverlayMode(true); canvasApiRef.current?.addLegend(ids); },
+        addBus: () => setBusOpen(true),
       }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
       onUploadCsv={(f) => void onUploadCsv(f)}
       onInsertImage={(f) => void onDropImageFile(f)}
       onInsertPdfPage={() => setPdfInsertOpen(true)}
-      onSaveNow={() => project && void saveProject(project)}
+      onSaveNow={() => void saveNow()}
+      onOpenBackups={() => setBackupOpen(true)}
       onExportPdf={() => setExportOpen(true)}
       onExportPackage={() => void onExportPackage()}
       onRenumber={onRenumber}
@@ -840,7 +971,7 @@ export default function App() {
       left={
         <>
           <CollapsibleSection title="Output Pages" hint="The pages that make up your drawing package. Drag to reorder; right-click for actions.">
-            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={setActivePageId} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
+            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void flushSave(); setActivePageId(id); }} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
           </CollapsibleSection>
           <CollapsibleSection title="Source Tabs" defaultOpen={false} hint="The original workbook worksheets, for reference.">
             <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
@@ -868,6 +999,7 @@ export default function App() {
           onSelectionChange={onSelectionChange}
           onBlockChange={onBlockChange}
           onSelectPage={(id) => {
+            void flushSave();
             setActivePageId(id);
             setSelection(null);
           }}
@@ -994,6 +1126,13 @@ export default function App() {
           worksheetCount={project.worksheets.length}
           activeLabel={`${activePage.sheetCode} ${activePage.sheetTitle}`}
           zoomPct={Math.round(effectiveScale * 100)}
+          drawingHint={
+            activeTool === 'polyline' || activeTool === 'elbow'
+              ? 'Click to add point · double-click or Enter to finish · Esc to cancel'
+              : activeTool === 'line' || activeTool === 'arrow'
+                ? 'Click start point, then end point · Esc to cancel'
+                : undefined
+          }
         />
       }
     />
@@ -1041,6 +1180,23 @@ export default function App() {
           setPdfInsertOpen(false);
         }}
         onCancel={() => setPdfInsertOpen(false)}
+      />
+    )}
+    {backupOpen && (
+      <BackupRecoveryModal
+        projectId={project.id}
+        onRestore={applyRestoredProject}
+        onClose={() => setBackupOpen(false)}
+      />
+    )}
+    {busOpen && (
+      <BusModal
+        onCreate={(opts: BusOptions) => {
+          setOverlayMode(true);
+          canvasApiRef.current?.startBus(opts);
+          setBusOpen(false);
+        }}
+        onCancel={() => setBusOpen(false)}
       />
     )}
     {ctxMenu && (

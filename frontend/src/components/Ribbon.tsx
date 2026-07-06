@@ -18,6 +18,7 @@ export interface ViewControls {
 
 interface Props {
   saveStatus: string;
+  saveLabel?: string;
   hasProject: boolean;
   view: ViewControls;
   canvasEnabled: boolean;
@@ -50,12 +51,14 @@ interface Props {
     distributeObjects: (d: 'horizontal'|'vertical') => void;
     matchObjectSize: (w: 'width'|'height'|'both') => void;
     addLegend: (presetIds?: string[]) => void;
+    addBus: () => void;
   };
   onUploadFile: (file: File) => void;
   onUploadCsv: (file: File) => void;
   onInsertImage: (file: File) => void;
   onInsertPdfPage: () => void;
   onSaveNow: () => void;
+  onOpenBackups: () => void;
   onExportPdf: () => void;
   onExportPackage: () => void;
   onRenumber: () => void;
@@ -94,6 +97,7 @@ function PlaceholderBtn({ label }: { label: string }) {
 
 export default function Ribbon({
   saveStatus,
+  saveLabel,
   hasProject,
   view,
   canvasEnabled,
@@ -107,6 +111,7 @@ export default function Ribbon({
   onInsertImage,
   onInsertPdfPage,
   onSaveNow,
+  onOpenBackups,
   onExportPdf,
   onExportPackage,
   onRenumber,
@@ -171,7 +176,7 @@ export default function Ribbon({
           <span className="brand-sub">Drawing Package Editor</span>
         </div>
         <div className="ribbon-appbar-right">
-          <span className={`status-pill ${saveStatus}`}>{saveStatus}</span>
+          <span className={`status-pill ${saveStatus}`}>{saveLabel ?? saveStatus}</span>
         </div>
       </div>
 
@@ -198,6 +203,7 @@ export default function Ribbon({
             </Group>
             <Group title="Maintenance">
               <button className="ribbon-btn" onClick={onCleanWorkspace} title="Archive old projects/exports to start fresh (never deletes; library preserved)">Clean Workspace</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onOpenBackups} title="View server backup snapshots and recover unsaved drawing changes">Backups / Recover</button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={onArchiveCurrentProject} title="Archive the currently open project and return to the landing screen">Archive Project</button>
             </Group>
             <Group title="Output">
@@ -338,9 +344,11 @@ export default function Ribbon({
                 <button className={`ribbon-btn ${activeTool === 'text' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('text')} title="Click-place a text box">Text</button>
                 <button className={`ribbon-btn ${activeTool === 'rectangle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('rectangle')} title="Click-place a rectangle">Rectangle</button>
                 <button className={`ribbon-btn ${activeTool === 'circle' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('circle')} title="Click-place a circle">Circle</button>
-                <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')} title="Two clicks: start point, then end point. Done.">Line</button>
+                <button className={`ribbon-btn ${activeTool === 'line' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('line')} title="Line (L): two clicks — start point, then end point.">Line</button>
                 <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')} title="Two clicks like Line, with an arrowhead on the end">Arrow</button>
-                <button className={`ribbon-btn ${activeTool === 'polyline' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('polyline')} title="Click to drop each point (as many as you want). Press Esc when done — you stay in edit mode until then.">Multi-Point Line</button>
+                <button className={`ribbon-btn ${activeTool === 'polyline' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('polyline')} title="Multi-Point Line (P): click each point, double-click or Enter to finish, Esc to cancel.">Multi-Point Line</button>
+                <button className={`ribbon-btn ${activeTool === 'elbow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('elbow')} title="Elbow (E): orthogonal square-cornered routing. Click each bend, double-click or Enter to finish.">Elbow</button>
+                <button className="ribbon-btn" disabled={!cx} onClick={canvas.addBus} title="Bus / Harness (B): create several parallel labeled wires at once.">Bus / Harness</button>
               </Group>
               <Group title="Line Color">
                 <select className="ribbon-select" disabled={!ln} value={typeof selection?.stroke === 'string' ? selection.stroke : '#111111'} onChange={(e) => onUpdateSelection({ stroke: e.target.value })} title={ln ? 'Stroke color of the selected line/connector' : 'Select a line or connector first'}>

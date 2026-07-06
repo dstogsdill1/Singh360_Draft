@@ -186,7 +186,28 @@ body { background: var(--board); color: var(--ink); }
 }
 .status-pill.saved { color: #7fd39b; border-color: #2f6f45; }
 .status-pill.saving { color: #f0c37a; border-color: #7a5a1e; }
-.status-pill.failed { color: #f19a99; border-color: #7a2b2a; }
+.status-pill.failed { color: #f19a99; border-color: #7a2b2a; background: #3a2726; }
+.status-pill.unsaved { color: #f0c37a; border-color: #7a5a1e; }
+.status-pill.idle { color: #aeb6bf; }
+
+/* Bus / harness + backup recovery modals + drawing hint */
+.sb-hint { color: #8fb8ff; font-style: italic; }
+.bus-modal .bus-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
+.bus-modal .bus-row > span { color: #444; font-size: 13px; }
+.bus-modal .bus-row input, .bus-modal .bus-row select { flex: 0 0 200px; }
+.bus-modal .bus-check { justify-content: flex-start; gap: 6px; }
+.bus-modal .bus-check input { flex: 0 0 auto; }
+.bus-modal .bus-help { color: #666; font-size: 12px; margin: 4px 0 10px; }
+.bus-modal .bus-preview { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; margin: 8px 0; }
+.backup-modal .backup-section { border-top: 1px solid #e3e3e3; padding-top: 8px; margin-top: 8px; }
+.backup-modal h4 { margin: 4px 0 8px; font-size: 13px; }
+.backup-modal .backup-local { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.backup-modal .backup-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; }
+.backup-modal .backup-list li { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.backup-modal .backup-list li > span:first-child { flex: 1; }
+.backup-modal .backup-size { color: #888; font-size: 12px; }
+.backup-modal .backup-empty { color: #888; font-size: 12px; }
+.backup-modal .backup-error { color: #b3261e; font-size: 12px; }
 
 /* ── LEFT NAVIGATOR (collapsible sections) ── */
 .nav-section { display: flex; flex-direction: column; min-height: 0; border-bottom: 1px solid var(--panel-line); }

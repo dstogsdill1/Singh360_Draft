@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, filters, type FabricObject } from 'fabric';
-import type { CanvasApi, CanvasSelection, LineStyle } from '../model/types';
+import type { BusOptions, CanvasApi, CanvasSelection, LineStyle } from '../model/types';
 import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
 import { BODY_W, BODY_H } from '../model/sheetGeometry';
@@ -19,7 +19,7 @@ interface Props {
 const CANVAS_W = BODY_W;
 const CANVAS_H = BODY_H;
 const SNAP = 16;
-const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label'];
+const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer'];
 
 function summarize(obj: FabricObject): CanvasSelection {
   const anyObj = obj as unknown as Record<string, unknown>;
@@ -338,6 +338,20 @@ export default function CanvasEditor({
 
     canvas.on('mouse:down', (opt) => {
       const tool = toolRef.current;
+      // Alt+drag on an existing object leaves a duplicate behind (Visio/PPT style).
+      const nativeEvt = opt.e as MouseEvent | undefined;
+      if (tool === 'select' && nativeEvt?.altKey && opt.target && !creatingPolyRef.current) {
+        const orig = opt.target;
+        const ol = orig.left ?? 0;
+        const ot = orig.top ?? 0;
+        void orig.clone(SER_PROPS).then((clone: FabricObject) => {
+          clone.set({ left: ol, top: ot });
+          (clone as unknown as Record<string, unknown>).objName = (orig as unknown as Record<string, unknown>).objName;
+          canvas.add(clone);
+          canvas.requestRenderAll();
+        });
+        // The original keeps dragging, so the copy stays at the start position.
+      }
       // While actively building a line, EVERY click drops a point.
       const building = !!creatingPolyRef.current;
       if (!building && (tool === 'select' || opt.target)) return;
@@ -570,6 +584,50 @@ export default function CanvasEditor({
       addPolyline: () => addObj(makePolyline(200, 340)),
       addElbow: () => addObj(makeElbow(200, 360)),
       setLineStyle: (style: LineStyle) => { lineStyleRef.current = style; },
+      startBus: (opts: BusOptions) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        // Place N evenly-spaced parallel connectors across the page middle. Each
+        // carries its label; the whole harness is selected so it can be dragged
+        // into position as one gesture.
+        const x1 = Math.round(CANVAS_W * 0.3);
+        const x2 = Math.round(CANVAS_W * 0.7);
+        const y0 = Math.round(CANVAS_H * 0.45 - ((opts.count - 1) * opts.spacing) / 2);
+        const added: FabricObject[] = [];
+        for (let i = 0; i < opts.count; i++) {
+          const y = y0 + i * opts.spacing;
+          const label = opts.labels[i] || '';
+          const conn = new Connector([{ x: x1, y }, { x: x2, y }], {
+            stroke: opts.stroke,
+            strokeWidth: opts.strokeWidth,
+            strokeDashArray: dashArray(opts.dash as DashStyle, opts.strokeWidth),
+            connectorKind: opts.orthogonal ? 'elbow' : 'line',
+            stylePreset: opts.presetId,
+            label,
+            labelMiddle: label,
+            objName: label ? `Bus ${label}` : `Bus wire ${i + 1}`,
+          });
+          styleForSelection(conn);
+          c.add(conn);
+          added.push(conn);
+          if (label) {
+            const lbl = new Textbox(label, {
+              left: x1 - 54, top: y - 9, width: 48, fontSize: 11,
+              fontFamily: 'Arial', textAlign: 'right', fill: '#111',
+            });
+            (lbl as unknown as Record<string, unknown>).objName = `Bus Label ${label}`;
+            c.add(lbl);
+            added.push(lbl);
+          }
+        }
+        if (added.length > 1) {
+          const sel = new ActiveSelection(added, { canvas: c });
+          c.setActiveObject(sel);
+        } else if (added.length === 1) {
+          c.setActiveObject(added[0]);
+        }
+        c.requestRenderAll();
+      },
       addPageTitle: (text: string) => addObj(makePageTitle(text)),
       addSectionHeader: (text: string) => addObj(makeSectionHeader(text)),
       addNote: (text: string) => addObj(makeNote(text)),
@@ -765,8 +823,9 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         const o = c?.getActiveObject();
         if (!c || !o) return;
-        void o.clone().then((clone: FabricObject) => {
-          clone.set({ left: (o.left ?? 0) + 20, top: (o.top ?? 0) + 20 });
+        void o.clone(SER_PROPS).then((clone: FabricObject) => {
+          clone.set({ left: (o.left ?? 0) + 12, top: (o.top ?? 0) + 12 });
+          (clone as unknown as Record<string, unknown>).objName = (o as unknown as Record<string, unknown>).objName;
           c.add(clone);
           c.setActiveObject(clone);
           c.requestRenderAll();
