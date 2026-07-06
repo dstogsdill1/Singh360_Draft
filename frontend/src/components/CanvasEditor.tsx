@@ -243,8 +243,10 @@ export default function CanvasEditor({
   const finalizeRef = useRef<(() => void) | null>(null);
   // Transient alignment guide lines (never serialized/exported).
   const guidesRef = useRef<FabricObject[]>([]);
-  // Transient snap-port dots shown while a connector tool is active.
-  const snapDotsRef = useRef<FabricObject[]>([]);
+  // Cursor position (scene coords) while a connector tool is active. Drives the
+  // render-overlay snap dots which are DRAWN directly on the canvas context and
+  // never added as objects, so they cannot interfere with click hit-testing.
+  const hoverRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -326,45 +328,45 @@ export default function CanvasEditor({
       guidesRef.current = [];
     };
 
-    // ── Visible port snap dots (feedback while a connector tool is active) ──
-    const clearSnapDots = () => {
-      if (!snapDotsRef.current.length) return;
-      snapDotsRef.current.forEach((d) => canvas.remove(d));
-      snapDotsRef.current = [];
-    };
-    const updateSnapDots = (px: number, py: number) => {
-      clearSnapDots();
-      const ports: Array<{ x: number; y: number }> = [];
-      for (const o of canvas.getObjects()) {
+    // ── Port snap dots drawn as a RENDER OVERLAY (never added as objects) ──
+    // Drawing straight on the context after Fabric renders means the dots are
+    // pure decoration: they never appear in the object list, never fire events,
+    // and cannot interfere with click/drag hit-testing (the previous
+    // add/remove-on-mousemove approach was doing exactly that).
+    canvas.on('after:render', () => {
+      const hover = hoverRef.current;
+      if (!hover || !isLineTool(toolRef.current)) return;
+      const ctx = canvas.getContext();
+      const objs = canvas.getObjects();
+      let nearest: { x: number; y: number } | null = null;
+      let nd = 20;
+      const all: Array<{ x: number; y: number }> = [];
+      for (const o of objs) {
         if (o === creatingPolyRef.current) continue;
         if ((o as unknown as Record<string, unknown>).excludeFromExport) continue;
         const bb = o.getBoundingRect();
         const ocx = bb.left + bb.width / 2;
         const ocy = bb.top + bb.height / 2;
-        // Only decorate objects reasonably close to the cursor (keeps it light).
-        if (Math.hypot(ocx - px, ocy - py) > Math.max(bb.width, bb.height) / 2 + 200) continue;
-        for (const pt of objectSnapPoints(o)) ports.push(pt);
+        if (Math.hypot(ocx - hover.x, ocy - hover.y) > Math.max(bb.width, bb.height) / 2 + 220) continue;
+        for (const pt of objectSnapPoints(o)) {
+          all.push(pt);
+          const d = Math.hypot(pt.x - hover.x, pt.y - hover.y);
+          if (d < nd) { nd = d; nearest = pt; }
+        }
       }
-      // Find the single nearest port so we can highlight it green.
-      let nearest: { x: number; y: number } | null = null;
-      let nd = 18;
-      for (const pt of ports) {
-        const d = Math.hypot(pt.x - px, pt.y - py);
-        if (d < nd) { nd = d; nearest = pt; }
-      }
-      for (const pt of ports) {
+      ctx.save();
+      for (const pt of all) {
         const isNear = !!nearest && pt.x === nearest.x && pt.y === nearest.y;
-        const dot = new Circle({
-          left: pt.x, top: pt.y, radius: isNear ? 7 : 4,
-          fill: isNear ? '#16a34a' : '#2563eb', stroke: '#ffffff', strokeWidth: 1.5,
-          originX: 'center', originY: 'center', selectable: false, evented: false,
-        });
-        (dot as unknown as Record<string, unknown>).excludeFromExport = true;
-        snapDotsRef.current.push(dot);
-        canvas.add(dot);
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, isNear ? 7 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = isNear ? '#16a34a' : '#2563eb';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.fill();
+        ctx.stroke();
       }
-      canvas.requestRenderAll();
-    };
+      ctx.restore();
+    });
 
     const addVGuide = (x: number) => {
       const ln = new Line([x, 0, x, CANVAS_H], { stroke: '#e5006d', strokeWidth: 1, selectable: false, evented: false });
@@ -580,15 +582,15 @@ export default function CanvasEditor({
     });
     canvas.on('mouse:move', (opt) => {
       const tool = toolRef.current;
-      // Show port snap dots whenever a connector tool is active (hover feedback),
-      // even before the first click so the user can see where things will snap.
+      // Track the cursor for the render-overlay snap dots (hover feedback),
+      // even before the first click so the user sees where things will snap.
       if (isLineTool(tool)) {
         const hp = scenePoint(opt.e);
-        const gx = snapRef.current ? Math.round(hp.x / SNAP) * SNAP : hp.x;
-        const gy = snapRef.current ? Math.round(hp.y / SNAP) * SNAP : hp.y;
-        try { updateSnapDots(gx, gy); } catch { /* never block drawing */ }
-      } else if (snapDotsRef.current.length) {
-        clearSnapDots();
+        hoverRef.current = { x: hp.x, y: hp.y };
+        canvas.requestRenderAll();
+      } else if (hoverRef.current) {
+        hoverRef.current = null;
+        canvas.requestRenderAll();
       }
       const poly = creatingPolyRef.current;
       if (!poly) return;
@@ -729,10 +731,9 @@ export default function CanvasEditor({
     canvas.calcOffset();
     if (drawing) {
       canvas.discardActiveObject();
-    } else if (snapDotsRef.current.length) {
-      // Leaving a draw tool: remove any lingering snap dots.
-      snapDotsRef.current.forEach((d) => canvas.remove(d));
-      snapDotsRef.current = [];
+    } else if (hoverRef.current) {
+      // Leaving a draw tool: drop the hover so the snap-dot overlay disappears.
+      hoverRef.current = null;
     }
     canvas.requestRenderAll();
   }, [activeTool]);
