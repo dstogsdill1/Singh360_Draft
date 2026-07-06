@@ -203,9 +203,6 @@ export default function CanvasEditor({
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fabricRef = useRef<Canvas | null>(null);
-  // Temporary on-screen diagnostic: shows the last pointer action so we can see
-  // (without the dev console) whether clicks reach the canvas and where they map.
-  const dbgRef = useRef<HTMLDivElement | null>(null);
 
   // Latest-prop refs so long-lived Fabric handlers read current values.
   const toolRef = useRef(activeTool);
@@ -443,10 +440,6 @@ export default function CanvasEditor({
     });
     canvas.on('mouse:up', (opt) => {
       clearGuides();
-      if (dbgRef.current) {
-        const ue = opt.e as MouseEvent;
-        dbgRef.current.textContent = `UP fired · poly=${creatingPolyRef.current ? 'yes' : 'no'} client=(${Math.round(ue.clientX ?? 0)},${Math.round(ue.clientY ?? 0)})`;
-      }
       // Drag-to-draw: if a Line/Arrow was started on mouse-down and the pointer
       // has since moved a meaningful distance, finish it here on release. This
       // makes simple lines behave like every other app (press → drag → release),
@@ -502,7 +495,6 @@ export default function CanvasEditor({
 
     canvas.on('mouse:down', (opt) => {
       const tool = toolRef.current;
-      if (dbgRef.current) dbgRef.current.textContent = `DOWN fired · tool=${tool}`;
       // Alt+drag on an existing object leaves a duplicate behind (Visio/PPT style).
       const nativeEvt = opt.e as MouseEvent | undefined;
       if (tool === 'select' && nativeEvt?.altKey && opt.target && !creatingPolyRef.current) {
@@ -527,9 +519,6 @@ export default function CanvasEditor({
       const isDrawTool = isLineTool(tool) || tool === 'text' || tool === 'rectangle' || tool === 'circle';
       if (!building && !isDrawTool) return; // only exit in pure select mode
       const p = scenePoint(opt.e);
-      if (dbgRef.current) {
-        dbgRef.current.textContent = `DOWN tool=${tool} x=${Math.round(p.x)} y=${Math.round(p.y)} building=${building} target=${opt.target ? 'yes' : 'no'}`;
-      }
       const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
 
       if (isLineTool(tool) || building) {
@@ -564,11 +553,9 @@ export default function CanvasEditor({
             canvas.setActiveObject(conn);
             creatingPolyRef.current = conn;
             canvas.requestRenderAll();
-            if (dbgRef.current) dbgRef.current.textContent = `START ok · ${tool} @ ${Math.round(px)},${Math.round(py)}`;
           } catch (err) {
             creatingPolyRef.current = null;
             polyCommittedRef.current = [];
-            if (dbgRef.current) dbgRef.current.textContent = `CREATE ERROR: ${String(err).slice(0, 140)}`;
           }
         } else {
           // Subsequent click: commit the next point.
@@ -1318,7 +1305,6 @@ export default function CanvasEditor({
   return (
     <div className="canvas-wrap">
       <canvas ref={canvasRef} className="canvas-surface" />
-      <div ref={dbgRef} className="canvas-dbg">draw diag: click the canvas with a Draw tool</div>
     </div>
   );
 }
