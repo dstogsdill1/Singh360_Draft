@@ -405,7 +405,13 @@ export default function CanvasEditor({
       }
       // While actively building a line, EVERY click drops a point.
       const building = !!creatingPolyRef.current;
-      if (!building && (tool === 'select' || opt.target)) return;
+      // FIX: for any draw tool (line/arrow/polyline/elbow/text/rect/circle)
+      // we must NEVER return early just because opt.target is non-null.
+      // Returning early here was blocking drawing on pages that already have
+      // components on them (opt.target was set even with skipTargetFind=true
+      // in certain Fabric v6 builds when clicking near existing objects).
+      const isDrawTool = isLineTool(tool) || tool === 'text' || tool === 'rectangle' || tool === 'circle';
+      if (!building && !isDrawTool) return; // only exit in pure select mode
       const p = canvas.getScenePoint(opt.e);
       const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
 
@@ -415,7 +421,10 @@ export default function CanvasEditor({
         // Port-snap: snap to object connection points first, then grid.
         const gridX = sp(p.x);
         const gridY = sp(p.y);
-        const snapped = snapToNearestPort(canvas, gridX, gridY, creatingPolyRef.current, guidesRef.current);
+        let snapped = { x: gridX, y: gridY };
+        try {
+          snapped = snapToNearestPort(canvas, gridX, gridY, creatingPolyRef.current, guidesRef.current);
+        } catch { /* port-snap failure must never block drawing */ }
         const px = snapped.x;
         const py = snapped.y;
         if (!creatingPolyRef.current) {
@@ -468,7 +477,10 @@ export default function CanvasEditor({
       // Port-snap the preview endpoint too.
       const gridX = sp(p.x);
       const gridY = sp(p.y);
-      const snapped = snapToNearestPort(canvas, gridX, gridY, poly, guidesRef.current);
+      let snapped = { x: gridX, y: gridY };
+      try {
+        snapped = snapToNearestPort(canvas, gridX, gridY, poly, guidesRef.current);
+      } catch { /* port-snap failure must never block preview */ }
       const px = snapped.x;
       const py = snapped.y;
       const committed = polyCommittedRef.current;
