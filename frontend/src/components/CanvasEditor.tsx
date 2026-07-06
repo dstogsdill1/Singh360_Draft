@@ -231,6 +231,9 @@ export default function CanvasEditor({
   const creatingPolyRef = useRef<Connector | null>(null);
   // Committed absolute vertices while building a line (preview point excluded).
   const polyCommittedRef = useRef<Array<{ x: number; y: number }>>([]);
+  // Drag-to-draw: the scene point where a Line/Arrow drag started, so we can
+  // finish the line on mouse-up when the user drags rather than click-clicks.
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   // Finalizes any in-progress line (set inside the mount effect). Called when the
   // tool changes so the user can NEVER get stuck mid-draw.
   const finalizeRef = useRef<(() => void) | null>(null);
@@ -366,7 +369,33 @@ export default function CanvasEditor({
       }
       canvas.requestRenderAll();
     });
-    canvas.on('mouse:up', () => { clearGuides(); canvas.requestRenderAll(); });
+    canvas.on('mouse:up', (opt) => {
+      clearGuides();
+      // Drag-to-draw: if a Line/Arrow was started on mouse-down and the pointer
+      // has since moved a meaningful distance, finish it here on release. This
+      // makes simple lines behave like every other app (press → drag → release),
+      // while still allowing two-click placement for people who prefer it.
+      const poly = creatingPolyRef.current;
+      const start = dragStartRef.current;
+      if (poly && start && (poly.connectorKind === 'line' || poly.connectorKind === 'arrow')) {
+        const p = canvas.getScenePoint(opt.e);
+        const moved = Math.hypot(p.x - start.x, p.y - start.y);
+        if (moved > 10) {
+          const sp = (v: number) => (snapRef.current ? Math.round(v / SNAP) * SNAP : v);
+          let end = { x: sp(p.x), y: sp(p.y) };
+          try {
+            end = snapToNearestPort(canvas, end.x, end.y, poly, guidesRef.current);
+          } catch { /* ignore */ }
+          polyCommittedRef.current = [start, end];
+          poly.setAbsPoints([start, end]);
+          dragStartRef.current = null;
+          finishLine(true);
+          return;
+        }
+      }
+      dragStartRef.current = null;
+      canvas.requestRenderAll();
+    });
     // ---- Simple multi-point line placement ---------------------------------
     // Line / Arrow / Polyline all work the SAME way: click to drop each point,
     // move to preview the next segment, double-click or Enter to finish, Esc to
@@ -430,6 +459,7 @@ export default function CanvasEditor({
         if (!creatingPolyRef.current) {
           // First click: start the line at this point.
           polyCommittedRef.current = [{ x: px, y: py }];
+          dragStartRef.current = { x: px, y: py };
           const conn = new Connector([{ x: px, y: py }, { x: px, y: py }], {
             ...styleForNewLine(tool),
             pointsData: [{ x: px, y: py }, { x: px, y: py }],
@@ -502,6 +532,7 @@ export default function CanvasEditor({
       const poly = creatingPolyRef.current;
       if (!poly) return;
       creatingPolyRef.current = null;
+      dragStartRef.current = null;
       const committed = polyCommittedRef.current;
       const finalPts = committed.length >= 2 ? committed : poly.getAbsPoints();
       poly.setAbsPoints(finalPts);
@@ -517,6 +548,7 @@ export default function CanvasEditor({
     finalizeRef.current = () => {
       const poly = creatingPolyRef.current;
       if (!poly) return;
+      dragStartRef.current = null;
       const committed = polyCommittedRef.current;
       if (committed.length >= 2) {
         creatingPolyRef.current = null;

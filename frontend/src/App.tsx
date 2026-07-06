@@ -1167,7 +1167,7 @@ export default function App() {
             activeTool === 'polyline' || activeTool === 'elbow'
               ? 'Click to add point · double-click or Enter to finish · Esc to cancel'
               : activeTool === 'line' || activeTool === 'arrow'
-                ? 'Click start point, then end point · Esc to cancel'
+                ? 'Click-drag to draw a line (or click start, then click end) · Esc to cancel'
                 : undefined
           }
         />
