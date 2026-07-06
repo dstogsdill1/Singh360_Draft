@@ -1079,9 +1079,20 @@ export default function App() {
             });
           }}
           onCanvasChange={(pageId, objects) => {
-            setProject({
-              ...project,
-              pages: project.pages.map((pg) => (pg.id === pageId ? { ...pg, canvasObjects: objects } : pg)),
+            // CRITICAL: functional update — always merges into the CURRENT state,
+            // never into a potentially-stale closure capture of `project`.
+            // Using `setProject({...project, ...})` here was the root cause of
+            // drawings vanishing: if `project` was a stale closure from before
+            // the objects were drawn, this would silently overwrite the live
+            // canvas state with an empty canvasObjects array.
+            setProject((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                pages: prev.pages.map((pg) =>
+                  pg.id === pageId ? { ...pg, canvasObjects: objects } : pg,
+                ),
+              };
             });
           }}
         />
