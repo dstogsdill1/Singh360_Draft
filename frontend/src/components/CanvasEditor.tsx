@@ -552,14 +552,24 @@ export default function CanvasEditor({
           // is independent of zoom and unaffected by port snapping.
           const de = opt.e as MouseEvent;
           downRawRef.current = { x: de.clientX ?? 0, y: de.clientY ?? 0 };
-          const conn = new Connector([{ x: px, y: py }, { x: px, y: py }], {
-            ...styleForNewLine(tool),
-            pointsData: [{ x: px, y: py }, { x: px, y: py }],
-          });
-          canvas.add(conn);
-          canvas.setActiveObject(conn);
-          creatingPolyRef.current = conn;
-          canvas.requestRenderAll();
+          try {
+            // IMPORTANT: never create a ZERO-LENGTH connector (both points equal).
+            // Fabric's Polyline math + poly controls choke on degenerate geometry
+            // and throw, which silently aborted every draw. Seed the 2nd point a
+            // hair away; mouse:move immediately replaces it with the live cursor.
+            const conn = new Connector([{ x: px, y: py }, { x: px + 1, y: py }], {
+              ...styleForNewLine(tool),
+            });
+            canvas.add(conn);
+            canvas.setActiveObject(conn);
+            creatingPolyRef.current = conn;
+            canvas.requestRenderAll();
+            if (dbgRef.current) dbgRef.current.textContent = `START ok · ${tool} @ ${Math.round(px)},${Math.round(py)}`;
+          } catch (err) {
+            creatingPolyRef.current = null;
+            polyCommittedRef.current = [];
+            if (dbgRef.current) dbgRef.current.textContent = `CREATE ERROR: ${String(err).slice(0, 140)}`;
+          }
         } else {
           // Subsequent click: commit the next point.
           const conn = creatingPolyRef.current;

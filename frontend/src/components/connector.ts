@@ -86,8 +86,14 @@ export class Connector extends Polyline {
 
   /** Swap the object's controls for one grabbable handle per vertex. */
   applyVertexControls() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.controls = controlsUtils.createPolyControls(this as any);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.controls = controlsUtils.createPolyControls(this as any);
+    } catch {
+      /* Degenerate geometry (e.g. a just-started zero-length line) can make the
+         poly-control factory throw; skip it rather than aborting the whole draw.
+         Controls are re-applied on the next setAbsPoints once real points exist. */
+    }
   }
 
   // ---- absolute scene coordinates -----------------------------------------
