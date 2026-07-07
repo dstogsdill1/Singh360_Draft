@@ -10,7 +10,17 @@ from openpyxl.utils.cell import column_index_from_string, get_column_letter
 
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 from core.page_normalizer import normalize_page
-from core.page_composer import EXCEL_EXACT_FAMILIES, EXCEL_MIN_SCALE, compose_pages, page_family
+from core.page_composer import (
+    EXCEL_EXACT_FAMILIES,
+    EXCEL_MIN_SCALE,
+    compose_pages,
+    log_render_diagnostics,
+    page_family,
+)
+from core.table_style_profile import RENDER_PROFILE, apply_singh360_profile
+
+# Default Singh360 normalized header style applied to every non-cover page.
+DEFAULT_HEADER_STYLE = "orange"
 
 _INDEX_ALIASES = {
     "include": {"include", "inc", "include?", "use?", "selected"},
@@ -572,8 +582,12 @@ def import_workbook(
         use_exact = _should_use_excel_exact(page_type, family, ws)
         split_settings = _split_settings_for_page(family, page_type, use_exact)
 
+        # Cover keeps its own look; every other page gets the Singh360 profile.
+        header_style = "source" if page_type == "cover" else DEFAULT_HEADER_STYLE
+
         if use_exact:
             exact_block = _excel_range_block(ws, f"{ws['id']}_xr", split_settings)
+            apply_singh360_profile(exact_block, header_style)
             blocks = [exact_block]
         else:
             exact_block = None
@@ -606,6 +620,8 @@ def import_workbook(
             "pageType": page_type,
             "pageFamily": family,
             "renderMode": "excel_exact" if use_exact else "normalized",
+            "renderProfile": RENDER_PROFILE,
+            "normalizedHeaderStyle": header_style,
             "sourceSheet": ws.get("sourceSheet") or ws["name"],
             "sourceRange": ws.get("sourceRange", "") if use_exact else "",
             "printArea": ws.get("printArea") if use_exact else None,
@@ -636,4 +652,8 @@ def import_workbook(
     project["pages"] = compose_pages(pages)
     project["paginationLocked"] = True
     recalc_page_numbers(project)
+    try:
+        log_render_diagnostics(project["pages"])
+    except Exception:
+        pass
     return sanitize_json(project)

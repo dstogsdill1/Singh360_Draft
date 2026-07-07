@@ -62,6 +62,8 @@ export interface PageBlock {
   url?: string;
   /** excelRange payload (exact worksheet range). */
   renderMode?: string;
+  renderProfile?: string;
+  normalizedHeaderStyle?: string;
   grid?: string[][];
   styles?: Record<string, ExcelCellStyle>;
   mergedCells?: MergedCell[];
@@ -127,6 +129,9 @@ export interface PageModel {
   pageType: PageType;
   pageFamily?: string;
   renderMode?: string;
+  /** Singh360 render profile + normalized header style (Milestone 4D). */
+  renderProfile?: string;
+  normalizedHeaderStyle?: 'orange' | 'source' | 'none';
   sourceSheet?: string;
   sourceRange?: string;
   printArea?: string | null;

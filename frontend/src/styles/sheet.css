@@ -81,6 +81,60 @@
 .tb-v3 .tb-code-value { font-size: 28px; letter-spacing: 0.02em; }
 .tb-v3 .tb-page-label { font-weight: 700; }
 
+/* ── SINGH360 STANDARD ORANGE TITLE BAND (renderProfile = singh360_standard_table) ── */
+.np-title-band-wrap {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  box-sizing: border-box;
+}
+.np-title-band {
+  height: 40px;
+  background: #FFC000;
+  color: #000;
+  border: 1.5px solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 14px;
+  box-sizing: border-box;
+}
+.np-title-band-text {
+  font-family: Calibri, "Segoe UI", Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #000;
+  text-align: center;
+  line-height: 1.05;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-title-band-cont { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #6b4b00; }
+.np-subtitle-band {
+  height: 22px;
+  background: #f2f2f2;
+  color: #333;
+  border: 1px solid #808080;
+  border-top: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  box-sizing: border-box;
+}
+/* When a band is present the base content area shrinks so nothing clips under
+   the title block (band = 40px + optional 22px subtitle ≈ 64px reserve). */
+.np-has-band .np,
+.np-has-band .np-xr,
+.np-has-band .np-index { max-height: 802px; }
+
 /* ── NORMALIZED PAGE BLOCKS ── */
 .np {
   padding: 40px 48px;
@@ -108,14 +162,15 @@
   table-layout: fixed;
 }
 .np-index-table th {
-  background: #24282e;
-  color: #fff;
+  background: #d9d9d9;
+  color: #000;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 6px 8px;
-  border: 1px solid #111;
+  border: 1px solid #808080;
   text-align: left;
+  font-weight: 700;
 }
 .np-index-table td {
   border: 1px solid #c2c7cd;
@@ -144,10 +199,10 @@
 }
 .np-table, .np-matrix { border-collapse: collapse; width: 100%; margin: 0; font-size: 13px; }
 .np-table th, .np-matrix th {
-  background: #24282e; color: #fff; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em;
-  border: 1px solid #111; padding: 6px 8px; text-align: left;
+  background: #d9d9d9; color: #000; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700;
+  border: 1px solid #808080; padding: 6px 8px; text-align: left;
 }
-.np-table td, .np-matrix td { border: 1px solid #c2c7cd; padding: 5px 8px; vertical-align: top; }
+.np-table td, .np-matrix td { border: 1px solid #a6a6a6; padding: 5px 8px; vertical-align: top; }
 .np-table tbody tr:nth-child(even) td { background: #f4f6f8; }
 .np-matrix td { text-align: center; }
 .np-matrix td:first-child { text-align: left; font-weight: 600; }

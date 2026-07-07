@@ -274,42 +274,130 @@ def _slice_excel_block(block: dict[str, Any], row_indices: list[int], part_index
     return nb
 
 
-def _excel_data_chunks(block: dict[str, Any], data_rows: list[int], header_h: float) -> list[list[int]]:
-    """Greedily pack data rows into page-height chunks, then rebalance so the last
-    page is never a single orphan row when a legal alternative exists."""
+def _section_break_rows(block: dict[str, Any], data_rows: list[int]) -> set[int]:
+    """Rows that start a new visual section (a filled band spanning the row).
+
+    Used as preferred split points so panel/lighting schedules break *between*
+    controller/section blocks instead of orphaning a few trailing rows."""
+    styles = block.get("styles") or {}
+    grid = block.get("grid") or []
+    ncols = max((len(r) for r in grid), default=0)
+    breaks: set[int] = set()
+    if not ncols:
+        return breaks
+    for r in data_rows:
+        banded = sum(1 for c in range(ncols) if (styles.get(f"{r}:{c}") or {}).get("fill"))
+        if banded >= max(2, ncols // 2):
+            breaks.add(r)
+    return breaks
+
+
+def _balanced_chunks(
+    block: dict[str, Any],
+    data_rows: list[int],
+    header_h: float,
+    n_pages: int,
+    budget: float,
+) -> list[list[int]]:
+    """Distribute ``data_rows`` across ``n_pages`` as evenly as possible (by
+    rendered height), never exceeding the page budget, snapping cuts to section
+    boundaries, and never stranding an orphan tail (< MIN_ORPHAN_DATA_ROWS)."""
     row_h = block.get("rowHeights") or []
-    scale_w = _excel_width_scale(block)
-    budget = BODY_BUDGET / max(scale_w, _block_min_scale(block))
+
+    def h(r: int) -> float:
+        return row_h[r] if r < len(row_h) else 20
+
+    total = sum(h(r) for r in data_rows)
+    target = max(1.0, total / n_pages)
+    breaks = _section_break_rows(block, data_rows)
 
     chunks: list[list[int]] = []
+    cur: list[int] = []
+    used = 0.0
+    pages_left = n_pages
+    n = len(data_rows)
+
+    for idx, r in enumerate(data_rows):
+        rh = h(r)
+        rows_left = n - idx
+        # Hard cut: this row would overflow the usable page budget.
+        if cur and used + rh > budget:
+            chunks.append(cur)
+            cur = []
+            used = 0.0
+            if pages_left > 1:
+                pages_left -= 1
+        # Balanced cut: hit the per-page height target with pages to spare and no
+        # orphan risk. Snap early to a section band if one lands near the target.
+        elif (
+            cur
+            and pages_left > 1
+            and rows_left > MIN_ORPHAN_DATA_ROWS
+            and len(cur) >= MIN_ORPHAN_DATA_ROWS
+            and (used >= target or (r in breaks and used >= target * 0.8))
+        ):
+            chunks.append(cur)
+            cur = []
+            used = 0.0
+            pages_left -= 1
+        cur.append(r)
+        used += rh
+
+    if cur:
+        chunks.append(cur)
+
+    # Orphan sweep: pull rows back so the last page is never a tiny tail.
+    if len(chunks) >= 2 and len(chunks[-1]) < MIN_ORPHAN_DATA_ROWS:
+        while (
+            len(chunks[-1]) < MIN_ORPHAN_DATA_ROWS
+            and len(chunks) >= 2
+            and len(chunks[-2]) > MIN_ORPHAN_DATA_ROWS
+        ):
+            chunks[-1].insert(0, chunks[-2].pop())
+    return chunks
+
+
+def _excel_data_chunks(block: dict[str, Any], data_rows: list[int], header_h: float) -> list[list[int]]:
+    """Split data rows into balanced, section-aware page chunks.
+
+    First a greedy pass learns the minimum page count that fits the height
+    budget; then rows are distributed evenly across exactly that many pages so
+    we never produce a full page followed by a short orphan tail (the old
+    37/11 IDF and RO9–RO12 LCP failures)."""
+    row_h = block.get("rowHeights") or []
+
+    def h(r: int) -> float:
+        return row_h[r] if r < len(row_h) else 20
+
+    if not data_rows:
+        return []
+
+    # A page can hold as many natural rows as fit BODY_BUDGET once the range is
+    # scaled down to its minimum readable scale — so we only split when the range
+    # genuinely cannot fit even at min scale (Phase C rule 1: scale before split).
+    min_scale = max(_block_min_scale(block), 0.2)
+    budget = BODY_BUDGET / min_scale
+
+    # 1) Greedy pass → minimum page count.
+    n_pages = 0
     i = 0
     while i < len(data_rows):
         used = header_h
-        chunk: list[int] = []
+        took = False
         while i < len(data_rows):
-            r = data_rows[i]
-            h = row_h[r] if r < len(row_h) else 20
-            if chunk and used + h > budget:
+            if took and used + h(data_rows[i]) > budget:
                 break
-            chunk.append(r)
-            used += h
+            used += h(data_rows[i])
             i += 1
-        if not chunk:  # a single row taller than the whole budget: unavoidable
-            chunk.append(data_rows[i])
-            i += 1
-        chunks.append(chunk)
+            took = True
+        n_pages += 1
 
-    # Orphan avoidance: if the last chunk has fewer than MIN_ORPHAN_DATA_ROWS,
-    # pull rows from the previous chunk until the tail is big enough or the prior
-    # page would drop below MIN_ORPHAN_DATA_ROWS (then the split is unavoidable).
-    if len(chunks) >= 2 and len(chunks[-1]) < MIN_ORPHAN_DATA_ROWS:
-        while len(chunks[-1]) < MIN_ORPHAN_DATA_ROWS and len(chunks) >= 2 and len(chunks[-2]) > MIN_ORPHAN_DATA_ROWS:
-            moved = chunks[-2].pop()
-            chunks[-1].insert(0, moved)
-        if len(chunks) >= 2 and len(chunks[-1]) < MIN_ORPHAN_DATA_ROWS and len(chunks[-2]) >= 2:
-            moved = chunks[-2].pop()
-            chunks[-1].insert(0, moved)
-    return chunks
+    if n_pages <= 1:
+        return [list(data_rows)]
+
+    # 2) Balanced, section-aware distribution across exactly n_pages.
+    return _balanced_chunks(block, list(data_rows), header_h, n_pages, budget)
+
 
 
 def _manual_chunks(block: dict[str, Any], repeat: list[int], n_rows: int) -> list[list[int]]:
@@ -498,6 +586,8 @@ def _append_continuation_pages(
                 "pageType": base.get("pageType", "data-grid"),
                 "pageFamily": base.get("pageFamily", "table"),
                 "renderMode": base.get("renderMode", "normalized"),
+                "renderProfile": base.get("renderProfile", "singh360_standard_table"),
+                "normalizedHeaderStyle": base.get("normalizedHeaderStyle", "orange"),
                 "sourceSheet": base.get("sourceSheet", ""),
                 "sourceRange": base.get("sourceRange", ""),
                 "printArea": base.get("printArea"),
@@ -558,6 +648,82 @@ def continuation_summary(pages: list[dict[str, Any]]) -> dict[str, Any]:
         "totalSheets": len(sheets),
         "multiPageSheets": sum(1 for s in sheets if s["pages"] > 1),
     }
+
+
+def _page_font_size(page: dict[str, Any]) -> float:
+    """Font size the Singh360 profile targets for this page family."""
+    family = page.get("pageFamily", "table")
+    if family in ("matrix", "idfTable", "ioSchedule", "panelDetail", "rackLayout"):
+        return 7.5
+    if family in ("index", "text"):
+        return 9.0
+    return 8.0
+
+
+def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Per-page render diagnostics for the import/export log (Phase G).
+
+    Reports family, render profile, computed scale, font size, rows rendered and
+    the continuation count/reason so a user can see exactly why a page split."""
+    included = [p for p in pages if p.get("include", True)]
+    # Continuation counts per group.
+    group_counts: dict[str, int] = {}
+    for p in included:
+        gid = p.get("pageGroupId") or p.get("id")
+        group_counts[gid] = group_counts.get(gid, 0) + 1
+
+    out: list[dict[str, Any]] = []
+    for p in included:
+        gid = p.get("pageGroupId") or p.get("id")
+        cont_total = group_counts.get(gid, 1)
+        xr = next((b for b in (p.get("blocks") or []) if b.get("type") == "excelRange"), None)
+        best = round(_excel_best_scale(xr), 3) if xr else 1.0
+        min_scale = _block_min_scale(xr) if xr else EXCEL_MIN_SCALE
+        rows = len(xr.get("grid") or []) if xr else sum(
+            len(b.get("rows") or []) for b in (p.get("blocks") or []) if b.get("type") in ("table", "matrix")
+        )
+        if cont_total > 1:
+            reason = "balanced split (range exceeds one page at min scale)"
+        elif best < 1.0:
+            reason = "single page, scaled to fit body"
+        else:
+            reason = "single page"
+        out.append(
+            {
+                "sheetCode": p.get("displaySheetCode") or p.get("sheetCode", ""),
+                "pageTitle": p.get("sheetTitle", ""),
+                "included": bool(p.get("include", True)),
+                "renderMode": p.get("renderMode", "normalized"),
+                "renderProfile": p.get("renderProfile", "singh360_standard_table"),
+                "headerStyle": p.get("normalizedHeaderStyle", "orange"),
+                "bestScale": best,
+                "minScale": min_scale,
+                "fontSize": _page_font_size(p),
+                "rows": rows,
+                "continuationOf": p.get("continuationOf"),
+                "continuationTotal": cont_total,
+                "reason": reason,
+            }
+        )
+    return out
+
+
+def log_render_diagnostics(pages: list[dict[str, Any]]) -> None:
+    """Emit a one-line render diagnostic per page group to stdout (Phase G)."""
+    seen: set[str] = set()
+    for d in page_render_diagnostics(pages):
+        gid = d.get("continuationOf") or d.get("sheetCode")
+        if d.get("continuationOf") and gid in seen:
+            continue
+        seen.add(gid or "")
+        n = d["continuationTotal"]
+        pages_txt = f"{n} page{'s' if n != 1 else ''}"
+        print(
+            f"Sheet {d['sheetCode']} {d['pageTitle']}: {pages_txt}, "
+            f"scale {d['bestScale']}, font {d['fontSize']}, "
+            f"{'continuation ' + str(n - 1) if n > 1 else 'no continuation'} "
+            f"[{d['reason']}]"
+        )
 
 
 # --------------------------------------------------------------------------

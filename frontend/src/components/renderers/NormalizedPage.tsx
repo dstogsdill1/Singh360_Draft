@@ -6,6 +6,7 @@ import ExcelRangeRenderer from './ExcelRangeRenderer';
 import CoverPageRenderer from './CoverPageRenderer';
 import ImagePlaceholderRenderer from './ImagePlaceholderRenderer';
 import GeneratedIndexRenderer from './GeneratedIndexRenderer';
+import SheetTitleBand from './SheetTitleBand';
 import CanvasEditor from '../CanvasEditor';
 
 interface Props {
@@ -53,6 +54,11 @@ export default function NormalizedPage({
   const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
   const isIndexPage = page.pageType === 'index';
   const indexUsesExcelExact = isIndexPage && page.renderMode === 'excel_exact';
+  const isCoverPage = page.pageType === 'cover' || blocks.some((b) => b.type === 'cover');
+  // Singh360 standard orange title band: every non-cover, non-canvas page.
+  const headerStyle = (page.normalizedHeaderStyle as string | undefined) ?? 'orange';
+  const showBand = headerStyle === 'orange' && !isImageType && !isCoverPage;
+  const bandReserve = showBand ? 64 : 0;
   const hasOverlay = (page.canvasObjects?.length ?? 0) > 0;
   // A page has an editable base when it renders editable table/matrix/text cells
   // (schedules, matrices, hybrid sheets, the generated index). For those pages
@@ -77,7 +83,7 @@ export default function NormalizedPage({
       if (xr) {
         return (
           <div className="np">
-            <ExcelRangeRenderer block={xr} />
+            <ExcelRangeRenderer block={xr} reservedTop={bandReserve} />
           </div>
         );
       }
@@ -121,7 +127,7 @@ export default function NormalizedPage({
             case 'cover':
               return <CoverPageRenderer key={b.id} block={b} project={project} />;
             case 'excelRange':
-              return <ExcelRangeRenderer key={b.id} block={b} />;
+              return <ExcelRangeRenderer key={b.id} block={b} reservedTop={bandReserve} />;
             case 'table':
               return <TablePageRenderer key={b.id} block={b} onChange={patch} onDuplicateTable={() => onDuplicateBlock(page.id, b.id)} />;
             case 'matrix':
@@ -139,7 +145,8 @@ export default function NormalizedPage({
 
   return (
     <div className="np-page-root">
-      <div className={`np-base-layer ${overlayInteractive ? 'passthrough' : ''}`}>
+      <div className={`np-base-layer ${overlayInteractive ? 'passthrough' : ''} ${showBand ? 'np-has-band' : ''}`}>
+        {showBand && <SheetTitleBand page={page} />}
         {base}
       </div>
       <div className={`np-overlay-layer ${overlayInteractive ? 'active' : ''}`}>

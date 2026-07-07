@@ -4,6 +4,8 @@ import { BODY_W, BODY_H } from '../../model/sheetGeometry';
 
 interface Props {
   block: PageBlock;
+  /** Vertical space (px) consumed above the range by the orange title band. */
+  reservedTop?: number;
 }
 
 // Small insets so the range never touches the sheet frame / title block.
@@ -11,6 +13,9 @@ const PAD_X = 10;
 const PAD_Y = 10;
 const DEFAULT_COL = 64;
 const DEFAULT_ROW = 20;
+// A small range is grown to use the full printable body width, up to this cap,
+// so front-matter tables fill the page instead of floating tiny in the corner.
+const GROW_CAP = 1.85;
 
 /** Map an Excel border side spec to a CSS border shorthand. */
 function borderCss(side?: BorderSide): string | undefined {
@@ -102,7 +107,7 @@ function cellCss(st: ExcelCellStyle | undefined, rowH: number): React.CSSPropert
  * restyled with app defaults; the range is scaled proportionally to fit the
  * printable body (no scrollbars, no distortion).
  */
-export default function ExcelRangeRenderer({ block }: Props) {
+export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
   const grid = block.grid ?? [];
   const styles = block.styles ?? {};
   const colWidths = block.colWidths ?? [];
@@ -151,13 +156,22 @@ export default function ExcelRangeRenderer({ block }: Props) {
     let raf = 0;
     let last = -1;
     const fit = () => {
-      const availW = BODY_W - PAD_X * 2;
-      const availH = BODY_H - PAD_Y * 2;
+      // Measure the real container so grow-to-fill fits inside whatever padding
+      // chain wraps the range (.np / .np-xr), never clipping on the right.
+      const container = wrap.parentElement;
+      const containerW = container?.clientWidth ?? BODY_W;
+      const availW = Math.max(1, containerW - PAD_X * 2);
+      const availH = BODY_H - PAD_Y * 2 - Math.max(0, reservedTop);
       const w = table.scrollWidth || naturalW;
       const h = table.scrollHeight || 1;
       const sw = availW / w;
       const sh = availH / h;
-      const scale = scaleMode === 'fit_width' ? Math.min(1, sw) : Math.min(1, sw, sh);
+      // Fit-to-body: grow small ranges to fill the width (up to GROW_CAP) while
+      // staying within the available height; shrink oversized ranges to fit.
+      const scale =
+        scaleMode === 'fit_width'
+          ? Math.min(GROW_CAP, sw)
+          : Math.min(GROW_CAP, sw, sh);
       if (Math.abs(scale - last) < 0.003) return;
       last = scale;
       wrap.style.setProperty('--xr-scale', String(scale));
@@ -173,7 +187,7 @@ export default function ExcelRangeRenderer({ block }: Props) {
       ro.disconnect();
       cancelAnimationFrame(raf);
     };
-  }, [naturalW, nRows, nCols, scaleMode, grid]);
+  }, [naturalW, nRows, nCols, scaleMode, grid, reservedTop]);
 
   if (!nRows || !nCols) {
     return <div className="np np-empty">No source range data.</div>;

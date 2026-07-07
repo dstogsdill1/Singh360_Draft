@@ -99,6 +99,38 @@ Update statuses here as work progresses. `In Progress` = actively being built,
 | 5 | Edge-first defaults + clean label priority | Done |
 | 6 | Smoke coverage updates | Done |
 
+## Milestone 4E — Singh360 Standard Orange Table Renderer
+
+Normalize every non-cover table/instruction/schedule page to one Singh360
+standard: orange (`#FFC000`) title band + black centered title, gray (`#D9D9D9`)
+column headers, full-body-width auto-fit, and balanced (non-orphan) continuation.
+
+| Phase | Item | Status |
+| ----- | ---- | ------ |
+| 0 | Audit `docs/BUGLIST_TABLE_OUTPUT_4D.md` | Done |
+| A | `core/table_style_profile.py` (singh360_standard_table profile + recolor) | Done |
+| B | Auto-fit: grow to full body width + reserve title-band height | Done |
+| C | Balanced, section-aware, non-orphan continuation (scale-before-split) | Done |
+| D | Orange title band + gray headers; `normalizedHeaderStyle` (orange/source/none) | Done |
+| G | Per-page render diagnostics (`log_render_diagnostics`) | Done |
+| H | Smokes: standard style / autofit / balanced continuation / orange headers | Done |
+| E | Source workbook template restyle (SA31 tabs) | Deferred (honest) |
+| F | Responsibility Matrix source rebuild (SA38/Kyle style) | Deferred (honest) |
+| I | Full SA31 visual QA export | Pending (user, local — no customer data in repo) |
+
+### 4E honest flags
+
+- Recolor + balanced continuation + autofit are proven by four synthetic-fixture
+  smokes and the existing render smokes (all green). The **visual** result
+  (orange bands, gray headers, full-width fit, no clipping) must be confirmed by
+  the user against a real SA31 export — customer workbooks are not in the repo.
+- The key correctness fix: the split budget now uses `BODY_BUDGET / minScale`
+  (scale-before-split), so tables that fit at min readable scale no longer split
+  — this removes the LCP `15.1` RO9–RO12 orphan and the 37/11 IDF tail.
+- Phases E/F (rewriting the source SA31 workbook tabs and rebuilding the
+  Responsibility Matrix source) are deferred, not faked — they require the
+  customer workbook locally.
+
 ## Milestone 3E — Save hardening + connector routing tools
 
 | Phase | Item | Status |
