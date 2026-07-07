@@ -57,9 +57,12 @@ export default function NormalizedPage({
   const isIndexPage = page.pageType === 'index';
   const indexUsesExcelExact = isIndexPage && page.renderMode === 'excel_exact';
   const isCoverPage = page.pageType === 'cover' || blocks.some((b) => b.type === 'cover');
-  // Singh360 standard orange title band: every non-cover, non-canvas page.
+  // Singh360 standard dark page-header band: every non-cover included page,
+  // even blank drawing/layout/pdf-vector pages (FINAL RENDER POLISH 4G,
+  // Phase D) — those pages still need the top title/subtitle band, they
+  // just have no table body underneath it.
   const headerStyle = (page.normalizedHeaderStyle as string | undefined) ?? 'orange';
-  const showBand = headerStyle === 'orange' && !isImageType && !isCoverPage;
+  const showBand = headerStyle === 'orange' && !isCoverPage;
   const bandReserve = showBand ? 64 : 0;
   const hasOverlay = (page.canvasObjects?.length ?? 0) > 0;
   // A page has an editable base when it renders editable table/matrix/text cells

@@ -97,6 +97,11 @@ export interface PageBlock {
   contentWidth?: number;
   contentHeight?: number;
   sourceRowCount?: number;
+  /** Trailing-blank-range trim diagnostics (FINAL RENDER POLISH 4G, Phase B/I). */
+  rowsBeforeTrim?: number;
+  colsBeforeTrim?: number;
+  rowsAfterTrim?: number;
+  colsAfterTrim?: number;
 }
 
 export interface CellStyle {
@@ -161,6 +166,11 @@ export interface PageModel {
   minScale?: number;
   allowContinuation?: boolean;
   scaleMode?: string;
+  /** Trim trailing blank worksheet columns/rows from the normalized/export
+   *  render only — the Source tab is never affected (FINAL RENDER POLISH
+   *  4G, Phase B/H). Both default true. */
+  trimBlankRows?: boolean;
+  trimBlankColumns?: boolean;
   orientation?: string;
   template?: string;
   templateId: string;

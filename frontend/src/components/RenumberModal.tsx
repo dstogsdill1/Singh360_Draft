@@ -18,7 +18,11 @@ const CONT_SUFFIX = ['', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
  * their base page's code with a letter suffix (4.0 -> 4.0a, 4.0b).
  */
 export default function RenumberModal({ pages, onApply, onCancel }: Props) {
-  const [scheme, setScheme] = useState<Scheme>('ems');
+  // Default to "keep existing" (FINAL RENDER POLISH 4G, Phase A) — imported
+  // sheet codes already come from the workbook/index Sheet Code column, so
+  // opening this modal must never silently threaten to overwrite them with a
+  // classification/sequential guess unless the user explicitly picks one.
+  const [scheme, setScheme] = useState<Scheme>('keep');
   const [prefix, setPrefix] = useState('EMS');
 
   const included = useMemo(() => pages.filter((p) => p.include), [pages]);

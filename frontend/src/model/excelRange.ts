@@ -61,42 +61,119 @@ function cellText(v: unknown): string {
   return v == null ? '' : String(v);
 }
 
+function meaningfulStyle(st: ExcelCellStyle | undefined): boolean {
+  if (!st) return false;
+  if (st.fill) return true;
+  const b = st.borders;
+  return !!(b && (b.top || b.right || b.bottom || b.left));
+}
+
+/** Trim trailing blank worksheet columns/rows from a freshly-built excelRange
+ *  block (Normalized/export only — mirrors
+ *  core/workbook_importer.py::_trim_trailing_blank_ranges, FINAL RENDER
+ *  POLISH 4G, Phase B). Never trims into a real merge or below the header
+ *  band; leaves single-row/col grids alone. */
+function trimTrailingBlankRanges(
+  grid: string[][],
+  stylesRc: Record<string, ExcelCellStyle>,
+  merges: MergedCell[],
+  headerRows: number,
+): { grid: string[][]; styles: Record<string, ExcelCellStyle>; merges: MergedCell[]; rowsBefore: number; colsBefore: number } {
+  let nRows = grid.length;
+  let nCols = Math.max(0, ...grid.map((r) => r.length));
+  const rowsBefore = nRows;
+  const colsBefore = nCols;
+  if (!nRows || !nCols) return { grid, styles: stylesRc, merges, rowsBefore, colsBefore };
+
+  // A merge continuation cell never carries its own text/style (the anchor
+  // top-left cell holds both), so a decorative full-width title-band merge
+  // does not by itself make its trailing columns non-blank. Surviving merges
+  // simply have endRow/endCol clamped below.
+  const colBlank = (c: number): boolean => {
+    for (let r = 0; r < nRows; r += 1) {
+      if ((grid[r]?.[c] ?? '').trim()) return false;
+      if (meaningfulStyle(stylesRc[`${r}:${c}`])) return false;
+    }
+    return true;
+  };
+  const rowBlank = (r: number): boolean => {
+    const row = grid[r] ?? [];
+    if (row.some((v) => (v ?? '').trim())) return false;
+    for (let c = 0; c < nCols; c += 1) {
+      if (meaningfulStyle(stylesRc[`${r}:${c}`])) return false;
+    }
+    return true;
+  };
+
+  let c = nCols - 1;
+  while (c > 0 && colBlank(c)) c -= 1;
+  nCols = c + 1;
+
+  const floor = Math.max(0, headerRows - 1);
+  let r = nRows - 1;
+  while (r > floor && rowBlank(r)) r -= 1;
+  nRows = r + 1;
+
+  if (nRows === rowsBefore && nCols === colsBefore) {
+    return { grid, styles: stylesRc, merges, rowsBefore, colsBefore };
+  }
+
+  const newGrid = grid.slice(0, nRows).map((row) => row.slice(0, nCols));
+  const newStyles: Record<string, ExcelCellStyle> = {};
+  for (const [key, val] of Object.entries(stylesRc)) {
+    const [rs, cs] = key.split(':');
+    if (Number(rs) < nRows && Number(cs) < nCols) newStyles[key] = val;
+  }
+  const newMerges = merges
+    .filter((m) => m.startRow < nRows && m.startCol < nCols)
+    .map((m) => ({ ...m, endRow: Math.min(m.endRow, nRows - 1), endCol: Math.min(m.endCol, nCols - 1) }));
+
+  return { grid: newGrid, styles: newStyles, merges: newMerges, rowsBefore, colsBefore };
+}
+
 /** Build a full (unsplit) excelRange block from a worksheet. Mirrors
  *  core/workbook_importer.py::_excel_range_block. */
 export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock {
   const src = ws.grid ?? [];
-  const nRows = src.length;
-  const nCols = Math.max(0, ...src.map((r) => r.length));
-  const grid = src.map((r) => {
+  const nRows0 = src.length;
+  const nCols0 = Math.max(0, ...src.map((r) => r.length));
+  const grid0 = src.map((r) => {
     const row = r.map(cellText);
-    while (row.length < nCols) row.push('');
+    while (row.length < nCols0) row.push('');
     return row;
   });
 
-  const stylesRc: Record<string, ExcelCellStyle> = {};
+  const stylesRc0: Record<string, ExcelCellStyle> = {};
   for (const [key, val] of Object.entries(ws.styles ?? {})) {
     const p = parseA1(key);
-    if (p && p.r >= 0 && p.r < nRows && p.c >= 0 && p.c < nCols) {
-      stylesRc[`${p.r}:${p.c}`] = val;
+    if (p && p.r >= 0 && p.r < nRows0 && p.c >= 0 && p.c < nCols0) {
+      stylesRc0[`${p.r}:${p.c}`] = val;
     }
   }
 
-  const colWidths = Array.from({ length: nCols }, (_, c) => ws.colWidthsPx?.[c] ?? DEFAULT_COL);
-  const rowHeights = Array.from({ length: nRows }, (_, r) => ws.rowHeightsPx?.[r] ?? DEFAULT_ROW);
-
   let headerRows = 0;
-  for (let r = 0; r < Math.min(nRows, 4); r += 1) {
+  for (let r = 0; r < Math.min(nRows0, 4); r += 1) {
     let styled = false;
     let hasText = false;
-    for (let c = 0; c < nCols; c += 1) {
-      const st = stylesRc[`${r}:${c}`];
+    for (let c = 0; c < nCols0; c += 1) {
+      const st = stylesRc0[`${r}:${c}`];
       if (st && (st.bold || st.fill)) styled = true;
-      if ((grid[r][c] ?? '').trim()) hasText = true;
+      if ((grid0[r][c] ?? '').trim()) hasText = true;
     }
     if (styled && hasText) headerRows = r + 1;
     else break;
   }
-  if (headerRows === 0 && nRows) headerRows = 1;
+  if (headerRows === 0 && nRows0) headerRows = 1;
+
+  const merges0 = (ws.mergedCells ?? []).map((m) => ({ ...m }));
+  const trimmed = trimTrailingBlankRanges(grid0, stylesRc0, merges0, headerRows);
+  const grid = trimmed.grid;
+  const stylesRc = trimmed.styles;
+  const nRows = grid.length;
+  const nCols = Math.max(0, ...grid.map((r) => r.length));
+
+  const colWidths = Array.from({ length: nCols }, (_, c) => ws.colWidthsPx?.[c] ?? DEFAULT_COL);
+  const rowHeights = Array.from({ length: nRows }, (_, r) => ws.rowHeightsPx?.[r] ?? DEFAULT_ROW);
 
   return {
     id: blockId,
@@ -107,7 +184,7 @@ export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock 
     renderMode: 'excel_exact',
     grid,
     styles: stylesRc,
-    mergedCells: (ws.mergedCells ?? []).map((m) => ({ ...m })),
+    mergedCells: trimmed.merges,
     colWidths,
     rowHeights,
     srcRows: Array.from({ length: nRows }, (_, r) => r),
@@ -122,6 +199,10 @@ export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock 
     bodyRowFillMode: 'none',
     gridLines: true,
     editable: true,
+    rowsBeforeTrim: trimmed.rowsBefore,
+    colsBeforeTrim: trimmed.colsBefore,
+    rowsAfterTrim: nRows,
+    colsAfterTrim: nCols,
   };
 }
 

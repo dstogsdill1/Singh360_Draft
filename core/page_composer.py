@@ -25,6 +25,15 @@ TABLE_ROW_H = 30
 TABLE_ROW_EXTRA_LINE_H = 14
 TABLE_ROW_MAX_H = 92
 
+# FINAL RENDER POLISH 4G, Phase C: reserve a fixed bottom safety gap so an
+# excel_exact range's scale/split decision never targets the literal edge of
+# the printable body — a table that "just fits" at BODY_BUDGET used to render
+# flush against the title block with zero margin (the "tight against the
+# title block" / occasional clipped-last-row failure). Mirrors
+# ExcelRangeRenderer.tsx's MIN_BOTTOM_GAP.
+MIN_BOTTOM_GAP = 20
+SAFE_BODY_BUDGET = BODY_BUDGET - MIN_BOTTOM_GAP
+
 # Smallest uniform scale we allow an exact Excel range to shrink to before we
 # split it onto continuation pages (keeps dense tables readable at 11x17).
 # TABLE STYLE 4F Phase C: most Singh360 EMS workbooks carry ~9pt body text, so
@@ -127,10 +136,11 @@ def _block_allows_continuation(block: dict[str, Any]) -> bool:
 
 
 def _excel_best_scale(block: dict[str, Any]) -> float:
-    """Largest uniform scale that fits the range in the body (width and height)."""
+    """Largest uniform scale that fits the range in the body (width and height),
+    leaving MIN_BOTTOM_GAP of clean space above the title block (Phase C)."""
     scale_w = _excel_width_scale(block)
     _, h = _excel_natural_size(block)
-    return min(scale_w, BODY_BUDGET / h)
+    return min(scale_w, SAFE_BODY_BUDGET / h)
 
 
 def _excel_needs_split(block: dict[str, Any]) -> bool:
@@ -414,11 +424,12 @@ def _excel_data_chunks(block: dict[str, Any], data_rows: list[int], header_h: fl
     if not data_rows:
         return []
 
-    # A page can hold as many natural rows as fit BODY_BUDGET once the range is
-    # scaled down to its minimum readable scale — so we only split when the range
-    # genuinely cannot fit even at min scale (Phase C rule 1: scale before split).
+    # A page can hold as many natural rows as fit the safe body budget once the
+    # range is scaled down to its minimum readable scale — so we only split when
+    # the range genuinely cannot fit even at min scale (Phase C rule 1: scale
+    # before split; SAFE_BODY_BUDGET keeps the bottom-gap margin either way).
     min_scale = max(_block_min_scale(block), 0.2)
-    budget = BODY_BUDGET / min_scale
+    budget = SAFE_BODY_BUDGET / min_scale
 
     # 1) Greedy pass → minimum page count.
     n_pages = 0
@@ -483,8 +494,17 @@ def _split_excel_range_block(block: dict[str, Any]) -> list[dict[str, Any]]:
     # splitMode none / continuation disabled: never add pages.
     if not _block_allows_continuation(block):
         if _excel_best_scale(block) < _block_min_scale(block):
+            # Phase C rule 5: never claim a clip happened — the renderer always
+            # auto-shrinks to fit (it never crops), but shrinking this far means
+            # the result would read below the accepted minimum, which is worth a
+            # loud, exact-phrase warning in the editor/export diagnostics.
             warn = list(block.get("layoutWarnings") or [])
-            warn.append("Range exceeds one page; scaled/cropped (continuation disabled).")
+            warn.append(
+                "TABLE OVERFLOW — NOT EXPORTED CLIPPED: range exceeds one page "
+                "even at minimum readable scale, and continuation is disabled "
+                "for this page; content is auto-shrunk below the readable floor "
+                "instead of being cropped."
+            )
             block["layoutWarnings"] = warn
         return [block]
 
@@ -763,9 +783,26 @@ def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]
                 reason = "single page"
             clipping = bool(xr and (not _block_allows_continuation(xr)) and best < min_scale)
 
+        # Phase I: render-range-before/after-trim + safe body + bottom gap, so a
+        # diagnostic consumer can see exactly why a page did/did not need to
+        # split without re-deriving the fit math.
+        rows_before = xr.get("rowsBeforeTrim") if xr else None
+        cols_before = xr.get("colsBeforeTrim") if xr else None
+        rows_after = xr.get("rowsAfterTrim") if xr else None
+        cols_after = xr.get("colsAfterTrim") if xr else None
+        rendered_h = content_h * best if best else content_h
+        bottom_gap = round(BODY_BUDGET - rendered_h, 1)
+        # A negative gap can only happen if best_scale/content math disagrees
+        # with the renderer's own fit-to-body pass; flag it defensively too.
+        if bottom_gap < 0:
+            clipping = True
+
         out.append(
             {
                 "sheetCode": p.get("displaySheetCode") or p.get("sheetCode", ""),
+                "sourceSheetCode": p.get("sheetCode", ""),
+                "titleBlockSheetCode": p.get("displaySheetCode") or p.get("sheetCode", ""),
+                "outputOrder": p.get("order", 0),
                 "pageTitle": p.get("sheetTitle", ""),
                 "included": bool(p.get("include", True)),
                 "renderMode": p.get("renderMode", "normalized"),
@@ -779,6 +816,15 @@ def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "outputRows": rows,
                 "contentWidth": content_w,
                 "contentHeight": content_h,
+                "renderRangeBeforeTrim": (
+                    f"{rows_before}x{cols_before}" if rows_before is not None else ""
+                ),
+                "renderRangeAfterTrim": (
+                    f"{rows_after}x{cols_after}" if rows_after is not None else ""
+                ),
+                "safeBodyWidth": BODY_W,
+                "safeBodyHeight": SAFE_BODY_BUDGET,
+                "bottomGap": bottom_gap,
                 "rowsPerPage": rows,
                 "clipping": clipping,
                 "twoUp": two_up,
@@ -809,8 +855,8 @@ def log_render_diagnostics(pages: list[dict[str, Any]]) -> None:
         print(
             f"Sheet {d['sheetCode']} {d['pageTitle']}: profile={d['layoutProfile']}, {pages_txt}, "
             f"rows {d['outputRows']}, size {d['contentWidth']}x{d['contentHeight']}, "
-            f"scale {d['bestScale']}, font {d['fontSize']}, splitMode={d['splitMode']}, "
-            f"twoUp={d['twoUp']}, clipping={d['clipping']}, "
+            f"scale {d['bestScale']}, font {d['fontSize']}, bottomGap={d['bottomGap']}, "
+            f"splitMode={d['splitMode']}, twoUp={d['twoUp']}, clipping={d['clipping']}, "
             f"{'continuation ' + str(n - 1) if n > 1 else 'no continuation'} "
             f"[{d['reason']}]"
         )

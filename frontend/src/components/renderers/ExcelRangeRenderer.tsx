@@ -16,6 +16,11 @@ const DEFAULT_ROW = 20;
 // A small range is grown to use the full printable body width, up to this cap,
 // so front-matter tables fill the page instead of floating tiny in the corner.
 const GROW_CAP = 1.85;
+// FINAL RENDER POLISH 4G, Phase C: the previous fit-to-body scale used 100% of
+// the available height with zero margin, so any table that needed to shrink
+// landed flush against the title block (and a hair of rounding could clip a
+// row). Reserve a fixed safety gap so a table never touches the boundary.
+const MIN_BOTTOM_GAP = 20;
 
 /** Map an Excel border side spec to a CSS border shorthand. */
 function borderCss(side?: BorderSide): string | undefined {
@@ -163,7 +168,7 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
       const container = wrap.parentElement;
       const containerW = container?.clientWidth ?? BODY_W;
       const availW = Math.max(1, containerW - PAD_X * 2);
-      const availH = BODY_H - PAD_Y * 2 - Math.max(0, reservedTop);
+      const availH = Math.max(1, BODY_H - PAD_Y * 2 - Math.max(0, reservedTop) - MIN_BOTTOM_GAP);
       const w = table.scrollWidth || naturalW;
       const h = table.scrollHeight || 1;
       const sw = availW / w;

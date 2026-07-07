@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
-from openpyxl.utils.cell import column_index_from_string, get_column_letter
+from openpyxl.utils.cell import column_index_from_string, get_column_letter, range_boundaries
 
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 from core.page_normalizer import normalize_page
@@ -16,6 +17,7 @@ from core.page_composer import (
     EXCEL_EXACT_FAMILIES,
     EXCEL_MIN_SCALE,
     compose_pages,
+    continuation_code,
     log_render_diagnostics,
     page_family,
 )
@@ -32,11 +34,30 @@ DEFAULT_HEADER_STYLE = "orange"
 _INDEX_ALIASES = {
     "include": {"include", "inc", "include?", "use?", "selected"},
     "order": {"order", "no", "num", "seq", "sheet no", "sheet no."},
+    # The real drawing-package sheet number (e.g. "EMS 0.2") — separate from
+    # the plain sequential "Order" column. FINAL RENDER POLISH 4G, Phase A:
+    # the title block must show this, not the sequential output order.
+    "sheet_code": {"sheet code", "code", "drawing no", "drawing no.", "drawing number", "dwg no", "dwg no.", "dwg code", "sheet #"},
     "sheet_tab": {"sheet tab", "sheet", "worksheet", "tab", "tab name"},
     "sheet_title": {"page title", "title", "sheet title", "page name", "name"},
     "use_source": {"use", "source", "use / source", "use/source", "type"},
     "notes": {"notes", "remarks", "description", "comment"},
 }
+
+# Matches a sheet-code prefix baked into the worksheet tab name itself, e.g.
+# "EMS 0.2 Abbrev" -> "EMS 0.2". Used only as a fallback when the index sheet
+# has no dedicated Sheet Code column (Phase A).
+_TAB_SHEET_CODE_RE = re.compile(r"^([A-Za-z]{2,8})\s*[-_ ]?\s*(\d{1,3}\.\d{1,3})\b")
+
+
+def _sheet_code_from_tab(name: str) -> str:
+    """Best-effort sheet code parsed from a worksheet tab name (fallback only;
+    the index sheet's own Sheet Code column always takes precedence)."""
+    m = _TAB_SHEET_CODE_RE.match((name or "").strip())
+    if not m:
+        return ""
+    prefix, num = m.groups()
+    return f"{prefix.upper()} {num}"
 
 
 def _norm(v: Any) -> str:
@@ -213,7 +234,20 @@ def _worksheet_payload(ws, ws_data=None) -> dict[str, Any]:
                     styles[f"{col_letter}{r}"] = s
         grid.append(row_vals)
 
-    while grid and not any(grid[-1]):
+    # Trailing rows with no values are dropped by default, but never a row that
+    # still carries a meaningful fill/border — a decorative ruled/shaded row with
+    # no text is real content, not usedRange bloat (FINAL RENDER POLISH 4G,
+    # Phase B: this legacy pop predates the dedicated trim step below and must
+    # honor the same "meaningful style survives" rule so it can't silently
+    # discard a blocked/shaded row before that step ever sees it).
+    def _row_has_meaningful_style(row_idx0: int) -> bool:
+        row_num = row_idx0 + 1
+        return any(
+            _meaningful_style(styles.get(f"{get_column_letter(c)}{row_num}"))
+            for c in range(1, max_col + 1)
+        )
+
+    while grid and not any(grid[-1]) and not _row_has_meaningful_style(len(grid) - 1):
         grid.pop()
 
     n_rows = len(grid)
@@ -311,6 +345,7 @@ def _parse_index(workbook, index_sheet_name: str | None) -> list[dict[str, Any]]
         notes = row[col["notes"]] if 0 <= col["notes"] < len(row) else ""
         include_raw = row[col["include"]] if 0 <= col["include"] < len(row) else ""
         order_raw = row[col["order"]] if 0 <= col["order"] < len(row) else ""
+        sheet_code_raw = row[col["sheet_code"]] if 0 <= col["sheet_code"] < len(row) else ""
 
         if not tab and not title:
             continue
@@ -322,6 +357,7 @@ def _parse_index(workbook, index_sheet_name: str | None) -> list[dict[str, Any]]
                 "useSource": use_source,
                 "notes": notes,
                 "orderRaw": order_raw,
+                "sheetCodeRaw": sheet_code_raw,
                 "include": _included(include_raw, title or tab, use_source),
             }
         )
@@ -490,6 +526,8 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
             "allowContinuation": False,
             "minScale": EXCEL_MIN_SCALE,
             "scaleMode": "fit_body",
+            "trimBlankRows": True,
+            "trimBlankColumns": True,
         }
 
     settings: dict[str, Any] = {
@@ -497,6 +535,11 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
         "allowContinuation": True,
         "minScale": EXCEL_MIN_SCALE,
         "scaleMode": "fit_body",
+        # Normalized/export tables trim trailing blank worksheet columns/rows
+        # by default; the Source tab is unaffected (FINAL RENDER POLISH 4G,
+        # Phase B/H). Per-page override lives on the page dict, not here.
+        "trimBlankRows": True,
+        "trimBlankColumns": True,
     }
     if family == "matrix":
         settings["minScale"] = EXCEL_MIN_SCALE
@@ -629,22 +672,34 @@ def _idf_cell_value(row: list[str], spec: tuple[int, ...]) -> str:
     return " / ".join(parts)
 
 
-def _build_idf_network_block(ws: dict[str, Any], header_row: int, block_id: str) -> dict[str, Any]:
+def _build_idf_network_block(
+    ws: dict[str, Any],
+    header_row: int,
+    block_id: str,
+    *,
+    row_slice: tuple[int, int] | None = None,
+) -> dict[str, Any]:
     """Build the special RDM/IDF network table block (single full-width table
     by default; two-up ports 1-N / N+1-total only when a single stack would
-    fall below the readable font floor)."""
+    fall below the readable font floor).
+
+    ``row_slice`` (start, end-exclusive) restricts the block to a subset of
+    data rows — used only by the Phase E hard-split fallback below, which
+    turns an oversized network table into two balanced *single*-layout pages
+    instead of ever rendering two-up below the 6.5pt floor.
+    """
     grid = ws.get("grid") or []
     headers_src = grid[header_row] if header_row < len(grid) else []
     cols = _idf_columns(headers_src)
     headers = [c[0] for c in cols]
     col_widths = [_IDF_COL_W.get(h, 90) for h in headers]
 
-    data_rows: list[list[str]] = []
+    all_data_rows: list[list[str]] = []
     for row in grid[header_row + 1:]:
         vals = [_idf_cell_value(row, spec) for _, spec in cols]
         if any(v for v in vals):
-            data_rows.append(vals)
-    n = len(data_rows)
+            all_data_rows.append(vals)
+    total_n = len(all_data_rows)
 
     title_lines = []
     for row in grid[:header_row]:
@@ -653,6 +708,15 @@ def _build_idf_network_block(ws: dict[str, Any], header_row: int, block_id: str)
             title_lines.append(line)
     section_title = " — ".join(title_lines)
 
+    if row_slice is not None:
+        start, end = row_slice
+        data_rows = all_data_rows[start:end]
+        port_offset = start
+    else:
+        data_rows = all_data_rows
+        port_offset = 0
+    n = len(data_rows)
+
     single_w = sum(col_widths)
     usable_w = BODY_W - 80
     single_h = _IDF_HEADER_H + n * _IDF_ROW_H
@@ -660,22 +724,26 @@ def _build_idf_network_block(ws: dict[str, Any], header_row: int, block_id: str)
     two_up_h = _IDF_HEADER_H + half * _IDF_ROW_H
 
     warnings: list[str] = []
+    needs_hard_split = False
     if single_w <= usable_w and single_h <= BODY_BUDGET:
         layout_mode = "single"
         font_size = _IDF_TARGET_FONT
+    elif row_slice is None and two_up_h > BODY_BUDGET:
+        # Phase E rule 4: two-up would still overflow the page even at the
+        # floor font — never shrink further/silently clip. Split into two
+        # balanced, full-width *single*-layout pages (1-half / half+1-total)
+        # instead of rendering an oversized/illegible two-up stack.
+        needs_hard_split = True
+        layout_mode = "two_up"
+        font_size = _IDF_MIN_FONT
     else:
         layout_mode = "two_up"
         font_size = _IDF_TARGET_FONT
-        if two_up_h > BODY_BUDGET:
-            font_size = _IDF_MIN_FONT
-            warnings.append(
-                f"Network table has {n} rows; two-up layout is dense at the {_IDF_MIN_FONT}pt floor."
-            )
 
-    left_rows = data_rows[:half] if layout_mode == "two_up" else []
-    right_rows = data_rows[half:] if layout_mode == "two_up" else []
-    port_left = f"1–{half}" if half else ""
-    port_right = f"{half + 1}–{n}" if n > half else ""
+    left_rows = data_rows[:half] if layout_mode == "two_up" and not needs_hard_split else []
+    right_rows = data_rows[half:] if layout_mode == "two_up" and not needs_hard_split else []
+    port_left = f"{port_offset + 1}–{port_offset + half}" if half else ""
+    port_right = f"{port_offset + half + 1}–{port_offset + n}" if n > half else ""
 
     return {
         "id": block_id,
@@ -684,19 +752,21 @@ def _build_idf_network_block(ws: dict[str, Any], header_row: int, block_id: str)
         "sourceSheet": ws.get("sourceSheet") or ws.get("name", ""),
         "sourceRange": ws.get("sourceRange", ""),
         "renderMode": "excel_exact",
-        "layoutMode": layout_mode,
+        "layoutMode": "single" if needs_hard_split else layout_mode,
         "sectionTitle": section_title,
         "headers": headers,
-        "rows": data_rows if layout_mode == "single" else [],
+        "rows": data_rows if (layout_mode == "single" or needs_hard_split) else [],
         "leftRows": left_rows,
         "rightRows": right_rows,
-        "portRangeLeft": port_left,
-        "portRangeRight": port_right,
+        "portRangeLeft": port_left if not needs_hard_split else "",
+        "portRangeRight": port_right if not needs_hard_split else "",
+        "portRangeLabel": f"{port_offset + 1}–{port_offset + n}" if needs_hard_split else "",
         "colWidths": col_widths,
-        "fontSize": font_size,
-        "contentWidth": single_w if layout_mode == "single" else single_w,
-        "contentHeight": single_h if layout_mode == "single" else two_up_h,
+        "fontSize": _IDF_TARGET_FONT if needs_hard_split else font_size,
+        "contentWidth": single_w,
+        "contentHeight": single_h if (layout_mode == "single" or needs_hard_split) else two_up_h,
         "sourceRowCount": n,
+        "totalRowCount": total_n,
         "bodyRowFillMode": "none",
         "gridLines": True,
         "styleRole": "network-two-up",
@@ -707,7 +777,14 @@ def _build_idf_network_block(ws: dict[str, Any], header_row: int, block_id: str)
         "orientation": "landscape",
         "editable": False,
         "layoutWarnings": warnings,
+        "needsHardSplit": needs_hard_split,
+        "hardSplitBoundary": _idf_hard_split_boundary(total_n) if (needs_hard_split and row_slice is None) else None,
     }
+
+
+def _idf_hard_split_boundary(total_n: int) -> int:
+    """Balanced row split point for the Phase E hard-split fallback."""
+    return (total_n + 1) // 2
 
 
 def _preferred_col_widths(grid: list[list[str]], family: str, page_type: str) -> list[int]:
@@ -794,6 +871,122 @@ def _apply_table_geometry(block: dict[str, Any], family: str, page_type: str) ->
     block["gridLines"] = True
 
 
+def _meaningful_style(style: dict[str, Any] | None) -> bool:
+    """True when a style carries a real fill or border — i.e. the cell is
+    visually meaningful even with no text (a blocked/shaded cell, a ruled
+    line) and must never be trimmed as "blank" (Phase B)."""
+    if not style:
+        return False
+    if style.get("fill"):
+        return True
+    borders = style.get("borders") or {}
+    return any(borders.get(side) for side in ("top", "bottom", "left", "right"))
+
+
+def _print_area_last_col_row(print_area: str | None) -> tuple[int, int] | None:
+    """0-based (lastCol, lastRow) of an explicit print-area override, or None.
+
+    Trailing-blank trimming (Phase B) must never eat into a range the source
+    workbook explicitly defined as the print area, even if its tail is blank.
+    """
+    if not print_area:
+        return None
+    try:
+        rng = str(print_area).split(",")[0].split("!")[-1].replace("$", "")
+        min_col, min_row, max_col, max_row = range_boundaries(rng)
+        return max_col - 1, max_row - 1
+    except Exception:
+        return None
+
+
+def _trim_trailing_blank_ranges(
+    grid: list[list[str]],
+    styles_rc: dict[str, Any],
+    merges: list[dict[str, Any]],
+    header_rows: int,
+    *,
+    trim_rows: bool = True,
+    trim_cols: bool = True,
+    print_area: str | None = None,
+) -> tuple[list[list[str]], dict[str, Any], list[dict[str, Any]], int, int]:
+    """Deterministically drop trailing blank worksheet columns/rows from a
+    normalized excel_exact render block (FINAL RENDER POLISH 4G, Phase B).
+
+    A trailing row/column is only dropped when, across its full extent, every
+    cell has no value AND no meaningful fill/border AND is not the tail of a
+    real merged cell. Never trims past an explicit print-area override, and
+    never trims below the repeated header band. Returns the trimmed
+    grid/styles/merges plus the pre-trim row/col counts (for diagnostics).
+    """
+    n_rows = len(grid)
+    n_cols = max((len(r) for r in grid), default=0)
+    rows_before, cols_before = n_rows, n_cols
+    if n_rows == 0 or n_cols == 0:
+        return grid, styles_rc, merges, rows_before, cols_before
+
+    keep_col, keep_row = _print_area_last_col_row(print_area) or (-1, -1)
+
+    # A merge continuation cell never carries its own text or style (the
+    # anchor top-left cell holds both) — so a decorative full-width title
+    # band merge does not, by itself, make its trailing columns non-blank.
+    # Any merge that survives a trim simply has its endRow/endCol clamped
+    # below, so shrinking a banner's span loses no content.
+    def col_is_blank(c: int) -> bool:
+        for r in range(n_rows):
+            row = grid[r] if r < len(grid) else []
+            if c < len(row) and str(row[c] or "").strip():
+                return False
+            if _meaningful_style(styles_rc.get(f"{r}:{c}")):
+                return False
+        return True
+
+    def row_is_blank(r: int) -> bool:
+        row = grid[r] if r < len(grid) else []
+        if any(str(v or "").strip() for v in row):
+            return False
+        for c in range(max(n_cols, len(row))):
+            if _meaningful_style(styles_rc.get(f"{r}:{c}")):
+                return False
+        return True
+
+    if trim_cols:
+        c = n_cols - 1
+        while c > 0 and c > keep_col and col_is_blank(c):
+            c -= 1
+        n_cols = c + 1
+
+    if trim_rows:
+        floor = max(0, header_rows - 1)
+        r = n_rows - 1
+        while r > floor and r > keep_row and row_is_blank(r):
+            r -= 1
+        n_rows = r + 1
+
+    if n_rows == rows_before and n_cols == cols_before:
+        return grid, styles_rc, merges, rows_before, cols_before
+
+    new_grid = [list(row[:n_cols]) for row in grid[:n_rows]]
+    new_styles: dict[str, Any] = {}
+    for key, val in styles_rc.items():
+        try:
+            rs, cs = key.split(":")
+            r, c = int(rs), int(cs)
+        except (ValueError, AttributeError):
+            continue
+        if r < n_rows and c < n_cols:
+            new_styles[key] = val
+    new_merges: list[dict[str, Any]] = []
+    for m in merges:
+        if m.get("startRow", 0) >= n_rows or m.get("startCol", 0) >= n_cols:
+            continue
+        nm = dict(m)
+        nm["endRow"] = min(nm.get("endRow", 0), n_rows - 1)
+        nm["endCol"] = min(nm.get("endCol", 0), n_cols - 1)
+        new_merges.append(nm)
+
+    return new_grid, new_styles, new_merges, rows_before, cols_before
+
+
 def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build a self-contained excel_exact block (grid + 0-based styles + dims)."""
     grid = [list(r) for r in (ws.get("grid") or [])]
@@ -816,6 +1009,7 @@ def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[s
     col_widths = (col_widths + [64] * n_cols)[:n_cols]
     row_heights = list(ws.get("rowHeightsPx") or [])
     row_heights = (row_heights + [20] * n_rows)[:n_rows]
+    merged_cells = ws.get("mergedCells") or []
 
     # Header band: leading consecutive rows that are bold or filled (the yellow
     # controller / gray column headers). Repeated on continuation pages.
@@ -835,6 +1029,25 @@ def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[s
 
     ss = split_settings or {}
 
+    # Trailing-blank-range trim (FINAL RENDER POLISH 4G, Phase B). Normalized
+    # output only — the Source tab keeps the untouched worksheet grid because
+    # it is built from ``ws["grid"]`` directly, not from this block.
+    rows_before, cols_before = n_rows, n_cols
+    if ss.get("trimBlankRows", True) or ss.get("trimBlankColumns", True):
+        grid, styles_rc, merged_cells, rows_before, cols_before = _trim_trailing_blank_ranges(
+            grid,
+            styles_rc,
+            merged_cells,
+            header_rows,
+            trim_rows=ss.get("trimBlankRows", True),
+            trim_cols=ss.get("trimBlankColumns", True),
+            print_area=ws.get("printArea"),
+        )
+        n_rows = len(grid)
+        n_cols = max((len(r) for r in grid), default=0)
+        col_widths = col_widths[:n_cols]
+        row_heights = row_heights[:n_rows]
+
     return {
         "id": block_id,
         "type": "excelRange",
@@ -845,7 +1058,7 @@ def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[s
         "renderMode": "excel_exact",
         "grid": grid,
         "styles": styles_rc,
-        "mergedCells": ws.get("mergedCells") or [],
+        "mergedCells": merged_cells,
         "colWidths": col_widths,
         "rowHeights": row_heights,
         "srcRows": list(range(n_rows)),
@@ -860,6 +1073,10 @@ def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[s
         "bodyRowFillMode": "none",
         "gridLines": True,
         "editable": True,
+        "rowsBeforeTrim": rows_before,
+        "colsBeforeTrim": cols_before,
+        "rowsAfterTrim": n_rows,
+        "colsAfterTrim": n_cols,
     }
 
 
@@ -1009,12 +1226,24 @@ def import_workbook(
                     }
                 )
 
+        # Sheet number precedence (FINAL RENDER POLISH 4G, Phase A): the real
+        # workbook/index "Sheet Code" column always wins — never the plain
+        # sequential "Order" column or the output page order. Fall back to a
+        # code embedded in the tab name itself, then the Order column, then
+        # the raw output order as a last resort so nothing is ever blank.
+        sheet_code = (
+            (idx.get("sheetCodeRaw") if idx else "")
+            or _sheet_code_from_tab(ws["name"])
+            or (idx["orderRaw"] if idx and idx["orderRaw"] else "")
+            or str(order_cursor)
+        )
+
         page = {
             "id": f"page_{i+1}",
             "order": order_cursor,
             "include": include,
-            "sheetCode": idx["orderRaw"] if idx and idx["orderRaw"] else str(order_cursor),
-            "displaySheetCode": idx["orderRaw"] if idx and idx["orderRaw"] else str(order_cursor),
+            "sheetCode": sheet_code,
+            "displaySheetCode": sheet_code,
             "sheetTitle": title,
             "sheetTab": ws["name"],
             "pageType": page_type,
@@ -1032,6 +1261,8 @@ def import_workbook(
             "minScale": split_settings.get("minScale", EXCEL_MIN_SCALE),
             "allowContinuation": split_settings.get("allowContinuation", False),
             "scaleMode": split_settings.get("scaleMode", "fit_width"),
+            "trimBlankRows": split_settings.get("trimBlankRows", True),
+            "trimBlankColumns": split_settings.get("trimBlankColumns", True),
             "orientation": "landscape",
             "templateId": "ansi-b-standard",
             "linkedWorksheetId": ws["id"],
@@ -1047,6 +1278,46 @@ def import_workbook(
             "generatedContinuation": False,
             "layoutWarnings": [],
         }
+
+        # Phase E rule 4 fallback: a network table so dense that two-up would
+        # still fall below the readable floor gets split here (at import time,
+        # since idfNetworkTable blocks opt out of compose_pages's generic
+        # continuation splitter) into two balanced full-width single pages.
+        if exact_block is not None and exact_block.get("needsHardSplit") and exact_block.get("hardSplitBoundary"):
+            boundary = exact_block["hardSplitBoundary"]
+            total_n = exact_block.get("totalRowCount", 0)
+            left_block = _build_idf_network_block(
+                ws, idf_header_row, f"{ws['id']}_idf_a", row_slice=(0, boundary)
+            )
+            right_block = _build_idf_network_block(
+                ws, idf_header_row, f"{ws['id']}_idf_b", row_slice=(boundary, total_n)
+            )
+            page["blocks"] = [left_block]
+            page["twoUp"] = False
+            page["layoutWarnings"] = [
+                f"Network table has {total_n} ports; split into balanced pages "
+                f"1–{boundary} and {boundary + 1}–{total_n} instead of an "
+                "illegibly dense two-up layout."
+            ]
+            pages.append(page)
+            order_cursor += 1
+
+            cont_page = deepcopy(page)
+            cont_page["id"] = f"page_{i+1}_b"
+            cont_page["order"] = order_cursor
+            cont_page["sheetCode"] = continuation_code(sheet_code, 1)
+            cont_page["displaySheetCode"] = cont_page["sheetCode"]
+            if "continued" not in title.lower():
+                cont_page["sheetTitle"] = f"{title} — CONTINUED"
+            cont_page["blocks"] = [right_block]
+            cont_page["pageGroupId"] = page["pageGroupId"]
+            cont_page["continuationOf"] = page["id"]
+            cont_page["continuationIndex"] = 1
+            cont_page["generatedContinuation"] = True
+            pages.append(cont_page)
+            order_cursor += 1
+            continue
+
         pages.append(page)
         order_cursor += 1
 
