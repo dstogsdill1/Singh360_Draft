@@ -11,6 +11,7 @@ from openpyxl.utils.cell import column_index_from_string, get_column_letter
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 from core.page_normalizer import normalize_page
 from core.page_composer import (
+    BODY_BUDGET,
     BODY_W,
     EXCEL_EXACT_FAMILIES,
     EXCEL_MIN_SCALE,
@@ -18,7 +19,12 @@ from core.page_composer import (
     log_render_diagnostics,
     page_family,
 )
-from core.table_style_profile import RENDER_PROFILE, apply_singh360_profile
+from core.table_style_profile import (
+    ABSOLUTE_MIN_FONT_SIZE,
+    DENSE_FONT_SIZE,
+    RENDER_PROFILE,
+    apply_singh360_profile,
+)
 
 # Default Singh360 normalized header style applied to every non-cover page.
 DEFAULT_HEADER_STYLE = "orange"
@@ -493,14 +499,215 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
         "scaleMode": "fit_body",
     }
     if family == "matrix":
-        settings["minScale"] = 0.45
+        settings["minScale"] = EXCEL_MIN_SCALE
     elif family == "idfTable":
-        settings["minScale"] = 0.42
+        # Fallback safety net for IDF-ish sheets that aren't detected as a
+        # Port/Label network table (those get the dedicated two-up layout
+        # instead); keeps this rare fallback above the 6.5pt readable floor.
+        settings["minScale"] = 0.75
     elif family in ("ioSchedule", "panelDetail", "rackLayout"):
-        settings["minScale"] = 0.58 if family in ("ioSchedule", "panelDetail") else 0.48
+        settings["minScale"] = 0.75
     elif page_type == "index" or family == "text":
         settings.update({"splitMode": "none", "allowContinuation": False, "scaleMode": "fit_body"})
     return settings
+
+
+def _layout_profile_for(family: str, page_type: str, blob: str) -> str:
+    """Rendering-options profile per page type (TABLE STYLE 4F, Phase D)."""
+    if family == "companyInfo":
+        return "company_info"
+    if family == "idfTable":
+        return "network_48_port"
+    if family in ("matrix", "ioSchedule", "panelDetail", "rackLayout"):
+        return "io_table"
+    if family == "text" and "instruction" in blob:
+        return "instruction_table"
+    return "front_matter_table"
+
+
+# --------------------------------------------------------------------------
+# RDM / IDF network table — special two-up layout (TABLE STYLE 4F, Phase B).
+#
+# Default is always ONE full-width table (no rotation). Only when the real
+# port count makes a single stack unreadable does the layout switch to a
+# two-up (ports 1-N / N+1-total) side-by-side layout with essential columns
+# only. Never invents data: a column with no source match renders blank.
+# --------------------------------------------------------------------------
+_IDF_TARGET_FONT = DENSE_FONT_SIZE  # 7.0pt
+_IDF_MIN_FONT = ABSOLUTE_MIN_FONT_SIZE  # 6.5pt
+_IDF_ROW_H = 20
+_IDF_HEADER_H = 24
+_IDF_COL_W = {
+    "Port": 46,
+    "Label": 72,
+    "Device / Drop": 170,
+    "From": 92,
+    "To": 92,
+    "Path": 170,
+    "Cable": 90,
+    "Notes": 220,
+    "Controller / IP": 140,
+    "Controller ID": 90,
+    "IP Address": 100,
+    "Network": 90,
+}
+
+
+def _idf_col_index(headers: list[str], *keys: str) -> int | None:
+    low = [str(h or "").strip().lower() for h in headers]
+    for i, h in enumerate(low):
+        if any(k in h for k in keys):
+            return i
+    return None
+
+
+def _idf_header_row(grid: list[list[str]]) -> int | None:
+    """First row (within the leading 6) that looks like a Port/Label header."""
+    for r, row in enumerate(grid[:6]):
+        low = [str(c or "").strip().lower() for c in row]
+        has_port = any("port" in c for c in low)
+        has_id = any(("label" in c) or ("device" in c) or ("drop" in c) for c in low)
+        if has_port and has_id:
+            return r
+    return None
+
+
+def _is_idf_network_table(ws: dict[str, Any], family: str) -> tuple[bool, int | None]:
+    if family != "idfTable":
+        return False, None
+    header_row = _idf_header_row(ws.get("grid") or [])
+    return header_row is not None, header_row
+
+
+def _idf_columns(headers: list[str]) -> list[tuple[str, tuple[int, ...]]]:
+    """Map source headers onto the essential RDM/IDF network columns, only
+    combining optional detail columns (Controller ID + IP Address, Network +
+    Cable, From + To) when needed to keep the column count readable."""
+    idx = {
+        "port": _idf_col_index(headers, "port"),
+        "label": _idf_col_index(headers, "label"),
+        "device": _idf_col_index(headers, "device", "drop", "location"),
+        "from": _idf_col_index(headers, "from"),
+        "to": _idf_col_index(headers, "to"),
+        "cable": _idf_col_index(headers, "cable"),
+        "notes": _idf_col_index(headers, "notes", "remark", "comment"),
+        "controllerId": _idf_col_index(headers, "controller id", "controller"),
+        "ip": _idf_col_index(headers, "ip address", "ip addr", "ip"),
+        "network": _idf_col_index(headers, "network", "vlan"),
+    }
+    cols: list[tuple[str, tuple[int, ...]]] = [
+        ("Port", (idx["port"],) if idx["port"] is not None else ()),
+        ("Label", (idx["label"],) if idx["label"] is not None else ()),
+        ("Device / Drop", (idx["device"],) if idx["device"] is not None else ()),
+        ("From", (idx["from"],) if idx["from"] is not None else ()),
+        ("To", (idx["to"],) if idx["to"] is not None else ()),
+        ("Cable", (idx["cable"],) if idx["cable"] is not None else ()),
+        ("Notes", (idx["notes"],) if idx["notes"] is not None else ()),
+    ]
+    cols = [c for c in cols if c[1] or c[0] in ("Port", "Label", "Device / Drop")]
+
+    detail: list[tuple[str, tuple[int, ...]]] = []
+    if idx["controllerId"] is not None and idx["ip"] is not None:
+        detail.append(("Controller / IP", (idx["controllerId"], idx["ip"])))
+    elif idx["controllerId"] is not None:
+        detail.append(("Controller ID", (idx["controllerId"],)))
+    elif idx["ip"] is not None:
+        detail.append(("IP Address", (idx["ip"],)))
+    if idx["network"] is not None:
+        detail.append(("Network", (idx["network"],)))
+    cols = cols + detail
+
+    # Only combine From/To -> Path if the column count is still too wide.
+    if len(cols) > 9 and idx["from"] is not None and idx["to"] is not None:
+        cols = [c for c in cols if c[0] not in ("From", "To")]
+        cols.insert(3, ("Path", (idx["from"], idx["to"])))
+    return cols
+
+
+def _idf_cell_value(row: list[str], spec: tuple[int, ...]) -> str:
+    parts = [str(row[i]).strip() for i in spec if i < len(row) and str(row[i] or "").strip()]
+    return " / ".join(parts)
+
+
+def _build_idf_network_block(ws: dict[str, Any], header_row: int, block_id: str) -> dict[str, Any]:
+    """Build the special RDM/IDF network table block (single full-width table
+    by default; two-up ports 1-N / N+1-total only when a single stack would
+    fall below the readable font floor)."""
+    grid = ws.get("grid") or []
+    headers_src = grid[header_row] if header_row < len(grid) else []
+    cols = _idf_columns(headers_src)
+    headers = [c[0] for c in cols]
+    col_widths = [_IDF_COL_W.get(h, 90) for h in headers]
+
+    data_rows: list[list[str]] = []
+    for row in grid[header_row + 1:]:
+        vals = [_idf_cell_value(row, spec) for _, spec in cols]
+        if any(v for v in vals):
+            data_rows.append(vals)
+    n = len(data_rows)
+
+    title_lines = []
+    for row in grid[:header_row]:
+        line = " ".join(str(c).strip() for c in row if str(c or "").strip())
+        if line:
+            title_lines.append(line)
+    section_title = " — ".join(title_lines)
+
+    single_w = sum(col_widths)
+    usable_w = BODY_W - 80
+    single_h = _IDF_HEADER_H + n * _IDF_ROW_H
+    half = (n + 1) // 2 if n else 0
+    two_up_h = _IDF_HEADER_H + half * _IDF_ROW_H
+
+    warnings: list[str] = []
+    if single_w <= usable_w and single_h <= BODY_BUDGET:
+        layout_mode = "single"
+        font_size = _IDF_TARGET_FONT
+    else:
+        layout_mode = "two_up"
+        font_size = _IDF_TARGET_FONT
+        if two_up_h > BODY_BUDGET:
+            font_size = _IDF_MIN_FONT
+            warnings.append(
+                f"Network table has {n} rows; two-up layout is dense at the {_IDF_MIN_FONT}pt floor."
+            )
+
+    left_rows = data_rows[:half] if layout_mode == "two_up" else []
+    right_rows = data_rows[half:] if layout_mode == "two_up" else []
+    port_left = f"1–{half}" if half else ""
+    port_right = f"{half + 1}–{n}" if n > half else ""
+
+    return {
+        "id": block_id,
+        "type": "idfNetworkTable",
+        "sourceWorksheetId": ws["id"],
+        "sourceSheet": ws.get("sourceSheet") or ws.get("name", ""),
+        "sourceRange": ws.get("sourceRange", ""),
+        "renderMode": "excel_exact",
+        "layoutMode": layout_mode,
+        "sectionTitle": section_title,
+        "headers": headers,
+        "rows": data_rows if layout_mode == "single" else [],
+        "leftRows": left_rows,
+        "rightRows": right_rows,
+        "portRangeLeft": port_left,
+        "portRangeRight": port_right,
+        "colWidths": col_widths,
+        "fontSize": font_size,
+        "contentWidth": single_w if layout_mode == "single" else single_w,
+        "contentHeight": single_h if layout_mode == "single" else two_up_h,
+        "sourceRowCount": n,
+        "bodyRowFillMode": "none",
+        "gridLines": True,
+        "styleRole": "network-two-up",
+        "splitMode": "none",
+        "allowContinuation": False,
+        "minScale": 1.0,
+        "scaleMode": "fit_body",
+        "orientation": "landscape",
+        "editable": False,
+        "layoutWarnings": warnings,
+    }
 
 
 def _preferred_col_widths(grid: list[list[str]], family: str, page_type: str) -> list[int]:
@@ -760,6 +967,8 @@ def import_workbook(
 
         use_exact = _should_use_excel_exact(page_type, family, ws)
         split_settings = _split_settings_for_page(family, page_type, use_exact)
+        is_idf_network, idf_header_row = _is_idf_network_table(ws, family)
+        layout_profile = _layout_profile_for(family, page_type, f"{ws['name']} {title} {use_source}".lower())
 
         # Cover keeps its own look; every other page gets the Singh360 profile.
         header_style = "source" if page_type == "cover" else DEFAULT_HEADER_STYLE
@@ -767,6 +976,11 @@ def import_workbook(
         if family == "companyInfo":
             exact_block = None
             blocks = [_company_info_block(ws, f"{ws['id']}_company")]
+        elif is_idf_network and idf_header_row is not None:
+            split_settings = {"splitMode": "none", "allowContinuation": False, "minScale": 1.0, "scaleMode": "fit_body"}
+            exact_block = _build_idf_network_block(ws, idf_header_row, f"{ws['id']}_idf")
+            use_exact = True
+            blocks = [exact_block]
         elif use_exact:
             render_ws = _filter_index_payload_for_output(ws) if page_type == "index" else ws
             exact_block = _excel_range_block(render_ws, f"{ws['id']}_xr", split_settings)
@@ -805,6 +1019,8 @@ def import_workbook(
             "sheetTab": ws["name"],
             "pageType": page_type,
             "pageFamily": family,
+            "layoutProfile": layout_profile,
+            "twoUp": bool(exact_block and exact_block.get("layoutMode") == "two_up"),
             "renderMode": "excel_exact" if use_exact else "normalized",
             "renderProfile": RENDER_PROFILE,
             "normalizedHeaderStyle": header_style,

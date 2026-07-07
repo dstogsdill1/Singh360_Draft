@@ -90,8 +90,8 @@
 }
 .np-title-band {
   height: 40px;
-  background: #FFC000;
-  color: #000;
+  background: #262a30;
+  color: #fff;
   border: 1.5px solid #000;
   display: flex;
   align-items: center;
@@ -106,14 +106,14 @@
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #000;
+  color: #fff;
   text-align: center;
   line-height: 1.05;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.np-title-band-cont { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #6b4b00; }
+.np-title-band-cont { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #ffb020; }
 .np-subtitle-band {
   height: 22px;
   background: #f2f2f2;
@@ -241,6 +241,52 @@
   border: 1px solid #a6a6a6;
   background: #fff;
   color: #111;
+}
+
+/* RDM / IDF network table — single full-width or two-up layout (TABLE STYLE 4F). */
+.np-idf-single { width: 100%; font-family: Calibri, "Segoe UI", Arial, sans-serif; }
+.np-idf-section-band {
+  background: #FFC000;
+  color: #000;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 5px 8px;
+  border: 1px solid #000;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.np-idf-two-up-row { display: flex; gap: 18px; align-items: flex-start; width: 100%; }
+.np-idf-two-up-col { flex: 1 1 50%; min-width: 0; }
+.np-idf-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-family: Calibri, "Segoe UI", Arial, sans-serif;
+  font-size: inherit;
+  background: #fff;
+  color: #111;
+}
+.np-idf-table th,
+.np-idf-table td {
+  box-sizing: border-box;
+  border: 1px solid #a6a6a6;
+  padding: 2px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.np-idf-table td { background: #fff; color: #111; }
+.np-idf-colhead { background: #D9D9D9; color: #000; font-weight: 700; }
+.np-idf-caption {
+  background: #FFC000;
+  color: #000;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .np-company-info {

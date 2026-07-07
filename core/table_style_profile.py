@@ -34,9 +34,14 @@ GRID_COLOR = "#A6A6A6"
 SECTION_DIVIDER = "#000000"
 
 FONT_FAMILY = "Calibri"
-DENSE_FONT_SIZE = 7.5
+# Minimum readable settings (TABLE STYLE 4F, Phase C):
+#   normal table 8pt, dense table 7pt, absolute floor 6.5pt,
+#   header 7.5-8.5pt, section band 8-10pt.
+DENSE_FONT_SIZE = 7.0
 NORMAL_FONT_SIZE = 8.0
-TITLE_FONT_SIZE = 11.0
+ABSOLUTE_MIN_FONT_SIZE = 6.5
+HEADER_FONT_SIZE = 8.0
+TITLE_FONT_SIZE = 9.0
 
 # A fill is considered a "controller / section accent" band (kept) when it is a
 # saturated gold/amber. A fill is considered a "dark title band" (recolored to

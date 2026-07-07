@@ -27,10 +27,16 @@ TABLE_ROW_MAX_H = 92
 
 # Smallest uniform scale we allow an exact Excel range to shrink to before we
 # split it onto continuation pages (keeps dense tables readable at 11x17).
-EXCEL_MIN_SCALE = 0.5
+# TABLE STYLE 4F Phase C: most Singh360 EMS workbooks carry ~9pt body text, so
+# a 0.73 floor keeps the rendered text at/above the 6.5pt absolute minimum
+# (9pt * 0.73 ~= 6.6pt) instead of silently shrinking further.
+EXCEL_MIN_SCALE = 0.73
 
 # Minimum data rows on a continuation page; smaller tails merge onto prior page.
 MIN_ORPHAN_DATA_ROWS = 4
+
+# Used only when an idfNetworkTable block is somehow missing its fontSize.
+DENSE_FONT_SIZE_FALLBACK = 7.0
 
 # Page families whose pages render the real Excel range verbatim (excel_exact).
 EXCEL_EXACT_FAMILIES = {
@@ -625,6 +631,8 @@ def _append_continuation_pages(
                 "sheetTab": base.get("sheetTab", ""),
                 "pageType": base.get("pageType", "data-grid"),
                 "pageFamily": base.get("pageFamily", "table"),
+                "layoutProfile": base.get("layoutProfile", "front_matter_table"),
+                "twoUp": False,
                 "renderMode": base.get("renderMode", "normalized"),
                 "renderProfile": base.get("renderProfile", "singh360_standard_table"),
                 "normalizedHeaderStyle": base.get("normalizedHeaderStyle", "orange"),
@@ -691,12 +699,16 @@ def continuation_summary(pages: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _page_font_size(page: dict[str, Any]) -> float:
-    """Font size the Singh360 profile targets for this page family."""
+    """Font size the Singh360 profile targets for this page family.
+
+    Minimums (TABLE STYLE 4F, Phase C): normal table 8pt, dense table 7pt,
+    absolute floor 6.5pt. The RDM/IDF network layout carries its own explicit
+    ``fontSize`` on its block (see ``page_render_diagnostics``), which takes
+    priority over this family default.
+    """
     family = page.get("pageFamily", "table")
     if family in ("matrix", "idfTable", "ioSchedule", "panelDetail", "rackLayout"):
-        return 7.5
-    if family in ("index", "text"):
-        return 9.0
+        return 7.0
     return 8.0
 
 
@@ -716,20 +728,41 @@ def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]
     for p in included:
         gid = p.get("pageGroupId") or p.get("id")
         cont_total = group_counts.get(gid, 1)
-        xr = next((b for b in (p.get("blocks") or []) if b.get("type") == "excelRange"), None)
-        best = round(_excel_best_scale(xr), 3) if xr else 1.0
-        min_scale = _block_min_scale(xr) if xr else EXCEL_MIN_SCALE
-        content_w, content_h = _excel_natural_size(xr) if xr else (0, 0)
-        rows = len(xr.get("grid") or []) if xr else sum(
-            len(b.get("rows") or []) for b in (p.get("blocks") or []) if b.get("type") in ("table", "matrix")
-        )
-        if cont_total > 1:
-            reason = "balanced split (range exceeds one page at min scale)"
-        elif best < 1.0:
-            reason = "single page, scaled to fit body"
+        blocks = p.get("blocks") or []
+        xr = next((b for b in blocks if b.get("type") == "excelRange"), None)
+        idf = next((b for b in blocks if b.get("type") == "idfNetworkTable"), None)
+
+        two_up = bool(idf and idf.get("layoutMode") == "two_up")
+        if idf is not None:
+            best = 1.0
+            min_scale = 1.0
+            content_w = int(idf.get("contentWidth") or 0)
+            content_h = int(idf.get("contentHeight") or 0)
+            rows = int(idf.get("sourceRowCount") or 0)
+            font_size = float(idf.get("fontSize") or DENSE_FONT_SIZE_FALLBACK)
+            clipping = bool(idf.get("layoutWarnings"))
+            if two_up:
+                reason = "network_48_port: two-up 1–24 / 25–48" if rows == 48 else (
+                    f"network_48_port: two-up {idf.get('portRangeLeft', '')} / {idf.get('portRangeRight', '')}"
+                )
+            else:
+                reason = "network_48_port: one-page full table, font >= 6.5"
         else:
-            reason = "single page"
-        clipping = bool(xr and (not _block_allows_continuation(xr)) and best < min_scale)
+            best = round(_excel_best_scale(xr), 3) if xr else 1.0
+            min_scale = _block_min_scale(xr) if xr else EXCEL_MIN_SCALE
+            content_w, content_h = _excel_natural_size(xr) if xr else (0, 0)
+            rows = len(xr.get("grid") or []) if xr else sum(
+                len(b.get("rows") or []) for b in blocks if b.get("type") in ("table", "matrix")
+            )
+            font_size = _page_font_size(p)
+            if cont_total > 1:
+                reason = "balanced split (range exceeds one page at min scale)"
+            elif best < 1.0:
+                reason = "single page, scaled to fit body"
+            else:
+                reason = "single page"
+            clipping = bool(xr and (not _block_allows_continuation(xr)) and best < min_scale)
+
         out.append(
             {
                 "sheetCode": p.get("displaySheetCode") or p.get("sheetCode", ""),
@@ -737,16 +770,19 @@ def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "included": bool(p.get("include", True)),
                 "renderMode": p.get("renderMode", "normalized"),
                 "renderProfile": p.get("renderProfile", "singh360_standard_table"),
+                "layoutProfile": p.get("layoutProfile", "front_matter_table"),
                 "headerStyle": p.get("normalizedHeaderStyle", "orange"),
                 "bestScale": best,
                 "minScale": min_scale,
-                "fontSize": _page_font_size(p),
+                "fontSize": font_size,
                 "sourceRows": len(xr.get("srcRows") or []) if xr else rows,
                 "outputRows": rows,
                 "contentWidth": content_w,
                 "contentHeight": content_h,
                 "rowsPerPage": rows,
                 "clipping": clipping,
+                "twoUp": two_up,
+                "splitMode": p.get("splitMode", "none"),
                 "continuationOf": p.get("continuationOf"),
                 "continuationTotal": cont_total,
                 "reason": reason,
@@ -756,7 +792,12 @@ def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def log_render_diagnostics(pages: list[dict[str, Any]]) -> None:
-    """Emit a one-line render diagnostic per page group to stdout (Phase G)."""
+    """Emit a one-line render diagnostic per page group to stdout (Phase G/E).
+
+    Includes page code, title, render/layout profile, font size, scale, table
+    width/height, split mode, split reason, row count, and (for RDM/IDF pages)
+    whether a two-up layout was used.
+    """
     seen: set[str] = set()
     for d in page_render_diagnostics(pages):
         gid = d.get("continuationOf") or d.get("sheetCode")
@@ -766,9 +807,10 @@ def log_render_diagnostics(pages: list[dict[str, Any]]) -> None:
         n = d["continuationTotal"]
         pages_txt = f"{n} page{'s' if n != 1 else ''}"
         print(
-            f"Sheet {d['sheetCode']} {d['pageTitle']}: {pages_txt}, "
+            f"Sheet {d['sheetCode']} {d['pageTitle']}: profile={d['layoutProfile']}, {pages_txt}, "
             f"rows {d['outputRows']}, size {d['contentWidth']}x{d['contentHeight']}, "
-            f"scale {d['bestScale']}, font {d['fontSize']}, clipping={d['clipping']}, "
+            f"scale {d['bestScale']}, font {d['fontSize']}, splitMode={d['splitMode']}, "
+            f"twoUp={d['twoUp']}, clipping={d['clipping']}, "
             f"{'continuation ' + str(n - 1) if n > 1 else 'no continuation'} "
             f"[{d['reason']}]"
         )
@@ -791,6 +833,8 @@ def compose_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         blocks = page.get("blocks") or []
         page_type = page.get("pageType", "")
         page.setdefault("pageFamily", page_family(page.get("sheetTab", ""), page.get("sheetTitle", ""), ""))
+        page.setdefault("layoutProfile", "front_matter_table")
+        page.setdefault("twoUp", False)
         page.setdefault("pageGroupId", page["id"])
         page.setdefault("continuationIndex", 0)
         page.setdefault("continuationOf", None)

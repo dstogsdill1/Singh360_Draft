@@ -9,6 +9,7 @@ export type BlockType =
   | 'table'
   | 'matrix'
   | 'excelRange'
+  | 'idfNetworkTable'
   | 'imagePlaceholder'
   | 'canvas'
   | 'note'
@@ -85,6 +86,17 @@ export interface PageBlock {
   printArea?: string | null;
   bodyRowFillMode?: 'none' | 'source' | 'zebra';
   gridLines?: boolean;
+  /** RDM / IDF network table (idfNetworkTable) payload — TABLE STYLE 4F. */
+  layoutMode?: 'single' | 'two_up';
+  sectionTitle?: string;
+  leftRows?: string[][];
+  rightRows?: string[][];
+  portRangeLeft?: string;
+  portRangeRight?: string;
+  fontSize?: number;
+  contentWidth?: number;
+  contentHeight?: number;
+  sourceRowCount?: number;
 }
 
 export interface CellStyle {
@@ -131,6 +143,12 @@ export interface PageModel {
   sheetTab: string;
   pageType: PageType;
   pageFamily?: string;
+  /** Rendering-options profile: front_matter_table | io_table | network_48_port
+   *  | instruction_table | company_info (TABLE STYLE 4F, Phase D). */
+  layoutProfile?: string;
+  /** True when a network_48_port page used the two-up (ports 1-N / N+1-total)
+   *  side-by-side layout instead of one full-width table. */
+  twoUp?: boolean;
   renderMode?: string;
   /** Singh360 render profile + normalized header style (Milestone 4D). */
   renderProfile?: string;
