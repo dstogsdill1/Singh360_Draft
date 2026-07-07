@@ -51,7 +51,7 @@ interface Props {
   onDropImageFile: (file: File) => void;
   onDropComponent: (url: string, name: string, label: string | null, clientX: number, clientY: number) => void;
   onScaleChange: (scale: number) => void;
-  onGridChange: (worksheetId: string, grid: string[][]) => void;
+  onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
 }
 
@@ -80,7 +80,7 @@ export default function DocumentView({
   onDropImageFile,
   onDropComponent,
   onScaleChange,
-  onGridChange,
+  onWorksheetChange,
   onCanvasChange,
 }: Props) {
   const worksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
@@ -195,7 +195,7 @@ export default function DocumentView({
                 onBlockChange={onBlockChange}
                 onPatchPage={onPatchPage}
                 onDuplicateBlock={onDuplicateBlock}
-                onGridChange={onGridChange}
+                onWorksheetChange={onWorksheetChange}
                 onCanvasChange={onCanvasChange}
               />
             </SheetFrame>

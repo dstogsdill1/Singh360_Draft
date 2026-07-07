@@ -14,6 +14,7 @@ interface Props {
   overflowWarning?: boolean;
   onMergeIntoPrevious?: () => void;
   onMakeIndependent?: () => void;
+  onReapplyPagination?: () => void;
   onConnectorConvert?: (kind: 'line' | 'arrow' | 'polyline' | 'elbow') => void;
   onConnectorAddVertex?: () => void;
   onConnectorDeleteVertex?: () => void;
@@ -31,6 +32,7 @@ export default function PropertiesPanel({
   overflowWarning,
   onMergeIntoPrevious,
   onMakeIndependent,
+  onReapplyPagination,
   onConnectorConvert,
   onConnectorAddVertex,
   onConnectorDeleteVertex,
@@ -134,6 +136,92 @@ export default function PropertiesPanel({
           <textarea id="page-notes" value={page.notes} onChange={(e) => onChange({ ...page, notes: e.target.value })} rows={4} />
         </div>
       </div>
+
+      {page.renderMode === 'excel_exact' && !page.continuationOf && (
+        <div className="props-group">
+          <h3>Excel Range / Continuation</h3>
+          <div className="field">
+            <label htmlFor="page-src-range">Source Range</label>
+            <input
+              id="page-src-range"
+              value={page.sourceRange || ''}
+              onChange={(e) => onChange({ ...page, sourceRange: e.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="page-print-area">Print Area</label>
+            <input
+              id="page-print-area"
+              value={page.printArea || ''}
+              placeholder="e.g. A1:K45"
+              onChange={(e) => onChange({ ...page, printArea: e.target.value || null })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="page-split-mode">Split Mode</label>
+            <select
+              id="page-split-mode"
+              value={page.splitMode || 'auto_rows'}
+              onChange={(e) => onChange({ ...page, splitMode: e.target.value })}
+            >
+              <option value="none">None (scale/warn only)</option>
+              <option value="auto_rows">Auto — split by rows</option>
+              <option value="manual_ranges">Manual ranges</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="page-repeat-rows">Repeat Header Rows (0-based, comma)</label>
+            <input
+              id="page-repeat-rows"
+              value={(page.repeatRows ?? []).join(', ')}
+              onChange={(e) => {
+                const rows = e.target.value
+                  .split(',')
+                  .map((x) => x.trim())
+                  .filter(Boolean)
+                  .map((x) => Number(x))
+                  .filter((n) => Number.isFinite(n) && n >= 0);
+                onChange({ ...page, repeatRows: rows });
+              }}
+            />
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="page-min-scale">Min Scale</label>
+              <input
+                id="page-min-scale"
+                type="number"
+                min={0.2}
+                max={1}
+                step={0.05}
+                value={page.minScale ?? 0.5}
+                onChange={(e) => onChange({ ...page, minScale: Number(e.target.value) })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="page-allow-cont" title="Allow automatic continuation pages when the range overflows">
+                <input
+                  id="page-allow-cont"
+                  type="checkbox"
+                  checked={page.allowContinuation !== false}
+                  onChange={(e) => onChange({ ...page, allowContinuation: e.target.checked })}
+                />
+                {' '}Allow continuation
+              </label>
+            </div>
+          </div>
+          {onReapplyPagination && (
+            <button
+              type="button"
+              className="props-btn"
+              title="Re-run row-splitting with the settings above"
+              onClick={onReapplyPagination}
+            >
+              Re-apply Pagination
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="props-group">
         <h3>Selection Properties</h3>

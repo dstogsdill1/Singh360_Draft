@@ -116,6 +116,8 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
     for key in ("projectDisplayName", "projectFolder"):
         if isinstance(project.get(key), str) and project[key]:
             merged[key] = project[key]
+    if "paginationLocked" in project:
+        merged["paginationLocked"] = bool(project["paginationLocked"])
 
     merged = sanitize_json(merged)
     merged["modified"] = utcnow_iso()

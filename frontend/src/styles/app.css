@@ -546,6 +546,19 @@ button, select, input, textarea { font: inherit; }
 .modal-x { border: none; background: transparent; font-size: 22px; line-height: 1; cursor: pointer; color: #556; }
 .modal-body { padding: 14px 16px; overflow: auto; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #d5dade; }
+
+/* Continuation preview modal (workbook import) */
+.cp-intro { font-size: 13px; color: #444; margin: 0 0 8px; line-height: 1.45; }
+.cp-file { margin: 0 0 12px; font-size: 13px; }
+.cp-status { color: #556; font-style: italic; }
+.cp-error { color: #b42318; }
+.cp-totals { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; font-size: 14px; }
+.cp-multi { color: #a5661a; font-size: 13px; }
+.cp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cp-table th { background: #eceef1; border: 1px solid #c9ccd0; padding: 6px 8px; text-align: left; }
+.cp-table td { border: 1px solid #c9ccd0; padding: 5px 8px; vertical-align: top; }
+.cp-table tr.cp-split td { background: #fff9ef; }
+.cp-num { text-align: center; font-weight: 700; width: 56px; }
 .btn { padding: 7px 14px; border: 1px solid #b9c0c7; background: #fff; border-radius: 4px; font-size: 13px; cursor: pointer; }
 .btn:hover { background: #eef2f6; }
 .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }

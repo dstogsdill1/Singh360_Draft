@@ -33,7 +33,7 @@ from core.drawing_generators import (
 )
 from core.sheet_numbering import default_sheet_index
 from engines.ems_sheet import render_layout_sheet, render_schedule_sheets
-from core.page_composer import compose_pages
+from core.page_composer import compose_pages, continuation_summary
 from core.pdf_renderer import (
     get_page_thumbnails,
     get_page_previews,
@@ -317,6 +317,37 @@ def workspace_reset():
     return jsonify({"ok": True, **plan.to_dict()})
 
 
+@app.post("/api/projects/preview-continuation")
+def preview_continuation():
+    """Parse an uploaded workbook WITHOUT saving and return per-sheet page counts
+    so the UI can show the continuation preview before finalizing the import."""
+    if "file" not in request.files:
+        return jsonify(_err("No workbook file uploaded.")), 400
+    upload = request.files["file"]
+    if not upload.filename:
+        return jsonify(_err("Empty filename — please select an .xlsx file.")), 400
+    if not upload.filename.lower().endswith(".xlsx"):
+        return jsonify(_err("Only .xlsx workbooks are supported.")), 400
+
+    temp_path = DOCS_DIR / f"preview_{uuid.uuid4().hex[:16]}.xlsx"
+    try:
+        upload.save(temp_path)
+        # No assets_dir/url_prefix → embedded images are skipped (parse-only).
+        project_state = import_workbook(temp_path, project_id="preview")
+        summary = continuation_summary(project_state.get("pages", []))
+        summary["sourceWorkbookName"] = upload.filename
+        return jsonify({"ok": True, "continuation": summary})
+    except Exception as exc:
+        app.logger.error("Continuation preview failed: %s", exc)
+        return jsonify(_err("Failed to preview workbook.", str(exc))), 500
+    finally:
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+        except OSError:
+            pass
+
+
 @app.post("/api/projects/new")
 def new_project():
     """Bootstrap a project from an uploaded Excel workbook."""
@@ -350,8 +381,9 @@ def new_project():
         except OSError as exc:
             app.logger.error("Could not copy source workbook for %s: %s", project_id, exc)
 
+        summary = continuation_summary(project_state.get("pages", []))
         app.logger.info("Project %s created with %d pages.", project_id, len(project_state.get("pages", [])))
-        return jsonify({"ok": True, "id": project_id})
+        return jsonify({"ok": True, "id": project_id, "continuation": summary})
 
     except FileNotFoundError as exc:
         app.logger.error("Workbook not found during parse: %s", exc)

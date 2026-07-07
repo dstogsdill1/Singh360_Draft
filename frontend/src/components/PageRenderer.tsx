@@ -17,7 +17,7 @@ interface Props {
   onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
   onPatchPage: (pageId: string, patch: Partial<PageModel>) => void;
   onDuplicateBlock: (pageId: string, blockId: string) => void;
-  onGridChange: (worksheetId: string, grid: string[][]) => void;
+  onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
 }
 
@@ -36,16 +36,16 @@ export default function PageRenderer({
   onBlockChange,
   onPatchPage,
   onDuplicateBlock,
-  onGridChange,
+  onWorksheetChange,
   onCanvasChange,
 }: Props) {
   if (viewMode === 'source') {
     return (
       <RawGridRenderer
         worksheet={worksheet}
-        onGridChange={(grid) => {
+        onWorksheetChange={(patch, opts) => {
           if (!page.linkedWorksheetId) return;
-          onGridChange(page.linkedWorksheetId, grid);
+          onWorksheetChange(page.linkedWorksheetId, patch, opts);
         }}
       />
     );

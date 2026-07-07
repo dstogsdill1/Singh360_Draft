@@ -8,17 +8,46 @@ export type BlockType =
   | 'sectionHeading'
   | 'table'
   | 'matrix'
+  | 'excelRange'
   | 'imagePlaceholder'
   | 'canvas'
   | 'note'
   | 'cover'
   | 'underlayPlaceholder';
 
+export interface BorderSide {
+  style?: string;
+  color?: string;
+}
+
+/** Full per-cell style carried by an excelRange block (keys are "r:c", 0-based). */
+export interface ExcelCellStyle {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontSize?: number | null;
+  fontName?: string | null;
+  fontColor?: string | null;
+  hAlign?: string | null;
+  vAlign?: string | null;
+  wrap?: boolean;
+  rotation?: number;
+  indent?: number;
+  fill?: string | null;
+  borders?: {
+    top?: BorderSide;
+    right?: BorderSide;
+    bottom?: BorderSide;
+    left?: BorderSide;
+  };
+}
+
 export interface PageBlock {
   id: string;
   type: BlockType;
   sourceWorksheetId?: string;
   sourceRange?: string;
+  sourceSheet?: string;
   text?: string;
   items?: string[];
   headers?: string[];
@@ -31,6 +60,26 @@ export interface PageBlock {
   styleRole?: string;
   editable?: boolean;
   url?: string;
+  /** excelRange payload (exact worksheet range). */
+  renderMode?: string;
+  grid?: string[][];
+  styles?: Record<string, ExcelCellStyle>;
+  mergedCells?: MergedCell[];
+  colWidths?: number[];
+  rowHeights?: number[];
+  /** Absolute worksheet row indices represented by this block (for live refresh
+   *  and split-safe editing). */
+  srcRows?: number[];
+  headerRowCount?: number;
+  repeatRows?: number[];
+  splitMode?: string;
+  minScale?: number;
+  allowContinuation?: boolean;
+  manualRanges?: number[][];
+  layoutWarnings?: string[];
+  scaleMode?: string;
+  orientation?: string;
+  printArea?: string | null;
 }
 
 export interface CellStyle {
@@ -55,10 +104,16 @@ export interface Worksheet {
   id: string;
   name: string;
   grid: string[][];
-  styles?: Record<string, CellStyle>;
+  /** A1-keyed cell styles (superset used by both source view and exact range). */
+  styles?: Record<string, ExcelCellStyle>;
   mergedCells?: MergedCell[];
   rowHeights?: Record<string, number>;
   columnWidths?: Record<string, number>;
+  colWidthsPx?: number[];
+  rowHeightsPx?: number[];
+  sourceSheet?: string;
+  sourceRange?: string;
+  printArea?: string | null;
 }
 
 export interface PageModel {
@@ -71,6 +126,16 @@ export interface PageModel {
   sheetTab: string;
   pageType: PageType;
   pageFamily?: string;
+  renderMode?: string;
+  sourceSheet?: string;
+  sourceRange?: string;
+  printArea?: string | null;
+  splitMode?: string;
+  repeatRows?: number[];
+  minScale?: number;
+  allowContinuation?: boolean;
+  scaleMode?: string;
+  orientation?: string;
   template?: string;
   templateId: string;
   linkedWorksheetId?: string;
@@ -111,6 +176,7 @@ export interface ProjectModel {
   modified?: string;
   projectFolder?: string;
   projectDisplayName?: string;
+  paginationLocked?: boolean;
   revisionHistory?: Array<{ revision: string; date: string; description?: string; exportedBy?: string }>;
 }
 

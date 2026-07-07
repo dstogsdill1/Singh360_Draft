@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   archiveProject,
   attachCsv,
-  createProjectFromWorkbook,
   exportPackage,
   exportPdf,
   getProject,
@@ -15,6 +14,8 @@ import {
 } from './api/client';
 import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
+import ContinuationPreviewModal from './components/ContinuationPreviewModal';
+import { refreshBlockFromWorksheet, regenerateExcelGroup } from './model/excelRange';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
@@ -105,6 +106,7 @@ export default function App() {
   const [busOpen, setBusOpen] = useState(false);
   const [addSheetPending, setAddSheetPending] = useState<{ refId: string; where: 'before' | 'after' } | null>(null);
   const [importWsOpen, setImportWsOpen] = useState<{ afterPageId?: string } | null>(null);
+  const [pendingWorkbookFile, setPendingWorkbookFile] = useState<File | null>(null);
   const [renumberBadge, setRenumberBadge] = useState(false);
   const [theme, setThemeState] = useState<'dark' | 'light'>(() => {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('singh360-theme') : null;
@@ -770,7 +772,24 @@ export default function App() {
   const onUploadWorkbook = async (file: File) => {
     const ok = await ensureSavedBeforeNavigation();
     if (!ok) return;
-    const { id } = await createProjectFromWorkbook(file);
+    setPendingWorkbookFile(file);
+  };
+
+  const reapplyPagePagination = (pageId: string) => {
+    const pg = project?.pages.find((p) => p.id === pageId);
+    if (!pg?.linkedWorksheetId || pg.renderMode !== 'excel_exact') return;
+    setProjectSync((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        pages: regenerateExcelGroup(prev, pg.linkedWorksheetId as string),
+        paginationLocked: true,
+      };
+    });
+  };
+
+  const finishWorkbookImport = async (id: string) => {
+    setPendingWorkbookFile(null);
     const p = await getProject(id);
     lastSavedJsonRef.current = JSON.stringify(p);
     setProjectSync(p);
@@ -1107,6 +1126,13 @@ export default function App() {
           onCancel={() => setImportWsOpen(null)}
         />
       )}
+      {pendingWorkbookFile && (
+        <ContinuationPreviewModal
+          file={pendingWorkbookFile}
+          onImported={(id) => void finishWorkbookImport(id)}
+          onCancel={() => setPendingWorkbookFile(null)}
+        />
+      )}
       {addSheetPending && (
         <AddSheetModal
           onAdd={(title, code, tmpl) => addSheetFromModal(title, code, tmpl, addSheetPending.refId, addSheetPending.where)}
@@ -1163,18 +1189,38 @@ export default function App() {
           onDropImageFile={(file) => void onDropImageFile(file)}
           onDropComponent={onDropComponent}
           onScaleChange={onScaleChange}
-          onGridChange={(wsId, grid) => {
+          onWorksheetChange={(wsId, patch, opts) => {
             setProjectSync((prev) => {
               if (!prev) return prev;
-              return {
-                ...prev,
-                worksheets: prev.worksheets.map((ws) => (ws.id === wsId ? { ...ws, grid } : ws)),
-                pages: prev.pages.map((pg) =>
+              const worksheets = prev.worksheets.map((ws) =>
+                ws.id === wsId ? { ...ws, ...patch } : ws,
+              );
+              const ws = worksheets.find((w) => w.id === wsId);
+              const linked = prev.pages.filter((p) => p.linkedWorksheetId === wsId);
+              const isExact = linked.some((p) => p.renderMode === 'excel_exact');
+
+              let pages = prev.pages;
+              if (isExact && ws) {
+                if (opts?.structural) {
+                  // Row/column count changed — rebuild base + continuation pages.
+                  pages = regenerateExcelGroup({ ...prev, worksheets }, wsId);
+                } else {
+                  // Value / fill / border edit — refresh each page's block in place.
+                  pages = prev.pages.map((pg) => {
+                    if (pg.linkedWorksheetId !== wsId || pg.renderMode !== 'excel_exact') return pg;
+                    const b = (pg.blocks ?? [])[0];
+                    if (!b || b.type !== 'excelRange') return pg;
+                    return { ...pg, blocks: [refreshBlockFromWorksheet(b, ws)] };
+                  });
+                }
+              } else {
+                pages = prev.pages.map((pg) =>
                   pg.linkedWorksheetId === wsId
-                    ? { ...pg, blocks: syncBlocksFromGrid(pg, grid) }
+                    ? { ...pg, blocks: syncBlocksFromGrid(pg, patch.grid ?? ws?.grid ?? []) }
                     : pg,
-                ),
-              };
+                );
+              }
+              return { ...prev, worksheets, pages };
             });
           }}
           onCanvasChange={(pageId, objects) => {
@@ -1289,6 +1335,11 @@ export default function App() {
             overflowWarning={Array.isArray(activePage.layoutWarnings) && activePage.layoutWarnings.length > 0}
             onMergeIntoPrevious={activePage.continuationOf ? () => mergeContinuationIntoPrevious(activePage.id) : undefined}
             onMakeIndependent={activePage.continuationOf ? () => makeIndependent(activePage.id) : undefined}
+            onReapplyPagination={
+              activePage.renderMode === 'excel_exact' && !activePage.continuationOf
+                ? () => reapplyPagePagination(activePage.id)
+                : undefined
+            }
           />
         </div>
       }
@@ -1328,6 +1379,13 @@ export default function App() {
         insertAfterPageId={importWsOpen.afterPageId}
         onImported={(ids, rs) => void onImportedWorksheets(ids, rs)}
         onCancel={() => setImportWsOpen(null)}
+      />
+    )}
+    {pendingWorkbookFile && (
+      <ContinuationPreviewModal
+        file={pendingWorkbookFile}
+        onImported={(id) => void finishWorkbookImport(id)}
+        onCancel={() => setPendingWorkbookFile(null)}
       />
     )}
     {addSheetPending && (

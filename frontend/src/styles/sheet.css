@@ -153,6 +153,31 @@
 .np-matrix td:first-child { text-align: left; font-weight: 600; }
 .np-matrix th:first-child { min-width: 220px; }
 
+/* ── EXCEL EXACT RANGE ── */
+.np-xr {
+  padding: 10px;
+  overflow: hidden;
+  max-height: 866px;
+  box-sizing: border-box;
+  color: #111;
+}
+.np-xr-fit {
+  transform: scale(var(--xr-scale, 1));
+  transform-origin: top left;
+}
+.np-xr-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-family: Calibri, "Segoe UI", Arial, sans-serif;
+  font-size: 13px;
+  color: #111;
+  background: #fff;
+}
+.np-xr-table td {
+  box-sizing: border-box;
+  line-height: 1.15;
+}
+
 .np-image-ph {
   border: 2px dashed #9aa3ac; background: #f4f6f8; padding: 24px; margin: 12px 0;
   display: flex; flex-direction: column; align-items: center; gap: 10px; color: #556;
@@ -253,6 +278,72 @@
   outline-offset: -1px;
   background: #fffef2;
 }
+
+/* -- Editable source grid (Excel-like) -- */
+.gx-wrap { outline: none; }
+.gx-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #f6f7f9;
+  border-bottom: 1px solid #d5d9de;
+}
+.gx-tb-label { font-size: 11px; color: #55606b; font-weight: 600; }
+.gx-tb-sep { width: 1px; height: 18px; background: #cfd4da; margin: 0 2px; }
+.gx-swatch {
+  width: 18px;
+  height: 18px;
+  border: 1px solid #9aa3ac;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+}
+.gx-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid #c2c7cd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  color: #222;
+}
+.gx-btn:hover { background: #eef1f4; }
+.gx-table { table-layout: auto; }
+.gx-corner, .gx-colhead, .gx-rowhead {
+  background: #eceef1;
+  border: 1px solid #c9ccd0;
+  font-size: 11px;
+  color: #55606b;
+  font-weight: 600;
+  text-align: center;
+  padding: 2px 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.gx-rowhead { position: sticky; left: 0; z-index: 1; }
+.gx-cell {
+  border: 1px solid #c9ccd0;
+  min-width: 90px;
+  max-width: 320px;
+  height: 22px;
+  padding: 0;
+  vertical-align: top;
+  overflow: hidden;
+  cursor: cell;
+}
+.gx-cell-text {
+  display: block;
+  padding: 3px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gx-cell.gx-sel { outline: 2px solid #12539b; outline-offset: -2px; background: rgba(18, 83, 155, 0.08); }
 
 
 /* -- IMAGE / LAYOUT DROP ZONE (editor-only; never exported) -- */

@@ -66,7 +66,34 @@ export async function resetWorkspace(opts: WorkspaceResetOptions): Promise<Works
   return res.json();
 }
 
-export async function createProjectFromWorkbook(file: File): Promise<{ id: string }> {
+export interface ContinuationSheetSummary {
+  sheetTab: string;
+  sheetTitle: string;
+  sheetCode: string;
+  renderMode: string;
+  splitMode: string;
+  pages: number;
+  message: string;
+}
+
+export interface ContinuationSummary {
+  sheets: ContinuationSheetSummary[];
+  totalPages: number;
+  totalSheets: number;
+  multiPageSheets: number;
+  sourceWorkbookName?: string;
+}
+
+export async function previewWorkbookContinuation(file: File): Promise<ContinuationSummary> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch('/api/projects/preview-continuation', { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.continuation as ContinuationSummary;
+}
+
+export async function createProjectFromWorkbook(file: File): Promise<{ id: string; continuation?: ContinuationSummary }> {
   const fd = new FormData();
   fd.append('file', file);
   const res = await fetch('/api/projects/new', { method: 'POST', body: fd });

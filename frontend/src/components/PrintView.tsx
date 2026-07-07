@@ -104,7 +104,7 @@ export default function PrintView({ project }: Props) {
                   onBlockChange={noop}
                   onPatchPage={noop}
                   onDuplicateBlock={noop}
-                  onGridChange={noop}
+                  onWorksheetChange={noop}
                   onCanvasChange={noop}
                 />
               </SheetFrame>
