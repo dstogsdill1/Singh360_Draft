@@ -34,6 +34,8 @@ interface Props {
     addArrow: () => void;
     addPolyline: () => void;
     addElbow: () => void;
+    addBracket: () => void;
+    addDashedBox: () => void;
     addPageTitle: () => void;
     addSectionHeader: () => void;
     addNote: () => void;
@@ -354,7 +356,9 @@ export default function Ribbon({
                 <button className={`ribbon-btn ${activeTool === 'arrow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('arrow')} title="Two clicks like Line, with an arrowhead on the end">Arrow</button>
                 <button className={`ribbon-btn ${activeTool === 'polyline' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('polyline')} title="Multi-Point Line (P): click each point, double-click or Enter to finish, Esc to cancel.">Multi-Point Line</button>
                 <button className={`ribbon-btn ${activeTool === 'elbow' ? 'active' : ''}`} disabled={!cx} onClick={() => onSetTool('elbow')} title="Elbow (E): orthogonal square-cornered routing. Click each bend, double-click or Enter to finish.">Elbow</button>
+                <button className="ribbon-btn" disabled={!cx} onClick={canvas.addBracket} title="Insert a yellow group-bracket connector like HVAC/controls callouts">Bracket</button>
                 <button className="ribbon-btn" disabled={!cx} onClick={canvas.addBus} title="Bus / Harness (B): create several parallel labeled wires at once.">Bus / Harness</button>
+                <button className="ribbon-btn" disabled={!cx} onClick={canvas.addDashedBox} title="Insert a dashed boundary box for grouped devices/areas">Dashed Box</button>
               </Group>
               <Group title="Line Color">
                 <select className="ribbon-select" disabled={!ln} value={typeof selection?.stroke === 'string' ? selection.stroke : '#111111'} onChange={(e) => onUpdateSelection({ stroke: e.target.value })} title={ln ? 'Stroke color of the selected line/connector' : 'Select a line or connector first'}>

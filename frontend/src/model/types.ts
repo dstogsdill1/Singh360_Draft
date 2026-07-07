@@ -184,6 +184,8 @@ export interface CanvasApi {
   addArrow: () => void;
   addPolyline: () => void;
   addElbow: () => void;
+  addBracket: () => void;
+  addDashedBox: () => void;
   setLineStyle: (style: LineStyle) => void;
   startBus: (opts: BusOptions) => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;

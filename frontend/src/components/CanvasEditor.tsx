@@ -128,6 +128,35 @@ function makeElbow(x: number, y: number) {
     ],
   });
 }
+function makeBracket(x: number, y: number) {
+  return new Connector([x, y, x + 50, y + 70], {
+    stroke: '#f2c200',
+    strokeWidth: 2,
+    arrowEnd: false,
+    connectorKind: 'polyline',
+    pointsData: [
+      { x, y },
+      { x: x + 26, y },
+      { x: x + 26, y: y + 20 },
+      { x: x + 52, y: y + 35 },
+      { x: x + 26, y: y + 50 },
+      { x: x + 26, y: y + 70 },
+      { x, y: y + 70 },
+    ],
+  });
+}
+function makeDashedBox(x: number, y: number) {
+  return new Rect({
+    left: x,
+    top: y,
+    width: 240,
+    height: 140,
+    fill: 'transparent',
+    stroke: '#f28c28',
+    strokeWidth: 1.6,
+    strokeDashArray: [8, 4],
+  });
+}
 
 function wantsBw(url: string): boolean {
   try {
@@ -810,6 +839,8 @@ export default function CanvasEditor({
       addArrow: () => addObj(makeArrow(200, 320)),
       addPolyline: () => addObj(makePolyline(200, 340)),
       addElbow: () => addObj(makeElbow(200, 360)),
+      addBracket: () => addObj(makeBracket(260, 260)),
+      addDashedBox: () => addObj(makeDashedBox(220, 220)),
       setLineStyle: (style: LineStyle) => { lineStyleRef.current = style; },
       startBus: (opts: BusOptions) => {
         const c = fabricRef.current;

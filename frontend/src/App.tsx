@@ -1026,6 +1026,8 @@ export default function App() {
         addArrow: () => { setOverlayMode(true); canvasApiRef.current?.addArrow(); },
         addPolyline: () => { setOverlayMode(true); canvasApiRef.current?.addPolyline(); },
         addElbow: () => { setOverlayMode(true); canvasApiRef.current?.addElbow(); },
+        addBracket: () => { setOverlayMode(true); canvasApiRef.current?.addBracket(); },
+        addDashedBox: () => { setOverlayMode(true); canvasApiRef.current?.addDashedBox(); },
         addPageTitle: () => { setOverlayMode(true); canvasApiRef.current?.addPageTitle(activePage?.sheetTitle ?? 'Page Title'); },
         addSectionHeader: () => { setOverlayMode(true); canvasApiRef.current?.addSectionHeader('Section Header'); },
         addNote: () => { setOverlayMode(true); canvasApiRef.current?.addNote('Note'); },
