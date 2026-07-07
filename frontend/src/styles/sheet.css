@@ -177,7 +177,6 @@
   padding: 5px 8px;
   vertical-align: middle;
 }
-.np-index-table tbody tr:nth-child(even) td { background: #f4f6f8; }
 .np-index-table .ni-code { width: 96px; font-weight: 700; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
 .np-index-table .ni-title { width: auto; }
 .np-index-table .ni-pg { width: 48px; text-align: center; }
@@ -203,7 +202,6 @@
   border: 1px solid #808080; padding: 6px 8px; text-align: left;
 }
 .np-table td, .np-matrix td { border: 1px solid #a6a6a6; padding: 5px 8px; vertical-align: top; }
-.np-table tbody tr:nth-child(even) td { background: #f4f6f8; }
 .np-matrix td { text-align: center; }
 .np-matrix td:first-child { text-align: left; font-weight: 600; }
 .np-matrix th:first-child { min-width: 220px; }
@@ -220,6 +218,15 @@
   transform: scale(var(--xr-scale, 1));
   transform-origin: top left;
 }
+.np-xr-warning {
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border: 1px solid #b45309;
+  background: #fff7ed;
+  color: #7c2d12;
+  font-size: 11px;
+  font-weight: 700;
+}
 .np-xr-table {
   border-collapse: collapse;
   table-layout: fixed;
@@ -231,7 +238,27 @@
 .np-xr-table td {
   box-sizing: border-box;
   line-height: 1.15;
+  border: 1px solid #a6a6a6;
+  background: #fff;
+  color: #111;
 }
+
+.np-company-info {
+  height: 100%;
+  min-height: 680px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  color: #111;
+}
+.np-company-logo { max-width: 360px; max-height: 150px; object-fit: contain; margin-bottom: 10px; }
+.np-company-name { font-size: 30px; font-weight: 800; letter-spacing: 0.04em; }
+.np-company-service { font-size: 20px; font-weight: 700; color: #333; }
+.np-company-details { margin-top: 8px; font-size: 15px; line-height: 1.45; }
+.np-company-note { margin-top: 20px; max-width: 720px; font-size: 13px; color: #444; }
 
 .np-image-ph {
   border: 2px dashed #9aa3ac; background: #f4f6f8; padding: 24px; margin: 12px 0;

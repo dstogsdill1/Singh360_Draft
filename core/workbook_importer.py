@@ -11,6 +11,7 @@ from openpyxl.utils.cell import column_index_from_string, get_column_letter
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 from core.page_normalizer import normalize_page
 from core.page_composer import (
+    BODY_W,
     EXCEL_EXACT_FAMILIES,
     EXCEL_MIN_SCALE,
     compose_pages,
@@ -322,6 +323,71 @@ def _parse_index(workbook, index_sheet_name: str | None) -> list[dict[str, Any]]
     return entries
 
 
+def _remap_a1_styles(styles: dict[str, Any], row_map: dict[int, int]) -> dict[str, Any]:
+    """Copy A1-keyed styles for retained rows, remapping row numbers."""
+    out: dict[str, Any] = {}
+    for key, val in (styles or {}).items():
+        m = re.fullmatch(r"([A-Z]+)(\d+)", key)
+        if not m:
+            continue
+        old_r = int(m.group(2)) - 1
+        if old_r not in row_map:
+            continue
+        out[f"{m.group(1)}{row_map[old_r] + 1}"] = val
+    return out
+
+
+def _filter_index_payload_for_output(ws: dict[str, Any]) -> dict[str, Any]:
+    """Return an index worksheet payload containing included rows only.
+
+    Source tabs keep the original workbook unchanged; this filtered payload is
+    used only for the normalized/output Sheet Index page.
+    """
+    grid = ws.get("grid") or []
+    if not grid:
+        return ws
+
+    header_idx = 0
+    for i, row in enumerate(grid[:20]):
+        low = {str(x).lower() for x in row if x}
+        if low & _INDEX_ALIASES["sheet_tab"] and low & _INDEX_ALIASES["sheet_title"]:
+            header_idx = i
+            break
+    col = _header_map([str(x) for x in grid[header_idx]])
+    include_col = col.get("include", -1)
+    if include_col < 0:
+        return ws
+
+    keep: list[int] = list(range(header_idx + 1))
+    for r in range(header_idx + 1, len(grid)):
+        row = grid[r]
+        include_raw = row[include_col] if include_col < len(row) else ""
+        title = row[col["sheet_title"]] if 0 <= col["sheet_title"] < len(row) else ""
+        use_source = row[col["use_source"]] if 0 <= col["use_source"] < len(row) else ""
+        if _included(include_raw, title, use_source):
+            keep.append(r)
+
+    row_map = {old: new for new, old in enumerate(keep)}
+    out = dict(ws)
+    out["grid"] = [list(grid[r]) for r in keep if r < len(grid)]
+    out["styles"] = _remap_a1_styles(ws.get("styles") or {}, row_map)
+    out["rowHeightsPx"] = [
+        (ws.get("rowHeightsPx") or [])[r] if r < len(ws.get("rowHeightsPx") or []) else _DEFAULT_ROW_PX
+        for r in keep
+    ]
+    # Keep only merges whose full row span survived the filter.
+    merges = []
+    for m in ws.get("mergedCells") or []:
+        rows = range(m.get("startRow", 0), m.get("endRow", 0) + 1)
+        if all(r in row_map for r in rows):
+            nm = dict(m)
+            ns = [row_map[r] for r in rows]
+            nm["startRow"], nm["endRow"] = min(ns), max(ns)
+            merges.append(nm)
+    out["mergedCells"] = merges
+    return out
+
+
 def _safe_name(text: str) -> str:
     out = re.sub(r"[^A-Za-z0-9._-]+", "_", (text or "sheet").strip())
     return out[:40] or "sheet"
@@ -389,6 +455,8 @@ def _tabular_enough(ws: dict[str, Any]) -> bool:
 
 def _should_use_excel_exact(page_type: str, family: str, ws: dict[str, Any]) -> bool:
     """Render the worksheet range verbatim (excel_exact) for all tabular EMS pages."""
+    if family == "companyInfo":
+        return False
     if page_type in ("cover", "canvas", "hybrid", "underlay"):
         return False
     if not _tabular_enough(ws):
@@ -398,6 +466,11 @@ def _should_use_excel_exact(page_type: str, family: str, ws: dict[str, Any]) -> 
     if family in EXCEL_EXACT_FAMILIES or family == "text":
         return True
     return False
+
+
+def _looks_company_info(sheet_tab: str, title: str, use_source: str = "") -> bool:
+    blob = f"{sheet_tab} {title} {use_source}".lower()
+    return "company info" in blob or "singh360 company" in blob or "company/reference" in blob
 
 
 def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> dict[str, Any]:
@@ -424,10 +497,94 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
     elif family == "idfTable":
         settings["minScale"] = 0.42
     elif family in ("ioSchedule", "panelDetail", "rackLayout"):
-        settings["minScale"] = 0.48
+        settings["minScale"] = 0.58 if family in ("ioSchedule", "panelDetail") else 0.48
     elif page_type == "index" or family == "text":
         settings.update({"splitMode": "none", "allowContinuation": False, "scaleMode": "fit_body"})
     return settings
+
+
+def _preferred_col_widths(grid: list[list[str]], family: str, page_type: str) -> list[int]:
+    """Deterministic normalized column sizing before placement/export."""
+    n_cols = max((len(r) for r in grid), default=0)
+    if not n_cols:
+        return []
+    target = BODY_W - (96 if family not in ("ioSchedule", "panelDetail", "idfTable") else 48)
+    min_w = 52 if family in ("ioSchedule", "panelDetail", "idfTable") else 76
+    max_w = 360 if family in ("text", "index") else 300
+    weights: list[float] = []
+    header = grid[0] if grid else []
+    for c in range(n_cols):
+        values = [str(row[c]) if c < len(row) else "" for row in grid]
+        max_len = max((len(v) for v in values), default=1)
+        head = (str(header[c]) if c < len(header) else "").lower()
+        weight = max(6.0, min(float(max_len), 48.0))
+        if any(k in head for k in ("description", "notes", "instruction", "scope", "remarks", "location")):
+            weight *= 1.9
+        elif any(k in head for k in ("no", "#", "id", "qty", "type", "addr", "i/o", "io", "point", "ckt")):
+            weight *= 0.75
+        weights.append(weight)
+    total = sum(weights) or 1.0
+    raw = [int(round(target * w / total)) for w in weights]
+    widths = [max(min_w, min(max_w, w)) for w in raw]
+    # Distribute leftover width so small tables use the page instead of floating.
+    diff = target - sum(widths)
+    guard = 0
+    while diff > 0 and guard < 2000:
+        changed = False
+        for i in sorted(range(n_cols), key=lambda x: weights[x], reverse=True):
+            if widths[i] < max_w:
+                widths[i] += 1
+                diff -= 1
+                changed = True
+                if diff <= 0:
+                    break
+        if not changed:
+            break
+        guard += 1
+    return widths
+
+
+def _estimated_row_heights(grid: list[list[str]], col_widths: list[int], family: str, header_rows: int) -> list[int]:
+    font_px = 12 if family in ("matrix", "idfTable", "ioSchedule", "panelDetail", "rackLayout") else 13
+    line_h = int(round(font_px * 1.22))
+    out: list[int] = []
+    for r, row in enumerate(grid):
+        max_lines = 1
+        for c, val in enumerate(row):
+            text = " ".join(str(val or "").split())
+            if not text:
+                continue
+            w = max(36, (col_widths[c] if c < len(col_widths) else _DEFAULT_COL_PX) - 8)
+            chars = max(7, int(w / max(5.5, font_px * 0.48)))
+            words = text.split()
+            lines = 1
+            cur = 0
+            for word in words:
+                wl = len(word)
+                if cur and cur + 1 + wl > chars:
+                    lines += 1
+                    cur = wl
+                else:
+                    cur = cur + (1 if cur else 0) + wl
+            max_lines = max(max_lines, min(lines, 8))
+        base = 28 if r < header_rows else 24
+        out.append(max(base, line_h * max_lines + 8))
+    return out
+
+
+def _apply_table_geometry(block: dict[str, Any], family: str, page_type: str) -> None:
+    """Auto-size columns and rows for normalized/output table geometry."""
+    grid = block.get("grid") or []
+    if not grid:
+        return
+    widths = _preferred_col_widths(grid, family, page_type)
+    if widths:
+        block["colWidths"] = widths
+    header_rows = int(block.get("headerRowCount") or 1)
+    block["rowHeights"] = _estimated_row_heights(grid, block.get("colWidths") or widths, family, header_rows)
+    block["pageFamily"] = family
+    block["bodyRowFillMode"] = "none"
+    block["gridLines"] = True
 
 
 def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -493,6 +650,26 @@ def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[s
         "scaleMode": ss.get("scaleMode", "fit_body"),
         "orientation": "landscape",
         "styleRole": "excel-exact",
+        "bodyRowFillMode": "none",
+        "gridLines": True,
+        "editable": True,
+    }
+
+
+def _company_info_block(ws: dict[str, Any], block_id: str) -> dict[str, Any]:
+    rows = []
+    for row in ws.get("grid") or []:
+        vals = [str(c).strip() for c in row if str(c).strip()]
+        if vals:
+            rows.append(vals)
+    return {
+        "id": block_id,
+        "type": "companyInfo",
+        "sourceWorksheetId": ws["id"],
+        "sourceSheet": ws.get("sourceSheet") or ws.get("name", ""),
+        "rows": rows,
+        "text": "Singh360 Company Info",
+        "styleRole": "company-info",
         "editable": True,
     }
 
@@ -578,6 +755,8 @@ def import_workbook(
 
         page_type = classify_page_type(ws["name"], title, use_source)
         family = page_family(ws["name"], title, use_source)
+        if _looks_company_info(ws["name"], title, use_source):
+            family = "companyInfo"
 
         use_exact = _should_use_excel_exact(page_type, family, ws)
         split_settings = _split_settings_for_page(family, page_type, use_exact)
@@ -585,8 +764,15 @@ def import_workbook(
         # Cover keeps its own look; every other page gets the Singh360 profile.
         header_style = "source" if page_type == "cover" else DEFAULT_HEADER_STYLE
 
-        if use_exact:
-            exact_block = _excel_range_block(ws, f"{ws['id']}_xr", split_settings)
+        if family == "companyInfo":
+            exact_block = None
+            blocks = [_company_info_block(ws, f"{ws['id']}_company")]
+        elif use_exact:
+            render_ws = _filter_index_payload_for_output(ws) if page_type == "index" else ws
+            exact_block = _excel_range_block(render_ws, f"{ws['id']}_xr", split_settings)
+            if "lighting" in f"{ws['name']} {title}".lower():
+                exact_block["minScale"] = max(float(exact_block.get("minScale") or EXCEL_MIN_SCALE), 0.58)
+            _apply_table_geometry(exact_block, family, page_type)
             apply_singh360_profile(exact_block, header_style)
             blocks = [exact_block]
         else:

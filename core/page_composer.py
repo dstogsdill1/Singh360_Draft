@@ -18,7 +18,7 @@ from typing import Any
 
 # Usable body height budget (logical px) for one 17x11 sheet, after title block
 # and page padding are removed. Kept conservative so print never scrolls.
-BODY_BUDGET = 820
+BODY_BUDGET = 720
 BODY_W = 1600
 TABLE_HEADER_H = 46
 TABLE_ROW_H = 30
@@ -47,6 +47,7 @@ EXCEL_EXACT_FAMILIES = {
 # Page family mapping (Phase H)
 # --------------------------------------------------------------------------
 _FAMILY_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("companyInfo", ("company info", "singh360 company", "company/reference")),
     ("cover", ("cover", "title sheet", "project info")),
     ("index", ("index", "sheet index", "drawing list", "sheet list")),
     ("matrix", ("responsibilit", "resp matrix", "matrix")),
@@ -287,9 +288,44 @@ def _section_break_rows(block: dict[str, Any], data_rows: list[int]) -> set[int]
         return breaks
     for r in data_rows:
         banded = sum(1 for c in range(ncols) if (styles.get(f"{r}:{c}") or {}).get("fill"))
+        text = " ".join(str(c or "") for c in (grid[r] if r < len(grid) else [])).lower()
         if banded >= max(2, ncols // 2):
             breaks.add(r)
+        elif any(k in text for k in ("lcp-1", "lcp-2", "pr0663", "expansion", "relay", "contactor", "controller i/o")):
+            breaks.add(r)
     return breaks
+
+
+def _logical_section_chunks(block: dict[str, Any], data_rows: list[int]) -> list[list[int]] | None:
+    """Known SA31 schedule section splits, used only when a split is required."""
+    grid = block.get("grid") or []
+    family = block.get("pageFamily", "")
+    sheet_blob = f"{block.get('sourceSheet', '')} {block.get('sourceRange', '')}".lower()
+
+    def row_text(r: int) -> str:
+        return " ".join(str(c or "") for c in (grid[r] if r < len(grid) else [])).lower()
+
+    if family == "panelDetail":
+        lcp2 = next((r for r in data_rows if "lcp-2" in row_text(r) or "contactor panel" in row_text(r)), None)
+        if lcp2 is not None:
+            before = [r for r in data_rows if r < lcp2]
+            after = [r for r in data_rows if r >= lcp2]
+            if before and len(after) >= MIN_ORPHAN_DATA_ROWS:
+                return [before, after]
+
+    if "lighting" in sheet_blob or any("lighting" in row_text(r) for r in data_rows[:5]):
+        relay = next((r for r in data_rows if "relay" in row_text(r) or "contactor" in row_text(r)), None)
+        if relay is not None:
+            before = [r for r in data_rows if r < relay]
+            after = [r for r in data_rows if r >= relay]
+            if before and len(after) >= MIN_ORPHAN_DATA_ROWS:
+                return [before, after]
+
+    if family == "idfTable" and len(data_rows) >= 40:
+        mid = len(data_rows) // 2
+        return [data_rows[:mid], data_rows[mid:]]
+
+    return None
 
 
 def _balanced_chunks(
@@ -394,6 +430,10 @@ def _excel_data_chunks(block: dict[str, Any], data_rows: list[int], header_h: fl
 
     if n_pages <= 1:
         return [list(data_rows)]
+
+    logical = _logical_section_chunks(block, list(data_rows))
+    if logical and len(logical) == n_pages:
+        return logical
 
     # 2) Balanced, section-aware distribution across exactly n_pages.
     return _balanced_chunks(block, list(data_rows), header_h, n_pages, budget)
@@ -679,6 +719,7 @@ def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]
         xr = next((b for b in (p.get("blocks") or []) if b.get("type") == "excelRange"), None)
         best = round(_excel_best_scale(xr), 3) if xr else 1.0
         min_scale = _block_min_scale(xr) if xr else EXCEL_MIN_SCALE
+        content_w, content_h = _excel_natural_size(xr) if xr else (0, 0)
         rows = len(xr.get("grid") or []) if xr else sum(
             len(b.get("rows") or []) for b in (p.get("blocks") or []) if b.get("type") in ("table", "matrix")
         )
@@ -688,6 +729,7 @@ def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]
             reason = "single page, scaled to fit body"
         else:
             reason = "single page"
+        clipping = bool(xr and (not _block_allows_continuation(xr)) and best < min_scale)
         out.append(
             {
                 "sheetCode": p.get("displaySheetCode") or p.get("sheetCode", ""),
@@ -699,7 +741,12 @@ def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "bestScale": best,
                 "minScale": min_scale,
                 "fontSize": _page_font_size(p),
-                "rows": rows,
+                "sourceRows": len(xr.get("srcRows") or []) if xr else rows,
+                "outputRows": rows,
+                "contentWidth": content_w,
+                "contentHeight": content_h,
+                "rowsPerPage": rows,
+                "clipping": clipping,
                 "continuationOf": p.get("continuationOf"),
                 "continuationTotal": cont_total,
                 "reason": reason,
@@ -720,7 +767,8 @@ def log_render_diagnostics(pages: list[dict[str, Any]]) -> None:
         pages_txt = f"{n} page{'s' if n != 1 else ''}"
         print(
             f"Sheet {d['sheetCode']} {d['pageTitle']}: {pages_txt}, "
-            f"scale {d['bestScale']}, font {d['fontSize']}, "
+            f"rows {d['outputRows']}, size {d['contentWidth']}x{d['contentHeight']}, "
+            f"scale {d['bestScale']}, font {d['fontSize']}, clipping={d['clipping']}, "
             f"{'continuation ' + str(n - 1) if n > 1 else 'no continuation'} "
             f"[{d['reason']}]"
         )

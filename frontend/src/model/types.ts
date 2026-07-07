@@ -13,6 +13,7 @@ export type BlockType =
   | 'canvas'
   | 'note'
   | 'cover'
+  | 'companyInfo'
   | 'underlayPlaceholder';
 
 export interface BorderSide {
@@ -82,6 +83,8 @@ export interface PageBlock {
   scaleMode?: string;
   orientation?: string;
   printArea?: string | null;
+  bodyRowFillMode?: 'none' | 'source' | 'zebra';
+  gridLines?: boolean;
 }
 
 export interface CellStyle {

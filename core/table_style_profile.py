@@ -7,7 +7,7 @@ regardless of what fills the source workbook tab carried:
   2. Optional light-gray project/subtitle row under the band.
   3. Gray column-header row.
   4. Excel-style grid borders.
-  5. Alternating very-light-gray body rows.
+  5. White body cells by default (no zebra fill).
   6. Gold controller / section bands preserved (they are the Singh360 accent).
 
 This module is deterministic and hallucination-free: it only *recolors* cells
@@ -29,7 +29,6 @@ TITLE_BAND_TEXT = "#000000"   # black centered title text
 SUBTITLE_FILL = "#F2F2F2"     # optional light-gray project/subtitle row
 COLUMN_HEADER_FILL = "#D9D9D9"  # gray column-header row
 COLUMN_HEADER_TEXT = "#000000"
-BODY_ALT_FILL = "#F4F6F8"     # alternating very-light-gray body rows
 BODY_FILL = "#FFFFFF"
 GRID_COLOR = "#A6A6A6"
 SECTION_DIVIDER = "#000000"
@@ -121,7 +120,7 @@ def apply_singh360_profile(block: dict[str, Any], style: str = "orange") -> dict
 
     ``style``:
       - ``"orange"`` (default): dark title bands → orange w/ black centered title;
-        column-header rows → gray; gold controller bands preserved; alt-row shade.
+        column-header rows → gray; gold controller bands preserved; white body.
       - ``"source"``: leave the source colors untouched (legacy look).
       - ``"none"``: strip dark bands to white (plain), no orange accent.
 
@@ -129,6 +128,8 @@ def apply_singh360_profile(block: dict[str, Any], style: str = "orange") -> dict
     """
     block["renderProfile"] = RENDER_PROFILE
     block["normalizedHeaderStyle"] = style
+    block["bodyRowFillMode"] = "none"
+    block["gridLines"] = True
     if style == "source" or block.get("type") != "excelRange":
         return block
 
@@ -172,9 +173,9 @@ def apply_singh360_profile(block: dict[str, Any], style: str = "orange") -> dict
             title_assigned = True
 
     # Body: recolor any *remaining* dark bands (section titles inside the body).
-    # Dark → orange section band (orange), gold preserved; also apply alt-row.
+    # Dark → orange section band (orange), gold preserved. Body rows stay white
+    # unless the source carried an intentional highlight / blocked-cell fill.
     data_start = max(header_count, 1)
-    alt = False
     for r in range(data_start, n_rows):
         row_dark = _row_has_dark_band(styles, r, n_cols)
         if row_dark:
@@ -190,15 +191,7 @@ def apply_singh360_profile(block: dict[str, Any], style: str = "orange") -> dict
                         st["fill"] = TITLE_BAND_FILL
                         st["fontColor"] = TITLE_BAND_TEXT
                         st["bold"] = True
-            alt = False
             continue
-        # Alternating body shading on rows that carry no explicit source fill.
-        if style == "orange" and alt:
-            for c in range(n_cols):
-                st = _style_at(styles, r, c)
-                if not st.get("fill"):
-                    st["fill"] = BODY_ALT_FILL
-        alt = not alt
 
     block["styles"] = styles
     return block

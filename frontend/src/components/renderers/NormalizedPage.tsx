@@ -4,6 +4,7 @@ import TablePageRenderer from './TablePageRenderer';
 import MatrixPageRenderer from './MatrixPageRenderer';
 import ExcelRangeRenderer from './ExcelRangeRenderer';
 import CoverPageRenderer from './CoverPageRenderer';
+import CompanyInfoRenderer from './CompanyInfoRenderer';
 import ImagePlaceholderRenderer from './ImagePlaceholderRenderer';
 import GeneratedIndexRenderer from './GeneratedIndexRenderer';
 import SheetTitleBand from './SheetTitleBand';
@@ -64,7 +65,7 @@ export default function NormalizedPage({
   // (schedules, matrices, hybrid sheets, the generated index). For those pages
   // we must NOT let the overlay steal pointer events just because annotations
   // exist — otherwise the table underneath becomes unclickable/uneditable.
-  const baseTypes = ['table', 'matrix', 'excelRange', 'title', 'subtitle', 'paragraph', 'bulletList', 'sectionHeading', 'note', 'cover'];
+  const baseTypes = ['table', 'matrix', 'excelRange', 'title', 'subtitle', 'paragraph', 'bulletList', 'sectionHeading', 'note', 'cover', 'companyInfo'];
   const hasEditableBase = isIndexPage || (!isImageType && blocks.some((b) => baseTypes.includes(b.type)));
   // The overlay must capture clicks when: overlay-edit mode is on, a draw tool is
   // active, OR (on pure drawing pages) the page already has overlay objects so a
@@ -126,6 +127,8 @@ export default function NormalizedPage({
           switch (b.type) {
             case 'cover':
               return <CoverPageRenderer key={b.id} block={b} project={project} />;
+            case 'companyInfo':
+              return <CompanyInfoRenderer key={b.id} block={b} project={project} />;
             case 'excelRange':
               return <ExcelRangeRenderer key={b.id} block={b} reservedTop={bandReserve} />;
             case 'table':

@@ -21,7 +21,7 @@ def _clean_scalar(value: Any) -> Any:
             return ""
     if isinstance(value, str):
         txt = value.strip()
-        return "" if txt.lower() in {"nan", "nat", "<na>", "none", "undefined"} else value
+        return "" if txt.lower() in {"nan", "nat", "<na>", "undefined"} else value
     return value
 
 

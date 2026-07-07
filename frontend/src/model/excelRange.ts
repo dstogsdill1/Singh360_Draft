@@ -7,7 +7,7 @@
 import type { ExcelCellStyle, MergedCell, PageBlock, PageModel, ProjectModel, Worksheet } from './types';
 
 const BODY_W = 1600;
-const BODY_BUDGET = 820;
+const BODY_BUDGET = 720;
 const MIN_SCALE = 0.5;
 const MIN_ORPHAN_DATA_ROWS = 4;
 const DEFAULT_COL = 64;
@@ -119,6 +119,8 @@ export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock 
     scaleMode: 'fit_body',
     orientation: 'landscape',
     styleRole: 'excel-exact',
+    bodyRowFillMode: 'none',
+    gridLines: true,
     editable: true,
   };
 }

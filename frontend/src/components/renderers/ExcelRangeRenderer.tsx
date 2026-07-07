@@ -43,14 +43,15 @@ function borderCss(side?: BorderSide): string | undefined {
 
 function cellCss(st: ExcelCellStyle | undefined, rowH: number): React.CSSProperties {
   const s: React.CSSProperties = {
-    height: rowH,
-    padding: '0 3px',
-    overflow: 'hidden',
+    minHeight: rowH,
+    padding: '2px 4px',
     verticalAlign:
       st?.vAlign === 'top' ? 'top' : st?.vAlign === 'bottom' ? 'bottom' : 'middle',
+    whiteSpace: 'normal',
+    overflowWrap: 'normal',
+    wordBreak: 'normal',
   };
   if (!st) {
-    s.whiteSpace = 'nowrap';
     return s;
   }
   if (st.bold) s.fontWeight = 700;
@@ -70,8 +71,9 @@ function cellCss(st: ExcelCellStyle | undefined, rowH: number): React.CSSPropert
           ? 'justify'
           : 'left';
 
-  s.whiteSpace = st.wrap ? 'normal' : 'nowrap';
-  if (st.wrap) s.wordBreak = 'break-word';
+  // Normalized output tables always wrap as real table geometry. The backend
+  // sizes columns first, then rows are allowed to expand before final scaling.
+  if (st.wrap) s.overflowWrap = 'break-word';
   if (st.indent) s.paddingLeft = 3 + st.indent * 8;
 
   const rot = st.rotation ?? 0;
@@ -195,6 +197,11 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
 
   return (
     <div className="np-xr">
+      {block.layoutWarnings?.length ? (
+        <div className="np-xr-warning">
+          {block.layoutWarnings.join(' ')}
+        </div>
+      ) : null}
       <div className="np-xr-fit" ref={fitRef}>
         <table
           className="np-xr-table"
