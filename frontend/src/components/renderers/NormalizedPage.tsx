@@ -52,6 +52,7 @@ export default function NormalizedPage({
   const blocks = page.blocks ?? [];
   const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
   const isIndexPage = page.pageType === 'index';
+  const indexUsesExcelExact = isIndexPage && page.renderMode === 'excel_exact';
   const hasOverlay = (page.canvasObjects?.length ?? 0) > 0;
   // A page has an editable base when it renders editable table/matrix/text cells
   // (schedules, matrices, hybrid sheets, the generated index). For those pages
@@ -66,9 +67,20 @@ export default function NormalizedPage({
   const overlayInteractive = overlayMode || activeTool !== 'select' || (hasOverlay && !hasEditableBase);
 
   const base = (() => {
-    // Generated sheet index / TOC — live-computed from current project pages.
-    if (isIndexPage) {
+    // Workbook index / TOC from the Excel range (not a generated duplicate list).
+    if (isIndexPage && !indexUsesExcelExact) {
       return <GeneratedIndexRenderer project={project} page={page} onPatchPage={onPatchPage} />;
+    }
+
+    if (isIndexPage && indexUsesExcelExact) {
+      const xr = blocks.find((b) => b.type === 'excelRange');
+      if (xr) {
+        return (
+          <div className="np">
+            <ExcelRangeRenderer block={xr} />
+          </div>
+        );
+      }
     }
 
     if (isImageType) {

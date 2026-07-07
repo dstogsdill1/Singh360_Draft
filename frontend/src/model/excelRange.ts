@@ -9,6 +9,7 @@ import type { ExcelCellStyle, MergedCell, PageBlock, PageModel, ProjectModel, Wo
 const BODY_W = 1600;
 const BODY_BUDGET = 820;
 const MIN_SCALE = 0.5;
+const MIN_ORPHAN_DATA_ROWS = 4;
 const DEFAULT_COL = 64;
 const DEFAULT_ROW = 20;
 
@@ -207,10 +208,20 @@ function excelDataChunks(block: PageBlock, dataRows: number[], headerH: number):
     chunks.push(chunk);
   }
 
-  // Orphan avoidance: last page must not be a single row unless unavoidable.
-  if (chunks.length >= 2 && chunks[chunks.length - 1].length === 1 && chunks[chunks.length - 2].length >= 3) {
-    const moved = chunks[chunks.length - 2].pop();
-    if (moved !== undefined) chunks[chunks.length - 1].unshift(moved);
+  // Orphan avoidance: merge small tail chunks onto the prior page when legal.
+  if (chunks.length >= 2 && chunks[chunks.length - 1].length < MIN_ORPHAN_DATA_ROWS) {
+    while (
+      chunks[chunks.length - 1].length < MIN_ORPHAN_DATA_ROWS &&
+      chunks.length >= 2 &&
+      chunks[chunks.length - 2].length > MIN_ORPHAN_DATA_ROWS
+    ) {
+      const moved = chunks[chunks.length - 2].pop();
+      if (moved !== undefined) chunks[chunks.length - 1].unshift(moved);
+    }
+    if (chunks.length >= 2 && chunks[chunks.length - 1].length < MIN_ORPHAN_DATA_ROWS && chunks[chunks.length - 2].length >= 2) {
+      const moved = chunks[chunks.length - 2].pop();
+      if (moved !== undefined) chunks[chunks.length - 1].unshift(moved);
+    }
   }
   return chunks.filter((c) => c.length);
 }
@@ -278,6 +289,12 @@ export function refreshBlockFromWorksheet(block: PageBlock, ws: Worksheet): Page
   const rows = (block.srcRows ?? full.srcRows ?? []).filter((r) => r >= 0 && r < nRows);
   if (!rows.length) return full;
   return sliceBlock(full, rows, { keepId: block.id });
+}
+
+function continuationTitle(baseTitle: string): string {
+  const low = (baseTitle || '').toLowerCase();
+  if (low.includes('continued')) return baseTitle;
+  return `${baseTitle} — CONTINUED`;
 }
 
 function continuationCode(base: string, index: number): string {
@@ -348,7 +365,7 @@ export function regenerateExcelGroup(project: ProjectModel, wsId: string): PageM
       include: base.include,
       sheetCode: code,
       displaySheetCode: code,
-      sheetTitle: `${base.sheetTitle} — CONTINUED`,
+      sheetTitle: continuationTitle(base.sheetTitle ?? ''),
       sheetTab: base.sheetTab,
       pageType: base.pageType,
       pageFamily: base.pageFamily,

@@ -29,6 +29,9 @@ TABLE_ROW_MAX_H = 92
 # split it onto continuation pages (keeps dense tables readable at 11x17).
 EXCEL_MIN_SCALE = 0.5
 
+# Minimum data rows on a continuation page; smaller tails merge onto prior page.
+MIN_ORPHAN_DATA_ROWS = 4
+
 # Page families whose pages render the real Excel range verbatim (excel_exact).
 EXCEL_EXACT_FAMILIES = {
     "matrix",
@@ -296,12 +299,16 @@ def _excel_data_chunks(block: dict[str, Any], data_rows: list[int], header_h: fl
             i += 1
         chunks.append(chunk)
 
-    # Orphan avoidance: pull one row down from the previous page so the last page
-    # carries at least two rows, unless the previous page would itself drop below
-    # two (i.e. the source truly has no other legal split).
-    if len(chunks) >= 2 and len(chunks[-1]) == 1 and len(chunks[-2]) >= 3:
-        moved = chunks[-2].pop()
-        chunks[-1].insert(0, moved)
+    # Orphan avoidance: if the last chunk has fewer than MIN_ORPHAN_DATA_ROWS,
+    # pull rows from the previous chunk until the tail is big enough or the prior
+    # page would drop below MIN_ORPHAN_DATA_ROWS (then the split is unavoidable).
+    if len(chunks) >= 2 and len(chunks[-1]) < MIN_ORPHAN_DATA_ROWS:
+        while len(chunks[-1]) < MIN_ORPHAN_DATA_ROWS and len(chunks) >= 2 and len(chunks[-2]) > MIN_ORPHAN_DATA_ROWS:
+            moved = chunks[-2].pop()
+            chunks[-1].insert(0, moved)
+        if len(chunks) >= 2 and len(chunks[-1]) < MIN_ORPHAN_DATA_ROWS and len(chunks[-2]) >= 2:
+            moved = chunks[-2].pop()
+            chunks[-1].insert(0, moved)
     return chunks
 
 
@@ -443,13 +450,88 @@ def _paginate_blocks(blocks: list[dict[str, Any]]) -> list[list[dict[str, Any]]]
     return pages if pages else [[]]
 
 
+def _continuation_title(base_title: str) -> str:
+    low = (base_title or "").lower()
+    if "continued" in low:
+        return base_title
+    return f"{base_title} — CONTINUED"
+
+
+def _page_should_paginate(page: dict[str, Any]) -> bool:
+    """Only normalized block pages with explicit continuation permission may split."""
+    if page.get("renderMode") == "excel_exact":
+        return False
+    if page.get("splitMode") == "none" or not page.get("allowContinuation", False):
+        return False
+    if page.get("pageType") in ("index", "cover", "canvas", "hybrid", "underlay"):
+        return False
+    return True
+
+
+def _append_continuation_pages(
+    composed: list[dict[str, Any]],
+    base: dict[str, Any],
+    groups: list[list[dict[str, Any]]],
+) -> None:
+    """Insert generated continuation pages immediately after ``base``."""
+    base_code = base.get("sheetCode", "")
+    base_title = base.get("sheetTitle", "")
+    group_id = base["id"]
+    cont_title = _continuation_title(base_title)
+
+    base["blocks"] = groups[0]
+    base["pageGroupId"] = group_id
+    base["continuationIndex"] = 0
+    base["displaySheetCode"] = base_code
+    composed.append(base)
+
+    for ci, grp in enumerate(groups[1:], start=1):
+        composed.append(
+            {
+                "id": f"{group_id}_c{ci}",
+                "order": base.get("order", 0),
+                "include": base.get("include", True),
+                "sheetCode": continuation_code(base_code, ci),
+                "displaySheetCode": continuation_code(base_code, ci),
+                "sheetTitle": cont_title,
+                "sheetTab": base.get("sheetTab", ""),
+                "pageType": base.get("pageType", "data-grid"),
+                "pageFamily": base.get("pageFamily", "table"),
+                "renderMode": base.get("renderMode", "normalized"),
+                "sourceSheet": base.get("sourceSheet", ""),
+                "sourceRange": base.get("sourceRange", ""),
+                "printArea": base.get("printArea"),
+                "splitMode": base.get("splitMode", "none"),
+                "repeatRows": base.get("repeatRows", []),
+                "minScale": base.get("minScale", EXCEL_MIN_SCALE),
+                "allowContinuation": base.get("allowContinuation", False),
+                "scaleMode": base.get("scaleMode", "fit_body"),
+                "orientation": base.get("orientation", "landscape"),
+                "templateId": base.get("templateId", "ansi-b-standard"),
+                "linkedWorksheetId": base.get("linkedWorksheetId"),
+                "blocks": grp,
+                "canvasObjects": [],
+                "assets": [],
+                "underlays": [],
+                "notes": "",
+                "revisionRows": [],
+                "pageGroupId": group_id,
+                "continuationOf": group_id,
+                "continuationIndex": ci,
+                "generatedContinuation": True,
+                "layoutWarnings": [],
+            }
+        )
+
+
 def continuation_summary(pages: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-sheet page counts for the import continuation preview.
 
     Groups by ``pageGroupId`` (base + its continuations), preserving order."""
+    included = [p for p in pages if p.get("include", True)]
     groups: dict[str, dict[str, Any]] = {}
     order: list[str] = []
-    for p in pages:
+    for p in included:
         gid = p.get("pageGroupId") or p.get("id")
         if gid not in groups:
             pages_count = 0
@@ -472,7 +554,7 @@ def continuation_summary(pages: list[dict[str, Any]]) -> dict[str, Any]:
         sheets.append(s)
     return {
         "sheets": sheets,
-        "totalPages": len(pages),
+        "totalPages": len(included),
         "totalSheets": len(sheets),
         "multiPageSheets": sum(1 for s in sheets if s["pages"] > 1),
     }
@@ -489,6 +571,9 @@ def compose_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     composed: list[dict[str, Any]] = []
 
     for page in pages:
+        if not page.get("include", True):
+            continue
+
         blocks = page.get("blocks") or []
         page_type = page.get("pageType", "")
         page.setdefault("pageFamily", page_family(page.get("sheetTab", ""), page.get("sheetTitle", ""), ""))
@@ -500,7 +585,25 @@ def compose_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         page.setdefault("layoutWarnings", [])
 
         # Canvas/cover/hybrid or empty → never split.
-        if page_type in ("canvas", "hybrid", "underlay") or not blocks:
+        if page_type in ("canvas", "hybrid", "underlay", "cover") or not blocks:
+            composed.append(page)
+            continue
+
+        excel_blocks = [b for b in blocks if b.get("type") == "excelRange"]
+        if page.get("renderMode") == "excel_exact" or excel_blocks:
+            if len(excel_blocks) == 1 and len(blocks) == len(excel_blocks):
+                parts = _split_excel_range_block(excel_blocks[0])
+                if len(parts) <= 1:
+                    page["blocks"] = parts
+                    composed.append(page)
+                else:
+                    base = deepcopy(page)
+                    _append_continuation_pages(composed, base, [[p] for p in parts])
+            else:
+                composed.append(page)
+            continue
+
+        if not _page_should_paginate(page):
             composed.append(page)
             continue
 
@@ -510,55 +613,8 @@ def compose_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             composed.append(page)
             continue
 
-        base_code = page.get("sheetCode", "")
-        base_title = page.get("sheetTitle", "")
-        group_id = page["id"]
-
-        # First group stays on the base page.
-        base = page
-        base["blocks"] = groups[0]
-        base["pageGroupId"] = group_id
-        base["continuationIndex"] = 0
-        base["displaySheetCode"] = base_code
-        composed.append(base)
-
-        # Remaining groups become generated continuation pages.
-        for ci, grp in enumerate(groups[1:], start=1):
-            cont = {
-                "id": f"{group_id}_c{ci}",
-                "order": base.get("order", 0),
-                "include": base.get("include", True),
-                "sheetCode": continuation_code(base_code, ci),
-                "displaySheetCode": continuation_code(base_code, ci),
-                "sheetTitle": f"{base_title} — CONTINUED",
-                "sheetTab": base.get("sheetTab", ""),
-                "pageType": base.get("pageType", "data-grid"),
-                "pageFamily": base.get("pageFamily", "table"),
-                "renderMode": base.get("renderMode", "normalized"),
-                "sourceSheet": base.get("sourceSheet", ""),
-                "sourceRange": base.get("sourceRange", ""),
-                "printArea": base.get("printArea"),
-                "splitMode": base.get("splitMode", "none"),
-                "repeatRows": base.get("repeatRows", []),
-                "minScale": base.get("minScale", EXCEL_MIN_SCALE),
-                "allowContinuation": base.get("allowContinuation", True),
-                "scaleMode": base.get("scaleMode", "fit_width"),
-                "orientation": base.get("orientation", "landscape"),
-                "templateId": base.get("templateId", "ansi-b-standard"),
-                "linkedWorksheetId": base.get("linkedWorksheetId"),
-                "blocks": grp,
-                "canvasObjects": [],
-                "assets": [],
-                "underlays": [],
-                "notes": "",
-                "revisionRows": [],
-                "pageGroupId": group_id,
-                "continuationOf": group_id,
-                "continuationIndex": ci,
-                "generatedContinuation": True,
-                "layoutWarnings": [],
-            }
-            composed.append(cont)
+        base = deepcopy(page)
+        _append_continuation_pages(composed, base, groups)
 
     # Re-sequence order to reflect insertion order.
     for i, p in enumerate(composed, start=1):

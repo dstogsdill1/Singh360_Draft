@@ -49,16 +49,22 @@ def _header_map(header_row: list[str]) -> dict[str, int]:
     return out
 
 
-def _included(raw: str, sheet_title: str, use_source: str) -> bool:
+def _included(raw: str, sheet_title: str, use_source: str, *, in_index: bool = True) -> bool:
+    """Index include column is law: only explicit YES/TRUE/include renders output."""
     text = (raw or "").strip().lower()
     cls_blob = f"{sheet_title} {use_source}".lower()
-    if text in {"n", "no", "false", "0", "exclude", "off", "excluded"}:
+    if text in {"n", "no", "false", "0", "exclude", "off", "excluded", "disabled"}:
         return False
-    if text in {"y", "yes", "true", "1", "include", "x", "✓"}:
+    if text in {"y", "yes", "true", "1", "include", "x", "✓", "on"}:
         return True
+    if "disabled" in cls_blob or "not included" in cls_blob or "optional" in cls_blob:
+        return False
     if "template" in cls_blob or "utility" in cls_blob:
         return False
-    return True
+    if in_index:
+        # Blank or unrecognized include cell on an index row → excluded.
+        return False
+    return False
 
 
 # Excel unit conversion. Column width is in "characters" of the default font;
@@ -368,21 +374,33 @@ def _tabular_enough(ws: dict[str, Any]) -> bool:
     if ncols < 2:
         return False
     filled = sum(1 for row in grid for c in row if (c or "").strip())
-    return filled >= 4
+    return filled >= 3
+
+
+def _should_use_excel_exact(page_type: str, family: str, ws: dict[str, Any]) -> bool:
+    """Render the worksheet range verbatim (excel_exact) for all tabular EMS pages."""
+    if page_type in ("cover", "canvas", "hybrid", "underlay"):
+        return False
+    if not _tabular_enough(ws):
+        return False
+    if page_type == "index":
+        return True
+    if family in EXCEL_EXACT_FAMILIES or family == "text":
+        return True
+    return False
 
 
 def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> dict[str, Any]:
     """Default continuation/pagination settings per page family.
 
-    Index/cover/canvas never auto-split. Dense tables (matrix, IDF) prefer scaling
-    down to minScale before row-splitting so SA31 index / LCP / IDF don't get
-    unnecessary continuation sheets."""
+    Index/cover/scope/workflow never auto-split. Dense tables (matrix, IDF) prefer
+    scaling down to minScale before row-splitting."""
     if not use_exact:
         return {
             "splitMode": "none",
             "allowContinuation": False,
             "minScale": EXCEL_MIN_SCALE,
-            "scaleMode": "fit_width",
+            "scaleMode": "fit_body",
         }
 
     settings: dict[str, Any] = {
@@ -391,15 +409,14 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
         "minScale": EXCEL_MIN_SCALE,
         "scaleMode": "fit_body",
     }
-    # Prefer fit-to-width scaling before splitting for wide/dense EMS tables.
     if family == "matrix":
         settings["minScale"] = 0.45
     elif family == "idfTable":
         settings["minScale"] = 0.42
     elif family in ("ioSchedule", "panelDetail", "rackLayout"):
         settings["minScale"] = 0.48
-    elif page_type == "index":
-        settings.update({"splitMode": "none", "allowContinuation": False})
+    elif page_type == "index" or family == "text":
+        settings.update({"splitMode": "none", "allowContinuation": False, "scaleMode": "fit_body"})
     return settings
 
 
@@ -533,6 +550,8 @@ def import_workbook(
         )
 
     index_entries = _parse_index(wb, _find_index_sheet(wb))
+    index_sheet_name = _find_index_sheet(wb)
+    has_index = bool(index_sheet_name and index_entries)
     index_lookup = {e["sheetTab"].lower(): e for e in index_entries if e.get("sheetTab")}
 
     pages = []
@@ -540,18 +559,17 @@ def import_workbook(
     for i, ws in enumerate(project["worksheets"]):
         idx = index_lookup.get(ws["name"].lower())
         title = idx["sheetTitle"] if idx else ws["name"]
-        include = idx["include"] if idx else True
+        include = idx["include"] if idx else (not has_index)
         use_source = idx["useSource"] if idx else ""
+
+        # Index include/exclude is law: no output page/tab/PDF for excluded sheets.
+        if not include:
+            continue
+
         page_type = classify_page_type(ws["name"], title, use_source)
         family = page_family(ws["name"], title, use_source)
 
-        # Exact-range pages (schedules, matrices, I/O tables, ...) render the real
-        # Excel range verbatim; everything else keeps the normalized block path.
-        use_exact = (
-            page_type not in ("cover", "index", "canvas")
-            and family in EXCEL_EXACT_FAMILIES
-            and _tabular_enough(ws)
-        )
+        use_exact = _should_use_excel_exact(page_type, family, ws)
         split_settings = _split_settings_for_page(family, page_type, use_exact)
 
         if use_exact:
