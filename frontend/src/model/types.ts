@@ -23,6 +23,10 @@ export interface PageBlock {
   items?: string[];
   headers?: string[];
   rows?: string[][];
+  /** Per-cell background fill/highlight, keyed "r:c" (r=-1 is a header cell).
+   *  Populated from source workbook fills at import and edited via the table
+   *  right-click Highlight actions. Persists in project JSON. */
+  cellFills?: Record<string, string>;
   filename?: string;
   styleRole?: string;
   editable?: boolean;

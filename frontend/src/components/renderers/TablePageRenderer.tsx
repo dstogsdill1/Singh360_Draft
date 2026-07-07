@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PageBlock } from '../../model/types';
 import { BODY_H } from '../../model/sheetGeometry';
+import { HIGHLIGHT_SWATCHES } from '../../model/tableStyle';
 import SheetContextMenu from '../SheetContextMenu';
 
 interface Props {
@@ -62,6 +63,19 @@ export default function TablePageRenderer({ block, onChange, onDuplicateTable, v
       cancelAnimationFrame(raf);
     };
   }, [headers, rows, variant]);
+
+  // Apply per-cell highlight fills without JSX inline styles (lint-safe): set
+  // element background from the block's cellFills map after each render. Empty
+  // value falls back to the CSS alternating-row style.
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+    const fills = block.cellFills ?? {};
+    table.querySelectorAll<HTMLElement>('th[data-row], td[data-row]').forEach((el) => {
+      const key = `${el.dataset.row}:${el.dataset.col}`;
+      el.style.backgroundColor = fills[key] || '';
+    });
+  }, [block.cellFills, headers, rows]);
 
   const updateHeader = (c: number, value: string) => {
     const next = [...headers];
@@ -167,6 +181,13 @@ export default function TablePageRenderer({ block, onChange, onDuplicateTable, v
     if (r < 0) updateHeader(c, value);
     else updateCell(r, c, value);
   };
+  const setHighlight = (r: number, c: number, color: string | null) => {
+    const next = { ...(block.cellFills ?? {}) };
+    const key = `${r}:${c}`;
+    if (color) next[key] = color;
+    else delete next[key];
+    onChange({ cellFills: next });
+  };
 
   return (
     <>
@@ -241,6 +262,12 @@ export default function TablePageRenderer({ block, onChange, onDuplicateTable, v
             { label: 'Clear Cell', divider: true, disabled: menu.r < 0, onClick: () => clearCell(menu.r, menu.c) },
             { label: 'Copy Cell', onClick: () => copyCell(menu.r, menu.c) },
             { label: 'Paste Cell', onClick: () => void pasteCell(menu.r, menu.c) },
+            ...HIGHLIGHT_SWATCHES.map((s, i) => ({
+              label: i === 0 ? `Highlight ▸ ${s.label}` : `Highlight ▸ ${s.label}`,
+              divider: i === 0,
+              onClick: () => setHighlight(menu.r, menu.c, s.color),
+            })),
+            { label: 'Clear Highlight', onClick: () => setHighlight(menu.r, menu.c, null) },
             { label: 'Duplicate Table', divider: true, disabled: !onDuplicateTable, onClick: () => onDuplicateTable?.() },
             { label: 'Fit Table to Body', onClick: () => onChange({ styleRole: 'fit-to-body' }) },
             { label: 'Resize Columns', disabled: true, hint: 'Column resize handles are not implemented yet; values still save safely.', onClick: () => {} },

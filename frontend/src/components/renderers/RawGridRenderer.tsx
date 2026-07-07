@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Worksheet } from '../../model/types';
 
 interface Props {
@@ -11,6 +11,17 @@ export default function RawGridRenderer({ worksheet, onGridChange }: Props) {
   const grid = worksheet?.grid ?? [];
   const styles = worksheet?.styles ?? {};
   const [activeCol, setActiveCol] = useState<number | null>(null);
+  const tableRef = useRef<HTMLTableElement | null>(null);
+
+  // Apply real source fill colors (lint-safe, no JSX inline styles) so the
+  // source preview matches the normalized output's preserved highlights.
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+    table.querySelectorAll<HTMLElement>('td[data-fill]').forEach((el) => {
+      el.style.backgroundColor = el.dataset.fill || '';
+    });
+  }, [worksheet]);
 
   if (!grid.length) {
     return <div className="np-empty">No source grid data.</div>;
@@ -41,14 +52,14 @@ export default function RawGridRenderer({ worksheet, onGridChange }: Props) {
           <tr key={r}>
             {row.map((cell, c) => {
               const st = styles[`${colLetter(c)}${r + 1}`];
+              const fill = typeof st?.fill === 'string' ? st.fill : '';
               const cls = [
                 st?.bold ? 'gc-bold' : '',
                 st?.italic ? 'gc-italic' : '',
-                st?.fill ? 'gc-fill' : '',
                 activeCol === c ? 'gc-col-active' : '',
               ].join(' ').trim();
               return (
-                <td key={c} className={cls || undefined}>
+                <td key={c} className={cls || undefined} data-fill={fill || undefined}>
                   <input
                     className="grid-cell-input"
                     value={cell ?? ''}

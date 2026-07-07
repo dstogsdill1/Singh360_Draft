@@ -223,12 +223,25 @@ def _build_table_block(
 
     headers = [(grid[header_idx][c] if c < len(grid[header_idx]) else "").strip() for c in range(ncols)]
     body_rows: list[list[str]] = []
-    for row in grid[header_idx + 1 :]:
+    cell_fills: dict[str, str] = {}
+    # Header-row fills (r = -1).
+    for c in range(ncols):
+        fill = _style_at(styles, header_idx, c).get("fill")
+        if fill:
+            cell_fills[f"-1:{c}"] = fill
+    out_r = 0
+    for src_r in range(header_idx + 1, len(grid)):
+        row = grid[src_r]
         if not any((c or "").strip() for c in row):
             continue
         body_rows.append([(row[c] if c < len(row) else "").strip() for c in range(ncols)])
+        for c in range(ncols):
+            fill = _style_at(styles, src_r, c).get("fill")
+            if fill:
+                cell_fills[f"{out_r}:{c}"] = fill
+        out_r += 1
 
-    return {
+    block: dict[str, Any] = {
         "id": ids.next(),
         "type": "matrix" if kind == "matrix" else "table",
         "sourceWorksheetId": ws_id,
@@ -238,6 +251,9 @@ def _build_table_block(
         "styleRole": "table-header",
         "editable": True,
     }
+    if cell_fills:
+        block["cellFills"] = cell_fills
+    return block
 
 
 def _image_blocks(refs: list[str], ws_id: str, ids: _Ids) -> list[dict[str, Any]]:
