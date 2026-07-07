@@ -341,6 +341,7 @@ export default function Ribbon({
 
         {tab === 'Draw' && (() => {
           const ln = selection?.isConnector ?? false;
+          const st = !!selection && !selection.isText && !selection.isImage;
           const COLORS: Array<[string, string]> = [
             ['#111111', 'Black'], ['#888888', 'Gray'], ['#d71920', 'Red'], ['#12539b', 'Blue'],
             ['#f2c200', 'Yellow'], ['#f28c28', 'Orange'], ['#00a651', 'Green'], ['#ffffff', 'White'],
@@ -361,17 +362,17 @@ export default function Ribbon({
                 <button className="ribbon-btn" disabled={!cx} onClick={canvas.addDashedBox} title="Insert a dashed boundary box for grouped devices/areas">Dashed Box</button>
               </Group>
               <Group title="Line Color">
-                <select className="ribbon-select" disabled={!ln} value={typeof selection?.stroke === 'string' ? selection.stroke : '#111111'} onChange={(e) => onUpdateSelection({ stroke: e.target.value })} title={ln ? 'Stroke color of the selected line/connector' : 'Select a line or connector first'}>
+                <select className="ribbon-select" disabled={!st} value={typeof selection?.stroke === 'string' ? selection.stroke : '#111111'} onChange={(e) => onUpdateSelection({ stroke: e.target.value })} title={st ? 'Stroke color of the selected line/boundary' : 'Select a line, bracket, or dashed box first'}>
                   {COLORS.map(([hex, label]) => <option key={hex} value={hex}>{label}</option>)}
                 </select>
               </Group>
               <Group title="Line Width">
-                <select className="ribbon-select" disabled={!ln} value={selection?.strokeWidth ?? 2} onChange={(e) => onUpdateSelection({ strokeWidth: Number(e.target.value) })} title={ln ? 'Line thickness' : 'Select a line or connector first'}>
+                <select className="ribbon-select" disabled={!st} value={selection?.strokeWidth ?? 2} onChange={(e) => onUpdateSelection({ strokeWidth: Number(e.target.value) })} title={st ? 'Line / boundary thickness' : 'Select a line, bracket, or dashed box first'}>
                   {[1, 2, 3, 4, 6].map((w) => <option key={w} value={w}>{w} px</option>)}
                 </select>
               </Group>
               <Group title="Line Style">
-                <select className="ribbon-select" disabled={!ln} value={selection?.dash ?? 'solid'} onChange={(e) => onUpdateSelection({ dash: e.target.value })} title={ln ? 'Solid / dashed / long-dash / dotted / dash-dot' : 'Select a line or connector first'}>
+                <select className="ribbon-select" disabled={!st} value={selection?.dash ?? 'solid'} onChange={(e) => onUpdateSelection({ dash: e.target.value })} title={st ? 'Solid / dashed / long-dash / dotted / dash-dot' : 'Select a line, bracket, or dashed box first'}>
                   <option value="solid">Solid</option>
                   <option value="dashed">Dashed</option>
                   <option value="long-dash">Long dash</option>
@@ -380,6 +381,10 @@ export default function Ribbon({
                 </select>
                 <button className={`ribbon-btn ${selection?.arrowStart ? 'active' : ''}`} disabled={!ln} onClick={() => onUpdateSelection({ arrowStart: !selection?.arrowStart })} title="Toggle arrowhead at start">Arrow Start</button>
                 <button className={`ribbon-btn ${selection?.arrowEnd ? 'active' : ''}`} disabled={!ln} onClick={() => onUpdateSelection({ arrowEnd: !selection?.arrowEnd })} title="Toggle arrowhead at end">Arrow End</button>
+              </Group>
+              <Group title="Edit">
+                <button className="ribbon-btn" disabled={!selection} onClick={() => onUpdateSelection({ angle: (selection?.angle ?? 0) - 90 })} title="Rotate selected object -90°">↺ -90°</button>
+                <button className="ribbon-btn" disabled={!selection} onClick={() => onUpdateSelection({ angle: (selection?.angle ?? 0) + 90 })} title="Rotate selected object +90°">↻ +90°</button>
               </Group>
               <Group title="Presets">
                 {CONNECTOR_PRESETS.map((p) => (
@@ -390,11 +395,11 @@ export default function Ribbon({
                     onClick={() => {
                       // Remember this style for the NEXT new line.
                       onSetLineStyle({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowStart: false, arrowEnd: p.arrowEnd ?? false });
-                      if (ln) {
+                      if (st) {
                         // A line is already selected → just recolor it and STAY in
                         // Select mode so you can click preset after preset without
                         // having to Esc + re-select each time.
-                        onUpdateSelection({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowEnd: p.arrowEnd ?? false });
+                        onUpdateSelection({ stroke: p.stroke, dash: p.dash, strokeWidth: p.strokeWidth, arrowEnd: ln ? (p.arrowEnd ?? false) : undefined });
                       } else {
                         // Nothing selected → arm the Line tool pre-styled to draw one.
                         onSetTool('line');

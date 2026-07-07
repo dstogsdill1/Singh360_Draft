@@ -145,16 +145,17 @@ function makeBracket(x: number, y: number) {
     ],
   });
 }
-function makeDashedBox(x: number, y: number) {
+function makeDashedBox(x: number, y: number, style: LineStyle) {
+  const sw = style.strokeWidth || 1.6;
   return new Rect({
     left: x,
     top: y,
     width: 240,
     height: 140,
     fill: 'transparent',
-    stroke: '#f28c28',
-    strokeWidth: 1.6,
-    strokeDashArray: [8, 4],
+    stroke: style.stroke || '#f28c28',
+    strokeWidth: sw,
+    strokeDashArray: dashArray((style.dash || 'dashed') as DashStyle, sw) || [8, 4],
   });
 }
 
@@ -840,7 +841,7 @@ export default function CanvasEditor({
       addPolyline: () => addObj(makePolyline(200, 340)),
       addElbow: () => addObj(makeElbow(200, 360)),
       addBracket: () => addObj(makeBracket(260, 260)),
-      addDashedBox: () => addObj(makeDashedBox(220, 220)),
+      addDashedBox: () => addObj(makeDashedBox(220, 220, lineStyleRef.current)),
       setLineStyle: (style: LineStyle) => { lineStyleRef.current = style; },
       startBus: (opts: BusOptions) => {
         const c = fabricRef.current;

@@ -256,7 +256,7 @@ export default function PropertiesPanel({
                 <input id="sel-sw" type="number" min={0} step={0.5} value={selection.strokeWidth} onChange={(e) => onUpdateSelection({ strokeWidth: Number(e.target.value) })} />
               </div>
             )}
-            {selection.isConnector && (
+            {!selection.isImage && (
               <>
                 <div className="field">
                   <label htmlFor="sel-dash" title="Solid, dashed, dotted, or dash-dot line">Line Style</label>
@@ -268,6 +268,10 @@ export default function PropertiesPanel({
                     <option value="dash-dot">Dash-dot</option>
                   </select>
                 </div>
+              </>
+            )}
+            {selection.isConnector && (
+              <>
                 <div className="field">
                   <label htmlFor="sel-arrowhead">Arrowhead</label>
                   <select
