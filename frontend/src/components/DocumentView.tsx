@@ -37,7 +37,8 @@ interface Props {
   sourceDirty?: boolean;
   sourceStatusLabel?: string;
   onViewModeChange: (mode: ViewMode) => void;
-  onRefreshFromSource?: () => void;
+  onRebuildFromSource?: () => void;
+  canRebuildFromSource?: boolean;
   activeTool: string;
   snap: boolean;
   overlayMode: boolean;
@@ -69,7 +70,8 @@ export default function DocumentView({
   sourceDirty,
   sourceStatusLabel,
   onViewModeChange,
-  onRefreshFromSource,
+  onRebuildFromSource,
+  canRebuildFromSource,
   activeTool,
   snap,
   overlayMode,
@@ -161,7 +163,8 @@ export default function DocumentView({
         sourceDirty={sourceDirty}
         sourceStatusLabel={sourceStatusLabel}
         onViewModeChange={onViewModeChange}
-        onRefreshFromSource={onRefreshFromSource}
+        onRebuildFromSource={onRebuildFromSource}
+        canRebuildFromSource={canRebuildFromSource}
       />
       <div
         className="sheet-viewport"

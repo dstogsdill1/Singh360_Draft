@@ -110,7 +110,11 @@ export default function App() {
   const [backupOpen, setBackupOpen] = useState(false);
   const [busOpen, setBusOpen] = useState(false);
   const [addSheetPending, setAddSheetPending] = useState<{ refId: string; where: 'before' | 'after' } | null>(null);
-  const [importWsOpen, setImportWsOpen] = useState<{ afterPageId?: string } | null>(null);
+  const [importWsOpen, setImportWsOpen] = useState<{
+    afterPageId?: string;
+    replacePageId?: string;
+    replacePageTitle?: string;
+  } | null>(null);
   const [pendingWorkbookFile, setPendingWorkbookFile] = useState<File | null>(null);
   const [renumberBadge, setRenumberBadge] = useState(false);
   const [theme, setThemeState] = useState<'dark' | 'light'>(() => {
@@ -364,7 +368,11 @@ export default function App() {
   const sourceRedoRef = useRef<() => boolean>(() => false);
 
   /** Rebuild linked normalized pages for a worksheet from its source grid. */
-  const refreshPagesFromWorksheet = useCallback((wsId: string, pageId?: string | null) => {
+  const refreshPagesFromWorksheet = useCallback((
+    wsId: string,
+    pageId?: string | null,
+    opts?: { full?: boolean },
+  ) => {
     setProjectSync((prev) => {
       if (!prev) return prev;
       const ws = prev.worksheets.find((w) => w.id === wsId);
@@ -372,7 +380,9 @@ export default function App() {
       const linked = prev.pages.filter((p) => p.linkedWorksheetId === wsId);
       const isExact = linked.some((p) => p.renderMode === 'excel_exact');
       let pages = prev.pages;
-      if (isExact) {
+      if (isExact && opts?.full) {
+        pages = regenerateExcelGroup({ ...prev, worksheets: prev.worksheets }, wsId);
+      } else if (isExact) {
         pages = linked.map((pg) => {
           const b = (pg.blocks ?? [])[0];
           if (!b || b.type !== 'excelRange') return pg;
@@ -398,11 +408,14 @@ export default function App() {
   }, [setProjectSync]);
 
   /** Rebuild the active page's normalized blocks from its linked worksheet. */
-  const refreshActivePageFromSource = useCallback(() => {
+  const rebuildCurrentPageFromSource = useCallback(() => {
+    document.dispatchEvent(new CustomEvent('singh360:capture-active-editors'));
+    const el = document.activeElement as HTMLElement | null;
+    el?.blur?.();
     const pageId = activePageRef.current?.id;
     const wsId = activePageRef.current?.linkedWorksheetId;
     if (!wsId) return;
-    refreshPagesFromWorksheet(wsId, pageId);
+    refreshPagesFromWorksheet(wsId, pageId, { full: true });
     setSourceDirty(false);
     setSourceEditStatus('updated');
   }, [refreshPagesFromWorksheet]);
@@ -490,13 +503,10 @@ export default function App() {
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     if (viewModeRef.current === 'source' && mode === 'normalized') {
-      document.dispatchEvent(new CustomEvent('singh360:capture-active-editors'));
-      const el = document.activeElement as HTMLElement | null;
-      el?.blur?.();
-      refreshActivePageFromSource();
+      rebuildCurrentPageFromSource();
     }
     setViewMode(mode);
-  }, [refreshActivePageFromSource]);
+  }, [rebuildCurrentPageFromSource]);
 
   // Keep the mutable project ref in sync with committed React state only.
   // Do NOT assign this during render: a page-switch render can otherwise
@@ -982,7 +992,11 @@ export default function App() {
     }
   };
 
-  const onImportedWorksheets = async (pageIds: string[], renumberSuggested: boolean) => {
+  const onImportedWorksheets = async (
+    pageIds: string[],
+    renumberSuggested: boolean,
+    replacedPageId?: string,
+  ) => {
     setImportWsOpen(null);
     if (!project) return;
     try {
@@ -990,8 +1004,11 @@ export default function App() {
       lastSavedJsonRef.current = JSON.stringify(p);
       resetSourceEditState();
       setProjectSync(p);
-      // Select the first imported page.
-      if (pageIds.length) setActivePageId(pageIds[0]);
+      if (replacedPageId) {
+        setActivePageId(replacedPageId);
+      } else if (pageIds.length) {
+        setActivePageId(pageIds[0]);
+      }
       if (renumberSuggested) setRenumberBadge(true);
     } catch (err) {
       console.error('refresh after import failed', err);
@@ -1267,7 +1284,11 @@ export default function App() {
       renumberBadge={renumberBadge}
       onOpenProject={() => setOpenProjectOpen(true)}
       onCleanWorkspace={() => setCleanWorkspaceOpen(true)}
-      onImportWorksheet={() => setImportWsOpen({ afterPageId: activePageId ?? undefined })}
+      onImportWorksheet={() => setImportWsOpen({
+        afterPageId: activePageId ?? undefined,
+        replacePageId: activePageId ?? undefined,
+        replacePageTitle: activePage?.sheetTitle,
+      })}
       onArchiveCurrentProject={() => void onArchiveCurrentProject()}
       theme={theme}
       onSetTheme={setThemeState}
@@ -1308,7 +1329,9 @@ export default function App() {
         <ImportWorksheetModal
           projectId={project.id}
           insertAfterPageId={importWsOpen.afterPageId}
-          onImported={(ids, rs) => void onImportedWorksheets(ids, rs)}
+          replacePageId={importWsOpen.replacePageId}
+          replacePageTitle={importWsOpen.replacePageTitle}
+          onImported={(ids, rs, replaced) => void onImportedWorksheets(ids, rs, replaced)}
           onCancel={() => setImportWsOpen(null)}
         />
       )}
@@ -1359,7 +1382,8 @@ export default function App() {
           sourceDirty={sourceDirty}
           sourceStatusLabel={sourceStatusLabel}
           onViewModeChange={handleViewModeChange}
-          onRefreshFromSource={refreshActivePageFromSource}
+          onRebuildFromSource={rebuildCurrentPageFromSource}
+          canRebuildFromSource={!!activePage?.linkedWorksheetId}
           activeTool={activeTool}
           snap={snap}
           overlayMode={overlayMode}
@@ -1535,7 +1559,9 @@ export default function App() {
       <ImportWorksheetModal
         projectId={project.id}
         insertAfterPageId={importWsOpen.afterPageId}
-        onImported={(ids, rs) => void onImportedWorksheets(ids, rs)}
+        replacePageId={importWsOpen.replacePageId}
+        replacePageTitle={importWsOpen.replacePageTitle}
+        onImported={(ids, rs, replaced) => void onImportedWorksheets(ids, rs, replaced)}
         onCancel={() => setImportWsOpen(null)}
       />
     )}

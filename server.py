@@ -657,6 +657,7 @@ def do_import_workbook_sheet(project_id: str):
         return jsonify(_err("Invalid sheetNames.", str(exc))), 400
 
     insert_after_id = request.form.get("insertAfterPageId") or None
+    replace_page_id = request.form.get("replacePageId") or None
     template_override = request.form.get("templateOverride") or None
 
     # Save the workbook permanently to the project sources directory.
@@ -671,6 +672,7 @@ def do_import_workbook_sheet(project_id: str):
             wb_path,
             sheet_names,
             insert_after_page_id=insert_after_id,
+            replace_page_id=replace_page_id,
             template_override=template_override,
             assets_dir=store.assets_excel_dir(project_id, doc),
             asset_url_prefix=f"/api/assets/{project_id}",
@@ -686,9 +688,10 @@ def do_import_workbook_sheet(project_id: str):
     return jsonify({
         "ok": True,
         "id": project_id,
-        "pagesAdded": len(new_pages),
+        "pagesAdded": len(new_pages) if not replace_page_id else 0,
         "pageIds": [p["id"] for p in new_pages],
-        "renumberSuggested": True,
+        "renumberSuggested": not bool(replace_page_id),
+        "replacedPageId": replace_page_id if replace_page_id else None,
     })
 
 

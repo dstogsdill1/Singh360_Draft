@@ -213,6 +213,16 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
       if (Math.abs(scale - last) < 0.003) return;
       last = scale;
       wrap.style.setProperty('--xr-scale', String(scale));
+      // `transform: scale()` only changes paint size, not layout size, so the
+      // parent `.np-xr` (auto-height, overflow:hidden) would still size itself
+      // from the pre-transform box. When scale > 1 (a narrow table grown to
+      // fill the body width) that leaves the visually-larger content taller
+      // than its own too-small ancestor box, silently clipping the bottom
+      // rows. Give the wrapper explicit post-scale dimensions so the ancestor
+      // always sizes to the real, visible footprint — never crops, never
+      // leaves a shrink-mode gap either.
+      wrap.style.width = `${Math.ceil(w * scale)}px`;
+      wrap.style.height = `${Math.ceil(h * scale)}px`;
     };
     const schedule = () => {
       cancelAnimationFrame(raf);

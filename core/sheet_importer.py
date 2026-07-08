@@ -57,6 +57,7 @@ def import_workbook_sheets(
     sheet_names: list[str],
     *,
     insert_after_page_id: str | None = None,
+    replace_page_id: str | None = None,
     append: bool = False,
     template_override: str | None = None,
     assets_dir=None,
@@ -65,9 +66,9 @@ def import_workbook_sheets(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Import selected worksheets into the project.
 
-    Returns the mutated project (caller must save) and the list of new page dicts.
-    Existing pages are never removed. If ``insert_after_page_id`` is given the
-    new pages are inserted after that page, otherwise they are appended.
+    Returns the mutated project (caller must save) and the list of new or updated page dicts.
+    When ``replace_page_id`` is set, the first selected sheet replaces the linked source
+    on that existing page — no duplicate output page is created.
     """
     xlsx_path = Path(xlsx_path)
     wb = load_workbook(filename=str(xlsx_path), data_only=False)
@@ -120,8 +121,60 @@ def import_workbook_sheets(
         })
         existing_ws_names.add(unique_name)
 
-    # Compute the insertion index in pages.
     pages: list[dict[str, Any]] = project.get("pages", [])
+
+    # Replace the linked source on an existing output page (no new page tab).
+    if replace_page_id:
+        if len(sheet_names) != 1:
+            wb.close()
+            raise ValueError("replace_page_id requires exactly one sheet name")
+        sheet_name = sheet_names[0]
+        ws_id = ws_id_by_name.get(sheet_name)
+        ws_data = next((w for w in project.get("worksheets", []) if w.get("id") == ws_id), None)
+        target_idx = next((i for i, p in enumerate(pages) if p.get("id") == replace_page_id), None)
+        if target_idx is None or not ws_data:
+            wb.close()
+            raise ValueError(f"replace page {replace_page_id!r} or worksheet not found")
+        target = pages[target_idx]
+        group_id = target.get("pageGroupId") or target.get("id")
+        # Drop stale generated continuations for this page group.
+        pages = [
+            p for p in pages
+            if not (
+                p.get("generatedContinuation")
+                and (p.get("continuationOf") == group_id or p.get("pageGroupId") == group_id)
+                and p.get("id") != replace_page_id
+            )
+        ]
+        target_idx = next((i for i, p in enumerate(pages) if p.get("id") == replace_page_id), None)
+        page_type = template_override or target.get("pageType") or classify_page_type(sheet_name, sheet_name, "")
+        blocks = normalize_page(ws_data, ws_id, page_type, sheet_name)
+        updated = {
+            **target,
+            "linkedWorksheetId": ws_id,
+            "blocks": blocks,
+            "importedFrom": {
+                "sourceFile": src_filename,
+                "sheetName": sheet_name,
+                "importedAt": _ts(),
+                "replacedPageId": replace_page_id,
+            },
+        }
+        pages[target_idx] = updated
+        for i, p in enumerate(pages):
+            p["order"] = i + 1
+        project["pages"] = pages
+        project.setdefault("importHistory", []).append({
+            "sourceFile": src_filename,
+            "sheetNames": sheet_names,
+            "importedAt": _ts(),
+            "pagesAdded": 0,
+            "replacedPageId": replace_page_id,
+        })
+        wb.close()
+        return sanitize_json(project), [updated]
+
+    # Compute the insertion index in pages.
     if insert_after_page_id:
         ref_idx = next(
             (i for i, p in enumerate(pages) if p.get("id") == insert_after_page_id), None

@@ -123,13 +123,14 @@ export async function importWorksheets(
   projectId: string,
   file: File,
   sheetNames: string[],
-  opts: { insertAfterPageId?: string; templateOverride?: string } = {},
-): Promise<{ pagesAdded: number; pageIds: string[]; renumberSuggested: boolean }> {
+  opts: { insertAfterPageId?: string; templateOverride?: string; replacePageId?: string } = {},
+): Promise<{ pagesAdded: number; pageIds: string[]; renumberSuggested: boolean; replacedPageId?: string }> {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('sheetNames', JSON.stringify(sheetNames));
   if (opts.insertAfterPageId) fd.append('insertAfterPageId', opts.insertAfterPageId);
   if (opts.templateOverride) fd.append('templateOverride', opts.templateOverride);
+  if (opts.replacePageId) fd.append('replacePageId', opts.replacePageId);
   const res = await fetch(`/api/projects/${projectId}/import/workbook-sheet`, { method: 'POST', body: fd });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

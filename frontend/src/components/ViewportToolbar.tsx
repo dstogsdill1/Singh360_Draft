@@ -8,7 +8,8 @@ interface Props {
   sourceDirty?: boolean;
   sourceStatusLabel?: string;
   onViewModeChange: (mode: ViewMode) => void;
-  onRefreshFromSource?: () => void;
+  onRebuildFromSource?: () => void;
+  canRebuildFromSource?: boolean;
 }
 
 export default function ViewportToolbar({
@@ -18,7 +19,8 @@ export default function ViewportToolbar({
   sourceDirty,
   sourceStatusLabel,
   onViewModeChange,
-  onRefreshFromSource,
+  onRebuildFromSource,
+  canRebuildFromSource,
 }: Props) {
   const pageLabel =
     activePage.pageNumber != null
@@ -34,9 +36,14 @@ export default function ViewportToolbar({
       <span className="vt-viewmode">
         <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Normalized</button>
         <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Source</button>
-        {viewMode === 'normalized' && sourceDirty && onRefreshFromSource ? (
-          <button className="fit-btn" type="button" onClick={onRefreshFromSource} title="Rebuild normalized page from source">
-            Refresh From Source
+        {canRebuildFromSource && onRebuildFromSource ? (
+          <button
+            className="fit-btn"
+            type="button"
+            onClick={onRebuildFromSource}
+            title="Rebuild this page's normalized output from the linked source worksheet"
+          >
+            Rebuild This Page From Source
           </button>
         ) : null}
         {sourceStatusLabel ? (
