@@ -364,14 +364,84 @@ export function planExcelRange(block: PageBlock): { pages: number; willSplit: bo
   };
 }
 
+/** Keep import-time layout/render tuning when only cell values changed. */
+function preserveBlockPresentationMeta(prev: PageBlock, next: PageBlock): PageBlock {
+  const out: PageBlock = { ...next };
+  if (prev.renderProfile !== undefined) out.renderProfile = prev.renderProfile;
+  if (prev.nowrapColumns !== undefined) out.nowrapColumns = prev.nowrapColumns;
+  if (prev.noGrow !== undefined) out.noGrow = prev.noGrow;
+  if (prev.layoutWarnings !== undefined) out.layoutWarnings = prev.layoutWarnings;
+  if (prev.splitMode !== undefined) out.splitMode = prev.splitMode;
+  if (prev.minScale !== undefined) out.minScale = prev.minScale;
+  if (prev.allowContinuation !== undefined) out.allowContinuation = prev.allowContinuation;
+  if (prev.scaleMode !== undefined) out.scaleMode = prev.scaleMode;
+  if (prev.repeatRows !== undefined) out.repeatRows = prev.repeatRows;
+  if (prev.headerRowCount !== undefined) out.headerRowCount = prev.headerRowCount;
+  if (prev.bodyRowFillMode !== undefined) out.bodyRowFillMode = prev.bodyRowFillMode;
+  if (prev.gridLines !== undefined) out.gridLines = prev.gridLines;
+  if (prev.editable !== undefined) out.editable = prev.editable;
+  if (prev.styleRole !== undefined) out.styleRole = prev.styleRole;
+  if (prev.orientation !== undefined) out.orientation = prev.orientation;
+  if (prev.bodyFontPx !== undefined) out.bodyFontPx = prev.bodyFontPx;
+  if (prev.renderProfile || (prev as PageBlock & { layoutProfile?: string }).layoutProfile) {
+    if (prev.colWidths?.length) out.colWidths = prev.colWidths;
+    if (prev.rowHeights?.length) out.rowHeights = prev.rowHeights;
+  }
+  const prevExt = prev as PageBlock & { layoutProfile?: string; columnPriorities?: number[] };
+  const outExt = out as PageBlock & { layoutProfile?: string; columnPriorities?: number[] };
+  if (prevExt.layoutProfile !== undefined) outExt.layoutProfile = prevExt.layoutProfile;
+  if (prevExt.columnPriorities !== undefined) outExt.columnPriorities = prevExt.columnPriorities;
+  return out;
+}
+
+function trimTrailingEmptyColumns(grid: string[][]): string[][] {
+  const maxCol = grid.reduce((m, row) => {
+    let last = -1;
+    for (let i = 0; i < row.length; i += 1) {
+      if ((row[i] ?? '').trim() !== '') last = i;
+    }
+    return Math.max(m, last + 1);
+  }, 0);
+  const cols = Math.max(1, maxCol);
+  return grid.map((row) => {
+    const out = row.slice(0, cols);
+    while (out.length < cols) out.push('');
+    return out;
+  });
+}
+
 /** Refresh a single page's block from the worksheet using its srcRows (values /
  *  fills / borders reflected, split pages stay non-duplicated). */
 export function refreshBlockFromWorksheet(block: PageBlock, ws: Worksheet): PageBlock {
   const full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
   const nRows = (full.grid ?? []).length;
   const rows = (block.srcRows ?? full.srcRows ?? []).filter((r) => r >= 0 && r < nRows);
-  if (!rows.length) return full;
-  return sliceBlock(full, rows, { keepId: block.id });
+  if (!rows.length) return preserveBlockPresentationMeta(block, full);
+  return preserveBlockPresentationMeta(block, sliceBlock(full, rows, { keepId: block.id }));
+}
+
+/** Rebuild normalized blocks for one page from its linked worksheet source grid. */
+export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel {
+  const blocks = page.blocks ?? [];
+  let nextBlocks: PageBlock[];
+  if (page.renderMode === 'excel_exact') {
+    nextBlocks = blocks.map((b) => (b.type === 'excelRange' ? refreshBlockFromWorksheet(b, ws) : b));
+  } else {
+    const tableIdx = blocks.findIndex((b) => b.type === 'matrix' || b.type === 'table');
+    if (tableIdx < 0) {
+      nextBlocks = blocks;
+    } else {
+      const normalized = trimTrailingEmptyColumns(ws.grid ?? []);
+      const headers = (normalized[0] ?? []).map((x) => x ?? '');
+      const rows = normalized.slice(1).map((r) => r.map((x) => x ?? ''));
+      nextBlocks = blocks.map((b, i) => (i === tableIdx ? { ...b, headers, rows } : b));
+    }
+  }
+  return {
+    ...page,
+    blocks: nextBlocks,
+    sourceRevision: (page.sourceRevision ?? 0) + 1,
+  };
 }
 
 function continuationTitle(baseTitle: string): string {

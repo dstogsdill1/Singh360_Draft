@@ -34,7 +34,9 @@ interface Props {
   view: ViewControls;
   actualZoom: number;
   viewMode: ViewMode;
+  sourceDirty?: boolean;
   onViewModeChange: (mode: ViewMode) => void;
+  onRefreshFromSource?: () => void;
   activeTool: string;
   snap: boolean;
   overlayMode: boolean;
@@ -63,7 +65,9 @@ export default function DocumentView({
   view,
   actualZoom,
   viewMode,
+  sourceDirty,
   onViewModeChange,
+  onRefreshFromSource,
   activeTool,
   snap,
   overlayMode,
@@ -148,7 +152,14 @@ export default function DocumentView({
   return (
     <>
       <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} onReorder={onReorderPages} onRenameTitle={onRenamePageTitle} onContextMenu={onPageContextMenu} />
-      <ViewportToolbar activePage={activePage} view={view} viewMode={viewMode} onViewModeChange={onViewModeChange} />
+      <ViewportToolbar
+        activePage={activePage}
+        view={view}
+        viewMode={viewMode}
+        sourceDirty={sourceDirty}
+        onViewModeChange={onViewModeChange}
+        onRefreshFromSource={onRefreshFromSource}
+      />
       <div
         className="sheet-viewport"
         ref={viewportRef}
@@ -182,6 +193,7 @@ export default function DocumentView({
           >
             <SheetFrame titleBlock={<TitleBlock project={project} page={activePage} />} sourceView={viewMode === 'source'}>
               <PageRenderer
+                key={`${activePage.id}-${activePage.sourceRevision ?? 0}-${viewMode}`}
                 page={activePage}
                 worksheet={worksheet}
                 project={project}

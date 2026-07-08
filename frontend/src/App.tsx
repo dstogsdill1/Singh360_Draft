@@ -15,7 +15,7 @@ import {
 import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
 import ContinuationPreviewModal from './components/ContinuationPreviewModal';
-import { refreshBlockFromWorksheet, regenerateExcelGroup } from './model/excelRange';
+import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource } from './model/excelRange';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
@@ -91,6 +91,7 @@ export default function App() {
 
   // Rendering + editing state.
   const [viewMode, setViewMode] = useState<ViewMode>('normalized');
+  const [sourceDirty, setSourceDirty] = useState(false);
   const [activeTool, setActiveTool] = useState('select');
   const [overlayMode, setOverlayMode] = useState(false);
   const [lineStyle, setLineStyle] = useState<LineStyle>({
@@ -342,6 +343,35 @@ export default function App() {
   activePageRef.current = activePage;
   viewModeRef.current = viewMode;
   selectionRef.current = selection;
+
+  /** Rebuild the active page's normalized blocks from its linked worksheet. */
+  const refreshActivePageFromSource = useCallback(() => {
+    setProjectSync((prev) => {
+      if (!prev) return prev;
+      const pageId = activePageRef.current?.id;
+      if (!pageId) return prev;
+      const pg = prev.pages.find((p) => p.id === pageId);
+      if (!pg?.linkedWorksheetId) return prev;
+      const ws = prev.worksheets.find((w) => w.id === pg.linkedWorksheetId);
+      if (!ws) return prev;
+      return {
+        ...prev,
+        pages: prev.pages.map((p) => (p.id === pageId ? refreshPageFromSource(pg, ws) : p)),
+      };
+    });
+    setSourceDirty(false);
+  }, [setProjectSync]);
+
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    if (viewModeRef.current === 'source' && mode === 'normalized') {
+      // Flush any in-progress source cell edit before unmounting the grid.
+      document.dispatchEvent(new CustomEvent('singh360:capture-active-editors'));
+      const el = document.activeElement as HTMLElement | null;
+      el?.blur?.();
+      refreshActivePageFromSource();
+    }
+    setViewMode(mode);
+  }, [refreshActivePageFromSource]);
 
   // Keep the mutable project ref in sync with committed React state only.
   // Do NOT assign this during render: a page-switch render can otherwise
@@ -1170,7 +1200,9 @@ export default function App() {
           view={view}
           actualZoom={actualZoom}
           viewMode={viewMode}
-          onViewModeChange={setViewMode}
+          sourceDirty={sourceDirty}
+          onViewModeChange={handleViewModeChange}
+          onRefreshFromSource={refreshActivePageFromSource}
           activeTool={activeTool}
           snap={snap}
           overlayMode={overlayMode}
@@ -1190,6 +1222,12 @@ export default function App() {
           onDropComponent={onDropComponent}
           onScaleChange={onScaleChange}
           onWorksheetChange={(wsId, patch, opts) => {
+            if (
+              activePageRef.current?.linkedWorksheetId === wsId
+              && viewModeRef.current === 'source'
+            ) {
+              setSourceDirty(true);
+            }
             setProjectSync((prev) => {
               if (!prev) return prev;
               const worksheets = prev.worksheets.map((ws) =>

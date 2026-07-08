@@ -197,6 +197,8 @@ export interface PageModel {
   templateId: string;
   linkedWorksheetId?: string;
   blocks?: PageBlock[];
+  /** Bumped when normalized blocks are rebuilt from source (forces view refresh). */
+  sourceRevision?: number;
   canvasObjects: Record<string, unknown>[];
   assets?: Record<string, unknown>[];
   notes: string;

@@ -5,10 +5,19 @@ interface Props {
   activePage: PageModel;
   view: ViewControls;
   viewMode: ViewMode;
+  sourceDirty?: boolean;
   onViewModeChange: (mode: ViewMode) => void;
+  onRefreshFromSource?: () => void;
 }
 
-export default function ViewportToolbar({ activePage, view, viewMode, onViewModeChange }: Props) {
+export default function ViewportToolbar({
+  activePage,
+  view,
+  viewMode,
+  sourceDirty,
+  onViewModeChange,
+  onRefreshFromSource,
+}: Props) {
   const pageLabel =
     activePage.pageNumber != null
       ? `Page ${activePage.pageNumber} of ${activePage.pageTotal ?? '—'}`
@@ -23,6 +32,11 @@ export default function ViewportToolbar({ activePage, view, viewMode, onViewMode
       <span className="vt-viewmode">
         <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Normalized</button>
         <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Source</button>
+        {viewMode === 'normalized' && sourceDirty && onRefreshFromSource ? (
+          <button className="fit-btn" type="button" onClick={onRefreshFromSource} title="Rebuild normalized page from source">
+            Refresh From Source
+          </button>
+        ) : null}
       </span>
       <span className="vt-spacer" />
       <span className="sb-item">{pageLabel}</span>

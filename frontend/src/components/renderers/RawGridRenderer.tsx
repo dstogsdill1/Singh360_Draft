@@ -49,6 +49,22 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
   const [editing, setEditing] = useState<{ r: number; c: number } | null>(null);
   const draggingRef = useRef(false);
   const clipboardRef = useRef<string[][]>([]);
+  const editingInputRef = useRef<HTMLInputElement | null>(null);
+  const editingCellRef = useRef<{ r: number; c: number } | null>(null);
+
+  useEffect(() => {
+    const capture = () => {
+      const cell = editingCellRef.current;
+      const input = editingInputRef.current;
+      if (!cell || !input || !worksheet) return;
+      onWorksheetChange(wsSetCell(worksheet, cell.r, cell.c, input.value));
+      setEditing(null);
+      editingCellRef.current = null;
+      editingInputRef.current = null;
+    };
+    document.addEventListener('singh360:capture-active-editors', capture);
+    return () => document.removeEventListener('singh360:capture-active-editors', capture);
+  }, [worksheet, onWorksheetChange]);
 
   useEffect(() => {
     const up = () => {
@@ -236,7 +252,10 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
                     onMouseEnter={() => {
                       if (draggingRef.current && sel) setSel({ ...sel, r1: r, c1: c });
                     }}
-                    onDoubleClick={() => setEditing({ r, c })}
+                    onDoubleClick={() => {
+                      setEditing({ r, c });
+                      editingCellRef.current = { r, c };
+                    }}
                   >
                     {isEditing ? (
                       <input
@@ -244,16 +263,28 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
                         autoFocus
                         defaultValue={grid[r]?.[c] ?? ''}
                         aria-label={`Cell ${a1(r, c)}`}
+                        ref={(el) => {
+                          editingInputRef.current = el;
+                          if (el && editingCellRef.current?.r === r && editingCellRef.current?.c === c) {
+                            editingCellRef.current = { r, c };
+                          }
+                        }}
                         onBlur={(e) => {
                           setValue(r, c, e.currentTarget.value);
                           setEditing(null);
+                          editingCellRef.current = null;
+                          editingInputRef.current = null;
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             setValue(r, c, e.currentTarget.value);
                             setEditing(null);
+                            editingCellRef.current = null;
+                            editingInputRef.current = null;
                           } else if (e.key === 'Escape') {
                             setEditing(null);
+                            editingCellRef.current = null;
+                            editingInputRef.current = null;
                           }
                         }}
                       />
