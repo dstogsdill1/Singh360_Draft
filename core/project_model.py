@@ -41,6 +41,15 @@ def classify_page_type(sheet_tab: str, title: str, use_source: str = "") -> str:
         return "index"
     if any(k in text for k in ("bom", "material", "matrix", "schedule", "table", "notes", "guideline")):
         return "data-grid"
+    # I/O schedules and rack/network tables sometimes carry "layout" or
+    # "location" in their tab/title (e.g. SA38's "Rack A I/O & Layout") but
+    # are real tabular content, not a blank drawing/floor-plan page — check
+    # for tabular-I/O keywords before the canvas fallback below. Mirrors the
+    # more complete family mapping in core/page_composer.py::page_family
+    # (see docs/PAGE_TYPE_MAPPING.md); without this a real 200+ row I/O
+    # schedule silently renders as an empty canvas page.
+    if any(k in text for k in ("i/o", "io schedule", "points list", "bacnet", "rack", "condenser", "idf", "network frame")):
+        return "data-grid"
     if any(k in text for k in ("one-line", "oneline", "layout", "diagram", "schematic", "wiring", "location")):
         return "canvas"
     return "data-grid"

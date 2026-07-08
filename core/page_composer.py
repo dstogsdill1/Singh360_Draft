@@ -291,11 +291,72 @@ def _slice_excel_block(block: dict[str, Any], row_indices: list[int], part_index
     return nb
 
 
+def _gold_section_starts(block: dict[str, Any]) -> list[tuple[int, int]]:
+    """Ordered ``(gold_row, gray_row)`` pairs: a gold controller/section band
+    row immediately followed by its own gray column-header row (Kyle/SA38
+    -style repeating multi-controller sheets — RACK A/B, DLE Controllers,
+    and similar; FINAL RELEASE CLEANUP 4H+SA38, Phase F).
+
+    This is the atomic "controller section" unit for those sheets: a split
+    should only ever land on a ``gold_row`` boundary, and a continuation
+    whose data starts mid-section must repeat this exact pair as its own
+    header. Also fires for SA31-style LCP-1/LCP-2 gold section bands
+    (already used by ``_logical_section_chunks``'s keyword special case),
+    generalizing that same idea by fill color instead of row text.
+    """
+    from core.table_style_profile import is_gold_fill
+
+    styles = block.get("styles") or {}
+    grid = block.get("grid") or []
+    merges = block.get("mergedCells") or []
+    n_rows = len(grid)
+    ncols = max((len(r) for r in grid), default=0)
+    if not ncols:
+        return []
+
+    # A gold section-title band is usually one wide merged cell — Excel (and
+    # openpyxl) only carries the fill on the merge's top-left anchor cell, not
+    # on every covered cell, so a per-cell fill count alone misses it. Treat a
+    # single-row merge spanning at least half the columns, whose anchor cell
+    # is gold, as a full gold band across its span.
+    wide_gold_rows: set[int] = set()
+    for m in merges:
+        start_row, end_row = m.get("startRow", -1), m.get("endRow", -1)
+        if start_row != end_row or start_row < 0:
+            continue
+        span = m.get("endCol", 0) - m.get("startCol", 0) + 1
+        if span < max(2, ncols // 2):
+            continue
+        anchor_fill = (styles.get(f"{start_row}:{m.get('startCol', 0)}") or {}).get("fill")
+        if is_gold_fill(anchor_fill):
+            wide_gold_rows.add(start_row)
+
+    pairs: list[tuple[int, int]] = []
+    for r in range(n_rows - 1):
+        if r in wide_gold_rows:
+            pairs.append((r, r + 1))
+            continue
+        gold_cols = sum(1 for c in range(ncols) if is_gold_fill((styles.get(f"{r}:{c}") or {}).get("fill")))
+        if gold_cols >= max(2, ncols // 2):
+            pairs.append((r, r + 1))
+    return pairs
+
+
 def _section_break_rows(block: dict[str, Any], data_rows: list[int]) -> set[int]:
     """Rows that start a new visual section (a filled band spanning the row).
 
     Used as preferred split points so panel/lighting schedules break *between*
-    controller/section blocks instead of orphaning a few trailing rows."""
+    controller/section blocks instead of orphaning a few trailing rows.
+
+    Phase F: when the block has repeating gold+gray controller sections, the
+    gold rows are the ONLY preferred/allowed break points — never a generic
+    keyword/fill match that could land strictly inside a section pair.
+    """
+    gold_pairs = _gold_section_starts(block)
+    if gold_pairs:
+        gold_rows = {g for g, _ in gold_pairs}
+        return {r for r in data_rows if r in gold_rows}
+
     styles = block.get("styles") or {}
     grid = block.get("grid") or []
     ncols = max((len(r) for r in grid), default=0)
@@ -310,6 +371,83 @@ def _section_break_rows(block: dict[str, Any], data_rows: list[int]) -> set[int]
         elif any(k in text for k in ("lcp-1", "lcp-2", "pr0663", "expansion", "relay", "contactor", "controller i/o")):
             breaks.add(r)
     return breaks
+
+
+def _section_aware_chunks(
+    block: dict[str, Any],
+    data_rows: list[int],
+    header_h: float,
+    budget: float,
+) -> list[list[int]]:
+    """Split ``data_rows`` into page chunks that only ever cut at a gold
+    section boundary, unless a single section alone exceeds one page's
+    budget — then (and only then) hard-cut inside it at a plain row
+    boundary (FINAL RELEASE CLEANUP 4H+SA38, Phase F rule 7). Used instead
+    of ``_balanced_chunks`` whenever the block has gold+gray controller
+    sections (see ``_gold_section_starts``).
+    """
+    row_h = block.get("rowHeights") or []
+
+    def h(r: int) -> float:
+        return row_h[r] if r < len(row_h) else 20
+
+    gold_pairs = _gold_section_starts(block)
+    gold_rows = {g for g, _ in gold_pairs}
+    repeat_h_by_gold = {g: h(g) + h(gr) for g, gr in gold_pairs}
+
+    sections: list[list[int]] = []
+    cur_section: list[int] = []
+    for r in data_rows:
+        if r in gold_rows and cur_section:
+            sections.append(cur_section)
+            cur_section = []
+        cur_section.append(r)
+    if cur_section:
+        sections.append(cur_section)
+
+    data_budget = max(1.0, budget - header_h)
+
+    chunks: list[list[int]] = []
+    cur: list[int] = []
+    used = 0.0
+    for section in sections:
+        sec_h = sum(h(r) for r in section)
+        repeat_extra = repeat_h_by_gold.get(section[0], 0.0)
+
+        if cur and used + sec_h > data_budget:
+            chunks.append(cur)
+            cur = []
+            used = 0.0
+
+        if sec_h > data_budget:
+            # A single section alone doesn't fit one page — hard-split at a
+            # plain row boundary. Every sub-chunk after the first repeats
+            # this section's own gold+gray pair (added back in
+            # _split_excel_range_block), so reserve that height for them.
+            if cur:
+                chunks.append(cur)
+                cur = []
+                used = 0.0
+            i = 0
+            first_sub = True
+            while i < len(section):
+                sub: list[int] = []
+                sub_budget = data_budget if first_sub else max(1.0, data_budget - repeat_extra)
+                sub_used = 0.0
+                while i < len(section) and (not sub or sub_used + h(section[i]) <= sub_budget):
+                    sub.append(section[i])
+                    sub_used += h(section[i])
+                    i += 1
+                chunks.append(sub)
+                first_sub = False
+            continue
+
+        cur.extend(section)
+        used += sec_h
+
+    if cur:
+        chunks.append(cur)
+    return [c for c in chunks if c]
 
 
 def _logical_section_chunks(block: dict[str, Any], data_rows: list[int]) -> list[list[int]] | None:
@@ -452,7 +590,12 @@ def _excel_data_chunks(block: dict[str, Any], data_rows: list[int], header_h: fl
     if logical and len(logical) == n_pages:
         return logical
 
-    # 2) Balanced, section-aware distribution across exactly n_pages.
+    # 2) Gold+gray controller/module sections (Phase F): never cut strictly
+    # inside a section unless that section alone exceeds one page.
+    if _gold_section_starts(block):
+        return _section_aware_chunks(block, list(data_rows), header_h, budget)
+
+    # 3) Balanced, section-aware distribution across exactly n_pages.
     return _balanced_chunks(block, list(data_rows), header_h, n_pages, budget)
 
 
@@ -520,8 +663,30 @@ def _split_excel_range_block(block: dict[str, Any]) -> list[dict[str, Any]]:
     if len(chunks) <= 1:
         return [block]
 
+    # Phase F rule 5/7: a chunk whose first row falls strictly inside a gold
+    # section (its own gold+gray pair isn't already the start of the chunk —
+    # only possible from a forced mid-section hard split) gets that section's
+    # header pair unioned in, so the continuation repeats its own controller
+    # section header instead of showing orphaned data rows with no label.
+    gold_pairs = sorted(_gold_section_starts(block))
+
+    def row_indices_for(chunk: list[int]) -> list[int]:
+        ids = set(repeat) | set(chunk)
+        if gold_pairs and chunk:
+            first = chunk[0]
+            owning = None
+            for g, gr in gold_pairs:
+                if g <= first:
+                    owning = (g, gr)
+                else:
+                    break
+            if owning:
+                ids.add(owning[0])
+                ids.add(owning[1])
+        return sorted(ids)
+
     return [
-        _slice_excel_block(block, sorted(set(repeat) | set(chunk)), ci)
+        _slice_excel_block(block, row_indices_for(chunk), ci)
         for ci, chunk in enumerate(chunks)
     ]
 

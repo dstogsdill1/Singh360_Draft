@@ -103,10 +103,25 @@ export default function NormalizedPage({
           </div>
         );
       }
-      // No base image block. If an overlay image/PDF is present, or we're
-      // exporting, render nothing (the overlay shows through, no placeholder).
-      if (exporting || hasOverlay) {
+      // A user has already drawn/pasted something on the overlay — never
+      // cover it with a placeholder note, exported or not (Phase C rule 6:
+      // preserve user-added canvas objects on re-import/re-render).
+      if (hasOverlay) {
         return <div className="np np-image-base" />;
+      }
+      if (exporting) {
+        // Phase C rule 3/4: a blank drawing/layout/schematic/pdf-vector page
+        // must never export silently blank — always render a clear, centered,
+        // export-visible note instead of an empty base layer. The importer
+        // sets `blankPagePlaceholder`; fall back to the same keyword rule
+        // here for older saved projects that predate that field.
+        const blob = `${page.sheetTab ?? ''} ${page.sheetTitle ?? ''}`.toLowerCase();
+        const message = page.blankPagePlaceholder || (blob.includes('location') ? 'RESERVED FOR FIELD LAYOUT' : 'DRAWING TO BE INSERTED');
+        return (
+          <div className="np np-image-base">
+            <div className="np-reserved-note">{message}</div>
+          </div>
+        );
       }
       // Editor-only drop zone hint (never exported).
       return (

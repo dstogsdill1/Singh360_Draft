@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { BorderSide, ExcelCellStyle, MergedCell, PageBlock } from '../../model/types';
-import { BODY_W, BODY_H } from '../../model/sheetGeometry';
+import { BODY_W } from '../../model/sheetGeometry';
 
 interface Props {
   block: PageBlock;
@@ -21,6 +21,20 @@ const GROW_CAP = 1.85;
 // landed flush against the title block (and a hair of rounding could clip a
 // row). Reserve a fixed safety gap so a table never touches the boundary.
 const MIN_BOTTOM_GAP = 20;
+// FINAL RELEASE CLEANUP 4H+SA38, Phase H fix: BODY_H (866) models the full
+// on-screen sheet body used for page-frame layout, but is taller than the
+// backend's proven-safe render budget (core/page_composer.py
+// SAFE_BODY_BUDGET = 700). A short, narrow table (e.g. a 2-column
+// instruction page) grow-scales width-first up to GROW_CAP, which also
+// scales its height by the same factor — using the optimistic BODY_H for
+// that height check let the scaled table overflow the page's real
+// overflow:hidden body and silently drop its bottom rows (confirmed via a
+// real SA31 export: only row 1 of 5 painted onto the PDF page). Match the
+// backend's conservative budget for this safety-critical height check only;
+// BODY_H itself is untouched everywhere else it's used for page-frame
+// layout, so this does not touch the wider, already-flagged 720/866
+// calibration mismatch.
+const SAFE_FIT_HEIGHT = 700;
 
 /** Map an Excel border side spec to a CSS border shorthand. */
 function borderCss(side?: BorderSide): string | undefined {
@@ -46,7 +60,7 @@ function borderCss(side?: BorderSide): string | undefined {
   }
 }
 
-function cellCss(st: ExcelCellStyle | undefined, rowH: number): React.CSSProperties {
+function cellCss(st: ExcelCellStyle | undefined, rowH: number, bodyFontPx?: number): React.CSSProperties {
   const s: React.CSSProperties = {
     minHeight: rowH,
     padding: '2px 4px',
@@ -57,6 +71,7 @@ function cellCss(st: ExcelCellStyle | undefined, rowH: number): React.CSSPropert
     wordBreak: 'normal',
   };
   if (!st) {
+    if (bodyFontPx) s.fontSize = bodyFontPx;
     return s;
   }
   if (st.bold) s.fontWeight = 700;
@@ -104,6 +119,9 @@ function cellCss(st: ExcelCellStyle | undefined, rowH: number): React.CSSPropert
     if (bottom) s.borderBottom = bottom;
     if (left) s.borderLeft = left;
   }
+  // Phase D: an explicit block-level body font (instruction_table pages)
+  // always wins over the per-cell Excel font size captured on import.
+  if (bodyFontPx) s.fontSize = bodyFontPx;
   return s;
 }
 
@@ -168,17 +186,21 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
       const container = wrap.parentElement;
       const containerW = container?.clientWidth ?? BODY_W;
       const availW = Math.max(1, containerW - PAD_X * 2);
-      const availH = Math.max(1, BODY_H - PAD_Y * 2 - Math.max(0, reservedTop) - MIN_BOTTOM_GAP);
+      const availH = Math.max(1, SAFE_FIT_HEIGHT - PAD_Y * 2 - Math.max(0, reservedTop) - MIN_BOTTOM_GAP);
       const w = table.scrollWidth || naturalW;
       const h = table.scrollHeight || 1;
       const sw = availW / w;
       const sh = availH / h;
-      // Fit-to-body: grow small ranges to fill the width (up to GROW_CAP) while
+      // A block marked noGrow (e.g. a narrow 2-column instruction table)
+      // never stretches past its natural size — only shrinks if it doesn't
+      // fit (see noGrow doc comment in model/types.ts for why).
+      const growCap = block.noGrow ? 1 : GROW_CAP;
+      // Fit-to-body: grow small ranges to fill the width (up to growCap) while
       // staying within the available height; shrink oversized ranges to fit.
       const scale =
         scaleMode === 'fit_width'
-          ? Math.min(GROW_CAP, sw)
-          : Math.min(GROW_CAP, sw, sh);
+          ? Math.min(growCap, sw)
+          : Math.min(growCap, sw, sh);
       if (Math.abs(scale - last) < 0.003) return;
       last = scale;
       wrap.style.setProperty('--xr-scale', String(scale));
@@ -194,7 +216,7 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
       ro.disconnect();
       cancelAnimationFrame(raf);
     };
-  }, [naturalW, nRows, nCols, scaleMode, grid, reservedTop]);
+  }, [naturalW, nRows, nCols, scaleMode, grid, reservedTop, block.noGrow]);
 
   if (!nRows || !nCols) {
     return <div className="np np-empty">No source range data.</div>;
@@ -231,7 +253,7 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
                       key={c}
                       rowSpan={span?.rs}
                       colSpan={span?.cs}
-                      style={cellCss(st, rowHeights[r] ?? DEFAULT_ROW)}
+                      style={cellCss(st, rowHeights[r] ?? DEFAULT_ROW, block.bodyFontPx)}
                     >
                       {row[c] ?? ''}
                     </td>

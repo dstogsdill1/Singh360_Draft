@@ -86,6 +86,16 @@ export interface PageBlock {
   printArea?: string | null;
   bodyRowFillMode?: 'none' | 'source' | 'zebra';
   gridLines?: boolean;
+  /** Explicit body font size in px, overriding per-cell Excel font size
+   *  (instruction_table profile only — FINAL RELEASE CLEANUP 4H+SA38,
+   *  Phase D). Unset for every other page/profile (unchanged behavior). */
+  bodyFontPx?: number;
+  /** Never stretch this excelRange block past its natural size to fill the
+   *  page width (instruction_table profile only — FINAL RELEASE CLEANUP
+   *  4H+SA38, Phase H). Width-driven grow-to-fill also scales height by the
+   *  same factor, which can overflow the page's real safe render area for a
+   *  narrow table and silently drop bottom rows in export. */
+  noGrow?: boolean;
   /** RDM / IDF network table (idfNetworkTable) payload — TABLE STYLE 4F. */
   layoutMode?: 'single' | 'two_up';
   sectionTitle?: string;
@@ -148,6 +158,11 @@ export interface PageModel {
   sheetTab: string;
   pageType: PageType;
   pageFamily?: string;
+  /** Export-visible placeholder note for a blank canvas/drawing/pdf-vector
+   *  page with no image content (FINAL RELEASE CLEANUP 4H+SA38, Phase C).
+   *  Set by the importer; blank/absent when the page has real image content
+   *  or isn't a canvas page. */
+  blankPagePlaceholder?: string;
   /** Rendering-options profile: front_matter_table | io_table | network_48_port
    *  | instruction_table | company_info (TABLE STYLE 4F, Phase D). */
   layoutProfile?: string;

@@ -492,3 +492,21 @@
 .np-dropzone-icon { font-size: 46px; color: #b3bdc7; }
 .np-dropzone-text { font-size: 17px; font-weight: 600; color: #6b7682; }
 .np-dropzone-sub { font-size: 12px; color: #97a1ab; }
+
+/* -- RESERVED DRAWING/LAYOUT NOTE (export-visible; FINAL RELEASE CLEANUP
+   4H+SA38, Phase C) -- a blank drawing/schematic/location page must never
+   export silently blank. Plain, print-safe (no dashed "editor hint" look). */
+.np-reserved-note {
+  height: 100%;
+  min-height: 480px;
+  margin: 24px;
+  border: 1px solid #c2ccd6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #6b7682;
+}

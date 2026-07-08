@@ -754,6 +754,8 @@ def get_asset(project_id: str, asset_name: str):
     candidates = [
         store.assets_images_dir(project_id) / asset_name,
         store.assets_excel_dir(project_id) / asset_name,
+        # Best-effort reference screenshots (Phase C blank-page asset match).
+        store.dir_for(project_id) / "assets" / "screenshots" / asset_name,
         DOCS_DIR / "assets" / project_id / asset_name,  # legacy
     ]
     for cand in candidates:

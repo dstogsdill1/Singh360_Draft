@@ -37,9 +37,12 @@ _INDEX_ALIASES = {
     # The real drawing-package sheet number (e.g. "EMS 0.2") — separate from
     # the plain sequential "Order" column. FINAL RENDER POLISH 4G, Phase A:
     # the title block must show this, not the sequential output order.
-    "sheet_code": {"sheet code", "code", "drawing no", "drawing no.", "drawing number", "dwg no", "dwg no.", "dwg code", "sheet #"},
-    "sheet_tab": {"sheet tab", "sheet", "worksheet", "tab", "tab name"},
-    "sheet_title": {"page title", "title", "sheet title", "page name", "name"},
+    # "Suggested EMS Code" is the SA38/Kyle-workbook alias (00_APP_INDEX).
+    "sheet_code": {"sheet code", "code", "drawing no", "drawing no.", "drawing number", "dwg no", "dwg no.", "dwg code", "sheet #", "suggested ems code"},
+    # "Original Tab" is the SA38/Kyle-workbook alias (00_APP_INDEX).
+    "sheet_tab": {"sheet tab", "sheet", "worksheet", "tab", "tab name", "original tab"},
+    # "Normalized Page Title" is the SA38/Kyle-workbook alias (00_APP_INDEX).
+    "sheet_title": {"page title", "title", "sheet title", "page name", "name", "normalized page title"},
     "use_source": {"use", "source", "use / source", "use/source", "type"},
     "notes": {"notes", "remarks", "description", "comment"},
 }
@@ -67,12 +70,59 @@ def _norm(v: Any) -> str:
     return "" if text.lower() in {"nan", "nat", "<na>", "none"} else text
 
 
-def _find_index_sheet(workbook) -> str | None:
+def _normalized_sheet_key(name: str) -> str:
+    return (name or "").replace(" ", "").replace("_", "").upper()
+
+
+def _is_metadata_sheet_name(name: str) -> bool:
+    """True for a project-metadata/control sheet (e.g. ``00_PROJECT_META``).
+
+    Metadata sheets are never an index candidate and are never rendered as an
+    output page (Kyle/SA38 workbook import, Phase A)."""
+    key = _normalized_sheet_key(name)
+    return "PROJECTMETA" in key
+
+
+def _find_metadata_sheet(workbook) -> str | None:
     for name in workbook.sheetnames:
-        key = name.replace(" ", "").replace("_", "").upper()
-        if "INDEX" in key:
+        if _is_metadata_sheet_name(name):
             return name
     return None
+
+
+def _find_index_sheet(workbook) -> str | None:
+    """Pick the controlling index sheet.
+
+    Kyle/SA38-style workbooks may ship both a canonical ``00_INDEX`` and a
+    richer ``00_APP_INDEX`` alias sheet (Phase A). ``00_INDEX`` always wins
+    when both exist; metadata/control sheets (``00_PROJECT_META``) are never
+    treated as an index candidate even though their name may contain other
+    index-like substrings.
+    """
+    candidates = [
+        name
+        for name in workbook.sheetnames
+        if "INDEX" in _normalized_sheet_key(name) and not _is_metadata_sheet_name(name)
+    ]
+    if not candidates:
+        return None
+    for name in candidates:
+        if _normalized_sheet_key(name) in ("00INDEX", "INDEX"):
+            return name
+    return candidates[0]
+
+
+def _find_alias_index_sheets(workbook, winning_index: str | None) -> set[str]:
+    """Other index-like sheets that lost the Phase A preference (e.g.
+    ``00_APP_INDEX`` when ``00_INDEX`` exists) — always excluded from output
+    pages regardless of any Include flag."""
+    return {
+        name
+        for name in workbook.sheetnames
+        if "INDEX" in _normalized_sheet_key(name)
+        and not _is_metadata_sheet_name(name)
+        and name != winning_index
+    }
 
 
 def _header_map(header_row: list[str]) -> dict[str, int]:
@@ -365,6 +415,51 @@ def _parse_index(workbook, index_sheet_name: str | None) -> list[dict[str, Any]]
     return entries
 
 
+_METADATA_LABEL_MAP = {
+    "project name": "projectName",
+    "project": "projectName",
+    "store name": "storeNumber",
+    "drawing package file name": "drawingPackageFileName",
+    "package": "drawingPackageFileName",
+    "location": "location",
+    "address": "location",
+    "revision": "revision",
+    "rev": "revision",
+    "issue date": "issueDate",
+    "drawn by": "drawnBy",
+    "prepared by": "drawnBy",
+    "checked by": "checkedBy",
+    "prepared for": "client",
+    "client": "client",
+}
+
+
+def _infer_metadata_from_labeled_grid(ws: dict[str, Any] | None) -> dict[str, str]:
+    """Infer title-block metadata from adjacent label/value cell pairs in a
+    worksheet grid (Phase B).
+
+    Used for both a dedicated project-metadata sheet (``00_PROJECT_META``,
+    one label/value pair per row) and a cover sheet's key/value layout
+    (SA31-style, several pairs across one row, e.g. ``Address`` / ``Package``
+    / ``Revision`` / ``Prepared By``). Never invents a value: only a
+    recognized label with a non-blank adjacent value is used.
+    """
+    if not ws:
+        return {}
+    grid = ws.get("grid") or []
+    out: dict[str, str] = {}
+    for row in grid:
+        for i in range(len(row) - 1):
+            label = (row[i] or "").strip().lower().rstrip(":")
+            field = _METADATA_LABEL_MAP.get(label)
+            if not field:
+                continue
+            value = (row[i + 1] or "").strip()
+            if value and not out.get(field):
+                out[field] = value
+    return out
+
+
 def _remap_a1_styles(styles: dict[str, Any], row_map: dict[int, int]) -> dict[str, Any]:
     """Copy A1-keyed styles for retained rows, remapping row numbers."""
     out: dict[str, Any] = {}
@@ -481,6 +576,121 @@ def _extract_embedded_images(ws, assets_dir, url_prefix: str, sheet_name: str) -
         except Exception:
             continue
     return out
+
+
+_ASSET_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")
+
+
+def _asset_slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
+
+
+def _match_page_asset(project_id: str, sheet_code: str, title: str) -> dict[str, Any] | None:
+    """Best-effort match of a page-specific reference screenshot in the
+    project's ``assets/screenshots`` scaffold folder, by sheet code or
+    slugified title (Phase C rule: populate blank drawing/layout pages).
+
+    This folder is normally empty on a fresh import — it primarily supports
+    a future "drop a reference PNG next to the import" workflow. Returns
+    ``None`` (never raises) when no match exists.
+    """
+    if not project_id:
+        return None
+    try:
+        from core.project_store import ProjectStore
+
+        docs_dir = Path(__file__).resolve().parents[1] / ".docs"
+        screenshots_dir = ProjectStore(docs_dir).dir_for(project_id) / "assets" / "screenshots"
+    except Exception:
+        return None
+    if not screenshots_dir.is_dir():
+        return None
+    code_key = _asset_slug(sheet_code)
+    title_key = _asset_slug(title)
+    try:
+        candidates = sorted(p for p in screenshots_dir.iterdir() if p.is_file())
+    except OSError:
+        return None
+    for f in candidates:
+        if f.suffix.lower() not in _ASSET_IMAGE_EXTS:
+            continue
+        name_key = _asset_slug(f.stem)
+        if (code_key and code_key in name_key) or (title_key and len(title_key) > 3 and title_key in name_key):
+            return {"name": f.name, "url": f"/api/assets/{project_id}/{f.name}"}
+    return None
+
+
+def _blank_page_placeholder_message(sheet_tab: str, title: str) -> str:
+    """Export-visible placeholder text for a blank canvas/drawing page
+    (Phase C). ``NormalizedPage.tsx`` renders this exact text at export time
+    when the page has no image block and no user overlay content — never a
+    silently blank page."""
+    text = f"{sheet_tab} {title}".lower()
+    if "location" in text:
+        return "RESERVED FOR FIELD LAYOUT"
+    return "DRAWING TO BE INSERTED"
+
+
+def _append_continuation_rows_to_index(project: dict[str, Any]) -> None:
+    """Reflect generated continuation pages in the rendered Sheet Index
+    (FINAL RELEASE CLEANUP 4H+SA38, Phase E).
+
+    ``compose_pages`` may split an oversized sheet (e.g. an LCP schedule)
+    into a base page plus one or more ``generatedContinuation`` pages
+    (``EMS 1.4`` -> ``EMS 1.4a``) *after* the index page was already
+    rendered from the raw workbook rows — so, without this step, the index
+    silently under-counts the real output and never lists the continuation
+    sheet code at all. Call this right after ``compose_pages``, before
+    ``recalc_page_numbers``. Never touches or duplicates the base row.
+    """
+    index_page = next(
+        (p for p in project.get("pages", []) if p.get("pageType") == "index" and p.get("renderMode") == "excel_exact"),
+        None,
+    )
+    if not index_page:
+        return
+    block = next((b for b in (index_page.get("blocks") or []) if b.get("type") == "excelRange"), None)
+    if not block:
+        return
+    grid = block.get("grid") or []
+    if not grid:
+        return
+
+    header_idx = 0
+    for i, row in enumerate(grid[:20]):
+        low = {str(x).lower() for x in row if x}
+        if low & _INDEX_ALIASES["sheet_tab"] and low & _INDEX_ALIASES["sheet_title"]:
+            header_idx = i
+            break
+    col = _header_map([str(x) for x in grid[header_idx]])
+    code_col = col.get("sheet_code", -1)
+    title_col = col.get("sheet_title", -1)
+    include_col = col.get("include", -1)
+    if title_col < 0:
+        # No recognizable title column on this index layout — nothing safe to fill in.
+        return
+
+    n_cols = len(grid[header_idx])
+    row_heights = block.get("rowHeights") or []
+    default_row_h = row_heights[-1] if row_heights else _DEFAULT_ROW_PX
+
+    for page in project.get("pages", []):
+        if not page.get("generatedContinuation"):
+            continue
+        new_row = [""] * n_cols
+        if code_col >= 0:
+            new_row[code_col] = page.get("displaySheetCode") or page.get("sheetCode") or ""
+        # sheetTitle already carries the "— CONTINUED" suffix (page_composer's
+        # continuation_title()) — reuse it verbatim so the index matches the
+        # page itself exactly, rather than risking a doubled-up suffix.
+        new_row[title_col] = page.get("sheetTitle") or ""
+        if include_col >= 0:
+            new_row[include_col] = "YES"
+        grid.append(new_row)
+        row_heights.append(default_row_h)
+
+    block["grid"] = grid
+    block["rowHeights"] = row_heights
 
 
 def _tabular_enough(ws: dict[str, Any]) -> bool:
@@ -787,6 +997,36 @@ def _idf_hard_split_boundary(total_n: int) -> int:
     return (total_n + 1) // 2
 
 
+_NARROW_COL_HEAD_KEYWORDS = ("no", "#", "id", "qty", "type", "addr", "i/o", "io", "point", "ckt", "step")
+
+
+def _find_header_row_index(grid: list[list[str]]) -> int:
+    """The real column-header row within a normalized excel_exact grid.
+
+    Many real sheets (SA31 instruction/BOM/matrix pages confirmed by
+    inspection) lead with title/subtitle/blank rows above the actual column
+    header (e.g. "EC FIELD INSTRUCTIONS" / project subtitle / blank / blank /
+    "Step | Instruction"). Those title rows populate only a single leading
+    cell; a real header row populates most/all columns with short text. Scan
+    the first 10 rows for that shape and use it instead of always assuming
+    row 0 is the header (FINAL RELEASE CLEANUP 4H+SA38, Phase D fix — column
+    width/weight classification was silently inert on any sheet whose header
+    isn't literally the first row).
+    """
+    n_cols = max((len(r) for r in grid), default=0)
+    if not n_cols:
+        return 0
+    for r in range(min(len(grid), 10)):
+        row = grid[r]
+        non_empty = [str(v).strip() for v in row if str(v or "").strip()]
+        if len(non_empty) < max(2, n_cols - 1):
+            continue
+        if any(len(v) > 60 for v in non_empty):
+            continue
+        return r
+    return 0
+
+
 def _preferred_col_widths(grid: list[list[str]], family: str, page_type: str) -> list[int]:
     """Deterministic normalized column sizing before placement/export."""
     n_cols = max((len(r) for r in grid), default=0)
@@ -795,27 +1035,42 @@ def _preferred_col_widths(grid: list[list[str]], family: str, page_type: str) ->
     target = BODY_W - (96 if family not in ("ioSchedule", "panelDetail", "idfTable") else 48)
     min_w = 52 if family in ("ioSchedule", "panelDetail", "idfTable") else 76
     max_w = 360 if family in ("text", "index") else 300
+    # A compact narrow column (Step/No/#/ID counter) on a "text" family sheet
+    # (instruction pages) should stay small and not stretch proportionally
+    # with the rest of the table (FINAL RELEASE CLEANUP 4H+SA38, Phase D).
+    narrow_min_w = 50
+    narrow_max_w = 64
     weights: list[float] = []
-    header = grid[0] if grid else []
+    is_narrow_col: list[bool] = []
+    header = grid[_find_header_row_index(grid)] if grid else []
     for c in range(n_cols):
         values = [str(row[c]) if c < len(row) else "" for row in grid]
         max_len = max((len(v) for v in values), default=1)
         head = (str(header[c]) if c < len(header) else "").lower()
         weight = max(6.0, min(float(max_len), 48.0))
-        if any(k in head for k in ("description", "notes", "instruction", "scope", "remarks", "location")):
+        is_wide = any(k in head for k in ("description", "notes", "instruction", "scope", "remarks", "location"))
+        is_narrow = (not is_wide) and any(k in head for k in _NARROW_COL_HEAD_KEYWORDS)
+        if is_wide:
             weight *= 1.9
-        elif any(k in head for k in ("no", "#", "id", "qty", "type", "addr", "i/o", "io", "point", "ckt")):
+        elif is_narrow:
             weight *= 0.75
         weights.append(weight)
+        is_narrow_col.append(is_narrow and family == "text")
     total = sum(weights) or 1.0
     raw = [int(round(target * w / total)) for w in weights]
-    widths = [max(min_w, min(max_w, w)) for w in raw]
-    # Distribute leftover width so small tables use the page instead of floating.
+    widths = [
+        max(narrow_min_w, min(narrow_max_w, w)) if is_narrow_col[i] else max(min_w, min(max_w, w))
+        for i, w in enumerate(raw)
+    ]
+    # Distribute leftover width so small tables use the page instead of
+    # floating — never grow the compact narrow (Step/No/#) column.
     diff = target - sum(widths)
     guard = 0
     while diff > 0 and guard < 2000:
         changed = False
         for i in sorted(range(n_cols), key=lambda x: weights[x], reverse=True):
+            if is_narrow_col[i]:
+                continue
             if widths[i] < max_w:
                 widths[i] += 1
                 diff -= 1
@@ -1160,14 +1415,50 @@ def import_workbook(
             }
         )
 
-    index_entries = _parse_index(wb, _find_index_sheet(wb))
     index_sheet_name = _find_index_sheet(wb)
+    index_entries = _parse_index(wb, index_sheet_name)
     has_index = bool(index_sheet_name and index_entries)
     index_lookup = {e["sheetTab"].lower(): e for e in index_entries if e.get("sheetTab")}
+
+    # Kyle/SA38 workbook import, Phase A rule 7: 00_INDEX, 00_APP_INDEX, and
+    # 00_PROJECT_META are metadata/control sheets, never drawing/output pages —
+    # regardless of any Include flag a hand-edited index might carry for them.
+    metadata_sheet_name = _find_metadata_sheet(wb)
+    never_output_sheets = _find_alias_index_sheets(wb, index_sheet_name)
+    if metadata_sheet_name:
+        never_output_sheets.add(metadata_sheet_name)
+
+    # Title-block metadata precedence (Phase B): project properties (already
+    # set by the caller before import — none at a fresh import) > workbook
+    # metadata sheet > cover-page key/value inference. Never overwrites a
+    # value that is already populated, and never invents a value that isn't
+    # literally present in the workbook.
+    meta_ws = next((w for w in project["worksheets"] if w["name"] == metadata_sheet_name), None) if metadata_sheet_name else None
+    cover_ws = None
+    for w in project["worksheets"]:
+        if w["name"] in never_output_sheets:
+            continue
+        w_idx = index_lookup.get(w["name"].lower())
+        w_title = w_idx["sheetTitle"] if w_idx else w["name"]
+        w_use_source = w_idx["useSource"] if w_idx else ""
+        if classify_page_type(w["name"], w_title, w_use_source) == "cover":
+            cover_ws = w
+            break
+
+    inferred_metadata = {
+        **_infer_metadata_from_labeled_grid(cover_ws),
+        **_infer_metadata_from_labeled_grid(meta_ws),
+    }
+    for field, value in inferred_metadata.items():
+        if value and not project["metadata"].get(field):
+            project["metadata"][field] = value
 
     pages = []
     order_cursor = 1
     for i, ws in enumerate(project["worksheets"]):
+        if ws["name"] in never_output_sheets:
+            continue
+
         idx = index_lookup.get(ws["name"].lower())
         title = idx["sheetTitle"] if idx else ws["name"]
         include = idx["include"] if idx else (not has_index)
@@ -1205,6 +1496,21 @@ def import_workbook(
                 exact_block["minScale"] = max(float(exact_block.get("minScale") or EXCEL_MIN_SCALE), 0.58)
             _apply_table_geometry(exact_block, family, page_type)
             apply_singh360_profile(exact_block, header_style)
+            if layout_profile == "instruction_table":
+                # Phase D: compact 9pt (~12px) body font for Step/Instruction
+                # pages — overrides the per-cell Excel font size captured on
+                # import so long instruction rows never force clipping/scaling.
+                exact_block["bodyFontPx"] = 12
+                # Phase H fix: a narrow 2-column instruction table has no
+                # reason to be stretched to fill the full page width — the
+                # frontend's width-driven "grow to fill" behavior (up to
+                # GROW_CAP) also grows the table's height by the same
+                # factor, which can push it past the page's real safe
+                # render area and silently drop bottom rows in export.
+                # Keeping this profile at its natural compact size avoids
+                # that overflow risk entirely instead of relying on scale
+                # math to always land inside a narrow safety margin.
+                exact_block["noGrow"] = True
             blocks = [exact_block]
         else:
             exact_block = None
@@ -1226,6 +1532,28 @@ def import_workbook(
                     }
                 )
 
+            # Best-effort reference-screenshot match for a blank drawing/
+            # canvas page with no embedded workbook image (Phase C). A no-op
+            # (returns None) when the project's assets/screenshots scaffold
+            # folder is empty or missing — the normal case on a fresh import.
+            if page_type == "canvas" and not ws.get("embeddedImages"):
+                preliminary_code = (idx.get("sheetCodeRaw") if idx else "") or _sheet_code_from_tab(ws["name"])
+                matched = _match_page_asset(project["id"], preliminary_code, title)
+                if matched:
+                    blocks.append(
+                        {
+                            "id": f"{ws['id']}_asset_match",
+                            "type": "imagePlaceholder",
+                            "sourceWorksheetId": ws["id"],
+                            "sourceRange": "",
+                            "filename": matched["name"],
+                            "url": matched["url"],
+                            "text": matched["name"],
+                            "styleRole": "note",
+                            "editable": False,
+                        }
+                    )
+
         # Sheet number precedence (FINAL RENDER POLISH 4G, Phase A): the real
         # workbook/index "Sheet Code" column always wins — never the plain
         # sequential "Order" column or the output page order. Fall back to a
@@ -1238,6 +1566,11 @@ def import_workbook(
             or str(order_cursor)
         )
 
+        has_image_block = any(b.get("type") in ("imagePlaceholder", "underlayPlaceholder") for b in blocks)
+        blank_page_placeholder = (
+            _blank_page_placeholder_message(ws["name"], title) if page_type == "canvas" and not has_image_block else ""
+        )
+
         page = {
             "id": f"page_{i+1}",
             "order": order_cursor,
@@ -1248,6 +1581,7 @@ def import_workbook(
             "sheetTab": ws["name"],
             "pageType": page_type,
             "pageFamily": family,
+            "blankPagePlaceholder": blank_page_placeholder,
             "layoutProfile": layout_profile,
             "twoUp": bool(exact_block and exact_block.get("layoutMode") == "two_up"),
             "renderMode": "excel_exact" if use_exact else "normalized",
@@ -1323,6 +1657,7 @@ def import_workbook(
 
     pages = sorted(pages, key=lambda p: p["order"])
     project["pages"] = compose_pages(pages)
+    _append_continuation_rows_to_index(project)
     project["paginationLocked"] = True
     recalc_page_numbers(project)
     try:
