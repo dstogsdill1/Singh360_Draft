@@ -5,6 +5,7 @@
 // whole continuation group. Keep these constants in parity with the backend.
 
 import type { ExcelCellStyle, MergedCell, PageBlock, PageModel, ProjectModel, Worksheet } from './types';
+import { inferMetadataFromWorksheet, isCoverWorksheet, mergeCoverMetadata } from './metadataInference';
 
 const BODY_W = 1600;
 const BODY_BUDGET = 720;
@@ -420,6 +421,20 @@ export function refreshBlockFromWorksheet(block: PageBlock, ws: Worksheet): Page
   return preserveBlockPresentationMeta(block, sliceBlock(full, rows, { keepId: block.id }));
 }
 
+function rowLine(row: string[]): string {
+  const parts = (row ?? []).map((c) => (c ?? '').trim()).filter(Boolean);
+  return parts.join('  ');
+}
+
+function refreshCoverBlockFromWorksheet(block: PageBlock, ws: Worksheet): PageBlock {
+  const grid = ws.grid ?? [];
+  const lines = grid.map((r) => rowLine(r)).filter(Boolean);
+  return {
+    ...block,
+    rows: lines.map((ln) => [ln]),
+  };
+}
+
 /** Rebuild normalized blocks for one page from its linked worksheet source grid. */
 export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel {
   const blocks = page.blocks ?? [];
@@ -427,14 +442,35 @@ export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel
   if (page.renderMode === 'excel_exact') {
     nextBlocks = blocks.map((b) => (b.type === 'excelRange' ? refreshBlockFromWorksheet(b, ws) : b));
   } else {
-    const tableIdx = blocks.findIndex((b) => b.type === 'matrix' || b.type === 'table');
-    if (tableIdx < 0) {
-      nextBlocks = blocks;
+    const coverIdx = blocks.findIndex((b) => b.type === 'cover');
+    if (coverIdx >= 0 || page.pageType === 'cover') {
+      if (coverIdx >= 0) {
+        nextBlocks = blocks.map((b) => (b.type === 'cover' ? refreshCoverBlockFromWorksheet(b, ws) : b));
+      } else {
+        const lines = (ws.grid ?? []).map((r) => rowLine(r)).filter(Boolean);
+        nextBlocks = [
+          ...blocks,
+          {
+            id: `${ws.id}_cover`,
+            type: 'cover' as const,
+            sourceWorksheetId: ws.id,
+            text: page.sheetTitle ?? 'Cover',
+            rows: lines.map((ln) => [ln]),
+            styleRole: 'page-title',
+            editable: true,
+          },
+        ];
+      }
     } else {
-      const normalized = trimTrailingEmptyColumns(ws.grid ?? []);
-      const headers = (normalized[0] ?? []).map((x) => x ?? '');
-      const rows = normalized.slice(1).map((r) => r.map((x) => x ?? ''));
-      nextBlocks = blocks.map((b, i) => (i === tableIdx ? { ...b, headers, rows } : b));
+      const tableIdx = blocks.findIndex((b) => b.type === 'matrix' || b.type === 'table');
+      if (tableIdx < 0) {
+        nextBlocks = blocks;
+      } else {
+        const normalized = trimTrailingEmptyColumns(ws.grid ?? []);
+        const headers = (normalized[0] ?? []).map((x) => x ?? '');
+        const rows = normalized.slice(1).map((r) => r.map((x) => x ?? ''));
+        nextBlocks = blocks.map((b, i) => (i === tableIdx ? { ...b, headers, rows } : b));
+      }
     }
   }
   return {
@@ -442,6 +478,17 @@ export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel
     blocks: nextBlocks,
     sourceRevision: (page.sourceRevision ?? 0) + 1,
   };
+}
+
+/** For cover pages: rebuild normalized blocks and overwrite project metadata from source. */
+export function applyCoverSourceTruth(project: ProjectModel, wsId: string): ProjectModel {
+  const ws = project.worksheets.find((w) => w.id === wsId);
+  if (!ws || !isCoverWorksheet(project, wsId)) return project;
+  const pages = project.pages.map((pg) =>
+    pg.linkedWorksheetId === wsId ? refreshPageFromSource(pg, ws) : pg,
+  );
+  const metadata = mergeCoverMetadata(project.metadata, inferMetadataFromWorksheet(ws));
+  return { ...project, pages, metadata };
 }
 
 function continuationTitle(baseTitle: string): string {

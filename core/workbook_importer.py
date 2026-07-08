@@ -9,6 +9,7 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils.cell import column_index_from_string, get_column_letter, range_boundaries
 
+from core.metadata_inference import infer_metadata_from_labeled_grid
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 from core.page_normalizer import normalize_page
 from core.page_composer import (
@@ -426,49 +427,9 @@ def _parse_index(workbook, index_sheet_name: str | None) -> list[dict[str, Any]]
     return entries
 
 
-_METADATA_LABEL_MAP = {
-    "project name": "projectName",
-    "project": "projectName",
-    "store name": "storeNumber",
-    "drawing package file name": "drawingPackageFileName",
-    "package": "drawingPackageFileName",
-    "location": "location",
-    "address": "location",
-    "revision": "revision",
-    "rev": "revision",
-    "issue date": "issueDate",
-    "drawn by": "drawnBy",
-    "prepared by": "drawnBy",
-    "checked by": "checkedBy",
-    "prepared for": "client",
-    "client": "client",
-}
-
-
 def _infer_metadata_from_labeled_grid(ws: dict[str, Any] | None) -> dict[str, str]:
-    """Infer title-block metadata from adjacent label/value cell pairs in a
-    worksheet grid (Phase B).
-
-    Used for both a dedicated project-metadata sheet (``00_PROJECT_META``,
-    one label/value pair per row) and a cover sheet's key/value layout
-    (SA31-style, several pairs across one row, e.g. ``Address`` / ``Package``
-    / ``Revision`` / ``Prepared By``). Never invents a value: only a
-    recognized label with a non-blank adjacent value is used.
-    """
-    if not ws:
-        return {}
-    grid = ws.get("grid") or []
-    out: dict[str, str] = {}
-    for row in grid:
-        for i in range(len(row) - 1):
-            label = (row[i] or "").strip().lower().rstrip(":")
-            field = _METADATA_LABEL_MAP.get(label)
-            if not field:
-                continue
-            value = (row[i + 1] or "").strip()
-            if value and not out.get(field):
-                out[field] = value
-    return out
+    """Backward-compatible alias for workbook import paths."""
+    return infer_metadata_from_labeled_grid(ws)
 
 
 def _remap_a1_styles(styles: dict[str, Any], row_map: dict[int, int]) -> dict[str, Any]:

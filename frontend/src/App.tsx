@@ -15,7 +15,8 @@ import {
 import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
 import ContinuationPreviewModal from './components/ContinuationPreviewModal';
-import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource } from './model/excelRange';
+import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource, applyCoverSourceTruth } from './model/excelRange';
+import { isCoverWorksheet } from './model/metadataInference';
 import { SourceWorksheetHistory } from './model/sourceWorksheetHistory';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
@@ -248,7 +249,17 @@ export default function App() {
   // Explicit "Save Now": capture the live canvas, then contact the server.
   const saveNow = useCallback(async (): Promise<boolean> => {
     captureActivePageState(); // sync active-page capture MUST happen before any read of projectRef
-    const p = projectRef.current;
+    let p = projectRef.current;
+    if (p) {
+      const wsId = activePageRef.current?.linkedWorksheetId;
+      if (wsId && isCoverWorksheet(p, wsId)) {
+        p = applyCoverSourceTruth(p, wsId);
+        projectRef.current = p;
+        setProjectSync(p);
+        setSourceEditStatus('updated');
+        setSourceDirty(false);
+      }
+    }
     if (!p || printMode) return true;
     const json = JSON.stringify(p);
     savingRef.current = true;
@@ -379,31 +390,36 @@ export default function App() {
       if (!ws) return prev;
       const linked = prev.pages.filter((p) => p.linkedWorksheetId === wsId);
       const isExact = linked.some((p) => p.renderMode === 'excel_exact');
-      let pages = prev.pages;
+      let next = prev;
       if (isExact && opts?.full) {
-        pages = regenerateExcelGroup({ ...prev, worksheets: prev.worksheets }, wsId);
+        next = { ...prev, pages: regenerateExcelGroup({ ...prev, worksheets: prev.worksheets }, wsId) };
       } else if (isExact) {
-        pages = linked.map((pg) => {
+        let pages = linked.map((pg) => {
           const b = (pg.blocks ?? [])[0];
           if (!b || b.type !== 'excelRange') return pg;
           return { ...pg, blocks: [refreshBlockFromWorksheet(b, ws)] };
         });
         const byId = new Map(pages.map((p) => [p.id, p]));
         pages = prev.pages.map((p) => (p.linkedWorksheetId === wsId ? (byId.get(p.id) ?? p) : p));
+        next = { ...prev, pages };
+      } else if (isCoverWorksheet(prev, wsId)) {
+        next = applyCoverSourceTruth(prev, wsId);
       } else {
-        pages = prev.pages.map((pg) =>
-          pg.linkedWorksheetId === wsId
-            ? refreshPageFromSource(pg, ws)
-            : pg,
+        const pages = prev.pages.map((pg) =>
+          pg.linkedWorksheetId === wsId ? refreshPageFromSource(pg, ws) : pg,
         );
+        next = { ...prev, pages };
       }
       // Bump sourceRevision on the active page so Normalized remounts.
       if (pageId) {
-        pages = pages.map((p) =>
-          p.id === pageId ? { ...p, sourceRevision: (p.sourceRevision ?? 0) + 1 } : p,
-        );
+        next = {
+          ...next,
+          pages: next.pages.map((p) =>
+            p.id === pageId ? { ...p, sourceRevision: (p.sourceRevision ?? 0) + 1 } : p,
+          ),
+        };
       }
-      return { ...prev, pages };
+      return next;
     });
   }, [setProjectSync]);
 
@@ -458,6 +474,9 @@ export default function App() {
           });
         }
       } else if (ws) {
+        if (isCoverWorksheet({ ...prev, worksheets }, wsId)) {
+          return applyCoverSourceTruth({ ...prev, worksheets }, wsId);
+        }
         pages = prev.pages.map((pg) =>
           pg.linkedWorksheetId === wsId ? refreshPageFromSource(pg, ws) : pg,
         );
@@ -1074,6 +1093,12 @@ export default function App() {
         revisionHistory: history,
         metadata: { ...project.metadata, revision: rev.newRevision, issueDate: today },
       };
+      projectRef.current = proj;
+      setProjectSync(proj);
+    }
+    const coverPage = proj.pages.find((pg) => pg.pageType === 'cover' && pg.linkedWorksheetId);
+    if (coverPage?.linkedWorksheetId) {
+      proj = applyCoverSourceTruth(proj, coverPage.linkedWorksheetId);
       projectRef.current = proj;
       setProjectSync(proj);
     }

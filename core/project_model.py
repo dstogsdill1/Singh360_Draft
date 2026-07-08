@@ -81,6 +81,7 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
             "sourceFile": "",
             "version": "",
             "status": "Draft",
+            "purpose": "",
         },
         "sources": [],
         "worksheets": [],

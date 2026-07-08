@@ -215,7 +215,11 @@ export interface ProjectModel {
   id: string;
   metadata: {
     projectName: string;
+    storeNumber?: string;
+    client?: string;
     location?: string;
+    address?: string;
+    purpose?: string;
     createdBy?: string;
     createdDate?: string;
     sourceFile?: string;
