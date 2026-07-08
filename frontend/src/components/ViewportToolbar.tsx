@@ -6,6 +6,7 @@ interface Props {
   view: ViewControls;
   viewMode: ViewMode;
   sourceDirty?: boolean;
+  sourceStatusLabel?: string;
   onViewModeChange: (mode: ViewMode) => void;
   onRefreshFromSource?: () => void;
 }
@@ -15,6 +16,7 @@ export default function ViewportToolbar({
   view,
   viewMode,
   sourceDirty,
+  sourceStatusLabel,
   onViewModeChange,
   onRefreshFromSource,
 }: Props) {
@@ -36,6 +38,9 @@ export default function ViewportToolbar({
           <button className="fit-btn" type="button" onClick={onRefreshFromSource} title="Rebuild normalized page from source">
             Refresh From Source
           </button>
+        ) : null}
+        {sourceStatusLabel ? (
+          <span className="vt-source-status sb-item">{sourceStatusLabel}</span>
         ) : null}
       </span>
       <span className="vt-spacer" />

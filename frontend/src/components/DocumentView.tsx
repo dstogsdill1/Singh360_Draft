@@ -35,6 +35,7 @@ interface Props {
   actualZoom: number;
   viewMode: ViewMode;
   sourceDirty?: boolean;
+  sourceStatusLabel?: string;
   onViewModeChange: (mode: ViewMode) => void;
   onRefreshFromSource?: () => void;
   activeTool: string;
@@ -53,7 +54,7 @@ interface Props {
   onDropImageFile: (file: File) => void;
   onDropComponent: (url: string, name: string, label: string | null, clientX: number, clientY: number) => void;
   onScaleChange: (scale: number) => void;
-  onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean }) => void;
+  onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
 }
 
@@ -66,6 +67,7 @@ export default function DocumentView({
   actualZoom,
   viewMode,
   sourceDirty,
+  sourceStatusLabel,
   onViewModeChange,
   onRefreshFromSource,
   activeTool,
@@ -157,6 +159,7 @@ export default function DocumentView({
         view={view}
         viewMode={viewMode}
         sourceDirty={sourceDirty}
+        sourceStatusLabel={sourceStatusLabel}
         onViewModeChange={onViewModeChange}
         onRefreshFromSource={onRefreshFromSource}
       />

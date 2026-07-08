@@ -15,7 +15,7 @@ import {
 
 interface Props {
   worksheet?: Worksheet;
-  onWorksheetChange: (patch: Partial<Worksheet>, opts?: { structural?: boolean }) => void;
+  onWorksheetChange: (patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
 }
 
 interface Rect {
@@ -62,8 +62,17 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
       editingCellRef.current = null;
       editingInputRef.current = null;
     };
+    const discard = () => {
+      setEditing(null);
+      editingCellRef.current = null;
+      editingInputRef.current = null;
+    };
     document.addEventListener('singh360:capture-active-editors', capture);
-    return () => document.removeEventListener('singh360:capture-active-editors', capture);
+    document.addEventListener('singh360:discard-active-editors', discard);
+    return () => {
+      document.removeEventListener('singh360:capture-active-editors', capture);
+      document.removeEventListener('singh360:discard-active-editors', discard);
+    };
   }, [worksheet, onWorksheetChange]);
 
   useEffect(() => {
@@ -109,6 +118,21 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
 
   const anchorRow = () => (sel ? norm(sel).r0 : 0);
   const anchorCol = () => (sel ? norm(sel).c0 : 0);
+
+  const columnHasData = (c: number): boolean => {
+    for (let r = 0; r < grid.length; r += 1) {
+      if ((grid[r]?.[c] ?? '').trim()) return true;
+      const st = styles[a1(r, c)];
+      if (st?.fill || st?.borders) return true;
+    }
+    return false;
+  };
+
+  const deleteColumn = () => {
+    const c = anchorCol();
+    if (columnHasData(c) && !window.confirm('Delete this column? You can undo with Ctrl+Z.')) return;
+    commit(wsDeleteCol(worksheet, c), true);
+  };
 
   const copySel = () => {
     const cells = sel ? norm(sel) : null;
@@ -200,7 +224,7 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
         {tb('Ins Row', () => commit(wsInsertRow(worksheet, anchorRow()), true), 'Insert row above selection')}
         {tb('Del Row', () => commit(wsDeleteRow(worksheet, anchorRow()), true), 'Delete selected row')}
         {tb('Ins Col', () => commit(wsInsertCol(worksheet, anchorCol()), true), 'Insert column left of selection')}
-        {tb('Del Col', () => commit(wsDeleteCol(worksheet, anchorCol()), true), 'Delete selected column')}
+        {tb('Del Col', deleteColumn, 'Delete selected column')}
         <span className="gx-tb-sep" />
         {tb('Copy', copySel)}
         {tb('Paste', () => void pasteSel())}
@@ -276,6 +300,16 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
                           editingInputRef.current = null;
                         }}
                         onKeyDown={(e) => {
+                          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                          }
+                          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                          }
                           if (e.key === 'Enter') {
                             setValue(r, c, e.currentTarget.value);
                             setEditing(null);

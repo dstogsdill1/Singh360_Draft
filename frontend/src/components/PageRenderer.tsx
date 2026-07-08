@@ -17,7 +17,7 @@ interface Props {
   onBlockChange: (pageId: string, blockId: string, patch: Partial<PageBlock>) => void;
   onPatchPage: (pageId: string, patch: Partial<PageModel>) => void;
   onDuplicateBlock: (pageId: string, blockId: string) => void;
-  onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean }) => void;
+  onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
 }
 

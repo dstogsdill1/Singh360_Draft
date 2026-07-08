@@ -12,10 +12,11 @@ import {
   uploadAssetDataUrl,
   uploadAssetFile,
 } from './api/client';
-import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode } from './model/types';
+import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
 import ContinuationPreviewModal from './components/ContinuationPreviewModal';
 import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource } from './model/excelRange';
+import { SourceWorksheetHistory } from './model/sourceWorksheetHistory';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
@@ -92,6 +93,9 @@ export default function App() {
   // Rendering + editing state.
   const [viewMode, setViewMode] = useState<ViewMode>('normalized');
   const [sourceDirty, setSourceDirty] = useState(false);
+  const [sourceEditStatus, setSourceEditStatus] = useState<'idle' | 'edited' | 'updated'>('idle');
+  const [sourceHistoryTick, setSourceHistoryTick] = useState(0);
+  const sourceHistoryRef = useRef(new SourceWorksheetHistory());
   const [activeTool, setActiveTool] = useState('select');
   const [overlayMode, setOverlayMode] = useState(false);
   const [lineStyle, setLineStyle] = useState<LineStyle>({
@@ -263,15 +267,23 @@ export default function App() {
     }
   }, [printMode, captureActivePageState]);
 
+  const resetSourceEditState = useCallback(() => {
+    sourceHistoryRef.current.clear();
+    setSourceHistoryTick((n) => n + 1);
+    setSourceEditStatus('idle');
+    setSourceDirty(false);
+  }, []);
+
   useEffect(() => {
     if (!initialProjectId) return;
     void getProject(initialProjectId).then((p) => {
-      lastSavedJsonRef.current = JSON.stringify(p); // loaded == clean baseline
+      lastSavedJsonRef.current = JSON.stringify(p);
+      resetSourceEditState();
       setProjectSync(p);
       setActivePageId(p.pages?.[0]?.id ?? null);
       setSelectedWorksheetId(p.worksheets?.[0]?.id);
     });
-  }, [initialProjectId, setProjectSync]);
+  }, [initialProjectId, setProjectSync, resetSourceEditState]);
 
   // Debounced autosave driven by real changes. Marks Unsaved Changes immediately,
   // writes a local recovery snapshot, then persists after a short quiet period.
@@ -344,27 +356,140 @@ export default function App() {
   viewModeRef.current = viewMode;
   selectionRef.current = selection;
 
-  /** Rebuild the active page's normalized blocks from its linked worksheet. */
-  const refreshActivePageFromSource = useCallback(() => {
+  const activeWorksheetId = activePage?.linkedWorksheetId ?? null;
+  void sourceHistoryTick;
+  const sourceCanUndo = sourceHistoryRef.current.canUndo(activeWorksheetId);
+  const sourceCanRedo = sourceHistoryRef.current.canRedo(activeWorksheetId);
+  const sourceUndoRef = useRef<() => boolean>(() => false);
+  const sourceRedoRef = useRef<() => boolean>(() => false);
+
+  /** Rebuild linked normalized pages for a worksheet from its source grid. */
+  const refreshPagesFromWorksheet = useCallback((wsId: string, pageId?: string | null) => {
     setProjectSync((prev) => {
       if (!prev) return prev;
-      const pageId = activePageRef.current?.id;
-      if (!pageId) return prev;
-      const pg = prev.pages.find((p) => p.id === pageId);
-      if (!pg?.linkedWorksheetId) return prev;
-      const ws = prev.worksheets.find((w) => w.id === pg.linkedWorksheetId);
+      const ws = prev.worksheets.find((w) => w.id === wsId);
       if (!ws) return prev;
-      return {
-        ...prev,
-        pages: prev.pages.map((p) => (p.id === pageId ? refreshPageFromSource(pg, ws) : p)),
-      };
+      const linked = prev.pages.filter((p) => p.linkedWorksheetId === wsId);
+      const isExact = linked.some((p) => p.renderMode === 'excel_exact');
+      let pages = prev.pages;
+      if (isExact) {
+        pages = linked.map((pg) => {
+          const b = (pg.blocks ?? [])[0];
+          if (!b || b.type !== 'excelRange') return pg;
+          return { ...pg, blocks: [refreshBlockFromWorksheet(b, ws)] };
+        });
+        const byId = new Map(pages.map((p) => [p.id, p]));
+        pages = prev.pages.map((p) => (p.linkedWorksheetId === wsId ? (byId.get(p.id) ?? p) : p));
+      } else {
+        pages = prev.pages.map((pg) =>
+          pg.linkedWorksheetId === wsId
+            ? refreshPageFromSource(pg, ws)
+            : pg,
+        );
+      }
+      // Bump sourceRevision on the active page so Normalized remounts.
+      if (pageId) {
+        pages = pages.map((p) =>
+          p.id === pageId ? { ...p, sourceRevision: (p.sourceRevision ?? 0) + 1 } : p,
+        );
+      }
+      return { ...prev, pages };
     });
-    setSourceDirty(false);
   }, [setProjectSync]);
+
+  /** Rebuild the active page's normalized blocks from its linked worksheet. */
+  const refreshActivePageFromSource = useCallback(() => {
+    const pageId = activePageRef.current?.id;
+    const wsId = activePageRef.current?.linkedWorksheetId;
+    if (!wsId) return;
+    refreshPagesFromWorksheet(wsId, pageId);
+    setSourceDirty(false);
+    setSourceEditStatus('updated');
+  }, [refreshPagesFromWorksheet]);
+
+  const applyWorksheetPatch = useCallback((
+    wsId: string,
+    patch: Partial<Worksheet>,
+    opts?: { structural?: boolean; skipHistory?: boolean },
+  ) => {
+    if (!opts?.skipHistory && projectRef.current) {
+      sourceHistoryRef.current.pushBeforeEdit(projectRef.current, wsId);
+      setSourceHistoryTick((n) => n + 1);
+    }
+    if (
+      activePageRef.current?.linkedWorksheetId === wsId
+      && viewModeRef.current === 'source'
+    ) {
+      setSourceDirty(true);
+      setSourceEditStatus('edited');
+    }
+    setProjectSync((prev) => {
+      if (!prev) return prev;
+      const worksheets = prev.worksheets.map((ws) =>
+        ws.id === wsId ? { ...ws, ...patch } : ws,
+      );
+      const ws = worksheets.find((w) => w.id === wsId);
+      const linked = prev.pages.filter((p) => p.linkedWorksheetId === wsId);
+      const isExact = linked.some((p) => p.renderMode === 'excel_exact');
+
+      let pages = prev.pages;
+      if (isExact && ws) {
+        if (opts?.structural) {
+          pages = regenerateExcelGroup({ ...prev, worksheets }, wsId);
+        } else {
+          pages = prev.pages.map((pg) => {
+            if (pg.linkedWorksheetId !== wsId || pg.renderMode !== 'excel_exact') return pg;
+            const b = (pg.blocks ?? [])[0];
+            if (!b || b.type !== 'excelRange') return pg;
+            return { ...pg, blocks: [refreshBlockFromWorksheet(b, ws)] };
+          });
+        }
+      } else if (ws) {
+        pages = prev.pages.map((pg) =>
+          pg.linkedWorksheetId === wsId ? refreshPageFromSource(pg, ws) : pg,
+        );
+      }
+      return { ...prev, worksheets, pages };
+    });
+  }, [setProjectSync]);
+
+  const sourceUndo = useCallback(() => {
+    document.dispatchEvent(new CustomEvent('singh360:discard-active-editors'));
+    const wsId = activePageRef.current?.linkedWorksheetId;
+    const p = projectRef.current;
+    if (!wsId || !p) return false;
+    const next = sourceHistoryRef.current.undo(p, wsId);
+    if (!next) return false;
+    projectRef.current = next;
+    setProjectSync(next);
+    setSourceHistoryTick((n) => n + 1);
+    setSourceDirty(true);
+    setSourceEditStatus('edited');
+    writeRecoverySnapshot(next);
+    return true;
+  }, [setProjectSync]);
+
+  const sourceRedo = useCallback(() => {
+    document.dispatchEvent(new CustomEvent('singh360:discard-active-editors'));
+    const wsId = activePageRef.current?.linkedWorksheetId;
+    const p = projectRef.current;
+    if (!wsId || !p) return false;
+    const next = sourceHistoryRef.current.redo(p, wsId);
+    if (!next) return false;
+    projectRef.current = next;
+    setProjectSync(next);
+    setSourceHistoryTick((n) => n + 1);
+    setSourceDirty(true);
+    setSourceEditStatus('edited');
+    writeRecoverySnapshot(next);
+    return true;
+  }, [setProjectSync]);
+
+  sourceUndoRef.current = sourceUndo;
+  sourceRedoRef.current = sourceRedo;
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     if (viewModeRef.current === 'source' && mode === 'normalized') {
-      // Flush any in-progress source cell edit before unmounting the grid.
       document.dispatchEvent(new CustomEvent('singh360:capture-active-editors'));
       const el = document.activeElement as HTMLElement | null;
       el?.blur?.();
@@ -543,13 +668,19 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Global keyboard: delete / undo / redo / duplicate on canvas (not while typing).
+  // Global keyboard: source undo/redo, canvas delete/undo, quick tools.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (viewModeRef.current === 'source' && (e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
+        e.preventDefault();
+        if (k === 'z') sourceUndoRef.current();
+        else sourceRedoRef.current();
+        return;
+      }
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (!isCanvasContext()) return;
-      const k = e.key.toLowerCase();
       if (e.key === 'Delete') {
         canvasApiRef.current?.deleteSelected();
       } else if ((e.ctrlKey || e.metaKey) && k === 'z') {
@@ -822,6 +953,7 @@ export default function App() {
     setPendingWorkbookFile(null);
     const p = await getProject(id);
     lastSavedJsonRef.current = JSON.stringify(p);
+    resetSourceEditState();
     setProjectSync(p);
     setSaveStatus('idle');
     setActivePageId(p.pages?.[0]?.id ?? null);
@@ -836,6 +968,7 @@ export default function App() {
       if (!ok) return;
       const p = await getProject(id);
       lastSavedJsonRef.current = JSON.stringify(p);
+      resetSourceEditState();
       setProjectSync(p);
       setSaveStatus('idle');
       setActivePageId(p.pages?.[0]?.id ?? null);
@@ -855,6 +988,7 @@ export default function App() {
     try {
       const p = await getProject(project.id);
       lastSavedJsonRef.current = JSON.stringify(p);
+      resetSourceEditState();
       setProjectSync(p);
       // Select the first imported page.
       if (pageIds.length) setActivePageId(pageIds[0]);
@@ -868,6 +1002,7 @@ export default function App() {
   // live editor and re-baseline the save manager so status is accurate.
   const applyRestoredProject = (p: ProjectModel) => {
     lastSavedJsonRef.current = JSON.stringify(p);
+    resetSourceEditState();
     setProjectSync(p);
     setActivePageId(p.pages?.[0]?.id ?? activePageId);
     setSelection(null);
@@ -1049,6 +1184,18 @@ export default function App() {
   const canvasEnabled =
     !!activePage && viewMode === 'normalized';
 
+  const sourceStatusLabel = (() => {
+    if (!activePage?.linkedWorksheetId) return '';
+    if (viewMode === 'source') {
+      if (sourceCanUndo) return 'Undo available';
+      if (sourceEditStatus === 'edited' || sourceDirty) return 'Source edited';
+      return '';
+    }
+    if (sourceEditStatus === 'updated') return 'Normalized updated';
+    if (sourceDirty) return 'Source edited';
+    return '';
+  })();
+
   const saveLabel =
     saveStatus === 'saving' ? 'Saving…'
     : saveStatus === 'unsaved' ? 'Unsaved Changes'
@@ -1063,6 +1210,9 @@ export default function App() {
       hasProject={!!project}
       view={view}
       canvasEnabled={canvasEnabled}
+      viewMode={viewMode}
+      sourceCanUndo={sourceCanUndo}
+      sourceCanRedo={sourceCanRedo}
       activeTool={activeTool}
       onSetTool={(t) => { if (t !== 'select') setOverlayMode(true); setActiveTool(t); }}
       overlayMode={overlayMode}
@@ -1085,8 +1235,14 @@ export default function App() {
         pasteCopied: () => canvasApiRef.current?.pasteCopied(),
         duplicateSelected: () => canvasApiRef.current?.duplicateSelected(),
         unlockAll: () => canvasApiRef.current?.unlockAll(),
-        undo: () => canvasApiRef.current?.undo(),
-        redo: () => canvasApiRef.current?.redo(),
+        undo: () => {
+          if (viewMode === 'source') sourceUndo();
+          else canvasApiRef.current?.undo();
+        },
+        redo: () => {
+          if (viewMode === 'source') sourceRedo();
+          else canvasApiRef.current?.redo();
+        },
         group: () => canvasApiRef.current?.group(),
         ungroup: () => canvasApiRef.current?.ungroup(),
         bringForward: () => canvasApiRef.current?.bringForward(),
@@ -1201,6 +1357,7 @@ export default function App() {
           actualZoom={actualZoom}
           viewMode={viewMode}
           sourceDirty={sourceDirty}
+          sourceStatusLabel={sourceStatusLabel}
           onViewModeChange={handleViewModeChange}
           onRefreshFromSource={refreshActivePageFromSource}
           activeTool={activeTool}
@@ -1222,44 +1379,7 @@ export default function App() {
           onDropComponent={onDropComponent}
           onScaleChange={onScaleChange}
           onWorksheetChange={(wsId, patch, opts) => {
-            if (
-              activePageRef.current?.linkedWorksheetId === wsId
-              && viewModeRef.current === 'source'
-            ) {
-              setSourceDirty(true);
-            }
-            setProjectSync((prev) => {
-              if (!prev) return prev;
-              const worksheets = prev.worksheets.map((ws) =>
-                ws.id === wsId ? { ...ws, ...patch } : ws,
-              );
-              const ws = worksheets.find((w) => w.id === wsId);
-              const linked = prev.pages.filter((p) => p.linkedWorksheetId === wsId);
-              const isExact = linked.some((p) => p.renderMode === 'excel_exact');
-
-              let pages = prev.pages;
-              if (isExact && ws) {
-                if (opts?.structural) {
-                  // Row/column count changed — rebuild base + continuation pages.
-                  pages = regenerateExcelGroup({ ...prev, worksheets }, wsId);
-                } else {
-                  // Value / fill / border edit — refresh each page's block in place.
-                  pages = prev.pages.map((pg) => {
-                    if (pg.linkedWorksheetId !== wsId || pg.renderMode !== 'excel_exact') return pg;
-                    const b = (pg.blocks ?? [])[0];
-                    if (!b || b.type !== 'excelRange') return pg;
-                    return { ...pg, blocks: [refreshBlockFromWorksheet(b, ws)] };
-                  });
-                }
-              } else {
-                pages = prev.pages.map((pg) =>
-                  pg.linkedWorksheetId === wsId
-                    ? { ...pg, blocks: syncBlocksFromGrid(pg, patch.grid ?? ws?.grid ?? []) }
-                    : pg,
-                );
-              }
-              return { ...prev, worksheets, pages };
-            });
+            applyWorksheetPatch(wsId, patch, opts);
           }}
           onCanvasChange={(pageId, objects) => {
             // CRITICAL: functional update — always merges into the CURRENT state,

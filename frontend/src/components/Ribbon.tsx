@@ -22,6 +22,9 @@ interface Props {
   hasProject: boolean;
   view: ViewControls;
   canvasEnabled: boolean;
+  viewMode: import('../model/types').ViewMode;
+  sourceCanUndo?: boolean;
+  sourceCanRedo?: boolean;
   activeTool: string;
   onSetTool: (tool: string) => void;
   overlayMode: boolean;
@@ -106,6 +109,9 @@ export default function Ribbon({
   hasProject,
   view,
   canvasEnabled,
+  viewMode,
+  sourceCanUndo,
+  sourceCanRedo,
   activeTool,
   onSetTool,
   overlayMode,
@@ -147,6 +153,10 @@ export default function Ribbon({
     }
   }, [selection]);
   const cx = canvasEnabled;
+  const sourceMode = viewMode === 'source';
+  const historyEnabled = sourceMode ? !!hasProject : cx;
+  const undoEnabled = sourceMode ? !!sourceCanUndo : cx;
+  const redoEnabled = sourceMode ? !!sourceCanRedo : cx;
 
   const uploadBtn = (
     <label className="ribbon-btn file-ribbon-btn" title="Upload Workbook">
@@ -227,19 +237,19 @@ export default function Ribbon({
               </button>
             </Group>
             <Group title="History">
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.undo} title="Undo (Ctrl+Z)">Undo</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.redo} title="Redo (Ctrl+Y)">Redo</button>
+              <button className="ribbon-btn" disabled={!undoEnabled} onClick={canvas.undo} title="Undo (Ctrl+Z)">Undo</button>
+              <button className="ribbon-btn" disabled={!redoEnabled} onClick={canvas.redo} title="Redo (Ctrl+Y)">Redo</button>
             </Group>
             <Group title="Edit">
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.deleteSelected} title="Delete selected object (Del)">Delete</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.copySelected} title="Copy selected object(s) (Ctrl+C)">Copy</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.pasteCopied} title="Paste copied object(s) (Ctrl+V)">Paste</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.duplicateSelected} title="Duplicate selected object (Ctrl+D)">Duplicate</button>
+              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.deleteSelected} title="Delete selected object (Del)">Delete</button>
+              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.copySelected} title="Copy selected object(s) (Ctrl+C)">Copy</button>
+              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.pasteCopied} title="Paste copied object(s) (Ctrl+V)">Paste</button>
+              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.duplicateSelected} title="Duplicate selected object (Ctrl+D)">Duplicate</button>
             </Group>
             <Group title="Group">
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.group} title="Group selected objects">Group</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.ungroup} title="Ungroup selected group">Ungroup</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.unlockAll} title="Unlock all objects on this page">Unlock All</button>
+              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.group} title="Group selected objects">Group</button>
+              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.ungroup} title="Ungroup selected group">Ungroup</button>
+              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.unlockAll} title="Unlock all objects on this page">Unlock All</button>
             </Group>
           </>
         )}
