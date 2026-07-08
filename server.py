@@ -43,6 +43,7 @@ from core.pdf_renderer import (
 )
 from core.pdf_importer import import_pdf
 from core.project_model import ensure_project_shape, recalc_page_numbers
+from core.sheet_index_sync import sync_project_sheet_index
 from core.project_store import ProjectStore, slugify
 from core.validation import validate_project
 from core.vsdx_importer import import_vsdx
@@ -411,6 +412,8 @@ def get_project(project_id: str):
         return jsonify(_err("Project file is corrupt or unreadable.")), 500
     if doc is None:
         abort(404)
+    doc = ensure_project_shape(doc)
+    doc = sync_project_sheet_index(doc)
     return jsonify(doc)
 
 
@@ -423,6 +426,7 @@ def save_project(project_id: str):
 
     data["id"] = project_id
     data = ensure_project_shape(data)
+    data = sync_project_sheet_index(data)
     problems = validate_project(data)
     if problems:
         return jsonify(_err("Project validation failed.", " | ".join(problems[:20]))), 400

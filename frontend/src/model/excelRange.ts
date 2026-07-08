@@ -483,6 +483,7 @@ export function regenerateExcelGroup(project: ProjectModel, wsId: string): PageM
   if (!ws || !base) return project.pages;
 
   const groupId = base.pageGroupId ?? base.id;
+  const canonicalBaseCode = (base.displaySheetCode || base.sheetCode || '').trim();
   const full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
   full.splitMode = base.splitMode ?? full.splitMode;
   full.minScale = base.minScale ?? full.minScale;
@@ -503,14 +504,15 @@ export function regenerateExcelGroup(project: ProjectModel, wsId: string): PageM
     continuationOf: null,
     continuationIndex: 0,
     generatedContinuation: false,
-    displaySheetCode: base.sheetCode,
+    displaySheetCode: canonicalBaseCode || base.sheetCode,
+    sheetCode: canonicalBaseCode || base.sheetCode,
     repeatRows: parts[0].repeatRows,
   });
 
   for (let i = 1; i < parts.length; i += 1) {
     const contId = `${groupId}_c${i}`;
     const prev = byId.get(contId);
-    const code = continuationCode(base.sheetCode, i);
+    const code = continuationCode(canonicalBaseCode || base.sheetCode, i);
     newGroup.push({
       ...(prev ?? ({} as PageModel)),
       id: contId,
