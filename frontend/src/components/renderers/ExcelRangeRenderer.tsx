@@ -60,15 +60,20 @@ function borderCss(side?: BorderSide): string | undefined {
   }
 }
 
-function cellCss(st: ExcelCellStyle | undefined, rowH: number, bodyFontPx?: number): React.CSSProperties {
+function cellCss(
+  st: ExcelCellStyle | undefined,
+  rowH: number,
+  bodyFontPx?: number,
+  opts?: { nowrap?: boolean },
+): React.CSSProperties {
   const s: React.CSSProperties = {
     minHeight: rowH,
     padding: '2px 4px',
     verticalAlign:
       st?.vAlign === 'top' ? 'top' : st?.vAlign === 'bottom' ? 'bottom' : 'middle',
-    whiteSpace: 'normal',
-    overflowWrap: 'normal',
-    wordBreak: 'normal',
+    whiteSpace: opts?.nowrap ? 'nowrap' : 'normal',
+    overflowWrap: opts?.nowrap ? 'normal' : 'normal',
+    wordBreak: opts?.nowrap ? 'keep-all' : 'normal',
   };
   if (!st) {
     if (bodyFontPx) s.fontSize = bodyFontPx;
@@ -173,6 +178,10 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
 
   const fitRef = useRef<HTMLDivElement | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
+  const nowrapCols = useMemo(
+    () => new Set((block.nowrapColumns as number[] | undefined) ?? []),
+    [block.nowrapColumns],
+  );
 
   useEffect(() => {
     const wrap = fitRef.current;
@@ -253,7 +262,9 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
                       key={c}
                       rowSpan={span?.rs}
                       colSpan={span?.cs}
-                      style={cellCss(st, rowHeights[r] ?? DEFAULT_ROW, block.bodyFontPx)}
+                      style={cellCss(st, rowHeights[r] ?? DEFAULT_ROW, block.bodyFontPx, {
+                        nowrap: nowrapCols.has(c),
+                      })}
                     >
                       {row[c] ?? ''}
                     </td>

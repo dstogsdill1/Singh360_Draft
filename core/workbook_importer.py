@@ -24,6 +24,9 @@ from core.page_composer import (
 from core.table_style_profile import (
     ABSOLUTE_MIN_FONT_SIZE,
     DENSE_FONT_SIZE,
+    NARRATIVE_FONT_SIZE,
+    NARRATIVE_MIN_FONT_SIZE,
+    NARRATIVE_RENDER_PROFILE,
     RENDER_PROFILE,
     apply_singh360_profile,
 )
@@ -33,17 +36,25 @@ DEFAULT_HEADER_STYLE = "orange"
 
 _INDEX_ALIASES = {
     "include": {"include", "inc", "include?", "use?", "selected"},
-    "order": {"order", "no", "num", "seq", "sheet no", "sheet no."},
+    # Plain sequential Order/Page column only. Never treat "Sheet No." as Order —
+    # that string is reserved for the canonical drawing sheet code (Phase B).
+    "order": {"order", "num", "seq", "page", "page no", "page no.", "page #"},
     # The real drawing-package sheet number (e.g. "EMS 0.2") — separate from
     # the plain sequential "Order" column. FINAL RENDER POLISH 4G, Phase A:
     # the title block must show this, not the sequential output order.
     # "Suggested EMS Code" is the SA38/Kyle-workbook alias (00_APP_INDEX).
-    "sheet_code": {"sheet code", "code", "drawing no", "drawing no.", "drawing number", "dwg no", "dwg no.", "dwg code", "sheet #", "suggested ems code"},
+    "sheet_code": {
+        "sheet code", "code", "drawing no", "drawing no.", "drawing number",
+        "dwg no", "dwg no.", "dwg code", "sheet #", "sheet no", "sheet no.",
+        "suggested ems code",
+    },
     # "Original Tab" is the SA38/Kyle-workbook alias (00_APP_INDEX).
     "sheet_tab": {"sheet tab", "sheet", "worksheet", "tab", "tab name", "original tab"},
     # "Normalized Page Title" is the SA38/Kyle-workbook alias (00_APP_INDEX).
     "sheet_title": {"page title", "title", "sheet title", "page name", "name", "normalized page title"},
     "use_source": {"use", "source", "use / source", "use/source", "type"},
+    "family": {"family", "page family", "discipline"},
+    "page_type": {"page type", "kind"},
     "notes": {"notes", "remarks", "description", "comment"},
 }
 
@@ -622,26 +633,86 @@ def _match_page_asset(project_id: str, sheet_code: str, title: str) -> dict[str,
 
 def _blank_page_placeholder_message(sheet_tab: str, title: str) -> str:
     """Export-visible placeholder text for a blank canvas/drawing page
-    (Phase C). ``NormalizedPage.tsx`` renders this exact text at export time
-    when the page has no image block and no user overlay content — never a
-    silently blank page."""
-    text = f"{sheet_tab} {title}".lower()
-    if "location" in text:
-        return "RESERVED FOR FIELD LAYOUT"
+    (FINAL SA31 POLISH 4I, Phase E). ``NormalizedPage.tsx`` renders this
+    exact text at export time when the page has no image block and no user
+    overlay content — never a silently blank page.
+
+    Location / layout / schematic blanks all use the same clear draft note.
+    """
     return "DRAWING TO BE INSERTED"
 
 
-def _append_continuation_rows_to_index(project: dict[str, Any]) -> None:
-    """Reflect generated continuation pages in the rendered Sheet Index
-    (FINAL RELEASE CLEANUP 4H+SA38, Phase E).
+def _canonical_sheet_code(idx: dict[str, Any] | None, sheet_tab: str, order_cursor: int) -> str:
+    """Resolve the title-block / index Sheet Code (FINAL SA31 POLISH 4I).
 
-    ``compose_pages`` may split an oversized sheet (e.g. an LCP schedule)
-    into a base page plus one or more ``generatedContinuation`` pages
-    (``EMS 1.4`` -> ``EMS 1.4a``) *after* the index page was already
-    rendered from the raw workbook rows — so, without this step, the index
-    silently under-counts the real output and never lists the continuation
-    sheet code at all. Call this right after ``compose_pages``, before
-    ``recalc_page_numbers``. Never touches or duplicates the base row.
+    Precedence:
+      1. Index Sheet Code column (canonical engineering code).
+      2. Sheet-code prefix baked into the worksheet tab name.
+      3. ``EMS {order}`` last-resort placeholder — never bare ``{order}.0``,
+         which previously leaked sequential Order into SHEET NO.
+    """
+    raw = (idx.get("sheetCodeRaw") if idx else "") or ""
+    if raw.strip():
+        return raw.strip()
+    from_tab = _sheet_code_from_tab(sheet_tab)
+    if from_tab:
+        return from_tab
+    return f"EMS {order_cursor}"
+
+
+def _continuation_index_title(page: dict[str, Any]) -> str:
+    """Prefer a clean '— Continued' title for index rows (Phase A)."""
+    title = (page.get("sheetTitle") or "").strip()
+    base = re.sub(r"\s*[—-]\s*CONTINUED\s*$", "", title, flags=re.IGNORECASE).strip()
+    if "lcp" in base.lower() and "panel" in base.lower():
+        return "LCP Panel Schedule — Continued"
+    if base:
+        return f"{base} — Continued"
+    return title or "Continued"
+
+
+def _continuation_index_page_type(page: dict[str, Any]) -> str:
+    """Stable Page Type string for a generated continuation index row."""
+    existing = (page.get("pageType") or "").strip().lower()
+    if existing in {"io-table-continuation", "io-table", "matrix"}:
+        return "io-table-continuation"
+    family = (page.get("pageFamily") or "").strip().lower()
+    if family in {"paneldetail", "ioschedule", "matrix", "panel detail"}:
+        return "io-table-continuation"
+    title = (page.get("sheetTitle") or "").lower()
+    if "lcp" in title or "panel schedule" in title:
+        return "io-table-continuation"
+    return "continuation"
+
+
+def _find_index_header_row(grid: list[list[str]]) -> int:
+    for i, row in enumerate(grid[:20]):
+        low = {str(x).lower() for x in row if x}
+        if low & _INDEX_ALIASES["sheet_tab"] and low & _INDEX_ALIASES["sheet_title"]:
+            return i
+    return 0
+
+
+def _index_row_sheet_code(row: list[str], code_col: int) -> str:
+    if code_col < 0 or code_col >= len(row):
+        return ""
+    return str(row[code_col] or "").strip()
+
+
+def _append_continuation_rows_to_index(project: dict[str, Any]) -> None:
+    """Keep the rendered Sheet Index in exact output order (FINAL SA31 POLISH 4I).
+
+    ``compose_pages`` may split an oversized sheet (e.g. LCP) into a base page
+    plus ``generatedContinuation`` pages (``EMS 1.4`` -> ``EMS 1.4a``) *after*
+    the index was rendered from workbook rows. Without this step the index
+    under-counts real output and appends incomplete continuation rows at the
+    bottom. Call after ``compose_pages``, before ``recalc_page_numbers``.
+
+    Rules:
+      - Insert each continuation immediately after its base sheet-code row.
+      - Fill Sheet Code / Page Title / Family / Page Type / Include / Order.
+      - Re-number Order to match physical export sequence for included rows.
+      - Never duplicate an already-present continuation sheet code.
     """
     index_page = next(
         (p for p in project.get("pages", []) if p.get("pageType") == "index" and p.get("renderMode") == "excel_exact"),
@@ -656,41 +727,124 @@ def _append_continuation_rows_to_index(project: dict[str, Any]) -> None:
     if not grid:
         return
 
-    header_idx = 0
-    for i, row in enumerate(grid[:20]):
-        low = {str(x).lower() for x in row if x}
-        if low & _INDEX_ALIASES["sheet_tab"] and low & _INDEX_ALIASES["sheet_title"]:
-            header_idx = i
-            break
+    header_idx = _find_index_header_row(grid)
     col = _header_map([str(x) for x in grid[header_idx]])
     code_col = col.get("sheet_code", -1)
     title_col = col.get("sheet_title", -1)
     include_col = col.get("include", -1)
+    order_col = col.get("order", -1)
+    tab_col = col.get("sheet_tab", -1)
+    family_col = col.get("family", -1)
+    page_type_col = col.get("page_type", -1)
+    notes_col = col.get("notes", -1)
     if title_col < 0:
-        # No recognizable title column on this index layout — nothing safe to fill in.
         return
 
     n_cols = len(grid[header_idx])
-    row_heights = block.get("rowHeights") or []
+    row_heights = list(block.get("rowHeights") or [])
+    while len(row_heights) < len(grid):
+        row_heights.append(_DEFAULT_ROW_PX)
     default_row_h = row_heights[-1] if row_heights else _DEFAULT_ROW_PX
 
-    for page in project.get("pages", []):
+    # Map sheet code -> last matching body-row index (for insertion).
+    def code_row_map() -> dict[str, int]:
+        out: dict[str, int] = {}
+        for r in range(header_idx + 1, len(grid)):
+            code = _index_row_sheet_code(grid[r], code_col)
+            if code:
+                out[code] = r
+        return out
+
+    included_pages = [p for p in project.get("pages", []) if p.get("include", True)]
+    for page in included_pages:
         if not page.get("generatedContinuation"):
             continue
+        cont_code = (page.get("displaySheetCode") or page.get("sheetCode") or "").strip()
+        if not cont_code:
+            continue
+        codes = code_row_map()
+        if cont_code in codes:
+            # Already listed — refresh metadata in place rather than duplicating.
+            r = codes[cont_code]
+            if title_col >= 0:
+                grid[r][title_col] = _continuation_index_title(page)
+            if include_col >= 0:
+                grid[r][include_col] = "YES"
+            if family_col >= 0 and not str(grid[r][family_col] if family_col < len(grid[r]) else "").strip():
+                family = page.get("pageFamily") or ""
+                grid[r][family_col] = "Lighting" if family in ("panelDetail", "matrix", "ioSchedule") else family
+            if page_type_col >= 0:
+                grid[r][page_type_col] = _continuation_index_page_type(page)
+            continue
+
+        # Prefer base page's sheet code; fall back to stripping trailing letter.
+        base_page = next(
+            (p for p in project.get("pages", []) if p.get("id") == page.get("continuationOf")),
+            None,
+        )
+        base_code = (
+            ((base_page.get("displaySheetCode") or base_page.get("sheetCode")) if base_page else "")
+            or re.sub(r"[a-z]$", "", cont_code, flags=re.IGNORECASE)
+        ).strip()
+
+        insert_at = codes.get(base_code, len(grid) - 1) + 1
+        # Skip past any other already-inserted continuations for this base.
+        while insert_at < len(grid):
+            existing = _index_row_sheet_code(grid[insert_at], code_col)
+            if existing.startswith(base_code) and existing != base_code and len(existing) == len(base_code) + 1:
+                insert_at += 1
+                continue
+            break
+
         new_row = [""] * n_cols
-        if code_col >= 0:
-            new_row[code_col] = page.get("displaySheetCode") or page.get("sheetCode") or ""
-        # sheetTitle already carries the "— CONTINUED" suffix (page_composer's
-        # continuation_title()) — reuse it verbatim so the index matches the
-        # page itself exactly, rather than risking a doubled-up suffix.
-        new_row[title_col] = page.get("sheetTitle") or ""
         if include_col >= 0:
             new_row[include_col] = "YES"
-        grid.append(new_row)
-        row_heights.append(default_row_h)
+        if code_col >= 0:
+            new_row[code_col] = cont_code
+        if title_col >= 0:
+            new_row[title_col] = _continuation_index_title(page)
+        if tab_col >= 0:
+            new_row[tab_col] = page.get("sheetTab") or (base_page.get("sheetTab") if base_page else "") or ""
+        if family_col >= 0:
+            family = page.get("pageFamily") or (base_page.get("pageFamily") if base_page else "") or ""
+            if family in ("panelDetail", "matrix", "ioSchedule"):
+                new_row[family_col] = "Lighting"
+            elif family:
+                new_row[family_col] = str(family)
+            else:
+                # Copy family from the base index row when available.
+                base_row_i = codes.get(base_code)
+                if base_row_i is not None and family_col < len(grid[base_row_i]):
+                    new_row[family_col] = str(grid[base_row_i][family_col] or "")
+        if page_type_col >= 0:
+            new_row[page_type_col] = _continuation_index_page_type(page)
+        if notes_col >= 0:
+            new_row[notes_col] = ""
+
+        grid.insert(insert_at, new_row)
+        row_heights.insert(insert_at, default_row_h)
+
+    # Re-stamp Order to physical included-page sequence so index Order matches
+    # "SHEET X OF Y" and the actual exported page order.
+    order_by_code = {
+        (p.get("displaySheetCode") or p.get("sheetCode") or "").strip(): int(p.get("order") or 0)
+        for p in included_pages
+        if (p.get("displaySheetCode") or p.get("sheetCode") or "").strip()
+    }
+    if order_col >= 0:
+        for r in range(header_idx + 1, len(grid)):
+            code = _index_row_sheet_code(grid[r], code_col)
+            if code and code in order_by_code:
+                while len(grid[r]) < n_cols:
+                    grid[r].append("")
+                grid[r][order_col] = str(order_by_code[code])
 
     block["grid"] = grid
     block["rowHeights"] = row_heights
+    # Keep preferred widths in sync when column geometry was already applied.
+    if block.get("colWidths") and len(block["colWidths"]) != n_cols:
+        family = index_page.get("pageFamily") or "index"
+        _apply_table_geometry(block, family if family != "index" else "table", "index")
 
 
 def _tabular_enough(ws: dict[str, Any]) -> bool:
@@ -766,7 +920,7 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
 
 
 def _layout_profile_for(family: str, page_type: str, blob: str) -> str:
-    """Rendering-options profile per page type (TABLE STYLE 4F, Phase D)."""
+    """Rendering-options profile per page type (TABLE STYLE 4F / SA31 4I)."""
     if family == "companyInfo":
         return "company_info"
     if family == "idfTable":
@@ -775,6 +929,9 @@ def _layout_profile_for(family: str, page_type: str, blob: str) -> str:
         return "io_table"
     if family == "text" and "instruction" in blob:
         return "instruction_table"
+    # Front-matter narrative pages with long Section / Scope Language cells.
+    if family == "text" and any(k in blob for k in ("scope", "workflow", "milestone")):
+        return "front_matter_narrative_table"
     return "front_matter_table"
 
 
@@ -787,9 +944,14 @@ def _layout_profile_for(family: str, page_type: str, blob: str) -> str:
 # only. Never invents data: a column with no source match renders blank.
 # --------------------------------------------------------------------------
 _IDF_TARGET_FONT = DENSE_FONT_SIZE  # 7.0pt
+_IDF_PREFERRED_FONT = 7.5  # FINAL SA31 POLISH 4I Phase D preferred readable size
 _IDF_MIN_FONT = ABSOLUTE_MIN_FONT_SIZE  # 6.5pt
 _IDF_ROW_H = 20
 _IDF_HEADER_H = 24
+# Two-up scale-up targets (Phase D): grow row height / font until the table
+# uses roughly 65–75% of the safe body when it would otherwise look tiny.
+_IDF_SCALE_TARGET_MIN = 0.65
+_IDF_SCALE_TARGET_MAX = 0.75
 _IDF_COL_W = {
     "Port": 46,
     "Label": 72,
@@ -832,10 +994,15 @@ def _is_idf_network_table(ws: dict[str, Any], family: str) -> tuple[bool, int | 
     return header_row is not None, header_row
 
 
-def _idf_columns(headers: list[str]) -> list[tuple[str, tuple[int, ...]]]:
+def _idf_columns(headers: list[str], *, fold_low_value: bool = False) -> list[tuple[str, tuple[int, ...]]]:
     """Map source headers onto the essential RDM/IDF network columns, only
     combining optional detail columns (Controller ID + IP Address, Network +
-    Cable, From + To) when needed to keep the column count readable."""
+    Cable, From + To) when needed to keep the column count readable.
+
+    ``fold_low_value`` (FINAL SA31 POLISH 4I Phase D): drop Network /
+    Controller / IP as their own columns so two-up can grow font/row height;
+    values stay available via Notes when present.
+    """
     idx = {
         "port": _idf_col_index(headers, "port"),
         "label": _idf_col_index(headers, "label"),
@@ -848,6 +1015,13 @@ def _idf_columns(headers: list[str]) -> list[tuple[str, tuple[int, ...]]]:
         "ip": _idf_col_index(headers, "ip address", "ip addr", "ip"),
         "network": _idf_col_index(headers, "network", "vlan"),
     }
+    notes_spec: list[int] = []
+    if idx["notes"] is not None:
+        notes_spec.append(idx["notes"])
+    if fold_low_value:
+        for key in ("controllerId", "ip", "network"):
+            if idx[key] is not None and idx[key] not in notes_spec:
+                notes_spec.append(idx[key])
     cols: list[tuple[str, tuple[int, ...]]] = [
         ("Port", (idx["port"],) if idx["port"] is not None else ()),
         ("Label", (idx["label"],) if idx["label"] is not None else ()),
@@ -855,20 +1029,21 @@ def _idf_columns(headers: list[str]) -> list[tuple[str, tuple[int, ...]]]:
         ("From", (idx["from"],) if idx["from"] is not None else ()),
         ("To", (idx["to"],) if idx["to"] is not None else ()),
         ("Cable", (idx["cable"],) if idx["cable"] is not None else ()),
-        ("Notes", (idx["notes"],) if idx["notes"] is not None else ()),
+        ("Notes", tuple(notes_spec) if notes_spec else ()),
     ]
-    cols = [c for c in cols if c[1] or c[0] in ("Port", "Label", "Device / Drop")]
+    cols = [c for c in cols if c[1] or c[0] in ("Port", "Label", "Device / Drop", "Notes")]
 
-    detail: list[tuple[str, tuple[int, ...]]] = []
-    if idx["controllerId"] is not None and idx["ip"] is not None:
-        detail.append(("Controller / IP", (idx["controllerId"], idx["ip"])))
-    elif idx["controllerId"] is not None:
-        detail.append(("Controller ID", (idx["controllerId"],)))
-    elif idx["ip"] is not None:
-        detail.append(("IP Address", (idx["ip"],)))
-    if idx["network"] is not None:
-        detail.append(("Network", (idx["network"],)))
-    cols = cols + detail
+    if not fold_low_value:
+        detail: list[tuple[str, tuple[int, ...]]] = []
+        if idx["controllerId"] is not None and idx["ip"] is not None:
+            detail.append(("Controller / IP", (idx["controllerId"], idx["ip"])))
+        elif idx["controllerId"] is not None:
+            detail.append(("Controller ID", (idx["controllerId"],)))
+        elif idx["ip"] is not None:
+            detail.append(("IP Address", (idx["ip"],)))
+        if idx["network"] is not None:
+            detail.append(("Network", (idx["network"],)))
+        cols = cols + detail
 
     # Only combine From/To -> Path if the column count is still too wide.
     if len(cols) > 9 and idx["from"] is not None and idx["to"] is not None:
@@ -897,18 +1072,36 @@ def _build_idf_network_block(
     data rows — used only by the Phase E hard-split fallback below, which
     turns an oversized network table into two balanced *single*-layout pages
     instead of ever rendering two-up below the 6.5pt floor.
+
+    FINAL SA31 POLISH 4I Phase D: when two-up content uses <55% of safe body
+    height, grow row height / prefer 7–7.5pt fonts (never below 6.5pt) until
+    the block fills ~65–75%. Optional low-value Network / Controller / IP
+    columns may fold into Notes so width never forces undersizing.
     """
     grid = ws.get("grid") or []
     headers_src = grid[header_row] if header_row < len(grid) else []
-    cols = _idf_columns(headers_src)
-    headers = [c[0] for c in cols]
-    col_widths = [_IDF_COL_W.get(h, 90) for h in headers]
 
-    all_data_rows: list[list[str]] = []
-    for row in grid[header_row + 1:]:
-        vals = [_idf_cell_value(row, spec) for _, spec in cols]
-        if any(v for v in vals):
-            all_data_rows.append(vals)
+    def _assemble(fold_low_value: bool) -> tuple[list[str], list[int], list[list[str]], int]:
+        cols = _idf_columns(headers_src, fold_low_value=fold_low_value)
+        hdrs = [c[0] for c in cols]
+        widths = [_IDF_COL_W.get(h, 90) for h in hdrs]
+        rows_all: list[list[str]] = []
+        for row in grid[header_row + 1:]:
+            vals = [_idf_cell_value(row, spec) for _, spec in cols]
+            if any(v for v in vals):
+                rows_all.append(vals)
+        return hdrs, widths, rows_all, sum(widths)
+
+    headers, col_widths, all_data_rows, single_w = _assemble(False)
+    # Prefer folding optional Network / Controller / IP columns when the
+    # essential+detail set is wider than ~half the usable page for two-up.
+    usable_w = BODY_W - 80
+    two_up_usable = (usable_w - 18) // 2  # gap between the two stacks
+    if single_w > two_up_usable and row_slice is None:
+        folded_h, folded_w, folded_rows, folded_sw = _assemble(True)
+        if folded_sw <= two_up_usable or folded_sw < single_w:
+            headers, col_widths, all_data_rows, single_w = folded_h, folded_w, folded_rows, folded_sw
+
     total_n = len(all_data_rows)
 
     title_lines = []
@@ -927,28 +1120,43 @@ def _build_idf_network_block(
         port_offset = 0
     n = len(data_rows)
 
-    single_w = sum(col_widths)
-    usable_w = BODY_W - 80
-    single_h = _IDF_HEADER_H + n * _IDF_ROW_H
+    row_h = _IDF_ROW_H
+    header_h = _IDF_HEADER_H
+    single_h = header_h + n * row_h
     half = (n + 1) // 2 if n else 0
-    two_up_h = _IDF_HEADER_H + half * _IDF_ROW_H
+    two_up_h = header_h + half * row_h
 
     warnings: list[str] = []
     needs_hard_split = False
     if single_w <= usable_w and single_h <= BODY_BUDGET:
         layout_mode = "single"
-        font_size = _IDF_TARGET_FONT
+        font_size = _IDF_PREFERRED_FONT
     elif row_slice is None and two_up_h > BODY_BUDGET:
-        # Phase E rule 4: two-up would still overflow the page even at the
-        # floor font — never shrink further/silently clip. Split into two
-        # balanced, full-width *single*-layout pages (1-half / half+1-total)
-        # instead of rendering an oversized/illegible two-up stack.
         needs_hard_split = True
         layout_mode = "two_up"
         font_size = _IDF_MIN_FONT
     else:
         layout_mode = "two_up"
-        font_size = _IDF_TARGET_FONT
+        font_size = _IDF_PREFERRED_FONT
+
+    # Phase D scale-up: if two-up (or single) uses <55% of safe body, grow
+    # row height / keep preferred font until ~65–75% fill, without exceeding
+    # BODY_BUDGET or dropping below the 6.5pt floor.
+    content_h = single_h if (layout_mode == "single" or needs_hard_split) else two_up_h
+    fill_ratio = content_h / BODY_BUDGET if BODY_BUDGET else 1.0
+    if not needs_hard_split and fill_ratio < 0.55 and n > 0:
+        target_h = int(BODY_BUDGET * _IDF_SCALE_TARGET_MIN)
+        rows_for_h = n if layout_mode == "single" else max(1, half)
+        grown_row = max(row_h, int((target_h - header_h) / rows_for_h))
+        # Cap growth so we stay within the 75% band.
+        max_h = int(BODY_BUDGET * _IDF_SCALE_TARGET_MAX)
+        while header_h + grown_row * rows_for_h > max_h and grown_row > row_h:
+            grown_row -= 1
+        row_h = grown_row
+        single_h = header_h + n * row_h
+        two_up_h = header_h + half * row_h
+        content_h = single_h if layout_mode == "single" else two_up_h
+        font_size = max(_IDF_MIN_FONT, min(_IDF_PREFERRED_FONT, font_size))
 
     left_rows = data_rows[:half] if layout_mode == "two_up" and not needs_hard_split else []
     right_rows = data_rows[half:] if layout_mode == "two_up" and not needs_hard_split else []
@@ -972,9 +1180,11 @@ def _build_idf_network_block(
         "portRangeRight": port_right if not needs_hard_split else "",
         "portRangeLabel": f"{port_offset + 1}–{port_offset + n}" if needs_hard_split else "",
         "colWidths": col_widths,
+        "rowHeight": row_h,
+        "headerHeight": header_h,
         "fontSize": _IDF_TARGET_FONT if needs_hard_split else font_size,
-        "contentWidth": single_w,
-        "contentHeight": single_h if (layout_mode == "single" or needs_hard_split) else two_up_h,
+        "contentWidth": single_w if layout_mode == "single" or needs_hard_split else min(usable_w, single_w * 2 + 18),
+        "contentHeight": content_h,
         "sourceRowCount": n,
         "totalRowCount": total_n,
         "bodyRowFillMode": "none",
@@ -989,6 +1199,7 @@ def _build_idf_network_block(
         "layoutWarnings": warnings,
         "needsHardSplit": needs_hard_split,
         "hardSplitBoundary": _idf_hard_split_boundary(total_n) if (needs_hard_split and row_slice is None) else None,
+        "scaledUp": bool(row_h > _IDF_ROW_H),
     }
 
 
@@ -998,6 +1209,12 @@ def _idf_hard_split_boundary(total_n: int) -> int:
 
 
 _NARROW_COL_HEAD_KEYWORDS = ("no", "#", "id", "qty", "type", "addr", "i/o", "io", "point", "ckt", "step")
+_STATUS_COL_HEAD_KEYWORDS = ("status", "state", "phase")
+_SECTION_COL_HEAD_KEYWORDS = ("section", "phase", "category", "item", "milestone")
+_NARRATIVE_COL_HEAD_KEYWORDS = (
+    "scope", "language", "description", "instruction", "deliverable", "detail", "narrative",
+)
+_NOTES_COL_HEAD_KEYWORDS = ("notes", "remark", "comment")
 
 
 def _find_header_row_index(grid: list[list[str]]) -> int:
@@ -1027,8 +1244,122 @@ def _find_header_row_index(grid: list[list[str]]) -> int:
     return 0
 
 
-def _preferred_col_widths(grid: list[list[str]], family: str, page_type: str) -> list[int]:
+def _col_header_class(head: str) -> str:
+    h = (head or "").strip().lower()
+    if any(k in h for k in _SECTION_COL_HEAD_KEYWORDS) and not any(k in h for k in _NARRATIVE_COL_HEAD_KEYWORDS):
+        return "section"
+    if any(k in h for k in _STATUS_COL_HEAD_KEYWORDS):
+        return "status"
+    if any(k in h for k in _NOTES_COL_HEAD_KEYWORDS):
+        return "notes"
+    if any(k in h for k in _NARRATIVE_COL_HEAD_KEYWORDS):
+        return "narrative"
+    return "other"
+
+
+def _notes_column_is_sparse(grid: list[list[str]], notes_cols: list[int], header_row: int) -> bool:
+    """True when Notes cells under the header are empty / mostly empty."""
+    if not notes_cols:
+        return True
+    filled = 0
+    total = 0
+    for r in range(header_row + 1, len(grid)):
+        row = grid[r]
+        for c in notes_cols:
+            total += 1
+            if c < len(row) and str(row[c] or "").strip():
+                filled += 1
+    if total == 0:
+        return True
+    return (filled / total) < 0.15
+
+
+def _preferred_narrative_col_widths(grid: list[list[str]]) -> list[int]:
+    """Column widths for front_matter_narrative_table (FINAL SA31 POLISH 4I).
+
+    Targets ~85–95% of printable body width with priorities:
+      Section 20–24%, Scope Language 56–62%, Status 8–10%, Notes 0–12%.
+    Empty/sparse Notes shrink to ~10% or disappear into leftover space.
+    """
+    n_cols = max((len(r) for r in grid), default=0)
+    if not n_cols:
+        return []
+    header_row = _find_header_row_index(grid)
+    header = grid[header_row] if grid else []
+    classes = [_col_header_class(str(header[c]) if c < len(header) else "") for c in range(n_cols)]
+    notes_idxs = [i for i, c in enumerate(classes) if c == "notes"]
+    hide_notes = _notes_column_is_sparse(grid, notes_idxs, header_row)
+
+    # Share of BODY_W (leave ~8% margin → ~92% usable).
+    target = int(BODY_W * 0.92)
+    shares: list[float] = []
+    for cls in classes:
+        if cls == "section":
+            shares.append(0.22)
+        elif cls == "narrative":
+            shares.append(0.58)
+        elif cls == "status":
+            shares.append(0.09)
+        elif cls == "notes":
+            shares.append(0.0 if hide_notes else 0.10)
+        else:
+            shares.append(0.12)
+    if hide_notes:
+        # Reallocate Notes share into Scope Language (or the widest non-status).
+        reassigned = False
+        for i, cls in enumerate(classes):
+            if cls == "narrative":
+                shares[i] += 0.10
+                reassigned = True
+                break
+        if not reassigned:
+            for i, cls in enumerate(classes):
+                if cls == "section":
+                    shares[i] += 0.05
+                elif cls != "notes":
+                    shares[i] += 0.05 / max(1, n_cols - len(notes_idxs))
+    total = sum(shares) or 1.0
+    widths = [max(48, int(round(target * s / total))) for s in shares]
+    if hide_notes:
+        for i in notes_idxs:
+            widths[i] = max(36, int(BODY_W * 0.08))
+    # Clamp to 85–95% body width band.
+    lo, hi = int(BODY_W * 0.85), int(BODY_W * 0.95)
+    cur = sum(widths)
+    if cur < lo:
+        grow = lo - cur
+        order = sorted(range(n_cols), key=lambda i: shares[i], reverse=True)
+        for i in order:
+            if classes[i] == "notes" and hide_notes:
+                continue
+            add = max(1, grow // max(1, n_cols - len(notes_idxs)))
+            widths[i] += add
+            grow -= add
+            if grow <= 0:
+                break
+    elif cur > hi:
+        shrink = cur - hi
+        order = sorted(range(n_cols), key=lambda i: shares[i])
+        for i in order:
+            min_w = 36 if classes[i] == "notes" else 64
+            can = max(0, widths[i] - min_w)
+            take = min(can, shrink)
+            widths[i] -= take
+            shrink -= take
+            if shrink <= 0:
+                break
+    return widths
+
+
+def _preferred_col_widths(
+    grid: list[list[str]],
+    family: str,
+    page_type: str,
+    layout_profile: str = "",
+) -> list[int]:
     """Deterministic normalized column sizing before placement/export."""
+    if layout_profile == "front_matter_narrative_table":
+        return _preferred_narrative_col_widths(grid)
     n_cols = max((len(r) for r in grid), default=0)
     if not n_cols:
         return []
@@ -1083,8 +1414,16 @@ def _preferred_col_widths(grid: list[list[str]], family: str, page_type: str) ->
     return widths
 
 
-def _estimated_row_heights(grid: list[list[str]], col_widths: list[int], family: str, header_rows: int) -> list[int]:
-    font_px = 12 if family in ("matrix", "idfTable", "ioSchedule", "panelDetail", "rackLayout") else 13
+def _estimated_row_heights(
+    grid: list[list[str]],
+    col_widths: list[int],
+    family: str,
+    header_rows: int,
+    *,
+    font_px: int | None = None,
+) -> list[int]:
+    if font_px is None:
+        font_px = 12 if family in ("matrix", "idfTable", "ioSchedule", "panelDetail", "rackLayout") else 13
     line_h = int(round(font_px * 1.22))
     out: list[int] = []
     for r, row in enumerate(grid):
@@ -1105,25 +1444,53 @@ def _estimated_row_heights(grid: list[list[str]], col_widths: list[int], family:
                     cur = wl
                 else:
                     cur = cur + (1 if cur else 0) + wl
-            max_lines = max(max_lines, min(lines, 8))
+            # Narrative sections may wrap scope language across several lines.
+            max_lines = max(max_lines, min(lines, 12 if family == "text" else 8))
         base = 28 if r < header_rows else 24
         out.append(max(base, line_h * max_lines + 8))
     return out
 
 
-def _apply_table_geometry(block: dict[str, Any], family: str, page_type: str) -> None:
+def _apply_table_geometry(
+    block: dict[str, Any],
+    family: str,
+    page_type: str,
+    layout_profile: str = "",
+) -> None:
     """Auto-size columns and rows for normalized/output table geometry."""
     grid = block.get("grid") or []
     if not grid:
         return
-    widths = _preferred_col_widths(grid, family, page_type)
+    profile = layout_profile or block.get("layoutProfile") or ""
+    widths = _preferred_col_widths(grid, family, page_type, profile)
     if widths:
         block["colWidths"] = widths
     header_rows = int(block.get("headerRowCount") or 1)
-    block["rowHeights"] = _estimated_row_heights(grid, block.get("colWidths") or widths, family, header_rows)
+    font_px = None
+    if profile == "front_matter_narrative_table":
+        # 8.5pt ≈ 11.3 CSS px; keep Section labels from stacking word-by-word.
+        font_px = 12
+        block["bodyFontPx"] = 12
+        block["bodyFontPt"] = NARRATIVE_FONT_SIZE
+        block["minFontPt"] = NARRATIVE_MIN_FONT_SIZE
+        block["renderProfile"] = NARRATIVE_RENDER_PROFILE
+        block["layoutProfile"] = "front_matter_narrative_table"
+        block["minScale"] = max(float(block.get("minScale") or EXCEL_MIN_SCALE), NARRATIVE_MIN_FONT_SIZE / 9.0)
+    block["rowHeights"] = _estimated_row_heights(
+        grid, block.get("colWidths") or widths, family, header_rows, font_px=font_px,
+    )
     block["pageFamily"] = family
     block["bodyRowFillMode"] = "none"
     block["gridLines"] = True
+    # Section column: prefer keep-together / nowrap cue for the frontend.
+    if profile == "front_matter_narrative_table" and widths:
+        header = grid[_find_header_row_index(grid)]
+        section_cols = [
+            i for i in range(len(widths))
+            if _col_header_class(str(header[i]) if i < len(header) else "") == "section"
+        ]
+        block["nowrapColumns"] = section_cols
+        block["preventStackedLabels"] = True
 
 
 def _meaningful_style(style: dict[str, Any] | None) -> bool:
@@ -1494,8 +1861,12 @@ def import_workbook(
             exact_block = _excel_range_block(render_ws, f"{ws['id']}_xr", split_settings)
             if "lighting" in f"{ws['name']} {title}".lower():
                 exact_block["minScale"] = max(float(exact_block.get("minScale") or EXCEL_MIN_SCALE), 0.58)
-            _apply_table_geometry(exact_block, family, page_type)
+            _apply_table_geometry(exact_block, family, page_type, layout_profile)
             apply_singh360_profile(exact_block, header_style)
+            if layout_profile == "front_matter_narrative_table":
+                # Keep narrative profile markers after the standard recolor pass.
+                exact_block["renderProfile"] = NARRATIVE_RENDER_PROFILE
+                exact_block["layoutProfile"] = "front_matter_narrative_table"
             if layout_profile == "instruction_table":
                 # Phase D: compact 9pt (~12px) body font for Step/Instruction
                 # pages — overrides the per-cell Excel font size captured on
@@ -1554,21 +1925,21 @@ def import_workbook(
                         }
                     )
 
-        # Sheet number precedence (FINAL RENDER POLISH 4G, Phase A): the real
-        # workbook/index "Sheet Code" column always wins — never the plain
-        # sequential "Order" column or the output page order. Fall back to a
-        # code embedded in the tab name itself, then the Order column, then
-        # the raw output order as a last resort so nothing is ever blank.
-        sheet_code = (
-            (idx.get("sheetCodeRaw") if idx else "")
-            or _sheet_code_from_tab(ws["name"])
-            or (idx["orderRaw"] if idx and idx["orderRaw"] else "")
-            or str(order_cursor)
-        )
+        # Sheet number precedence (FINAL SA31 POLISH 4I / 4G Phase A): the
+        # workbook/index "Sheet Code" column always wins — never bare Order
+        # values like "5.0". Fall back to a code embedded in the tab name,
+        # then ``EMS {order}`` so SHEET NO. never looks like physical order.
+        sheet_code = _canonical_sheet_code(idx, ws["name"], order_cursor)
 
         has_image_block = any(b.get("type") in ("imagePlaceholder", "underlayPlaceholder") for b in blocks)
         blank_page_placeholder = (
             _blank_page_placeholder_message(ws["name"], title) if page_type == "canvas" and not has_image_block else ""
+        )
+
+        page_render_profile = (
+            NARRATIVE_RENDER_PROFILE
+            if layout_profile == "front_matter_narrative_table"
+            else RENDER_PROFILE
         )
 
         page = {
@@ -1585,7 +1956,7 @@ def import_workbook(
             "layoutProfile": layout_profile,
             "twoUp": bool(exact_block and exact_block.get("layoutMode") == "two_up"),
             "renderMode": "excel_exact" if use_exact else "normalized",
-            "renderProfile": RENDER_PROFILE,
+            "renderProfile": page_render_profile,
             "normalizedHeaderStyle": header_style,
             "sourceSheet": ws.get("sourceSheet") or ws["name"],
             "sourceRange": ws.get("sourceRange", "") if use_exact else "",

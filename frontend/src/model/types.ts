@@ -87,9 +87,12 @@ export interface PageBlock {
   bodyRowFillMode?: 'none' | 'source' | 'zebra';
   gridLines?: boolean;
   /** Explicit body font size in px, overriding per-cell Excel font size
-   *  (instruction_table profile only — FINAL RELEASE CLEANUP 4H+SA38,
-   *  Phase D). Unset for every other page/profile (unchanged behavior). */
+   *  (instruction_table / front_matter_narrative_table profiles). */
   bodyFontPx?: number;
+  /** Column indices that must not wrap word-by-word (Section labels on
+   *  front_matter_narrative_table pages — FINAL SA31 POLISH 4I Phase C). */
+  nowrapColumns?: number[];
+  preventStackedLabels?: boolean;
   /** Never stretch this excelRange block past its natural size to fill the
    *  page width (instruction_table profile only — FINAL RELEASE CLEANUP
    *  4H+SA38, Phase H). Width-driven grow-to-fill also scales height by the
@@ -104,9 +107,12 @@ export interface PageBlock {
   portRangeLeft?: string;
   portRangeRight?: string;
   fontSize?: number;
+  rowHeight?: number;
+  headerHeight?: number;
   contentWidth?: number;
   contentHeight?: number;
   sourceRowCount?: number;
+  scaledUp?: boolean;
   /** Trailing-blank-range trim diagnostics (FINAL RENDER POLISH 4G, Phase B/I). */
   rowsBeforeTrim?: number;
   colsBeforeTrim?: number;
@@ -163,8 +169,8 @@ export interface PageModel {
    *  Set by the importer; blank/absent when the page has real image content
    *  or isn't a canvas page. */
   blankPagePlaceholder?: string;
-  /** Rendering-options profile: front_matter_table | io_table | network_48_port
-   *  | instruction_table | company_info (TABLE STYLE 4F, Phase D). */
+  /** Rendering-options profile: front_matter_table | front_matter_narrative_table
+   *  | io_table | network_48_port | instruction_table | company_info. */
   layoutProfile?: string;
   /** True when a network_48_port page used the two-up (ports 1-N / N+1-total)
    *  side-by-side layout instead of one full-width table. */

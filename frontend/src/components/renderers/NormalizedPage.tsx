@@ -110,13 +110,10 @@ export default function NormalizedPage({
         return <div className="np np-image-base" />;
       }
       if (exporting) {
-        // Phase C rule 3/4: a blank drawing/layout/schematic/pdf-vector page
-        // must never export silently blank — always render a clear, centered,
-        // export-visible note instead of an empty base layer. The importer
-        // sets `blankPagePlaceholder`; fall back to the same keyword rule
-        // here for older saved projects that predate that field.
-        const blob = `${page.sheetTab ?? ''} ${page.sheetTitle ?? ''}`.toLowerCase();
-        const message = page.blankPagePlaceholder || (blob.includes('location') ? 'RESERVED FOR FIELD LAYOUT' : 'DRAWING TO BE INSERTED');
+        // FINAL SA31 POLISH 4I Phase E: blank drawing/layout/schematic/
+        // location pages always export a clear centered note — never
+        // silently blank. Location pages use the same draft note.
+        const message = page.blankPagePlaceholder || 'DRAWING TO BE INSERTED';
         return (
           <div className="np np-image-base">
             <div className="np-reserved-note">{message}</div>

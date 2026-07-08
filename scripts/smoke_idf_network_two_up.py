@@ -67,8 +67,11 @@ def main() -> None:
         for must in ("Port", "Label", "Device / Drop", "From", "To", "Cable", "Notes"):
             if must not in headers:
                 problems.append(f"48-port IDF missing essential column {must!r}")
-        if "Controller / IP" not in headers:
-            problems.append("48-port IDF did not combine Controller ID + IP Address into 'Controller / IP'")
+        # FINAL SA31 POLISH 4I Phase D: Controller / IP and Network may fold
+        # into Notes so two-up can scale up; prefer presence or Notes fold.
+        if "Controller / IP" not in headers and "Controller ID" not in headers:
+            if "Notes" not in headers:
+                problems.append("48-port IDF missing Controller / IP and Notes fold target")
         left = block.get("leftRows") or []
         right = block.get("rightRows") or []
         if len(left) != 24 or len(right) != 24:

@@ -11,12 +11,15 @@ function NetworkTable({
   rows,
   colWidths,
   caption,
+  rowHeight,
 }: {
   headers: string[];
   rows: string[][];
   colWidths?: number[];
   caption?: string;
+  rowHeight?: number;
 }) {
+  const rh = rowHeight && rowHeight > 0 ? rowHeight : undefined;
   return (
     <table className="np-idf-table">
       <colgroup>
@@ -30,7 +33,7 @@ function NetworkTable({
             <th className="np-idf-caption" colSpan={headers.length}>{caption}</th>
           </tr>
         ) : null}
-        <tr>
+        <tr style={rh ? { height: rh + 4 } : undefined}>
           {headers.map((h, i) => (
             <th key={i} className="np-idf-colhead">{h}</th>
           ))}
@@ -38,7 +41,7 @@ function NetworkTable({
       </thead>
       <tbody>
         {rows.map((row, ri) => (
-          <tr key={ri}>
+          <tr key={ri} style={rh ? { height: rh } : undefined}>
             {headers.map((_, ci) => (
               <td key={ci} title={row[ci] || ''}>{row[ci] || ''}</td>
             ))}
@@ -64,6 +67,7 @@ export default function NetworkTwoUpRenderer({ block }: Props) {
   const fontSize = block.fontSize || 7;
   const caption = block.sectionTitle || '';
   const layoutMode = block.layoutMode || 'single';
+  const rowHeight = typeof block.rowHeight === 'number' ? block.rowHeight : undefined;
 
   if (!headers.length) {
     return <div className="np np-empty">No network table data.</div>;
@@ -80,10 +84,10 @@ export default function NetworkTwoUpRenderer({ block }: Props) {
         {caption && <div className="np-idf-section-band">{caption}</div>}
         <div className="np-idf-two-up-row">
           <div className="np-idf-two-up-col">
-            <NetworkTable headers={headers} rows={left} colWidths={colWidths} caption={`PORTS ${block.portRangeLeft || ''}`} />
+            <NetworkTable headers={headers} rows={left} colWidths={colWidths} caption={`PORTS ${block.portRangeLeft || ''}`} rowHeight={rowHeight} />
           </div>
           <div className="np-idf-two-up-col">
-            <NetworkTable headers={headers} rows={right} colWidths={colWidths} caption={`PORTS ${block.portRangeRight || ''}`} />
+            <NetworkTable headers={headers} rows={right} colWidths={colWidths} caption={`PORTS ${block.portRangeRight || ''}`} rowHeight={rowHeight} />
           </div>
         </div>
       </div>
@@ -97,7 +101,7 @@ export default function NetworkTwoUpRenderer({ block }: Props) {
         <div className="np-xr-warning">{block.layoutWarnings.join(' ')}</div>
       ) : null}
       {caption && <div className="np-idf-section-band">{caption}</div>}
-      <NetworkTable headers={headers} rows={rows} colWidths={colWidths} />
+      <NetworkTable headers={headers} rows={rows} colWidths={colWidths} rowHeight={rowHeight} />
     </div>
   );
 }

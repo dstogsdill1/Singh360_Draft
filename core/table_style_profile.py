@@ -23,6 +23,7 @@ from typing import Any
 # Singh360 standard palette + typography (renderProfile = singh360_standard_table)
 # --------------------------------------------------------------------------
 RENDER_PROFILE = "singh360_standard_table"
+NARRATIVE_RENDER_PROFILE = "front_matter_narrative_table"
 
 TITLE_BAND_FILL = "#FFC000"   # orange/gold title band
 TITLE_BAND_TEXT = "#000000"   # black centered title text
@@ -42,6 +43,10 @@ NORMAL_FONT_SIZE = 8.0
 ABSOLUTE_MIN_FONT_SIZE = 6.5
 HEADER_FONT_SIZE = 8.0
 TITLE_FONT_SIZE = 9.0
+# Front-matter narrative tables (Project Scope / Workflow): prefer 8.5–9pt,
+# never below 7.5pt (FINAL SA31 POLISH 4I, Phase C).
+NARRATIVE_FONT_SIZE = 8.5
+NARRATIVE_MIN_FONT_SIZE = 7.5
 
 # A fill is considered a "controller / section accent" band (kept) when it is a
 # saturated gold/amber. A fill is considered a "dark title band" (recolored to

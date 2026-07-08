@@ -8,8 +8,8 @@ Verifies:
   - Every blank canvas page's ``page["blankPagePlaceholder"]`` is non-empty
     (this is what ``NormalizedPage.tsx`` renders at export time instead of a
     silently blank base layer).
-  - "RESERVED FOR FIELD LAYOUT" is chosen for a *Device Location* page.
-  - "DRAWING TO BE INSERTED" is chosen for a general layout/schematic page.
+  - "DRAWING TO BE INSERTED" is chosen for layout, schematic, AND location
+    blank pages (FINAL SA31 POLISH 4I Phase E).
   - A page with an embedded image gets NO placeholder marker (real content
     already present — never cover it with a note).
   - A best-effort asset match (synthetic ``assets/screenshots`` fixture)
@@ -127,8 +127,11 @@ def main() -> None:
 
         if not p2 or not (p2.get("blankPagePlaceholder") or "").strip():
             problems.append("EMS 4.0 Location: blankPagePlaceholder is empty")
-        elif p2["blankPagePlaceholder"] != "RESERVED FOR FIELD LAYOUT":
-            problems.append(f"EMS 4.0 Location: placeholder={p2['blankPagePlaceholder']!r}, expected 'RESERVED FOR FIELD LAYOUT' (title contains 'Location')")
+        elif p2["blankPagePlaceholder"] != "DRAWING TO BE INSERTED":
+            problems.append(
+                f"EMS 4.0 Location: placeholder={p2['blankPagePlaceholder']!r}, "
+                "expected 'DRAWING TO BE INSERTED' (FINAL SA31 POLISH 4I Phase E)"
+            )
 
         if not p3:
             problems.append("EMS 4.1 Image: page not found")

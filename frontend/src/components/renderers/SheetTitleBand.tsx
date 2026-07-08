@@ -20,7 +20,15 @@ export default function SheetTitleBand({ page }: Props) {
     .replace(/\s*[—-]\s*CONTINUED\s*$/i, '')
     .trim();
   const isCont = !!page.continuationOf || !!page.generatedContinuation;
-  const subtitle = page.sheetTab && page.sheetTab !== cleanTitle ? page.sheetTab : '';
+  // Prefer the canonical sheet code in the subtitle so the top band agrees
+  // with the title-block SHEET NO. (FINAL SA31 POLISH 4I, Phase B). Fall
+  // back to the worksheet tab when no code is present.
+  const code = (page.displaySheetCode || page.sheetCode || '').trim();
+  const subtitle = code
+    ? code
+    : page.sheetTab && page.sheetTab !== cleanTitle
+      ? page.sheetTab
+      : '';
 
   return (
     <div className="np-title-band-wrap" data-band="dark">
