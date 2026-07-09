@@ -4,6 +4,7 @@ import type { BusOptions, CanvasApi, CanvasSelection, LineStyle } from '../model
 import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
 import { BODY_W, BODY_H } from '../model/sheetGeometry';
+import { normalizeAssetUrl, normalizeCanvasObjects } from '../model/assetUrl';
 
 interface Props {
   serialized: Record<string, unknown>[];
@@ -315,7 +316,8 @@ export default function CanvasEditor({
 
     const persist = () => {
       if (restoringRef.current || isTearingDown) return;
-      onSerRef.current((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+      const objects = (canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[];
+      onSerRef.current(normalizeCanvasObjects(objects));
     };
     const pushHistory = () => {
       if (restoringRef.current || isTearingDown) return;
@@ -334,7 +336,7 @@ export default function CanvasEditor({
       !!o && (o as unknown as Record<string, unknown>).excludeFromExport === true;
 
     if (serialized.length) {
-      void canvas.loadFromJSON({ version: '6', objects: serialized }).then(() => {
+      void canvas.loadFromJSON({ version: '6', objects: normalizeCanvasObjects(serialized) }).then(() => {
         canvas.getObjects().forEach((o) => styleForSelection(o));
         canvas.renderAll();
         historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
@@ -822,7 +824,7 @@ export default function CanvasEditor({
       c.renderAll();
       histIdxRef.current = idx;
       restoringRef.current = false;
-      onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+      onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
     });
   };
 
@@ -831,7 +833,7 @@ export default function CanvasEditor({
       captureCanvas: () => {
         const c = fabricRef.current;
         if (!c) return [];
-        return (c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[];
+        return normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
       },
       addText: () => addObj(makeText(200, 160)),
       addRect: () => addObj(makeRect(200, 200)),
@@ -893,8 +895,9 @@ export default function CanvasEditor({
       addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => {
         const c = fabricRef.current;
         if (!c) return;
-        void FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
-          applyBwIfRequested(img, url);
+        const assetUrl = normalizeAssetUrl(url) || url;
+        void FabricImage.fromURL(assetUrl, { crossOrigin: 'anonymous' }).then((img) => {
+          applyBwIfRequested(img, assetUrl);
           const maxW = CANVAS_W * 0.6;
           const maxH = CANVAS_H * 0.6;
           const iw = img.width || 1;
@@ -957,8 +960,9 @@ export default function CanvasEditor({
       addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => {
         const c = fabricRef.current;
         if (!c) return;
-        void FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
-          applyBwIfRequested(img, url);
+        const assetUrl = normalizeAssetUrl(url) || url;
+        void FabricImage.fromURL(assetUrl, { crossOrigin: 'anonymous' }).then((img) => {
+          applyBwIfRequested(img, assetUrl);
           const maxW = CANVAS_W * 0.35;
           const maxH = CANVAS_H * 0.35;
           const iw = img.width || 1;
@@ -1116,7 +1120,7 @@ export default function CanvasEditor({
           objs.filter((obj) => !(obj.lockMovementX || obj.lockScalingX || obj.lockRotation)).forEach((obj) => c.remove(obj));
           c.discardActiveObject();
           c.requestRenderAll();
-          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         }
       },
       copySelected: () => {
@@ -1136,7 +1140,7 @@ export default function CanvasEditor({
           c.add(pasted);
           c.setActiveObject(pasted);
           c.requestRenderAll();
-          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         });
       },
       duplicateSelected: () => {
@@ -1157,7 +1161,7 @@ export default function CanvasEditor({
           c.add(clone);
           c.setActiveObject(clone);
           c.requestRenderAll();
-          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         });
       },
       unlockAll: () => {
@@ -1169,7 +1173,7 @@ export default function CanvasEditor({
           o.setCoords();
         });
         c.requestRenderAll();
-        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
       undo: () => restore(histIdxRef.current - 1),
       redo: () => restore(histIdxRef.current + 1),
@@ -1189,7 +1193,7 @@ export default function CanvasEditor({
           c.add(grp);
           c.setActiveObject(grp);
           c.requestRenderAll();
-          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         }
       },
       ungroup: () => {
@@ -1202,28 +1206,28 @@ export default function CanvasEditor({
           c.remove(grp);
           items.forEach((o) => c.add(o as FabricObject));
           c.requestRenderAll();
-          onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         }
       },
       bringForward: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
-        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.bringObjectForward(o); c.requestRenderAll(); onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]); }
+        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.bringObjectForward(o); c.requestRenderAll(); onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[])); }
       },
       sendBackward: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
-        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.sendObjectBackwards(o); c.requestRenderAll(); onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]); }
+        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.sendObjectBackwards(o); c.requestRenderAll(); onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[])); }
       },
       bringToFront: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
-        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.bringObjectToFront(o); c.requestRenderAll(); onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]); }
+        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.bringObjectToFront(o); c.requestRenderAll(); onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[])); }
       },
       sendToBack: () => {
         const c = fabricRef.current;
         const o = c?.getActiveObject();
-        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.sendObjectToBack(o); c.requestRenderAll(); onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]); }
+        if (c && o && !(o.lockMovementX || o.lockScalingX || o.lockRotation)) { c.sendObjectToBack(o); c.requestRenderAll(); onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[])); }
       },
       alignObjects: (direction) => {
         const c = fabricRef.current;
@@ -1262,7 +1266,7 @@ export default function CanvasEditor({
           bbs.forEach(({ o, b }) => { o.set('top', (o.top ?? 0) + (midY - (b.top + b.height / 2))); o.setCoords(); });
         }
         c.requestRenderAll();
-        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
       distributeObjects: (direction) => {
         const c = fabricRef.current;
@@ -1292,7 +1296,7 @@ export default function CanvasEditor({
           bbs.forEach(({ o, b }) => { o.set('top', (o.top ?? 0) + (y - b.top)); o.setCoords(); y += b.height + gap; });
         }
         c.requestRenderAll();
-        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
       matchObjectSize: (which) => {
         const c = fabricRef.current;
@@ -1310,7 +1314,7 @@ export default function CanvasEditor({
           o.setCoords();
         });
         c.requestRenderAll();
-        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
       updateSelected: (patch) => {
         const c = fabricRef.current;
@@ -1360,7 +1364,7 @@ export default function CanvasEditor({
         o.set('dirty', true);
         o.setCoords();
         c.requestRenderAll();
-        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         onSelRef.current(summarize(o));
       },
       reverseConnectorDirection: () => {
@@ -1369,7 +1373,7 @@ export default function CanvasEditor({
         if (!c || !o || !(o instanceof Connector)) return;
         o.reverseDirection();
         c.requestRenderAll();
-        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
       addVertexToSelected: () => {
         const c = fabricRef.current;
@@ -1377,7 +1381,7 @@ export default function CanvasEditor({
         if (!c || !o || !(o instanceof Connector)) return;
         o.addVertexAtMidpoint();
         c.requestRenderAll();
-        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
       deleteVertexFromSelected: () => {
         const c = fabricRef.current;
@@ -1385,7 +1389,7 @@ export default function CanvasEditor({
         if (!c || !o || !(o instanceof Connector)) return;
         o.deleteVertex();
         c.requestRenderAll();
-        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
       convertSelectedConnector: (kind) => {
         const c = fabricRef.current;
@@ -1393,7 +1397,7 @@ export default function CanvasEditor({
         if (!c || !o || !(o instanceof Connector)) return;
         o.convertKind(kind);
         c.requestRenderAll();
-        onSerRef.current((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         onSelRef.current(summarize(o));
       },
     };

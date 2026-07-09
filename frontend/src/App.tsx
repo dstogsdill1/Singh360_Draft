@@ -14,6 +14,7 @@ import {
 } from './api/client';
 import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
+import { normalizeProjectAssetUrls } from './model/assetUrl';
 import ContinuationPreviewModal from './components/ContinuationPreviewModal';
 import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource, applyCoverSourceTruth } from './model/excelRange';
 import { isCoverWorksheet } from './model/metadataInference';
@@ -292,9 +293,10 @@ export default function App() {
   useEffect(() => {
     if (!initialProjectId) return;
     void getProject(initialProjectId).then((p) => {
-      lastSavedJsonRef.current = JSON.stringify(p);
+      const normalized = normalizeProjectAssetUrls(p);
+      lastSavedJsonRef.current = JSON.stringify(normalized);
       resetSourceEditState();
-      setProjectSync(p);
+      setProjectSync(normalized);
       setActivePageId(p.pages?.[0]?.id ?? null);
       setSelectedWorksheetId(p.worksheets?.[0]?.id);
     });
