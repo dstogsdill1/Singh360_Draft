@@ -875,8 +875,26 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
         settings["minScale"] = 0.75
     elif family in ("ioSchedule", "panelDetail", "rackLayout"):
         settings["minScale"] = 0.75
-    elif page_type == "index" or family == "text":
+    elif page_type == "index":
+        # A Sheet Index / TOC never spills onto a continuation page.
         settings.update({"splitMode": "none", "allowContinuation": False, "scaleMode": "fit_body"})
+    elif family == "text":
+        # PHASE B fix: text-family pages (guideline/instruction/scope/
+        # workflow/notes) used to hard-disable continuation, which forced a
+        # too-tall table to shrink uniformly below the readable floor instead
+        # of splitting (the "tiny unreadable strip" + TABLE OVERFLOW bug).
+        # Continuation is now allowed as a last resort — a table that already
+        # fits at >= minScale behaves exactly as before (no split happens),
+        # but a genuinely too-tall table now falls back to a continuation
+        # page (e.g. EMS 17.0 -> EMS 17.0a) instead of being crushed unreadable.
+        settings.update(
+            {
+                "splitMode": "auto_rows",
+                "allowContinuation": True,
+                "scaleMode": "fit_body",
+                "minScale": max(EXCEL_MIN_SCALE, NARRATIVE_MIN_FONT_SIZE / 9.0),
+            }
+        )
     return settings
 
 
@@ -913,20 +931,41 @@ _IDF_HEADER_H = 24
 # uses roughly 65–75% of the safe body when it would otherwise look tiny.
 _IDF_SCALE_TARGET_MIN = 0.65
 _IDF_SCALE_TARGET_MAX = 0.75
+# PHASE C fix (SA31 export tables): a proper 48-port switch schedule always
+# shows Controller ID, IP Address, and Network as their own columns — never
+# merged into one "Controller / IP" column and never folded into Notes.
+# Widths below are tuned so all 10 required columns fit one two-up half
+# (~751px, see ``_build_idf_network_block``'s ``two_up_usable``) at a
+# readable font; "Terminated By" only renders when explicitly requested via
+# ``show_terminated_by`` and only if it still fits.
 _IDF_COL_W = {
-    "Port": 46,
-    "Label": 72,
-    "Device / Drop": 170,
-    "From": 92,
-    "To": 92,
+    "Port": 40,
+    "Label": 64,
+    "Device / Drop": 130,
+    "Controller ID": 70,
+    "IP Address": 82,
+    "Network": 62,
+    "From": 60,
+    "To": 60,
     "Path": 170,
-    "Cable": 90,
-    "Notes": 220,
-    "Controller / IP": 140,
-    "Controller ID": 90,
-    "IP Address": 100,
-    "Network": 90,
+    "Cable": 66,
+    "Notes": 117,
+    "Terminated By": 70,
 }
+# Required output columns (Phase C) — always present when the source header
+# maps to them, in this exact left-to-right order.
+_IDF_REQUIRED_COLS = (
+    "Port",
+    "Label",
+    "Device / Drop",
+    "Controller ID",
+    "IP Address",
+    "Network",
+    "From",
+    "To",
+    "Cable",
+    "Notes",
+)
 
 
 def _idf_col_index(headers: list[str], *keys: str) -> int | None:
@@ -955,62 +994,90 @@ def _is_idf_network_table(ws: dict[str, Any], family: str) -> tuple[bool, int | 
     return header_row is not None, header_row
 
 
-def _idf_columns(headers: list[str], *, fold_low_value: bool = False) -> list[tuple[str, tuple[int, ...]]]:
-    """Map source headers onto the essential RDM/IDF network columns, only
-    combining optional detail columns (Controller ID + IP Address, Network +
-    Cable, From + To) when needed to keep the column count readable.
+def _idf_columns(
+    headers: list[str], *, show_terminated_by: bool = False
+) -> list[tuple[str, tuple[int, ...]]]:
+    """Map source headers onto the required RDM/IDF network columns.
 
-    ``fold_low_value`` (FINAL SA31 POLISH 4I Phase D): drop Network /
-    Controller / IP as their own columns so two-up can grow font/row height;
-    values stay available via Notes when present.
+    PHASE C fix (SA31 export tables): Controller ID, IP Address, and Network
+    are always their own separate output columns — never merged into a
+    single "Controller / IP" column and never folded into Notes. Notes only
+    ever contains the source workbook's actual Notes/Remarks/Comment column.
+    "Terminated By" is detected but only emitted when ``show_terminated_by``
+    is set (default hidden per spec); callers may still drop it afterwards
+    if it does not fit (see ``_build_idf_network_block``).
     """
     idx = {
         "port": _idf_col_index(headers, "port"),
         "label": _idf_col_index(headers, "label"),
         "device": _idf_col_index(headers, "device", "drop", "location"),
+        "controllerId": _idf_col_index(headers, "controller id", "controller"),
+        "ip": _idf_col_index(headers, "ip address", "ip addr", "ip"),
+        "network": _idf_col_index(headers, "network", "vlan"),
         "from": _idf_col_index(headers, "from"),
         "to": _idf_col_index(headers, "to"),
         "cable": _idf_col_index(headers, "cable"),
         "notes": _idf_col_index(headers, "notes", "remark", "comment"),
-        "controllerId": _idf_col_index(headers, "controller id", "controller"),
-        "ip": _idf_col_index(headers, "ip address", "ip addr", "ip"),
-        "network": _idf_col_index(headers, "network", "vlan"),
+        "terminated": _idf_col_index(headers, "terminated by", "terminated"),
     }
-    notes_spec: list[int] = []
-    if idx["notes"] is not None:
-        notes_spec.append(idx["notes"])
-    if fold_low_value:
-        for key in ("controllerId", "ip", "network"):
-            if idx[key] is not None and idx[key] not in notes_spec:
-                notes_spec.append(idx[key])
     cols: list[tuple[str, tuple[int, ...]]] = [
         ("Port", (idx["port"],) if idx["port"] is not None else ()),
         ("Label", (idx["label"],) if idx["label"] is not None else ()),
         ("Device / Drop", (idx["device"],) if idx["device"] is not None else ()),
+        ("Controller ID", (idx["controllerId"],) if idx["controllerId"] is not None else ()),
+        ("IP Address", (idx["ip"],) if idx["ip"] is not None else ()),
+        ("Network", (idx["network"],) if idx["network"] is not None else ()),
         ("From", (idx["from"],) if idx["from"] is not None else ()),
         ("To", (idx["to"],) if idx["to"] is not None else ()),
         ("Cable", (idx["cable"],) if idx["cable"] is not None else ()),
-        ("Notes", tuple(notes_spec) if notes_spec else ()),
+        ("Notes", (idx["notes"],) if idx["notes"] is not None else ()),
     ]
+    # Only keep a required column when the source actually has that header
+    # (never invent a column) — Port/Label/Device/Notes always render even
+    # if empty, matching prior behavior for the essential identity columns.
     cols = [c for c in cols if c[1] or c[0] in ("Port", "Label", "Device / Drop", "Notes")]
 
-    if not fold_low_value:
-        detail: list[tuple[str, tuple[int, ...]]] = []
-        if idx["controllerId"] is not None and idx["ip"] is not None:
-            detail.append(("Controller / IP", (idx["controllerId"], idx["ip"])))
-        elif idx["controllerId"] is not None:
-            detail.append(("Controller ID", (idx["controllerId"],)))
-        elif idx["ip"] is not None:
-            detail.append(("IP Address", (idx["ip"],)))
-        if idx["network"] is not None:
-            detail.append(("Network", (idx["network"],)))
-        cols = cols + detail
+    if show_terminated_by and idx["terminated"] is not None:
+        cols.append(("Terminated By", (idx["terminated"],)))
 
-    # Only combine From/To -> Path if the column count is still too wide.
-    if len(cols) > 9 and idx["from"] is not None and idx["to"] is not None:
+    # Only combine From/To -> Path if the column count is still too wide
+    # (kept as a last-resort fallback; Controller ID/IP/Network are exempt).
+    if len(cols) > 11 and idx["from"] is not None and idx["to"] is not None:
         cols = [c for c in cols if c[0] not in ("From", "To")]
-        cols.insert(3, ("Path", (idx["from"], idx["to"])))
+        insert_at = min(6, len(cols))
+        cols.insert(insert_at, ("Path", (idx["from"], idx["to"])))
     return cols
+
+
+_DEVICE_ABBREVIATIONS = {
+    "controller": "Ctrl",
+    "connection": "Conn",
+    "connector": "Conn",
+    "distribution": "Dist",
+    "management": "Mgmt",
+    "network": "Net",
+    "wireless": "WiFi",
+    "equipment": "Eqp",
+}
+
+
+def _abbreviate_device_text(text: str, max_chars: int) -> str:
+    """Best-effort shrink of a Device / Drop value that is still too wide
+    after Terminated By has already been hidden (Phase C rule 8: abbreviate
+    Device / Drop only if required, never touch Controller ID/IP/Network).
+    Never invents new text — only shortens known long words and truncates
+    with an ellipsis as a last resort.
+    """
+    if len(text) <= max_chars:
+        return text
+    out = text
+    for long_word, short in _DEVICE_ABBREVIATIONS.items():
+        if long_word in out.lower():
+            idx_ = out.lower().index(long_word)
+            out = out[:idx_] + short + out[idx_ + len(long_word):]
+    if len(out) <= max_chars:
+        return out
+    return out[: max(1, max_chars - 1)].rstrip() + "…"
 
 
 def _idf_cell_value(row: list[str], spec: tuple[int, ...]) -> str:
@@ -1024,6 +1091,7 @@ def _build_idf_network_block(
     block_id: str,
     *,
     row_slice: tuple[int, int] | None = None,
+    show_terminated_by: bool = False,
 ) -> dict[str, Any]:
     """Build the special RDM/IDF network table block (single full-width table
     by default; two-up ports 1-N / N+1-total only when a single stack would
@@ -1036,32 +1104,59 @@ def _build_idf_network_block(
 
     FINAL SA31 POLISH 4I Phase D: when two-up content uses <55% of safe body
     height, grow row height / prefer 7–7.5pt fonts (never below 6.5pt) until
-    the block fills ~65–75%. Optional low-value Network / Controller / IP
-    columns may fold into Notes so width never forces undersizing.
+    the block fills ~65–75%.
+
+    PHASE C fix (SA31 export tables): Controller ID, IP Address, and Network
+    are always real columns — they are never folded into Notes. When the
+    assembled table is too wide for two-up, the fallback order is: hide
+    Terminated By first (default hidden anyway), then abbreviate Device /
+    Drop text; Controller ID / IP Address / Network / Notes are never
+    touched.
     """
     grid = ws.get("grid") or []
     headers_src = grid[header_row] if header_row < len(grid) else []
 
-    def _assemble(fold_low_value: bool) -> tuple[list[str], list[int], list[list[str]], int]:
-        cols = _idf_columns(headers_src, fold_low_value=fold_low_value)
+    def _assemble(
+        *, terminated_by: bool, device_max_chars: int | None = None
+    ) -> tuple[list[str], list[int], list[list[str]], int]:
+        cols = _idf_columns(headers_src, show_terminated_by=terminated_by)
         hdrs = [c[0] for c in cols]
         widths = [_IDF_COL_W.get(h, 90) for h in hdrs]
+        device_i = hdrs.index("Device / Drop") if "Device / Drop" in hdrs else None
         rows_all: list[list[str]] = []
         for row in grid[header_row + 1:]:
             vals = [_idf_cell_value(row, spec) for _, spec in cols]
+            if device_i is not None and device_max_chars:
+                vals[device_i] = _abbreviate_device_text(vals[device_i], device_max_chars)
             if any(v for v in vals):
                 rows_all.append(vals)
         return hdrs, widths, rows_all, sum(widths)
 
-    headers, col_widths, all_data_rows, single_w = _assemble(False)
-    # Prefer folding optional Network / Controller / IP columns when the
-    # essential+detail set is wider than ~half the usable page for two-up.
     usable_w = BODY_W - 80
     two_up_usable = (usable_w - 18) // 2  # gap between the two stacks
-    if single_w > two_up_usable and row_slice is None:
-        folded_h, folded_w, folded_rows, folded_sw = _assemble(True)
-        if folded_sw <= two_up_usable or folded_sw < single_w:
-            headers, col_widths, all_data_rows, single_w = folded_h, folded_w, folded_rows, folded_sw
+    fits_budget = usable_w if row_slice is not None else two_up_usable
+
+    # 1) All required columns + Terminated By if explicitly requested.
+    headers, col_widths, all_data_rows, single_w = _assemble(terminated_by=show_terminated_by)
+
+    # 2) Too wide -> hide Terminated By first (Phase C rule 8), even if the
+    # caller asked for it — "enough room" gates it too.
+    if single_w > fits_budget and show_terminated_by:
+        headers, col_widths, all_data_rows, single_w = _assemble(terminated_by=False)
+
+    # 3) Still too wide -> abbreviate Device / Drop text (never touch
+    # Controller ID / IP Address / Network / Notes).
+    if single_w > fits_budget:
+        base_device_w = _IDF_COL_W.get("Device / Drop", 130)
+        overflow = single_w - fits_budget
+        shrunk_w = max(70, base_device_w - overflow)
+        max_chars = max(8, int(shrunk_w / 7.2))
+        headers, col_widths, all_data_rows, single_w = _assemble(
+            terminated_by=False, device_max_chars=max_chars
+        )
+        if "Device / Drop" in headers:
+            col_widths[headers.index("Device / Drop")] = shrunk_w
+            single_w = sum(col_widths)
 
     total_n = len(all_data_rows)
 
@@ -1170,6 +1265,55 @@ def _idf_hard_split_boundary(total_n: int) -> int:
 
 
 _NARROW_COL_HEAD_KEYWORDS = ("no", "#", "id", "qty", "type", "addr", "i/o", "io", "point", "ckt", "step")
+
+# PHASE D fix (SA31 export tables): I/O and LCP panel schedule columns holding
+# short technical tokens (0-10VDC, 10K2, NO, NO*, NC, DI, AIO1, PR0650CD-TDB,
+# PR0663, ...) used to wrap character-by-character in a too-narrow fixed
+# column. A token is any single "word" (no internal spaces) of letters,
+# digits, and the punctuation these part numbers/ranges actually use.
+_TECH_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-/*.]{0,17}$")
+_TECH_TOKEN_FAMILIES = ("ioSchedule", "panelDetail", "rackLayout")
+
+
+def _is_tech_token(text: str) -> bool:
+    t = (text or "").strip()
+    if not t or " " in t:
+        return False
+    return bool(_TECH_TOKEN_RE.match(t))
+
+
+def _technical_token_columns(grid: list[list[str]], family: str, header_rows: int) -> dict[int, int]:
+    """Columns dominated by short nowrap-worthy technical tokens.
+
+    Returns ``{col_index: longest_token_length}`` for columns where at least
+    60% of non-empty data-row values (excluding the header band) are
+    single-token technical values — never guesses on prose/description
+    columns, since those values contain spaces and are filtered out by
+    ``_is_tech_token`` immediately.
+    """
+    if family not in _TECH_TOKEN_FAMILIES or not grid:
+        return {}
+    n_cols = max((len(r) for r in grid), default=0)
+    out: dict[int, int] = {}
+    for c in range(n_cols):
+        values = [
+            str(row[c]).strip()
+            for r, row in enumerate(grid)
+            if r >= header_rows and c < len(row) and str(row[c] or "").strip()
+        ]
+        if len(values) < 2:
+            continue
+        token_like = [v for v in values if _is_tech_token(v)]
+        if len(token_like) / len(values) >= 0.6:
+            out[c] = max(len(v) for v in token_like)
+    return out
+
+
+def _token_column_min_width(longest_token_len: int, font_px: int = 12) -> int:
+    """Minimum column width (px) that fits ``longest_token_len`` characters on
+    one line at ``font_px`` without character-by-character wrapping."""
+    avg_char_w = max(5.5, font_px * 0.52)
+    return int(round(longest_token_len * avg_char_w)) + 16
 _STATUS_COL_HEAD_KEYWORDS = ("status", "state", "phase")
 _SECTION_COL_HEAD_KEYWORDS = ("section", "phase", "category", "item", "milestone")
 _NARRATIVE_COL_HEAD_KEYWORDS = (
@@ -1326,7 +1470,15 @@ def _preferred_col_widths(
         return []
     target = BODY_W - (96 if family not in ("ioSchedule", "panelDetail", "idfTable") else 48)
     min_w = 52 if family in ("ioSchedule", "panelDetail", "idfTable") else 76
-    max_w = 360 if family in ("text", "index") else 300
+    # PHASE B fix: a 2-3 column instruction/guideline table used to cap every
+    # column at 360px, which could never reach the ~1500px body width no
+    # matter how much leftover width the redistribute loop below had to give
+    # away — that undersized natural width is what made Guidelines/Field
+    # Instructions render as a tiny left-aligned strip (and, combined with
+    # the resulting inflated wrapped-row height, trip the TABLE OVERFLOW
+    # floor). Text-family wide/instruction columns may now grow to the full
+    # target width; the compact Step/No narrow column below is unaffected.
+    max_w = target if family == "text" else (360 if family == "index" else 300)
     # A compact narrow column (Step/No/#/ID counter) on a "text" family sheet
     # (instruction pages) should stay small and not stretch proportionally
     # with the rest of the table (FINAL RELEASE CLEANUP 4H+SA38, Phase D).
@@ -1354,6 +1506,15 @@ def _preferred_col_widths(
         max(narrow_min_w, min(narrow_max_w, w)) if is_narrow_col[i] else max(min_w, min(max_w, w))
         for i, w in enumerate(raw)
     ]
+    # PHASE D fix: a short technical-token column (Type/Range/Signal, etc.)
+    # must be wide enough to hold its longest token on one line — the flat
+    # min_w floor above was letting these columns clamp down to 52px, which
+    # is narrower than tokens like "PR0650CD-TDB" or "0-10VDC" need, forcing
+    # the browser to wrap them character-by-character.
+    token_cols = _technical_token_columns(grid, family, _find_header_row_index(grid) + 1)
+    for c, longest in token_cols.items():
+        if c < len(widths):
+            widths[c] = max(widths[c], _token_column_min_width(longest))
     # Distribute leftover width so small tables use the page instead of
     # floating — never grow the compact narrow (Step/No/#) column.
     diff = target - sum(widths)
@@ -1437,6 +1598,16 @@ def _apply_table_geometry(
         block["renderProfile"] = NARRATIVE_RENDER_PROFILE
         block["layoutProfile"] = "front_matter_narrative_table"
         block["minScale"] = max(float(block.get("minScale") or EXCEL_MIN_SCALE), NARRATIVE_MIN_FONT_SIZE / 9.0)
+    elif profile in ("front_matter_table", "instruction_table") and family == "text":
+        # PHASE B fix: Guidelines (front_matter_table) and Field Instructions
+        # (instruction_table) get the same 8.5pt preferred / 7.5pt absolute
+        # floor as narrative tables, so they can no longer be silently
+        # shrunk below a readable size.
+        font_px = 12
+        block["bodyFontPx"] = 12
+        block["bodyFontPt"] = NARRATIVE_FONT_SIZE
+        block["minFontPt"] = NARRATIVE_MIN_FONT_SIZE
+        block["minScale"] = max(float(block.get("minScale") or EXCEL_MIN_SCALE), NARRATIVE_MIN_FONT_SIZE / 9.0)
     block["rowHeights"] = _estimated_row_heights(
         grid, block.get("colWidths") or widths, family, header_rows, font_px=font_px,
     )
@@ -1452,6 +1623,16 @@ def _apply_table_geometry(
         ]
         block["nowrapColumns"] = section_cols
         block["preventStackedLabels"] = True
+    elif family in _TECH_TOKEN_FAMILIES:
+        # PHASE D fix: I/O / LCP panel schedule columns dominated by short
+        # technical tokens (0-10VDC, 10K2, NO, NC, DI, AIO1, PR0650CD-TDB...)
+        # must not wrap character-by-character — the column width above is
+        # already sized to fit the longest token; nowrap keeps it on one
+        # line instead of the browser breaking mid-token.
+        token_cols = _technical_token_columns(grid, family, header_rows)
+        if token_cols:
+            block["nowrapColumns"] = sorted(token_cols.keys())
+            block["preventStackedLabels"] = True
 
 
 def _meaningful_style(style: dict[str, Any] | None) -> bool:
@@ -1789,7 +1970,29 @@ def import_workbook(
 
         idx = index_lookup.get(ws["name"].lower())
         title = idx["sheetTitle"] if idx else ws["name"]
-        include = idx["include"] if idx else (not has_index)
+        is_index_tab = has_index and ws["name"] == index_sheet_name
+        if idx:
+            include = idx["include"]
+        elif is_index_tab:
+            # Phase A fix: a Sheet Index / TOC almost never lists itself as a
+            # row inside its own table, so falling back to "not has_index"
+            # here (the rule for every other un-indexed sheet) silently
+            # dropped the index page from every export whenever the index
+            # didn't self-reference. The index sheet defaults to included
+            # unless it has an explicit self-row saying otherwise (handled
+            # by the `if idx:` branch above).
+            include = True
+            if not idx:
+                title = "Sheet Index / TOC"
+            project.setdefault("importWarnings", []).append(
+                {
+                    "sheetTab": ws["name"],
+                    "issue": "Sheet Index / TOC has no row for itself inside 00_INDEX; "
+                    "defaulted to included so it is not silently dropped from export.",
+                }
+            )
+        else:
+            include = not has_index
         use_source = idx["useSource"] if idx else ""
 
         # Index include/exclude is law: no output page/tab/PDF for excluded sheets.
@@ -1833,16 +2036,18 @@ def import_workbook(
                 # pages — overrides the per-cell Excel font size captured on
                 # import so long instruction rows never force clipping/scaling.
                 exact_block["bodyFontPx"] = 12
-                # Phase H fix: a narrow 2-column instruction table has no
-                # reason to be stretched to fill the full page width — the
-                # frontend's width-driven "grow to fill" behavior (up to
-                # GROW_CAP) also grows the table's height by the same
-                # factor, which can push it past the page's real safe
-                # render area and silently drop bottom rows in export.
-                # Keeping this profile at its natural compact size avoids
-                # that overflow risk entirely instead of relying on scale
-                # math to always land inside a narrow safety margin.
-                exact_block["noGrow"] = True
+                # PHASE B fix (was "noGrow=True"): the old fix for this page
+                # kept the table pinned to its natural (narrow) size to avoid
+                # growing height past the safe render area — but that is
+                # exactly what produced the "tiny unreadable strip" bug,
+                # since the natural size was itself too narrow. Now that
+                # _preferred_col_widths lets this profile's columns reach the
+                # full body width (so height no longer inflates from
+                # excessive word-wrap) and _split_settings_for_page allows a
+                # genuine overflow to fall back to a continuation page
+                # (EMS 17.0 -> EMS 17.0a) instead of over-shrinking, this
+                # page can safely grow to fill the body width like any other
+                # table.
             blocks = [exact_block]
         else:
             exact_block = None
@@ -1891,6 +2096,8 @@ def import_workbook(
         # values like "5.0". Fall back to a code embedded in the tab name,
         # then ``EMS {order}`` so SHEET NO. never looks like physical order.
         sheet_code = _canonical_sheet_code(idx, ws["name"], order_cursor)
+        if is_index_tab and not idx:
+            sheet_code = f"EMS {order_cursor}.0" if order_cursor > 1 else "EMS 2.0"
 
         has_image_block = any(b.get("type") in ("imagePlaceholder", "underlayPlaceholder") for b in blocks)
         blank_page_placeholder = (
@@ -1943,6 +2150,7 @@ def import_workbook(
             "continuationIndex": 0,
             "generatedContinuation": False,
             "layoutWarnings": [],
+            "showTerminatedBy": False,
         }
 
         # Phase E rule 4 fallback: a network table so dense that two-up would

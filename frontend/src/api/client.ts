@@ -136,6 +136,70 @@ export async function importWorksheets(
   return res.json();
 }
 
+export interface ReimportPlanEntry {
+  existingPageId: string;
+  candidatePageId: string;
+  sheetCode: string;
+  candidateSheetCode?: string;
+  sheetTitle: string;
+  matchedBy: 'sheetCode' | 'sheetTitle' | null;
+  classification: 'manual' | 'source';
+  hasCanvasObjects: boolean;
+}
+
+export interface ReimportPlanAddEntry {
+  candidatePageId: string;
+  sheetCode: string;
+  sheetTitle: string;
+}
+
+export interface ReimportPlanArchiveEntry {
+  existingPageId: string;
+  sheetCode: string;
+  sheetTitle: string;
+  classification: 'manual' | 'source';
+}
+
+export interface ReimportPlan {
+  toUpdate: ReimportPlanEntry[];
+  toPreserve: ReimportPlanEntry[];
+  toAdd: ReimportPlanAddEntry[];
+  toArchive: ReimportPlanArchiveEntry[];
+  candidateWorksheetCount: number;
+}
+
+export interface ReimportSummary {
+  updated: string[];
+  preserved: string[];
+  replacedManual: string[];
+  added: string[];
+  archived: string[];
+}
+
+export async function previewReimportWorkbook(
+  projectId: string,
+  file: File,
+): Promise<{ plan: ReimportPlan; filename: string }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`/api/projects/${projectId}/reimport/preview`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function applyReimportWorkbook(
+  projectId: string,
+  file: File,
+  replacePageIds: string[] = [],
+): Promise<{ summary: ReimportSummary }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('replacePageIds', JSON.stringify(replacePageIds));
+  const res = await fetch(`/api/projects/${projectId}/reimport`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function getProject(id: string): Promise<ProjectModel> {
   const res = await fetch(`/api/projects/${id}`);
   if (!res.ok) throw new Error(await res.text());
@@ -160,14 +224,85 @@ export async function savePages(projectId: string, pages: PageModel[]): Promise<
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function exportPdf(projectId: string, paper?: { width: number; height: number }): Promise<Blob> {
+export async function exportPdf(
+  projectId: string,
+  paper?: { width: number; height: number },
+): Promise<Blob> {
   const res = await fetch(`/api/projects/${projectId}/export/pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(paper ?? {}),
   });
+  if (res.status === 409) {
+    const data = await res.json();
+    const err = new Error(data.error || 'PDF export blocked by QA gate') as Error & {
+      warnings?: ExportWarning[];
+    };
+    err.warnings = data.warnings;
+    throw err;
+  }
   if (!res.ok) throw new Error(await res.text());
   return res.blob();
+}
+
+export interface ExportWarning {
+  pageCode: string;
+  pageTitle: string;
+  issue: string;
+  suggestedFix: string;
+}
+
+export interface PageTemplateEntry {
+  id: string;
+  name: string;
+  createdAt: string;
+  pageType: string;
+  layoutProfile?: string;
+  hasThumbnail?: boolean;
+  thumbnailUrl?: string | null;
+}
+
+export async function listPageTemplates(): Promise<PageTemplateEntry[]> {
+  const res = await fetch('/api/lib/page-templates');
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.templates ?? [];
+}
+
+export async function savePageTemplate(
+  page: PageModel,
+  name: string,
+  thumbnailDataUrl?: string,
+): Promise<PageTemplateEntry> {
+  const res = await fetch('/api/lib/page-templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ page, name, thumbnailDataUrl }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.template;
+}
+
+export async function getPageTemplatePayload(templateId: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/lib/page-templates/${templateId}`);
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.template;
+}
+
+export async function deletePageTemplate(templateId: string): Promise<void> {
+  const res = await fetch(`/api/lib/page-templates/${templateId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function renamePageTemplate(templateId: string, name: string): Promise<void> {
+  const res = await fetch(`/api/lib/page-templates/${templateId}/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(await res.text());
 }
 
 export async function uploadAssetDataUrl(

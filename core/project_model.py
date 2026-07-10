@@ -93,6 +93,8 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
         "projectDisplayName": "",
         "projectFolder": "",
         "modified": created,
+        "importWarnings": [],
+        "archivedPages": [],
     }
 
 

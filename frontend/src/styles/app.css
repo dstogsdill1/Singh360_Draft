@@ -594,6 +594,10 @@ button, select, input, textarea { font: inherit; }
 .op-dup { color: #b8860b; font-weight: 700; }
 .link-btn { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
 
+/* PHASE E — Reimport Workbook modal (ReimportWorkbookModal.tsx) */
+.rw-section-title { margin: 16px 0 6px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.rw-replace-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 400; }
+
 /* -- CLEAN WORKSPACE MODAL -- */
 .cw-note { font-size: 12px; color: var(--ink-soft); line-height: 1.5; margin: 0 0 12px; }
 .cw-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 5px 0; color: var(--ink); }
@@ -711,3 +715,53 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 .pdf-page-card img { max-width: 120px; max-height: 150px; object-fit: contain; }
 .pdf-page-num { font-size: 11px; color: var(--ink-soft); }
 .pdf-insert-hint { margin-top: 8px; }
+
+/* -- PAGE TEMPLATE LIBRARY (PHASE F) -- */
+.pt-lib-grid {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 12px;
+  min-height: 200px;
+}
+.pt-lib-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow: auto;
+}
+.pt-lib-item {
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 4px;
+  background: var(--panel, #fff);
+  cursor: pointer;
+}
+.pt-lib-item.active {
+  border-color: #f90;
+  background: #fff8e8;
+}
+.pt-lib-item span {
+  display: block;
+  font-size: 11px;
+  color: #666;
+}
+.pt-lib-preview img {
+  max-width: 100%;
+  border: 1px solid #ccc;
+}
+.pt-lib-no-thumb {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f4f4;
+  color: #888;
+  font-size: 12px;
+}
+.pt-lib-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}

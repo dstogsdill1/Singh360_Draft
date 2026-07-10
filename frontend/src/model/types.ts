@@ -171,6 +171,8 @@ export interface PageModel {
   blankPagePlaceholder?: string;
   /** Rendering-options profile: front_matter_table | front_matter_narrative_table
    *  | io_table | network_48_port | instruction_table | company_info. */
+  /** Show Terminated By column on RDM/IDF network tables (default hidden). */
+  showTerminatedBy?: boolean;
   layoutProfile?: string;
   /** True when a network_48_port page used the two-up (ports 1-N / N+1-total)
    *  side-by-side layout instead of one full-width table. */

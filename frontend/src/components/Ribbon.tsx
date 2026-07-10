@@ -73,6 +73,9 @@ interface Props {
   onOpenProject: () => void;
   onCleanWorkspace: () => void;
   onImportWorksheet: () => void;
+  onSavePageTemplate: () => void;
+  onInsertPageTemplate: () => void;
+  onManagePageTemplates: () => void;
   onArchiveCurrentProject: () => void;
   renumberBadge?: boolean;
   theme: 'dark' | 'light';
@@ -129,6 +132,9 @@ export default function Ribbon({
   onOpenProject,
   onCleanWorkspace,
   onImportWorksheet,
+  onSavePageTemplate,
+  onInsertPageTemplate,
+  onManagePageTemplates,
   onArchiveCurrentProject,
   renumberBadge,
   theme,
@@ -215,6 +221,11 @@ export default function Ribbon({
                 Renumber Sheet Codes{renumberBadge ? ' ⚠' : ''}
               </button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={onImportWorksheet} title="Import one or more worksheets from another Excel workbook">Import Worksheet</button>
+            </Group>
+            <Group title="Templates">
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onSavePageTemplate} title="Save the active page layout as a reusable template">Save Page as Template</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onInsertPageTemplate} title="Insert a saved page template">Insert Page Template</button>
+              <button className="ribbon-btn" onClick={onManagePageTemplates} title="Rename or delete saved page templates">Manage Page Templates</button>
             </Group>
             <Group title="Maintenance">
               <button className="ribbon-btn" onClick={onCleanWorkspace} title="Archive old projects/exports to start fresh (never deletes; library preserved)">Clean Workspace</button>

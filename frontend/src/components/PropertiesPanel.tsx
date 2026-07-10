@@ -131,6 +131,16 @@ export default function PropertiesPanel({
             ))}
           </select>
         </div>
+        {page.layoutProfile === 'network_48_port' && (
+          <label className="lib-showretired" title="Show Terminated By only when there is enough room on the network table">
+            <input
+              type="checkbox"
+              checked={!!page.showTerminatedBy}
+              onChange={(e) => onChange({ ...page, showTerminatedBy: e.target.checked })}
+            />
+            {' '}Show Terminated By column
+          </label>
+        )}
         <div className="field">
           <label htmlFor="page-notes">Notes</label>
           <textarea id="page-notes" value={page.notes} onChange={(e) => onChange({ ...page, notes: e.target.value })} rows={4} />

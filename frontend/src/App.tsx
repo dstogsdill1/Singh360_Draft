@@ -11,11 +11,13 @@ import {
   saveProject,
   uploadAssetDataUrl,
   uploadAssetFile,
+  type ExportWarning,
 } from './api/client';
 import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
 import { normalizeProjectAssetUrls } from './model/assetUrl';
 import ContinuationPreviewModal from './components/ContinuationPreviewModal';
+import ReimportWorkbookModal from './components/ReimportWorkbookModal';
 import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource, applyCoverSourceTruth } from './model/excelRange';
 import { isCoverWorksheet } from './model/metadataInference';
 import { SourceWorksheetHistory } from './model/sourceWorksheetHistory';
@@ -34,6 +36,9 @@ import ImportWorksheetModal from './components/ImportWorksheetModal';
 import AddSheetModal from './components/AddSheetModal';
 import SheetContextMenu from './components/SheetContextMenu';
 import ExportModal from './components/ExportModal';
+import ExportWarningsModal from './components/ExportWarningsModal';
+import SavePageTemplateModal from './components/SavePageTemplateModal';
+import PageTemplateLibraryModal, { type TemplateInsertMode } from './components/PageTemplateLibraryModal';
 import PdfCropModal from './components/PdfCropModal';
 import BackupRecoveryModal from './components/BackupRecoveryModal';
 import BusModal from './components/BusModal';
@@ -108,6 +113,10 @@ export default function App() {
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportWarnings, setExportWarnings] = useState<ExportWarning[] | null>(null);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [templateLibOpen, setTemplateLibOpen] = useState(false);
+  const [templateLibManageOnly, setTemplateLibManageOnly] = useState(false);
   const [pdfCropOpen, setPdfCropOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [busOpen, setBusOpen] = useState(false);
@@ -118,6 +127,7 @@ export default function App() {
     replacePageTitle?: string;
   } | null>(null);
   const [pendingWorkbookFile, setPendingWorkbookFile] = useState<File | null>(null);
+  const [pendingReimportFile, setPendingReimportFile] = useState<File | null>(null);
   const [renumberBadge, setRenumberBadge] = useState(false);
   const [theme, setThemeState] = useState<'dark' | 'light'>(() => {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('singh360-theme') : null;
@@ -947,6 +957,8 @@ export default function App() {
       { label: 'Add Blank Sheet Before', onClick: () => addPage(id, 'before') },
       { label: 'Add Blank Sheet After', onClick: () => addPage(id, 'after') },
       { label: 'Import Worksheet from Excel', onClick: () => setImportWsOpen({ afterPageId: id }) },
+      { label: 'Save Page as Template', onClick: () => { setActivePageId(id); setSaveTemplateOpen(true); } },
+      { label: 'Insert Page Template', onClick: () => { setActivePageId(id); setTemplateLibManageOnly(false); setTemplateLibOpen(true); } },
       { label: pg?.include ? 'Exclude Page' : 'Include Page', divider: true, onClick: () => toggleInclude(id) },
       { label: 'Delete Page', onClick: () => deletePage(id) },
       { label: 'Move Left', divider: true, onClick: () => movePage(id, -1) },
@@ -961,10 +973,77 @@ export default function App() {
     return actions;
   };
 
+  const insertPageFromTemplate = (tplPage: PageModel, mode: TemplateInsertMode) => {
+    if (!project || !activePageId) return;
+    mutatePages((pages) => {
+      const idx = pages.findIndex((p) => p.id === activePageId);
+      if (idx < 0) return pages;
+      if (mode === 'new_after') {
+        const copy: PageModel = {
+          ...structuredClone(tplPage),
+          id: newPageId(),
+          order: pages[idx].order + 0.5,
+          pageGroupId: newPageId(),
+          continuationOf: null,
+          generatedContinuation: false,
+          include: true,
+        };
+        const next = [...pages];
+        next.splice(idx + 1, 0, copy);
+        return next.map((p, i) => ({ ...p, order: i + 1 }));
+      }
+      if (mode === 'replace_canvas') {
+        return pages.map((p, i) =>
+          i === idx
+            ? {
+                ...p,
+                canvasObjects: structuredClone(tplPage.canvasObjects ?? []),
+                blocks: structuredClone(tplPage.blocks ?? p.blocks ?? []),
+                pageType: tplPage.pageType ?? p.pageType,
+                layoutProfile: tplPage.layoutProfile ?? p.layoutProfile,
+              }
+            : p,
+        );
+      }
+      // overlay
+      return pages.map((p, i) =>
+        i === idx
+          ? {
+              ...p,
+              canvasObjects: [...(p.canvasObjects ?? []), ...structuredClone(tplPage.canvasObjects ?? [])],
+            }
+          : p,
+      );
+    });
+    setSaveStatus('unsaved');
+  };
+
   const onUploadWorkbook = async (file: File) => {
     const ok = await ensureSavedBeforeNavigation();
     if (!ok) return;
-    setPendingWorkbookFile(file);
+    // PHASE E: a project is already open — merge the workbook into it
+    // (same project id, manual layout pages preserved) instead of always
+    // bootstrapping a brand-new project from the upload.
+    if (project) {
+      setPendingReimportFile(file);
+    } else {
+      setPendingWorkbookFile(file);
+    }
+  };
+
+  const onReimportedWorkbook = async () => {
+    setPendingReimportFile(null);
+    if (!project) return;
+    try {
+      const p = await getProject(project.id);
+      lastSavedJsonRef.current = JSON.stringify(p);
+      resetSourceEditState();
+      setProjectSync(p);
+      setSaveStatus('idle');
+      setSelection(null);
+    } catch (err) {
+      console.error('refresh after reimport failed', err);
+    }
   };
 
   const reapplyPagePagination = (pageId: string) => {
@@ -1109,13 +1188,23 @@ export default function App() {
     if (!ok) return;
     const base = proj.metadata.drawingPackageFileName || proj.projectDisplayName || proj.metadata.projectName || proj.id;
     const revSuffix = rev.updateRevision ? `_${rev.newRevision.replace(/\s+/g, '')}` : '';
-    const blob = await exportPdf(proj.id, { width, height });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${base}${revSuffix}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = await exportPdf(proj.id, { width, height });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${base}${revSuffix}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const e = err as Error & { warnings?: ExportWarning[] };
+      if (e.warnings?.length) {
+        setExportWarnings(e.warnings);
+      } else {
+        console.error('PDF export failed', err);
+        window.alert(`PDF export failed: ${String(err)}`);
+      }
+    }
   };
 
   const onExportPackage = async () => {
@@ -1316,6 +1405,9 @@ export default function App() {
         replacePageId: activePageId ?? undefined,
         replacePageTitle: activePage?.sheetTitle,
       })}
+      onSavePageTemplate={() => setSaveTemplateOpen(true)}
+      onInsertPageTemplate={() => { setTemplateLibManageOnly(false); setTemplateLibOpen(true); }}
+      onManagePageTemplates={() => { setTemplateLibManageOnly(true); setTemplateLibOpen(true); }}
       onArchiveCurrentProject={() => void onArchiveCurrentProject()}
       theme={theme}
       onSetTheme={setThemeState}
@@ -1599,6 +1691,14 @@ export default function App() {
         onCancel={() => setPendingWorkbookFile(null)}
       />
     )}
+    {pendingReimportFile && project && (
+      <ReimportWorkbookModal
+        projectId={project.id}
+        file={pendingReimportFile}
+        onApplied={() => void onReimportedWorkbook()}
+        onCancel={() => setPendingReimportFile(null)}
+      />
+    )}
     {addSheetPending && (
       <AddSheetModal
         onAdd={(title, code, tmpl) => addSheetFromModal(title, code, tmpl, addSheetPending.refId, addSheetPending.where)}
@@ -1611,6 +1711,23 @@ export default function App() {
         packageName={project.metadata.drawingPackageFileName || project.projectDisplayName || project.metadata.projectName || ''}
         onExport={(w, h, rev) => void onExportPdfSized(w, h, rev)}
         onCancel={() => setExportOpen(false)}
+      />
+    )}
+    {exportWarnings && (
+      <ExportWarningsModal warnings={exportWarnings} onClose={() => setExportWarnings(null)} />
+    )}
+    {saveTemplateOpen && activePage && (
+      <SavePageTemplateModal
+        page={activePage}
+        onSaved={() => { setSaveTemplateOpen(false); window.alert('Page template saved.'); }}
+        onCancel={() => setSaveTemplateOpen(false)}
+      />
+    )}
+    {templateLibOpen && (
+      <PageTemplateLibraryModal
+        manageOnly={templateLibManageOnly}
+        onInsert={templateLibManageOnly ? undefined : insertPageFromTemplate}
+        onClose={() => setTemplateLibOpen(false)}
       />
     )}
     {pdfCropOpen && (

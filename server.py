@@ -25,6 +25,7 @@ from core.csv_importer import build_csv_worksheet_and_pages, import_csv_to_grid
 from core.export_pdf import export_pdf_via_playwright
 from core.library_store import LibraryStore
 from core.library_v2 import LibraryV2
+from core.page_template_store import PageTemplateStore
 from core import pdf_import_v2
 from core.drawing_generators import (
     generate_callout_schedule,
@@ -64,6 +65,11 @@ def _ensure_minimal_runtime_workspace(docs: Path) -> None:
     (docs / "library" / "components").mkdir(parents=True, exist_ok=True)
     (docs / "library" / "symbols").mkdir(parents=True, exist_ok=True)
     (docs / "library" / "thumbnails").mkdir(parents=True, exist_ok=True)
+    (docs / "library" / "page_templates").mkdir(parents=True, exist_ok=True)
+    (docs / "library" / "page_templates" / "thumbnails").mkdir(parents=True, exist_ok=True)
+    pt_manifest = docs / "library" / "page_templates" / "manifest.json"
+    if not pt_manifest.exists():
+        pt_manifest.write_text('{\n  "version": 1,\n  "templates": []\n}\n', encoding="utf-8")
     manifest = docs / "library" / "manifest.json"
     aliases = docs / "library" / "aliases.json"
     connectors = docs / "library" / "connector_styles.json"
@@ -700,6 +706,98 @@ def do_import_workbook_sheet(project_id: str):
 
 
 # --------------------------------------------------------------------------
+# PHASE E — safe whole-workbook re-upload (preserve manual layout pages)
+# --------------------------------------------------------------------------
+@app.post("/api/projects/<project_id>/reimport/preview")
+def preview_reimport_workbook(project_id: str):
+    """Upload a workbook and return a merge plan against the CURRENT project
+    (no mutation): which pages will update, which manual pages will be
+    preserved by default, which are new, and which are archived."""
+    _safe_id(project_id)
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    if "file" not in request.files:
+        return jsonify(_err("No workbook file uploaded.")), 400
+    upload = request.files["file"]
+    if not (upload.filename or "").lower().endswith(".xlsx"):
+        return jsonify(_err("Only .xlsx workbooks are supported.")), 400
+
+    tmp_dir = store.sources_dir(project_id, "tmp")
+    tmp_path = tmp_dir / f"reimport_preview_{uuid.uuid4().hex[:8]}_{upload.filename}"
+    try:
+        upload.save(tmp_path)
+        from core.workbook_reimport import plan_reimport
+        doc = ensure_project_shape(doc)
+        plan = plan_reimport(doc, tmp_path)
+    except Exception as exc:
+        tb = traceback.format_exc()
+        app.logger.error("reimport preview failed for %s:\n%s", project_id, tb)
+        return jsonify(_err("Could not preview workbook re-upload.", str(exc))), 400
+    finally:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
+    return jsonify({"ok": True, "plan": plan, "filename": upload.filename})
+
+
+@app.post("/api/projects/<project_id>/reimport")
+def do_reimport_workbook(project_id: str):
+    """Apply a Phase E safe reimport into the CURRENT project (same project
+    id — never creates a new project). Manual layout pages are preserved by
+    default; only page ids in ``replacePageIds`` are fully replaced.
+
+    Form fields:
+      file            — the workbook
+      replacePageIds  — JSON array of existing page ids to fully replace
+                        even though they are classified "manual" (optional)
+    """
+    _safe_id(project_id)
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    if "file" not in request.files:
+        return jsonify(_err("No workbook file uploaded.")), 400
+    upload = request.files["file"]
+    if not (upload.filename or "").lower().endswith(".xlsx"):
+        return jsonify(_err("Only .xlsx workbooks are supported.")), 400
+
+    import json as _json
+    raw_ids = request.form.get("replacePageIds", "[]")
+    try:
+        replace_page_ids: list[str] = _json.loads(raw_ids)
+        if not isinstance(replace_page_ids, list):
+            raise ValueError("replacePageIds must be a list")
+    except (ValueError, _json.JSONDecodeError) as exc:
+        return jsonify(_err("Invalid replacePageIds.", str(exc))), 400
+
+    wb_dir = store.sources_dir(project_id, "workbook")
+    wb_path = wb_dir / upload.filename
+    try:
+        upload.save(wb_path)
+        from core.workbook_reimport import apply_reimport
+        doc = ensure_project_shape(doc)
+        doc, summary = apply_reimport(
+            doc,
+            wb_path,
+            replace_page_ids=replace_page_ids,
+            source_filename=upload.filename,
+        )
+        recalc_page_numbers(doc)
+        # store.save() snapshots the pre-reimport project.json into backups/
+        # before overwriting, so a bad reimport is always recoverable.
+        store.save(project_id, doc)
+    except Exception as exc:
+        tb = traceback.format_exc()
+        app.logger.error("workbook reimport failed for %s:\n%s", project_id, tb)
+        return jsonify(_err("Failed to re-import workbook.", str(exc))), 500
+
+    return jsonify({"ok": True, "id": project_id, "summary": summary})
+
+
+# --------------------------------------------------------------------------
 # Image assets (pasted screenshots / dropped image files)
 # --------------------------------------------------------------------------
 
@@ -783,6 +881,8 @@ library = LibraryStore(DOCS_DIR, HERE)
 # --------------------------------------------------------------------------
 lib2 = LibraryV2(DOCS_DIR)
 lib2.ensure()
+page_templates = PageTemplateStore(DOCS_DIR)
+page_templates.ensure()
 
 
 @app.get("/api/lib")
@@ -987,6 +1087,71 @@ def lib2_gen_callout():
     sheet = body.get("sheet") or "ansi_b"
     sheets = render_schedule_sheets(table, sheet=sheet, base_sheet_no=body.get("sheetNo", ""))
     return jsonify({"ok": True, "table": table, "sheets": sheets})
+
+
+# --------------------------------------------------------------------------
+# Page Templates (PHASE F) — user-saved reusable layout pages
+# --------------------------------------------------------------------------
+
+
+@app.get("/api/lib/page-templates")
+def list_page_templates():
+    return jsonify({"ok": True, "templates": page_templates.list_templates()})
+
+
+@app.post("/api/lib/page-templates")
+def save_page_template():
+    body = request.get_json(force=True, silent=True) or {}
+    page = body.get("page")
+    name = (body.get("name") or "").strip()
+    if not isinstance(page, dict):
+        return jsonify(_err("page payload is required.")), 400
+    if not name:
+        name = page.get("sheetTitle") or "Page Template"
+    thumb_bytes = None
+    data_url = body.get("thumbnailDataUrl") or ""
+    if data_url:
+        thumb_bytes = PageTemplateStore.decode_thumbnail_data_url(str(data_url))
+    try:
+        entry = page_templates.save_template(page, name, thumbnail_png=thumb_bytes)
+    except Exception as exc:
+        app.logger.error("save page template failed: %s", exc)
+        return jsonify(_err("Failed to save page template.", str(exc))), 500
+    return jsonify({"ok": True, "template": entry})
+
+
+@app.get("/api/lib/page-templates/<template_id>")
+def get_page_template(template_id: str):
+    payload = page_templates.get_template(template_id)
+    if payload is None:
+        abort(404)
+    return jsonify({"ok": True, "template": payload})
+
+
+@app.delete("/api/lib/page-templates/<template_id>")
+def delete_page_template(template_id: str):
+    if not page_templates.delete_template(template_id):
+        abort(404)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/lib/page-templates/<template_id>/rename")
+def rename_page_template(template_id: str):
+    body = request.get_json(force=True, silent=True) or {}
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        return jsonify(_err("New template name is required.")), 400
+    if not page_templates.rename_template(template_id, new_name):
+        abort(404)
+    return jsonify({"ok": True, "name": new_name})
+
+
+@app.get("/api/lib/page-templates/<template_id>/thumbnail")
+def page_template_thumbnail(template_id: str):
+    thumb = page_templates.thumb_dir / f"{template_id}.png"
+    if not thumb.is_file():
+        abort(404)
+    return send_file(thumb, mimetype="image/png")
 
 
 @app.get("/api/lib/sheet-index")
@@ -1691,6 +1856,19 @@ def export_pdf(project_id: str):
     doc = _load_doc(project_id)
     if doc is None:
         abort(404)
+
+    from core.export_qa import compute_export_warnings
+
+    doc = ensure_project_shape(doc)
+    export_warnings = compute_export_warnings(doc)
+    if export_warnings:
+        return jsonify(
+            {
+                "ok": False,
+                "error": "PDF export blocked by QA gate — fix the issues below before exporting.",
+                "warnings": export_warnings,
+            }
+        ), 409
 
     body = request.get_json(silent=True) or {}
     try:
