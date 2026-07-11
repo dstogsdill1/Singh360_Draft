@@ -39,6 +39,8 @@ interface Props {
   onViewModeChange: (mode: ViewMode) => void;
   onRebuildFromSource?: () => void;
   canRebuildFromSource?: boolean;
+  onRestorePageRebuild?: () => void;
+  canRestorePageRebuild?: boolean;
   activeTool: string;
   snap: boolean;
   overlayMode: boolean;
@@ -72,6 +74,8 @@ export default function DocumentView({
   onViewModeChange,
   onRebuildFromSource,
   canRebuildFromSource,
+  onRestorePageRebuild,
+  canRestorePageRebuild,
   activeTool,
   snap,
   overlayMode,
@@ -165,6 +169,8 @@ export default function DocumentView({
         onViewModeChange={onViewModeChange}
         onRebuildFromSource={onRebuildFromSource}
         canRebuildFromSource={canRebuildFromSource}
+        onRestorePageRebuild={onRestorePageRebuild}
+        canRestorePageRebuild={canRestorePageRebuild}
       />
       <div
         className="sheet-viewport"

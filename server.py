@@ -2045,6 +2045,23 @@ def restore_project_page_snapshot(project_id: str):
     return jsonify({"ok": True, "id": project_id, "pageId": page_id, "restored": name, "project": restored})
 
 
+@app.post("/api/projects/<project_id>/page-rebuild-backup")
+def save_page_rebuild_backup(project_id: str):
+    """Snapshot the current page before a toolbar rebuild (project history/backups)."""
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    page_id = str(body.get("pageId") or "").strip()
+    page = body.get("page")
+    if not page_id or not isinstance(page, dict):
+        return jsonify(_err("Page id and page payload are required.")), 400
+    name = store.save_pre_rebuild_page_snapshot(project_id, page_id, page)
+    if not name:
+        return jsonify(_err("Could not save page rebuild backup.")), 500
+    return jsonify({"ok": True, "id": project_id, "pageId": page_id, "name": name})
+
+
 @app.post("/api/projects/<project_id>/archive-duplicate-folders")
 def archive_duplicate_folders(project_id: str):
     _safe_id(project_id)

@@ -10,6 +10,7 @@ import {
   previewImportWorksheets,
   renameProject,
   saveProject,
+  savePageRebuildBackup,
   uploadAssetDataUrl,
   uploadAssetFile,
   type ExportWarning,
@@ -22,6 +23,10 @@ import ReimportWorkbookModal from './components/ReimportWorkbookModal';
 import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource, applyCoverSourceTruth } from './model/excelRange';
 import { isCoverWorksheet } from './model/metadataInference';
 import { SourceWorksheetHistory } from './model/sourceWorksheetHistory';
+import { PageRebuildHistory } from './model/pageRebuildHistory';
+import { applyRebuiltPage, rebuildSinglePageFromSource } from './model/pageRebuild';
+import { validatePageRebuild } from './model/pageRebuildValidation';
+import RebuildValidationModal from './components/RebuildValidationModal';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
 import WorkbookView from './components/WorkbookView';
@@ -105,6 +110,13 @@ export default function App() {
   const [sourceEditStatus, setSourceEditStatus] = useState<'idle' | 'edited' | 'updated'>('idle');
   const [sourceHistoryTick, setSourceHistoryTick] = useState(0);
   const sourceHistoryRef = useRef(new SourceWorksheetHistory());
+  const pageRebuildHistoryRef = useRef(new PageRebuildHistory());
+  const [pageRebuildTick, setPageRebuildTick] = useState(0);
+  const [rebuildValidationModal, setRebuildValidationModal] = useState<{
+    pageId: string;
+    rebuilt: PageModel;
+    issues: string[];
+  } | null>(null);
   const [activeTool, setActiveTool] = useState('select');
   const [overlayMode, setOverlayMode] = useState(false);
   const [lineStyle, setLineStyle] = useState<LineStyle>({
@@ -389,10 +401,13 @@ export default function App() {
 
   const activeWorksheetId = activePage?.linkedWorksheetId ?? null;
   void sourceHistoryTick;
+  void pageRebuildTick;
   const sourceCanUndo = sourceHistoryRef.current.canUndo(activeWorksheetId);
   const sourceCanRedo = sourceHistoryRef.current.canRedo(activeWorksheetId);
+  const canRestorePageRebuild = pageRebuildHistoryRef.current.canRestore(activePage?.id);
   const sourceUndoRef = useRef<() => boolean>(() => false);
   const sourceRedoRef = useRef<() => boolean>(() => false);
+  const pageRebuildUndoRef = useRef<() => boolean>(() => false);
 
   /** Rebuild linked normalized pages for a worksheet from its source grid. */
   const refreshPagesFromWorksheet = useCallback((
@@ -439,18 +454,61 @@ export default function App() {
     });
   }, [setProjectSync]);
 
+  /** Apply a validated rebuilt page to the project. */
+  const applyPageRebuild = useCallback((pageId: string, rebuilt: PageModel) => {
+    setProjectSync((prev) => (prev ? applyRebuiltPage(prev, pageId, rebuilt) : prev));
+    setSourceDirty(false);
+    setSourceEditStatus('updated');
+  }, [setProjectSync]);
+
+  const pageRebuildUndo = useCallback(() => {
+    const pageId = activePageRef.current?.id;
+    const p = projectRef.current;
+    if (!pageId || !p) return false;
+    const next = pageRebuildHistoryRef.current.undo(p, pageId);
+    if (!next) return false;
+    setProjectSync(next);
+    setPageRebuildTick((n) => n + 1);
+    setSourceEditStatus('updated');
+    writeRecoverySnapshot(next);
+    return true;
+  }, [setProjectSync]);
+
+  const restoreLastPageRebuild = useCallback(() => {
+    pageRebuildUndo();
+  }, [pageRebuildUndo]);
+
   /** Rebuild the active page's normalized blocks from its linked worksheet. */
-  const rebuildCurrentPageFromSource = useCallback(() => {
+  const rebuildCurrentPageFromSource = useCallback(async () => {
     document.dispatchEvent(new CustomEvent('singh360:capture-active-editors'));
     const el = document.activeElement as HTMLElement | null;
     el?.blur?.();
-    const pageId = activePageRef.current?.id;
-    const wsId = activePageRef.current?.linkedWorksheetId;
-    if (!wsId) return;
-    refreshPagesFromWorksheet(wsId, pageId, { full: true });
-    setSourceDirty(false);
-    setSourceEditStatus('updated');
-  }, [refreshPagesFromWorksheet]);
+    const page = activePageRef.current;
+    const p = projectRef.current;
+    const pageId = page?.id;
+    const wsId = page?.linkedWorksheetId;
+    if (!pageId || !wsId || !page || !p) return;
+    const ws = p.worksheets.find((w) => w.id === wsId);
+    if (!ws) return;
+
+    let serverSnapshotName: string | undefined;
+    try {
+      const backup = await savePageRebuildBackup(p.id, pageId, page);
+      serverSnapshotName = backup.name;
+    } catch {
+      /* server backup is best-effort */
+    }
+    pageRebuildHistoryRef.current.pushBeforeRebuild(page, serverSnapshotName);
+    setPageRebuildTick((n) => n + 1);
+
+    const rebuilt = rebuildSinglePageFromSource(page, ws);
+    const validation = validatePageRebuild(page, rebuilt);
+    if (!validation.ok) {
+      setRebuildValidationModal({ pageId, rebuilt, issues: validation.issues });
+      return;
+    }
+    applyPageRebuild(pageId, rebuilt);
+  }, [applyPageRebuild]);
 
   const applyWorksheetPatch = useCallback((
     wsId: string,
@@ -535,6 +593,7 @@ export default function App() {
 
   sourceUndoRef.current = sourceUndo;
   sourceRedoRef.current = sourceRedo;
+  pageRebuildUndoRef.current = pageRebuildUndo;
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     if (viewModeRef.current === 'source' && mode === 'normalized') {
@@ -721,6 +780,16 @@ export default function App() {
         e.preventDefault();
         if (k === 'z') sourceUndoRef.current();
         else sourceRedoRef.current();
+        return;
+      }
+      if (
+        viewModeRef.current === 'normalized'
+        && (e.ctrlKey || e.metaKey)
+        && k === 'z'
+        && pageRebuildHistoryRef.current.canUndo(activePageRef.current?.id)
+      ) {
+        e.preventDefault();
+        pageRebuildUndoRef.current();
         return;
       }
       const t = e.target as HTMLElement | null;
@@ -1352,6 +1421,7 @@ export default function App() {
       if (sourceEditStatus === 'edited' || sourceDirty) return 'Source edited';
       return '';
     }
+    if (rebuildValidationModal) return 'Rebuild failed validation — current page kept';
     if (sourceEditStatus === 'updated') return 'Normalized updated';
     if (sourceDirty) return 'Source edited';
     return '';
@@ -1398,6 +1468,7 @@ export default function App() {
         unlockAll: () => canvasApiRef.current?.unlockAll(),
         undo: () => {
           if (viewMode === 'source') sourceUndo();
+          else if (canRestorePageRebuild) pageRebuildUndo();
           else canvasApiRef.current?.undo();
         },
         redo: () => {
@@ -1531,8 +1602,10 @@ export default function App() {
           sourceDirty={sourceDirty}
           sourceStatusLabel={sourceStatusLabel}
           onViewModeChange={handleViewModeChange}
-          onRebuildFromSource={rebuildCurrentPageFromSource}
+          onRebuildFromSource={() => void rebuildCurrentPageFromSource()}
           canRebuildFromSource={!!activePage?.linkedWorksheetId}
+          onRestorePageRebuild={restoreLastPageRebuild}
+          canRestorePageRebuild={canRestorePageRebuild}
           activeTool={activeTool}
           snap={snap}
           overlayMode={overlayMode}
@@ -1751,6 +1824,17 @@ export default function App() {
           setExportWarnings(null);
         }}
         onExportAnyway={() => void onExportPdfDespiteWarnings()}
+      />
+    )}
+    {rebuildValidationModal && (
+      <RebuildValidationModal
+        issues={rebuildValidationModal.issues}
+        onKeepCurrent={() => setRebuildValidationModal(null)}
+        onReplaceAnyway={() => {
+          const { pageId, rebuilt } = rebuildValidationModal;
+          setRebuildValidationModal(null);
+          applyPageRebuild(pageId, rebuilt);
+        }}
       />
     )}
     {symbolLegendOpen && (

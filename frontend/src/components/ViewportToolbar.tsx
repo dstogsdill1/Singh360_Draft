@@ -10,6 +10,8 @@ interface Props {
   onViewModeChange: (mode: ViewMode) => void;
   onRebuildFromSource?: () => void;
   canRebuildFromSource?: boolean;
+  onRestorePageRebuild?: () => void;
+  canRestorePageRebuild?: boolean;
 }
 
 export default function ViewportToolbar({
@@ -21,6 +23,8 @@ export default function ViewportToolbar({
   onViewModeChange,
   onRebuildFromSource,
   canRebuildFromSource,
+  onRestorePageRebuild,
+  canRestorePageRebuild,
 }: Props) {
   const pageLabel =
     activePage.pageNumber != null
@@ -44,6 +48,16 @@ export default function ViewportToolbar({
             title="Rebuild this page's normalized output from the linked source worksheet"
           >
             Rebuild This Page From Source
+          </button>
+        ) : null}
+        {canRestorePageRebuild && onRestorePageRebuild ? (
+          <button
+            className="fit-btn"
+            type="button"
+            onClick={onRestorePageRebuild}
+            title="Restore the page from before the last rebuild (Ctrl+Z)"
+          >
+            Restore Last Page Rebuild
           </button>
         ) : null}
         {sourceStatusLabel ? (

@@ -5,27 +5,30 @@
 // whole continuation group. Keep these constants in parity with the backend.
 
 import type { ExcelCellStyle, MergedCell, PageBlock, PageModel, ProjectModel, Worksheet } from './types';
+import { buildIdfNetworkBlock, idfHeaderRow, isIdfNetworkPage } from './idfNetworkTable';
 import { inferMetadataFromWorksheet, isCoverWorksheet, mergeCoverMetadata } from './metadataInference';
 
-const BODY_W = 1600;
-const BODY_BUDGET = 720;
+export const PAGE_BODY_WIDTH = 1600;
+export const PAGE_BODY_BUDGET = 720;
+const BODY_W = PAGE_BODY_WIDTH;
+const BODY_BUDGET = PAGE_BODY_BUDGET;
 const MIN_SCALE = 0.5;
 const MIN_ORPHAN_DATA_ROWS = 4;
 const DEFAULT_COL = 64;
 const DEFAULT_ROW = 20;
 
-function blockMinScale(block: PageBlock): number {
+export function blockMinScale(block: PageBlock): number {
   const v = Number(block.minScale ?? MIN_SCALE);
   if (!Number.isFinite(v)) return MIN_SCALE;
   return Math.min(1, Math.max(0.2, v));
 }
 
-function blockAllowsContinuation(block: PageBlock): boolean {
+export function blockAllowsContinuation(block: PageBlock): boolean {
   if (block.allowContinuation === false) return false;
   return (block.splitMode ?? 'auto_rows') !== 'none';
 }
 
-function excelBestScale(block: PageBlock): number {
+export function excelBestScale(block: PageBlock): number {
   const w = Math.max(1, (block.colWidths ?? []).reduce((a, b) => a + b, 0));
   const h = Math.max(1, (block.rowHeights ?? []).reduce((a, b) => a + b, 0));
   return Math.min(Math.min(1, BODY_W / w), BODY_BUDGET / h);
@@ -528,6 +531,30 @@ export function regenerateExcelGroup(project: ProjectModel, wsId: string): PageM
     (p) => p.linkedWorksheetId === wsId && !p.generatedContinuation && p.renderMode === 'excel_exact',
   );
   if (!ws || !base) return project.pages;
+
+  if (isIdfNetworkPage(base)) {
+    const headerRow = idfHeaderRow(ws.grid ?? []);
+    if (headerRow != null) {
+      const block = buildIdfNetworkBlock(ws, headerRow, `${ws.id}_idf`, {
+        showTerminatedBy: base.showTerminatedBy ?? false,
+      });
+      return project.pages.map((p) => {
+        if (p.id !== base.id && p.pageGroupId !== (base.pageGroupId ?? base.id)) return p;
+        if (p.generatedContinuation) return p;
+        return {
+          ...p,
+          blocks: [block],
+          layoutProfile: 'network_48_port',
+          twoUp: block.layoutMode === 'two_up',
+          splitMode: 'none',
+          allowContinuation: false,
+          minScale: 1.0,
+          scaleMode: 'fit_body',
+          layoutWarnings: block.layoutWarnings ?? [],
+        };
+      });
+    }
+  }
 
   const groupId = base.pageGroupId ?? base.id;
   const canonicalBaseCode = (base.displaySheetCode || base.sheetCode || '').trim();

@@ -314,6 +314,40 @@ class ProjectStore:
         data["pages"] = next_pages
         return data if self.save(project_id, data) else None
 
+    def save_pre_rebuild_page_snapshot(
+        self, project_id: str, page_id: str, page: dict[str, Any]
+    ) -> str | None:
+        """Persist a page snapshot immediately before a toolbar rebuild."""
+        safe_page_id = self._safe_page_id(page_id)
+        if not safe_page_id or not isinstance(page, dict):
+            return None
+        d = self.find_dir(project_id)
+        if not d:
+            return None
+        root = self.page_snapshots_root(d)
+        page_dir = root / safe_page_id
+        page_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        name = f"page_{stamp}.json"
+        payload = {
+            "projectId": project_id,
+            "pageId": safe_page_id,
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "sheetTitle": page.get("sheetTitle", ""),
+            "sheetCode": page.get("displaySheetCode") or page.get("sheetCode") or "",
+            "counts": self._page_counts(page),
+            "page": page,
+            "rebuildBackup": True,
+        }
+        try:
+            (page_dir / name).write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            self._prune_page_snapshots(page_dir)
+        except OSError:
+            return None
+        return name
+
     def list_backups(self, project_id: str) -> list[dict[str, Any]]:
         """Return newest-first backup snapshots for a project."""
         d = self.find_dir(project_id)

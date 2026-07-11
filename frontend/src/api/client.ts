@@ -449,6 +449,21 @@ export async function restorePageSnapshot(projectId: string, pageId: string, nam
   return json.project;
 }
 
+export async function savePageRebuildBackup(
+  projectId: string,
+  pageId: string,
+  page: PageModel,
+): Promise<{ name: string }> {
+  const res = await fetch(`/api/projects/${projectId}/page-rebuild-backup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pageId, page }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return { name: json.name as string };
+}
+
 // ── PDF Page Renderer ──
 export interface PdfPageInfo {
   page: number;
