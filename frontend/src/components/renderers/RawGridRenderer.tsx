@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Worksheet } from '../../model/types';
+import type { MergedCell, Worksheet } from '../../model/types';
 import { HIGHLIGHT_SWATCHES } from '../../model/tableStyle';
 import {
   colLetter,
@@ -11,11 +11,23 @@ import {
   wsDeleteRow,
   wsInsertCol,
   wsDeleteCol,
+  wsMergeCells,
+  wsUnmergeCells,
+  wsSetStyle,
+  wsSetColWidth,
+  wsSetRowHeight,
+  wsAutoFitColumns,
+  wsAutoFitRows,
+  wsAutoFitRange,
+  WS_MIN_COL_W,
+  WS_MIN_ROW_H,
 } from '../../model/excelRange';
 
 interface Props {
   worksheet?: Worksheet;
   onWorksheetChange: (patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
+  onReplaceSource?: () => void;
+  onExportSource?: () => void;
 }
 
 interface Rect {
@@ -24,6 +36,8 @@ interface Rect {
   r1: number;
   c1: number;
 }
+
+const FONT_SIZES = [8, 9, 10, 11, 12];
 
 function norm(r: Rect): Rect {
   return {
@@ -34,23 +48,56 @@ function norm(r: Rect): Rect {
   };
 }
 
-/** Editable Excel-like source grid: multi-cell selection, fill/border toggles,
- *  copy/paste, and insert/delete row/column. Edits flow up as worksheet patches
- *  so the Normalized (exact range) view refreshes and autosave persists. */
-export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props) {
+function cellKey(r: number, c: number): string {
+  return `${r}:${c}`;
+}
+
+function buildMergeMaps(merges: MergedCell[]) {
+  const covered = new Set<string>();
+  const spanAt = new Map<string, { rs: number; cs: number }>();
+  for (const m of merges) {
+    for (let r = m.startRow; r <= m.endRow; r += 1) {
+      for (let c = m.startCol; c <= m.endCol; c += 1) {
+        if (r === m.startRow && c === m.startCol) continue;
+        covered.add(cellKey(r, c));
+      }
+    }
+    spanAt.set(cellKey(m.startRow, m.startCol), {
+      rs: m.endRow - m.startRow + 1,
+      cs: m.endCol - m.startCol + 1,
+    });
+  }
+  return { covered, spanAt };
+}
+
+/** Editable Excel-like source grid with merge, auto-fit, alignment, and resize. */
+export default function RawGridRenderer({
+  worksheet,
+  onWorksheetChange,
+  onReplaceSource,
+  onExportSource,
+}: Props) {
   const grid = worksheet?.grid ?? [];
   const styles = worksheet?.styles ?? {};
+  const merges = worksheet?.mergedCells ?? [];
+  const colWidthsPx = worksheet?.colWidthsPx ?? [];
+  const rowHeightsPx = worksheet?.rowHeightsPx ?? [];
+
   const nCols = useMemo(
     () => Math.max(1, ...(grid.length ? grid.map((r) => r.length) : [1])),
     [grid],
   );
 
   const [sel, setSel] = useState<Rect | null>(null);
+  const [toggleCells, setToggleCells] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<{ r: number; c: number } | null>(null);
   const draggingRef = useRef(false);
+  const resizeRef = useRef<{ kind: 'col' | 'row'; index: number; start: number; startSize: number } | null>(null);
   const clipboardRef = useRef<string[][]>([]);
   const editingInputRef = useRef<HTMLInputElement | null>(null);
   const editingCellRef = useRef<{ r: number; c: number } | null>(null);
+
+  const { covered, spanAt } = useMemo(() => buildMergeMaps(merges), [merges]);
 
   useEffect(() => {
     const capture = () => {
@@ -76,29 +123,56 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
   }, [worksheet, onWorksheetChange]);
 
   useEffect(() => {
-    const up = () => {
-      draggingRef.current = false;
+    const onMove = (e: MouseEvent) => {
+      const rz = resizeRef.current;
+      if (!rz || !worksheet) return;
+      if (rz.kind === 'col') {
+        const delta = e.clientX - rz.start;
+        onWorksheetChange(wsSetColWidth(worksheet, rz.index, rz.startSize + delta), { skipHistory: true });
+      } else {
+        const delta = e.clientY - rz.start;
+        onWorksheetChange(wsSetRowHeight(worksheet, rz.index, rz.startSize + delta), { skipHistory: true });
+      }
     };
-    window.addEventListener('mouseup', up);
-    return () => window.removeEventListener('mouseup', up);
-  }, []);
+    const onUp = () => {
+      draggingRef.current = false;
+      resizeRef.current = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [worksheet, onWorksheetChange]);
 
   if (!worksheet || !grid.length) {
     return <div className="np-empty">No source grid data.</div>;
   }
 
+  const selRect = (): Rect | null => (sel ? norm(sel) : null);
+
   const selCells = (): Array<{ r: number; c: number }> => {
-    if (!sel) return [];
-    const n = norm(sel);
     const out: Array<{ r: number; c: number }> = [];
-    for (let r = n.r0; r <= n.r1; r += 1) for (let c = n.c0; c <= n.c1; c += 1) out.push({ r, c });
+    const rect = selRect();
+    if (rect) {
+      for (let r = rect.r0; r <= rect.r1; r += 1) {
+        for (let c = rect.c0; c <= rect.c1; c += 1) out.push({ r, c });
+      }
+    }
+    for (const key of toggleCells) {
+      const [rs, cs] = key.split(':');
+      const r = Number(rs);
+      const c = Number(cs);
+      if (!out.some((x) => x.r === r && x.c === c)) out.push({ r, c });
+    }
     return out;
   };
 
   const inSel = (r: number, c: number): boolean => {
-    if (!sel) return false;
-    const n = norm(sel);
-    return r >= n.r0 && r <= n.r1 && c >= n.c0 && c <= n.c1;
+    const rect = selRect();
+    if (rect && r >= rect.r0 && r <= rect.r1 && c >= rect.c0 && c <= rect.c1) return true;
+    return toggleCells.has(cellKey(r, c));
   };
 
   const commit = (patch: Partial<Worksheet>, structural = false) =>
@@ -111,9 +185,15 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
     const cells = selCells();
     if (cells.length) commit(wsSetFill(worksheet, cells, color));
   };
+
   const applyBorders = (on: boolean) => {
     const cells = selCells();
     if (cells.length) commit(wsSetBorders(worksheet, cells, on));
+  };
+
+  const applyStyle = (patch: Parameters<typeof wsSetStyle>[2]) => {
+    const cells = selCells();
+    if (cells.length) commit(wsSetStyle(worksheet, cells, patch));
   };
 
   const anchorRow = () => (sel ? norm(sel).r0 : 0);
@@ -134,8 +214,40 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
     commit(wsDeleteCol(worksheet, c), true);
   };
 
+  const mergeSel = () => {
+    const rect = selRect();
+    if (!rect) return;
+    commit(wsMergeCells(worksheet, rect), true);
+  };
+
+  const unmergeSel = () => {
+    const rect = selRect();
+    if (!rect) return;
+    commit(wsUnmergeCells(worksheet, rect), true);
+  };
+
+  const autoFitCols = () => {
+    const rect = selRect();
+    if (!rect) return;
+    const cols = Array.from({ length: rect.c1 - rect.c0 + 1 }, (_, i) => rect.c0 + i);
+    commit(wsAutoFitColumns(worksheet, cols), true);
+  };
+
+  const autoFitRows = () => {
+    const rect = selRect();
+    if (!rect) return;
+    const rows = Array.from({ length: rect.r1 - rect.r0 + 1 }, (_, i) => rect.r0 + i);
+    commit(wsAutoFitRows(worksheet, rows), true);
+  };
+
+  const autoFitRange = () => {
+    const rect = selRect();
+    if (!rect) return;
+    commit(wsAutoFitRange(worksheet, rect), true);
+  };
+
   const copySel = () => {
-    const cells = sel ? norm(sel) : null;
+    const cells = selRect();
     if (!cells) return;
     const rows: string[][] = [];
     for (let r = cells.r0; r <= cells.r1; r += 1) {
@@ -181,6 +293,25 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
     commit({ grid: next });
   };
 
+  const onCellMouseDown = (r: number, c: number, e: React.MouseEvent) => {
+    if (editing) return;
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      const key = cellKey(r, c);
+      setToggleCells((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      return;
+    }
+    setToggleCells(new Set());
+    draggingRef.current = true;
+    if (e.shiftKey && sel) setSel({ ...sel, r1: r, c1: c });
+    else setSel({ r0: r, c0: c, r1: r, c1: c });
+  };
+
   const onWrapKeyDown = (e: React.KeyboardEvent) => {
     if (editing) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
@@ -200,6 +331,9 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
       {label}
     </button>
   );
+
+  const colWidth = (c: number) => colWidthsPx[c] ?? WS_MIN_COL_W + 45;
+  const rowHeight = (r: number) => rowHeightsPx[r] ?? WS_MIN_ROW_H + 4;
 
   return (
     <div className="gx-wrap" tabIndex={0} onKeyDown={onWrapKeyDown}>
@@ -221,58 +355,149 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
         {tb('Borders', () => applyBorders(true))}
         {tb('No Borders', () => applyBorders(false))}
         <span className="gx-tb-sep" />
+        {tb('Merge', mergeSel, 'Merge selected cells')}
+        {tb('Unmerge', unmergeSel, 'Unmerge selected merged cells')}
+        <span className="gx-tb-sep" />
         {tb('Ins Row', () => commit(wsInsertRow(worksheet, anchorRow()), true), 'Insert row above selection')}
         {tb('Del Row', () => commit(wsDeleteRow(worksheet, anchorRow()), true), 'Delete selected row')}
         {tb('Ins Col', () => commit(wsInsertCol(worksheet, anchorCol()), true), 'Insert column left of selection')}
         {tb('Del Col', deleteColumn, 'Delete selected column')}
         <span className="gx-tb-sep" />
+        {tb('Fit Cols', autoFitCols, 'Auto-fit selected columns')}
+        {tb('Fit Rows', autoFitRows, 'Auto-fit selected rows')}
+        {tb('Fit Range', autoFitRange, 'Auto-fit selected range')}
+        <span className="gx-tb-sep" />
+        {tb('Left', () => applyStyle({ hAlign: 'left' }))}
+        {tb('Center', () => applyStyle({ hAlign: 'center' }))}
+        {tb('Right', () => applyStyle({ hAlign: 'right' }))}
+        {tb('Top', () => applyStyle({ vAlign: 'top' }))}
+        {tb('Middle', () => applyStyle({ vAlign: 'center' }))}
+        {tb('Bottom', () => applyStyle({ vAlign: 'bottom' }))}
+        {tb('Wrap', () => applyStyle({ wrap: true }))}
+        {tb('No Wrap', () => applyStyle({ wrap: false }))}
+        <span className="gx-tb-sep" />
+        {tb('Bold', () => applyStyle({ bold: true }))}
+        {tb('Italic', () => applyStyle({ italic: true }))}
+        <select
+          className="gx-font-size"
+          title="Font size"
+          defaultValue=""
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (v) applyStyle({ fontSize: v });
+            e.target.value = '';
+          }}
+        >
+          <option value="" disabled>Size</option>
+          {FONT_SIZES.map((s) => (
+            <option key={s} value={s}>{s}pt</option>
+          ))}
+        </select>
+        <span className="gx-tb-sep" />
         {tb('Copy', copySel)}
         {tb('Paste', () => void pasteSel())}
+        {onReplaceSource ? (
+          <>
+            <span className="gx-tb-sep" />
+            {tb('Replace Source', onReplaceSource, 'Replace current page source from Excel file')}
+          </>
+        ) : null}
+        {onExportSource ? (
+          tb('Export Sheet', onExportSource, 'Export current source worksheet as .xlsx')
+        ) : null}
       </div>
 
-      <table className="grid-table gx-table">
+      <table className="grid-table gx-table" style={{ tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: 36 }} />
+          {Array.from({ length: nCols }, (_, c) => (
+            <col key={c} style={{ width: colWidth(c) }} />
+          ))}
+        </colgroup>
         <thead>
           <tr>
             <th className="gx-corner" />
             {Array.from({ length: nCols }, (_, c) => (
               <th
                 key={c}
-                className="gx-colhead"
-                onClick={() => setSel({ r0: 0, c0: c, r1: grid.length - 1, c1: c })}
+                className="gx-colhead gx-colhead-resize"
+                style={{ width: colWidth(c), minWidth: colWidth(c) }}
+                onClick={() => {
+                  setToggleCells(new Set());
+                  setSel({ r0: 0, c0: c, r1: grid.length - 1, c1: c });
+                }}
               >
                 {colLetter(c)}
+                <span
+                  className="gx-col-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    onWorksheetChange({});
+                    resizeRef.current = {
+                      kind: 'col',
+                      index: c,
+                      start: e.clientX,
+                      startSize: colWidth(c),
+                    };
+                  }}
+                />
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {grid.map((row, r) => (
-            <tr key={r}>
+            <tr key={r} style={{ height: rowHeight(r) }}>
               <th
-                className="gx-rowhead"
-                onClick={() => setSel({ r0: r, c0: 0, r1: r, c1: nCols - 1 })}
+                className="gx-rowhead gx-rowhead-resize"
+                style={{ height: rowHeight(r) }}
+                onClick={() => {
+                  setToggleCells(new Set());
+                  setSel({ r0: r, c0: 0, r1: r, c1: nCols - 1 });
+                }}
               >
                 {r + 1}
+                <span
+                  className="gx-row-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    onWorksheetChange({});
+                    resizeRef.current = {
+                      kind: 'row',
+                      index: r,
+                      start: e.clientY,
+                      startSize: rowHeight(r),
+                    };
+                  }}
+                />
               </th>
               {Array.from({ length: nCols }, (_, c) => {
+                if (covered.has(cellKey(r, c))) return null;
                 const st = styles[a1(r, c)];
                 const fill = typeof st?.fill === 'string' ? st.fill : undefined;
                 const isEditing = editing?.r === r && editing?.c === c;
-                const cellStyle: React.CSSProperties = { backgroundColor: fill };
+                const span = spanAt.get(cellKey(r, c));
+                const cellStyle: React.CSSProperties = {
+                  backgroundColor: fill,
+                  height: rowHeight(r),
+                  textAlign: (st?.hAlign as React.CSSProperties['textAlign']) ?? 'left',
+                  verticalAlign: (st?.vAlign as React.CSSProperties['verticalAlign']) ?? 'top',
+                };
                 if (st?.bold) cellStyle.fontWeight = 700;
                 if (st?.italic) cellStyle.fontStyle = 'italic';
+                if (st?.fontSize) cellStyle.fontSize = st.fontSize;
+                if (st?.wrap) {
+                  cellStyle.whiteSpace = 'pre-wrap';
+                  cellStyle.wordBreak = 'break-word';
+                }
                 return (
                   <td
                     key={c}
+                    rowSpan={span?.rs}
+                    colSpan={span?.cs}
                     className={`gx-cell ${inSel(r, c) ? 'gx-sel' : ''}`}
                     style={cellStyle}
-                    onMouseDown={(e) => {
-                      if (isEditing) return;
-                      e.preventDefault();
-                      draggingRef.current = true;
-                      if (e.shiftKey && sel) setSel({ ...sel, r1: r, c1: c });
-                      else setSel({ r0: r, c0: c, r1: r, c1: c });
-                    }}
+                    onMouseDown={(e) => onCellMouseDown(r, c, e)}
                     onMouseEnter={() => {
                       if (draggingRef.current && sel) setSel({ ...sel, r1: r, c1: c });
                     }}
@@ -300,12 +525,7 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
                           editingInputRef.current = null;
                         }}
                         onKeyDown={(e) => {
-                          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            return;
-                          }
-                          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                          if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y')) {
                             e.preventDefault();
                             e.stopPropagation();
                             return;
@@ -323,7 +543,7 @@ export default function RawGridRenderer({ worksheet, onWorksheetChange }: Props)
                         }}
                       />
                     ) : (
-                      <span className="gx-cell-text">{grid[r]?.[c] ?? ''}</span>
+                      <span className={`gx-cell-text ${st?.wrap ? 'gx-wrap' : ''}`}>{grid[r]?.[c] ?? ''}</span>
                     )}
                   </td>
                 );

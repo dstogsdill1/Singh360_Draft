@@ -16,6 +16,7 @@ import socket
 import sys
 import traceback
 import uuid
+from io import BytesIO
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -708,6 +709,46 @@ def do_import_workbook_sheet(project_id: str):
         "renumberSuggested": not bool(replace_page_id),
         "replacedPageId": replace_page_id if replace_page_id else None,
     })
+
+
+@app.post("/api/projects/<project_id>/export/worksheet")
+def export_project_worksheet(project_id: str):
+    """Export one linked worksheet as a standalone .xlsx download."""
+    _safe_id(project_id)
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    ws_id = str(body.get("worksheetId") or "").strip()
+    page_id = str(body.get("pageId") or "").strip()
+    worksheets = doc.get("worksheets") if isinstance(doc.get("worksheets"), list) else []
+    ws = None
+    if ws_id:
+        ws = next((w for w in worksheets if isinstance(w, dict) and w.get("id") == ws_id), None)
+    elif page_id:
+        page = next((p for p in (doc.get("pages") or []) if isinstance(p, dict) and p.get("id") == page_id), None)
+        if page:
+            link = page.get("linkedWorksheetId")
+            ws = next((w for w in worksheets if isinstance(w, dict) and w.get("id") == link), None)
+    if not ws:
+        return jsonify(_err("Worksheet not found for export.")), 404
+    try:
+        from core.worksheet_export import export_worksheet_xlsx
+        data = export_worksheet_xlsx(ws)
+    except Exception as exc:
+        app.logger.error("worksheet export failed for %s: %s", project_id, exc)
+        return jsonify(_err("Failed to export worksheet.", str(exc))), 500
+    title = str(ws.get("name") or ws.get("sourceSheet") or "worksheet")
+    safe = re.sub(r"[^\w.\- ]+", "_", title).strip() or "worksheet"
+    download = f"{safe}.xlsx"
+    buf = BytesIO(data)
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=download,
+    )
 
 
 # --------------------------------------------------------------------------

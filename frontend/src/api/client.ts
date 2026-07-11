@@ -464,6 +464,20 @@ export async function savePageRebuildBackup(
   return { name: json.name as string };
 }
 
+/** Download the active page's source worksheet as a standalone .xlsx file. */
+export async function exportWorksheetXlsx(
+  projectId: string,
+  opts: { worksheetId?: string; pageId?: string },
+): Promise<Blob> {
+  const res = await fetch(`/api/projects/${projectId}/export/worksheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.blob();
+}
+
 // ── PDF Page Renderer ──
 export interface PdfPageInfo {
   page: number;

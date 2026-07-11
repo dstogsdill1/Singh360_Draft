@@ -19,6 +19,8 @@ interface Props {
   onDuplicateBlock: (pageId: string, blockId: string) => void;
   onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
+  onReplacePageSource?: () => void;
+  onExportPageSource?: () => void;
 }
 
 export default function PageRenderer({
@@ -38,6 +40,8 @@ export default function PageRenderer({
   onDuplicateBlock,
   onWorksheetChange,
   onCanvasChange,
+  onReplacePageSource,
+  onExportPageSource,
 }: Props) {
   if (viewMode === 'source') {
     return (
@@ -47,6 +51,8 @@ export default function PageRenderer({
           if (!page.linkedWorksheetId) return;
           onWorksheetChange(page.linkedWorksheetId, patch, opts);
         }}
+        onReplaceSource={onReplacePageSource}
+        onExportSource={onExportPageSource}
       />
     );
   }

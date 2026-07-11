@@ -17,6 +17,7 @@ export function rebuildSinglePageFromSource(page: PageModel, ws: Worksheet): Pag
     return {
       ...page,
       blocks: [block],
+      canvasObjects: page.canvasObjects ?? [],
       renderMode: 'excel_exact',
       layoutProfile: 'network_48_port',
       twoUp: block.layoutMode === 'two_up',
@@ -46,6 +47,7 @@ export function rebuildSinglePageFromSource(page: PageModel, ws: Worksheet): Pag
     return {
       ...page,
       blocks: [part],
+      canvasObjects: page.canvasObjects ?? [],
       layoutWarnings: part.layoutWarnings ?? [],
       sourceRevision: (page.sourceRevision ?? 0) + 1,
     };

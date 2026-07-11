@@ -787,3 +787,193 @@ export function wsDeleteCol(ws: Worksheet, at: number): Partial<Worksheet> {
     mergedCells: shiftMerges(ws.mergedCells ?? [], 'col', at, -1),
   };
 }
+
+// ── Source grid sizing / merge / style helpers ──────────────────────────────
+
+export const WS_MIN_COL_W = 45;
+export const WS_MAX_COL_W = 280;
+export const WS_MIN_ROW_H = 18;
+export const WS_MAX_ROW_H = 120;
+
+function clampColW(w: number): number {
+  return Math.min(WS_MAX_COL_W, Math.max(WS_MIN_COL_W, Math.round(w)));
+}
+
+function clampRowH(h: number): number {
+  return Math.min(WS_MAX_ROW_H, Math.max(WS_MIN_ROW_H, Math.round(h)));
+}
+
+function mergeOverlaps(
+  a: MergedCell,
+  b: { r0: number; c0: number; r1: number; c1: number },
+): boolean {
+  return !(
+    a.endRow < b.r0
+    || a.startRow > b.r1
+    || a.endCol < b.c0
+    || a.startCol > b.c1
+  );
+}
+
+/** Merge a rectangular selection; keeps top-left value and style. */
+export function wsMergeCells(
+  ws: Worksheet,
+  rect: { r0: number; c0: number; r1: number; c1: number },
+): Partial<Worksheet> {
+  const r0 = Math.min(rect.r0, rect.r1);
+  const r1 = Math.max(rect.r0, rect.r1);
+  const c0 = Math.min(rect.c0, rect.c1);
+  const c1 = Math.max(rect.c0, rect.c1);
+  if (r0 === r1 && c0 === c1) return {};
+
+  const grid = cloneGrid(ws.grid ?? []);
+  const topLeft = grid[r0]?.[c0] ?? '';
+  for (let r = r0; r <= r1; r += 1) {
+    while (grid.length <= r) grid.push([]);
+    for (let c = c0; c <= c1; c += 1) {
+      while (grid[r].length <= c) grid[r].push('');
+      if (r === r0 && c === c0) grid[r][c] = topLeft;
+      else grid[r][c] = '';
+    }
+  }
+
+  const box = { r0, c0, r1, c1 };
+  const merges = (ws.mergedCells ?? []).filter((m) => !mergeOverlaps(m, box));
+  merges.push({ startRow: r0, startCol: c0, endRow: r1, endCol: c1 });
+
+  const styles = { ...(ws.styles ?? {}) };
+  const anchorKey = a1(r0, c0);
+  const anchorStyle = { ...(styles[anchorKey] ?? {}) };
+  styles[anchorKey] = anchorStyle;
+  for (let r = r0; r <= r1; r += 1) {
+    for (let c = c0; c <= c1; c += 1) {
+      if (r === r0 && c === c0) continue;
+      delete styles[a1(r, c)];
+    }
+  }
+
+  return { grid, mergedCells: merges, styles };
+}
+
+/** Unmerge any merged region overlapping the selection anchor. */
+export function wsUnmergeCells(
+  ws: Worksheet,
+  rect: { r0: number; c0: number; r1: number; c1: number },
+): Partial<Worksheet> {
+  const r0 = Math.min(rect.r0, rect.r1);
+  const c0 = Math.min(rect.c0, rect.c1);
+  const r1 = Math.max(rect.r0, rect.r1);
+  const c1 = Math.max(rect.c0, rect.c1);
+  const box = { r0, c0, r1, c1 };
+  const merges = (ws.mergedCells ?? []).filter((m) => !mergeOverlaps(m, box));
+  if (merges.length === (ws.mergedCells ?? []).length) return {};
+  return { mergedCells: merges };
+}
+
+/** Patch per-cell style properties on selected cells. */
+export function wsSetStyle(
+  ws: Worksheet,
+  cells: Array<{ r: number; c: number }>,
+  patch: Partial<ExcelCellStyle>,
+): Partial<Worksheet> {
+  const styles: Record<string, ExcelCellStyle> = { ...(ws.styles ?? {}) };
+  for (const { r, c } of cells) {
+    const key = a1(r, c);
+    const cur = { ...(styles[key] ?? {}) };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null || v === undefined) delete (cur as Record<string, unknown>)[k];
+      else (cur as Record<string, unknown>)[k] = v;
+    }
+    styles[key] = cur;
+  }
+  return { styles };
+}
+
+export function wsSetColWidth(ws: Worksheet, col: number, width: number): Partial<Worksheet> {
+  const colWidthsPx = [...(ws.colWidthsPx ?? [])];
+  while (colWidthsPx.length <= col) colWidthsPx.push(DEFAULT_COL);
+  colWidthsPx[col] = clampColW(width);
+  return { colWidthsPx };
+}
+
+export function wsSetRowHeight(ws: Worksheet, row: number, height: number): Partial<Worksheet> {
+  const rowHeightsPx = [...(ws.rowHeightsPx ?? [])];
+  while (rowHeightsPx.length <= row) rowHeightsPx.push(DEFAULT_ROW);
+  rowHeightsPx[row] = clampRowH(height);
+  return { rowHeightsPx };
+}
+
+function estimateColWidth(text: string, wrap: boolean, fontSize = 12): number {
+  const t = (text ?? '').trim();
+  if (!t) return WS_MIN_COL_W;
+  if (wrap && t.length > 24) return Math.min(WS_MAX_COL_W, 140);
+  const pxPerChar = fontSize >= 11 ? 8 : 7;
+  return clampColW(t.length * pxPerChar + 16);
+}
+
+function estimateRowHeight(text: string, colWidth: number, wrap: boolean, fontSize = 12): number {
+  const t = (text ?? '').trim();
+  if (!t || !wrap) return WS_MIN_ROW_H;
+  const charsPerLine = Math.max(8, Math.floor(colWidth / (fontSize >= 11 ? 7.5 : 6.5)));
+  const lines = Math.ceil(t.length / charsPerLine);
+  return clampRowH(Math.max(WS_MIN_ROW_H, lines * (fontSize + 6) + 4));
+}
+
+/** Auto-fit column widths from cell text (clamped). */
+export function wsAutoFitColumns(ws: Worksheet, cols: number[]): Partial<Worksheet> {
+  const grid = ws.grid ?? [];
+  const styles = ws.styles ?? {};
+  const nCols = Math.max(cols.length ? Math.max(...cols) + 1 : 0, ...(grid.map((r) => r.length)));
+  const colWidthsPx = [...(ws.colWidthsPx ?? [])];
+  while (colWidthsPx.length < nCols) colWidthsPx.push(DEFAULT_COL);
+
+  for (const c of cols) {
+    let maxW = WS_MIN_COL_W;
+    for (let r = 0; r < grid.length; r += 1) {
+      const st = styles[a1(r, c)];
+      const w = estimateColWidth(grid[r]?.[c] ?? '', !!st?.wrap, st?.fontSize ?? 12);
+      maxW = Math.max(maxW, w);
+    }
+    colWidthsPx[c] = clampColW(maxW);
+  }
+  return { colWidthsPx };
+}
+
+/** Auto-fit row heights from wrapped text in selected rows. */
+export function wsAutoFitRows(ws: Worksheet, rows: number[]): Partial<Worksheet> {
+  const grid = ws.grid ?? [];
+  const styles = ws.styles ?? {};
+  const colWidthsPx = ws.colWidthsPx ?? [];
+  const rowHeightsPx = [...(ws.rowHeightsPx ?? [])];
+  const nRows = Math.max(rows.length ? Math.max(...rows) + 1 : 0, grid.length);
+  while (rowHeightsPx.length < nRows) rowHeightsPx.push(DEFAULT_ROW);
+
+  for (const r of rows) {
+    let maxH = WS_MIN_ROW_H;
+    const nCols = grid[r]?.length ?? 0;
+    for (let c = 0; c < nCols; c += 1) {
+      const st = styles[a1(r, c)];
+      const colW = colWidthsPx[c] ?? DEFAULT_COL;
+      const h = estimateRowHeight(grid[r]?.[c] ?? '', colW, !!st?.wrap, st?.fontSize ?? 12);
+      maxH = Math.max(maxH, h);
+    }
+    rowHeightsPx[r] = clampRowH(maxH);
+  }
+  return { rowHeightsPx };
+}
+
+/** Auto-fit both dimensions for cells in a rectangular range. */
+export function wsAutoFitRange(
+  ws: Worksheet,
+  rect: { r0: number; c0: number; r1: number; c1: number },
+): Partial<Worksheet> {
+  const r0 = Math.min(rect.r0, rect.r1);
+  const r1 = Math.max(rect.r0, rect.r1);
+  const c0 = Math.min(rect.c0, rect.c1);
+  const c1 = Math.max(rect.c0, rect.c1);
+  const cols = Array.from({ length: c1 - c0 + 1 }, (_, i) => c0 + i);
+  const rows = Array.from({ length: r1 - r0 + 1 }, (_, i) => r0 + i);
+  const colPatch = wsAutoFitColumns(ws, cols);
+  const rowPatch = wsAutoFitRows({ ...ws, ...colPatch }, rows);
+  return { ...colPatch, ...rowPatch };
+}

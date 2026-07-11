@@ -4,6 +4,7 @@ import {
   attachCsv,
   exportPackage,
   exportPdf,
+  exportWorksheetXlsx,
   fetchExportWarnings,
   getProject,
   importWorksheets,
@@ -478,6 +479,33 @@ export default function App() {
     pageRebuildUndo();
   }, [pageRebuildUndo]);
 
+  const replaceCurrentPageSource = useCallback(() => {
+    setImportWsOpen({
+      afterPageId: activePageRef.current?.id ?? undefined,
+      replacePageId: activePageRef.current?.id ?? undefined,
+      replacePageTitle: activePageRef.current?.sheetTitle,
+    });
+  }, []);
+
+  const exportCurrentSourceSheet = useCallback(async () => {
+    const p = projectRef.current;
+    const page = activePageRef.current;
+    if (!p || !page?.linkedWorksheetId) return;
+    try {
+      const blob = await exportWorksheetXlsx(p.id, { worksheetId: page.linkedWorksheetId });
+      const ws = p.worksheets.find((w) => w.id === page.linkedWorksheetId);
+      const base = (ws?.name || ws?.sourceSheet || page.sheetTitle || 'source').replace(/[^\w.\- ]+/g, '_').trim() || 'source';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${base}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      window.alert(`Export failed: ${err}`);
+    }
+  }, []);
+
   /** Rebuild the active page's normalized blocks from its linked worksheet. */
   const rebuildCurrentPageFromSource = useCallback(async () => {
     document.dispatchEvent(new CustomEvent('singh360:capture-active-editors'));
@@ -531,31 +559,9 @@ export default function App() {
       const worksheets = prev.worksheets.map((ws) =>
         ws.id === wsId ? { ...ws, ...patch } : ws,
       );
-      const ws = worksheets.find((w) => w.id === wsId);
-      const linked = prev.pages.filter((p) => p.linkedWorksheetId === wsId);
-      const isExact = linked.some((p) => p.renderMode === 'excel_exact');
-
-      let pages = prev.pages;
-      if (isExact && ws) {
-        if (opts?.structural) {
-          pages = regenerateExcelGroup({ ...prev, worksheets }, wsId);
-        } else {
-          pages = prev.pages.map((pg) => {
-            if (pg.linkedWorksheetId !== wsId || pg.renderMode !== 'excel_exact') return pg;
-            const b = (pg.blocks ?? [])[0];
-            if (!b || b.type !== 'excelRange') return pg;
-            return { ...pg, blocks: [refreshBlockFromWorksheet(b, ws)] };
-          });
-        }
-      } else if (ws) {
-        if (isCoverWorksheet({ ...prev, worksheets }, wsId)) {
-          return applyCoverSourceTruth({ ...prev, worksheets }, wsId);
-        }
-        pages = prev.pages.map((pg) =>
-          pg.linkedWorksheetId === wsId ? refreshPageFromSource(pg, ws) : pg,
-        );
-      }
-      return { ...prev, worksheets, pages };
+      // Source edits update worksheet payload only — normalized pages refresh on
+      // explicit Rebuild This Page From Source (or when leaving Source view).
+      return { ...prev, worksheets };
     });
   }, [setProjectSync]);
 
@@ -1606,6 +1612,8 @@ export default function App() {
           canRebuildFromSource={!!activePage?.linkedWorksheetId}
           onRestorePageRebuild={restoreLastPageRebuild}
           canRestorePageRebuild={canRestorePageRebuild}
+          onReplacePageSource={replaceCurrentPageSource}
+          onExportPageSource={() => void exportCurrentSourceSheet()}
           activeTool={activeTool}
           snap={snap}
           overlayMode={overlayMode}

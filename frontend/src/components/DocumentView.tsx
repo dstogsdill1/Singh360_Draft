@@ -59,6 +59,8 @@ interface Props {
   onScaleChange: (scale: number) => void;
   onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
+  onReplacePageSource?: () => void;
+  onExportPageSource?: () => void;
 }
 
 export default function DocumentView({
@@ -94,6 +96,8 @@ export default function DocumentView({
   onScaleChange,
   onWorksheetChange,
   onCanvasChange,
+  onReplacePageSource,
+  onExportPageSource,
 }: Props) {
   const worksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -221,6 +225,8 @@ export default function DocumentView({
                 onDuplicateBlock={onDuplicateBlock}
                 onWorksheetChange={onWorksheetChange}
                 onCanvasChange={onCanvasChange}
+                onReplacePageSource={onReplacePageSource}
+                onExportPageSource={onExportPageSource}
               />
             </SheetFrame>
           </div>
