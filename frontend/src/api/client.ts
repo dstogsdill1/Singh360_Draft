@@ -224,6 +224,13 @@ export async function savePages(projectId: string, pages: PageModel[]): Promise<
   if (!res.ok) throw new Error(await res.text());
 }
 
+export async function fetchExportWarnings(projectId: string): Promise<ExportWarning[]> {
+  const res = await fetch(`/api/projects/${projectId}/export/warnings`);
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data.warnings ?? [];
+}
+
 export async function exportPdf(
   projectId: string,
   paper?: { width: number; height: number },
@@ -233,14 +240,6 @@ export async function exportPdf(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(paper ?? {}),
   });
-  if (res.status === 409) {
-    const data = await res.json();
-    const err = new Error(data.error || 'PDF export blocked by QA gate') as Error & {
-      warnings?: ExportWarning[];
-    };
-    err.warnings = data.warnings;
-    throw err;
-  }
   if (!res.ok) throw new Error(await res.text());
   return res.blob();
 }

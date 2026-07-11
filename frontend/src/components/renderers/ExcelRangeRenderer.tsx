@@ -6,6 +6,8 @@ interface Props {
   block: PageBlock;
   /** Vertical space (px) consumed above the range by the orange title band. */
   reservedTop?: number;
+  /** When true (PDF export), suppress on-page diagnostic banners. */
+  exporting?: boolean;
 }
 
 // Small insets so the range never touches the sheet frame / title block.
@@ -137,7 +139,7 @@ function cellCss(
  * restyled with app defaults; the range is scaled proportionally to fit the
  * printable body (no scrollbars, no distortion).
  */
-export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
+export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting = false }: Props) {
   const grid = block.grid ?? [];
   const styles = block.styles ?? {};
   const colWidths = block.colWidths ?? [];
@@ -243,7 +245,7 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0 }: Props) {
 
   return (
     <div className="np-xr">
-      {block.layoutWarnings?.length ? (
+      {block.layoutWarnings?.length && !exporting ? (
         <div className="np-xr-warning">
           {block.layoutWarnings.join(' ')}
         </div>

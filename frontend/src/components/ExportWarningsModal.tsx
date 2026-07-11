@@ -1,21 +1,26 @@
+import { useState } from 'react';
 import type { ExportWarning } from '../api/client';
 
 interface Props {
   warnings: ExportWarning[];
   onClose: () => void;
+  onExportAnyway: () => void;
 }
 
-export default function ExportWarningsModal({ warnings, onClose }: Props) {
+export default function ExportWarningsModal({ warnings, onClose, onExportAnyway }: Props) {
+  const [acknowledged, setAcknowledged] = useState(false);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Export Blocked — Fix Before PDF</h2>
+          <h2>Export Warnings — Review Before PDF</h2>
           <button className="modal-x" onClick={onClose} title="Close">×</button>
         </div>
         <div className="modal-body">
           <p className="cw-note">
-            PDF export is blocked until these issues are resolved. Each row lists the page, the problem, and a suggested fix.
+            The PDF can be exported, but these issues were detected. Review the list below.
+            You can cancel and fix them, or continue exporting anyway.
           </p>
           <table className="op-table">
             <thead>
@@ -37,9 +42,27 @@ export default function ExportWarningsModal({ warnings, onClose }: Props) {
               ))}
             </tbody>
           </table>
+          <label className="export-warn-ack" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 14 }}>
+            <input
+              type="checkbox"
+              checked={acknowledged}
+              onChange={(e) => setAcknowledged(e.target.checked)}
+            />
+            <span>I understand these warnings and want to export anyway.</span>
+          </label>
         </div>
         <div className="modal-foot">
-          <button className="btn btn-primary" onClick={onClose}>Close</button>
+          <button className="btn" onClick={onClose}>Cancel / Go Back</button>
+          <button
+            className="btn btn-primary"
+            disabled={!acknowledged}
+            onClick={() => {
+              if (!acknowledged) return;
+              onExportAnyway();
+            }}
+          >
+            Export Anyway
+          </button>
         </div>
       </div>
     </div>

@@ -55,7 +55,9 @@ function PrintPageShell({ pageId, wPx, hPx, scale, children }: { pageId: string;
  * backend export can wait for a deterministic ready signal.
  */
 export default function PrintView({ project }: Props) {
-  const includedPages = project?.pages.filter((p) => p.include) ?? [];
+  const includedPages = (project?.pages.filter((p) => p.include) ?? [])
+    .slice()
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   useEffect(() => {
     if (!project) return;

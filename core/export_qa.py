@@ -1,11 +1,13 @@
-"""core/export_qa.py — PHASE H: PDF export QA gate.
+"""core/export_qa.py — PDF export QA warnings (non-blocking).
 
-Scans project page render diagnostics before export completes and returns a
-structured warning list. Export is hard-blocked when any warning is present
-(per user choice): the caller (server.py) returns HTTP 409 with the list.
+Scans project page render diagnostics before export and returns a structured
+warning list. The export endpoint always generates the PDF unless the project
+is missing, has no pages, or the render engine fails — layout/index warnings
+are surfaced for user review with an optional override in the UI.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from core.page_composer import BODY_W, page_render_diagnostics
@@ -106,8 +108,56 @@ def _index_included_codes(project: dict[str, Any]) -> list[tuple[str, str, str]]
     return entries
 
 
+def _is_generated_continuation(page: dict[str, Any]) -> bool:
+    """True for auto-generated continuation pages (EMS 16.0a, 17.0a, …)."""
+    if page.get("generatedContinuation"):
+        return True
+    code = (page.get("displaySheetCode") or page.get("sheetCode") or "").strip()
+    if page.get("continuationOf"):
+        return True
+    # Continuation codes end with a single lowercase letter suffix (EMS 16.0a).
+    if code and re.search(r"[a-z]$", code) and re.search(r"\d", code):
+        base = re.sub(r"[a-z]$", "", code, flags=re.IGNORECASE)
+        if base != code:
+            return True
+    return False
+
+
+def _index_codes_from_rendered_page(project: dict[str, Any]) -> set[str]:
+    """Sheet codes listed on the exported Sheet Index page grid (includes continuations)."""
+    from core.workbook_importer import _find_index_header_row, _header_map, _index_row_sheet_code
+
+    index_page = next(
+        (p for p in project.get("pages", []) if p.get("pageType") == "index" and p.get("include", True)),
+        None,
+    )
+    if not index_page:
+        return set()
+    block = next((b for b in (index_page.get("blocks") or []) if b.get("type") == "excelRange"), None)
+    if not block:
+        return set()
+    grid = block.get("grid") or []
+    if not grid:
+        return set()
+    header_idx = _find_index_header_row(grid)
+    col = _header_map([str(x) for x in grid[header_idx]])
+    code_col = col.get("sheet_code", -1)
+    include_col = col.get("include", -1)
+    codes: set[str] = set()
+    for row in grid[header_idx + 1 :]:
+        if include_col >= 0 and include_col < len(row):
+            from core.workbook_importer import _included
+
+            if not _included(str(row[include_col]), "", ""):
+                continue
+        code = _index_row_sheet_code(row, code_col)
+        if code:
+            codes.add(code)
+    return codes
+
+
 def compute_export_warnings(project: dict[str, Any]) -> list[dict[str, str]]:
-    """Return export-blocking warnings: pageCode, pageTitle, issue, suggestedFix."""
+    """Return export QA warnings: pageCode, pageTitle, issue, suggestedFix."""
     pages = [p for p in project.get("pages", []) if p.get("include", True)]
     diag_by_order = {d.get("outputOrder"): d for d in page_render_diagnostics(pages)}
     warnings: list[dict[str, str]] = []
@@ -190,12 +240,18 @@ def compute_export_warnings(project: dict[str, Any]) -> list[dict[str, str]]:
                         "suggestedFix": "Ensure the worksheet is included in 00_INDEX with Include=YES and exists in the workbook.",
                     }
                 )
+        rendered_index_codes = _index_codes_from_rendered_page(project)
+        effective_index_codes = index_codes | rendered_index_codes
+
         for p in pages:
             pcode = (p.get("displaySheetCode") or p.get("sheetCode") or "").strip()
             tab = (p.get("sheetTab") or "").strip().lower()
-            if pcode and index_codes and pcode not in index_codes:
+            if pcode and effective_index_codes and pcode not in effective_index_codes:
                 # The index page itself is often absent from its own table.
                 if p.get("pageType") == "index" or tab in ("00_index", "index"):
+                    continue
+                # Auto-generated continuations (EMS 16.0a) are not source rows.
+                if _is_generated_continuation(p):
                     continue
                 warnings.append(
                     {

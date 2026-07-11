@@ -2,6 +2,7 @@ import type { PageBlock } from '../../model/types';
 
 interface Props {
   block: PageBlock;
+  exporting?: boolean;
 }
 
 const DEFAULT_COL = 90;
@@ -61,7 +62,7 @@ function NetworkTable({
  * the Singh360 standard colors: dark page header (rendered above by
  * SheetTitleBand), orange section band, gray column headers, white gridlines.
  */
-export default function NetworkTwoUpRenderer({ block }: Props) {
+export default function NetworkTwoUpRenderer({ block, exporting = false }: Props) {
   const headers = block.headers || [];
   const colWidths = block.colWidths;
   const fontSize = block.fontSize || 7;
@@ -78,7 +79,7 @@ export default function NetworkTwoUpRenderer({ block }: Props) {
     const right = block.rightRows || [];
     return (
       <div className="np-idf-single" style={{ fontSize }}>
-        {block.layoutWarnings?.length ? (
+        {block.layoutWarnings?.length && !exporting ? (
           <div className="np-xr-warning">{block.layoutWarnings.join(' ')}</div>
         ) : null}
         {caption && <div className="np-idf-section-band">{caption}</div>}
@@ -97,7 +98,7 @@ export default function NetworkTwoUpRenderer({ block }: Props) {
   const rows = block.rows || [];
   return (
     <div className="np-idf-single" style={{ fontSize }}>
-      {block.layoutWarnings?.length ? (
+      {block.layoutWarnings?.length && !exporting ? (
         <div className="np-xr-warning">{block.layoutWarnings.join(' ')}</div>
       ) : null}
       {caption && <div className="np-idf-section-band">{caption}</div>}

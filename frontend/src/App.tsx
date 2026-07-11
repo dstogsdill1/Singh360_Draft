@@ -4,6 +4,7 @@ import {
   attachCsv,
   exportPackage,
   exportPdf,
+  fetchExportWarnings,
   getProject,
   importWorksheets,
   previewImportWorksheets,
@@ -114,6 +115,7 @@ export default function App() {
   const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportWarnings, setExportWarnings] = useState<ExportWarning[] | null>(null);
+  const pendingExportRef = useRef<{ width: number; height: number; downloadName: string } | null>(null);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateLibOpen, setTemplateLibOpen] = useState(false);
   const [templateLibManageOnly, setTemplateLibManageOnly] = useState(false);
@@ -1188,22 +1190,46 @@ export default function App() {
     if (!ok) return;
     const base = proj.metadata.drawingPackageFileName || proj.projectDisplayName || proj.metadata.projectName || proj.id;
     const revSuffix = rev.updateRevision ? `_${rev.newRevision.replace(/\s+/g, '')}` : '';
+    const downloadName = `${base}${revSuffix}.pdf`;
     try {
+      const warnings = await fetchExportWarnings(proj.id);
+      if (warnings.length > 0) {
+        pendingExportRef.current = { width, height, downloadName };
+        setExportWarnings(warnings);
+        return;
+      }
       const blob = await exportPdf(proj.id, { width, height });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${base}${revSuffix}.pdf`;
+      a.download = downloadName;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      const e = err as Error & { warnings?: ExportWarning[] };
-      if (e.warnings?.length) {
-        setExportWarnings(e.warnings);
-      } else {
-        console.error('PDF export failed', err);
-        window.alert(`PDF export failed: ${String(err)}`);
-      }
+      console.error('PDF export failed', err);
+      window.alert(`PDF export failed: ${String(err)}`);
+    }
+  };
+
+  const onExportPdfDespiteWarnings = async () => {
+    const pending = pendingExportRef.current;
+    if (!project || !pending) {
+      setExportWarnings(null);
+      return;
+    }
+    try {
+      const blob = await exportPdf(project.id, { width: pending.width, height: pending.height });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = pending.downloadName;
+      a.click();
+      URL.revokeObjectURL(url);
+      pendingExportRef.current = null;
+      setExportWarnings(null);
+    } catch (err) {
+      console.error('PDF export failed', err);
+      window.alert(`PDF export failed: ${String(err)}`);
     }
   };
 
@@ -1714,7 +1740,14 @@ export default function App() {
       />
     )}
     {exportWarnings && (
-      <ExportWarningsModal warnings={exportWarnings} onClose={() => setExportWarnings(null)} />
+      <ExportWarningsModal
+        warnings={exportWarnings}
+        onClose={() => {
+          pendingExportRef.current = null;
+          setExportWarnings(null);
+        }}
+        onExportAnyway={() => void onExportPdfDespiteWarnings()}
+      />
     )}
     {saveTemplateOpen && activePage && (
       <SavePageTemplateModal

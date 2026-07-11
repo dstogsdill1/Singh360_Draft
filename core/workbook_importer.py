@@ -969,20 +969,26 @@ _IDF_REQUIRED_COLS = (
 
 
 def _idf_col_index(headers: list[str], *keys: str) -> int | None:
-    low = [str(h or "").strip().lower() for h in headers]
+    low = [_normalize_header_cell(h) for h in headers]
     for i, h in enumerate(low):
+        if not h:
+            continue
         if any(k in h for k in keys):
             return i
     return None
 
 
 def _idf_header_row(grid: list[list[str]]) -> int | None:
-    """First row (within the leading 6) that looks like a Port/Label header."""
-    for r, row in enumerate(grid[:6]):
-        low = [str(c or "").strip().lower() for c in row]
-        has_port = any("port" in c for c in low)
-        has_id = any(("label" in c) or ("device" in c) or ("drop" in c) for c in low)
-        if has_port and has_id:
+    """First row that looks like a Port/Label or Port/Controller-ID network header."""
+    for r, row in enumerate(grid[:12]):
+        low = [_normalize_header_cell(c) for c in row]
+        has_port = any("port" in c for c in low if c)
+        has_label = any(("label" in c) or ("device" in c) or ("drop" in c) for c in low if c)
+        has_ctrl = any(("controller" in c) or ("ip address" in c) or ("ip addr" in c) for c in low if c)
+        has_network = any("network" in c for c in low if c)
+        if has_port and (has_label or has_ctrl or has_network):
+            return r
+        if has_ctrl and has_network:
             return r
     return None
 
@@ -1032,10 +1038,9 @@ def _idf_columns(
         ("Cable", (idx["cable"],) if idx["cable"] is not None else ()),
         ("Notes", (idx["notes"],) if idx["notes"] is not None else ()),
     ]
-    # Only keep a required column when the source actually has that header
-    # (never invent a column) — Port/Label/Device/Notes always render even
-    # if empty, matching prior behavior for the essential identity columns.
-    cols = [c for c in cols if c[1] or c[0] in ("Port", "Label", "Device / Drop", "Notes")]
+    # Only keep a required column when the source maps to it OR it is one of
+    # the default RDM/IDF export columns (always show the column shell).
+    cols = [c for c in cols if c[1] or c[0] in _IDF_REQUIRED_COLS]
 
     if show_terminated_by and idx["terminated"] is not None:
         cols.append(("Terminated By", (idx["terminated"],)))
@@ -1315,9 +1320,9 @@ def _token_column_min_width(longest_token_len: int, font_px: int = 12) -> int:
     avg_char_w = max(5.5, font_px * 0.52)
     return int(round(longest_token_len * avg_char_w)) + 16
 _STATUS_COL_HEAD_KEYWORDS = ("status", "state", "phase")
-_SECTION_COL_HEAD_KEYWORDS = ("section", "phase", "category", "item", "milestone")
+_SECTION_COL_HEAD_KEYWORDS = ("section", "phase", "category", "item", "milestone", "topic", "step")
 _NARRATIVE_COL_HEAD_KEYWORDS = (
-    "scope", "language", "description", "instruction", "deliverable", "detail", "narrative",
+    "scope", "language", "description", "instruction", "deliverable", "detail", "narrative", "guideline",
 )
 _NOTES_COL_HEAD_KEYWORDS = ("notes", "remark", "comment")
 
@@ -1465,6 +1470,8 @@ def _preferred_col_widths(
     """Deterministic normalized column sizing before placement/export."""
     if layout_profile == "front_matter_narrative_table":
         return _preferred_narrative_col_widths(grid)
+    if layout_profile in ("front_matter_table", "instruction_table") and family == "text":
+        return _preferred_text_instruction_col_widths(grid)
     n_cols = max((len(r) for r in grid), default=0)
     if not n_cols:
         return []
@@ -1599,15 +1606,27 @@ def _apply_table_geometry(
         block["layoutProfile"] = "front_matter_narrative_table"
         block["minScale"] = max(float(block.get("minScale") or EXCEL_MIN_SCALE), NARRATIVE_MIN_FONT_SIZE / 9.0)
     elif profile in ("front_matter_table", "instruction_table") and family == "text":
-        # PHASE B fix: Guidelines (front_matter_table) and Field Instructions
-        # (instruction_table) get the same 8.5pt preferred / 7.5pt absolute
-        # floor as narrative tables, so they can no longer be silently
-        # shrunk below a readable size.
         font_px = 12
         block["bodyFontPx"] = 12
         block["bodyFontPt"] = NARRATIVE_FONT_SIZE
         block["minFontPt"] = NARRATIVE_MIN_FONT_SIZE
         block["minScale"] = max(float(block.get("minScale") or EXCEL_MIN_SCALE), NARRATIVE_MIN_FONT_SIZE / 9.0)
+        header = grid[_find_header_row_index(grid)] if grid else []
+        section_cols = [
+            i for i in range(len(widths))
+            if _col_header_class(str(header[i]) if i < len(header) else "") in ("section", "other")
+            and i < len(widths) and widths[i] <= 120
+        ]
+        narrative_cols = [
+            i for i in range(len(widths))
+            if _col_header_class(str(header[i]) if i < len(header) else "") == "narrative"
+        ]
+        nowrap = set(section_cols)
+        block["nowrapColumns"] = sorted(nowrap)
+        block["preventStackedLabels"] = True
+        block["wordWrapColumns"] = sorted(narrative_cols) if narrative_cols else sorted(
+            i for i in range(len(widths)) if i not in nowrap
+        )
     block["rowHeights"] = _estimated_row_heights(
         grid, block.get("colWidths") or widths, family, header_rows, font_px=font_px,
     )
@@ -1661,6 +1680,135 @@ def _print_area_last_col_row(print_area: str | None) -> tuple[int, int] | None:
         return max_col - 1, max_row - 1
     except Exception:
         return None
+
+
+def _normalize_header_cell(h: Any) -> str:
+    return re.sub(r"\s+", " ", str(h or "").strip()).lower()
+
+
+def _drop_fully_blank_columns(
+    grid: list[list[str]],
+    styles_rc: dict[str, Any],
+    merges: list[dict[str, Any]],
+    header_rows: int,
+) -> tuple[list[list[str]], dict[str, Any], list[dict[str, Any]]]:
+    """Drop interior/trailing columns that are blank across the full grid."""
+    n_rows = len(grid)
+    n_cols = max((len(r) for r in grid), default=0)
+    if n_cols <= 1:
+        return grid, styles_rc, merges
+
+    keep: list[int] = []
+    for c in range(n_cols):
+        has_value = any(
+            c < len(grid[r]) and str(grid[r][c] or "").strip()
+            for r in range(n_rows)
+        )
+        has_style = any(_meaningful_style(styles_rc.get(f"{r}:{c}")) for r in range(n_rows))
+        if has_value or has_style:
+            keep.append(c)
+
+    if len(keep) == n_cols:
+        return grid, styles_rc, merges
+
+    col_map = {old: new for new, old in enumerate(keep)}
+    new_grid = [[row[c] if c < len(row) else "" for c in keep] for row in grid]
+    new_styles: dict[str, Any] = {}
+    for key, val in styles_rc.items():
+        try:
+            rs, cs = key.split(":")
+            r, c = int(rs), int(cs)
+        except (ValueError, AttributeError):
+            continue
+        if c in col_map:
+            new_styles[f"{r}:{col_map[c]}"] = val
+    new_merges: list[dict[str, Any]] = []
+    for m in merges:
+        sc, ec = m.get("startCol", 0), m.get("endCol", 0)
+        if sc not in col_map or ec not in col_map:
+            continue
+        nm = dict(m)
+        nm["startCol"] = col_map[sc]
+        nm["endCol"] = col_map[ec]
+        new_merges.append(nm)
+    return new_grid, new_styles, new_merges
+
+
+def _drop_blank_spacer_rows(
+    grid: list[list[str]],
+    styles_rc: dict[str, Any],
+    header_rows: int,
+) -> list[list[str]]:
+    """Drop fully blank spacer rows below the header band (not section dividers)."""
+    if len(grid) <= header_rows + 1:
+        return grid
+    out = grid[:header_rows]
+    for r in range(header_rows, len(grid)):
+        row = grid[r]
+        if any(str(v or "").strip() for v in row):
+            out.append(row)
+            continue
+        if any(_meaningful_style(styles_rc.get(f"{r}:{c}")) for c in range(len(row))):
+            out.append(row)
+    return out
+
+
+def _compact_text_instruction_block(block: dict[str, Any]) -> None:
+    """Normalize guideline/instruction tables: drop blank columns and spacers."""
+    grid = block.get("grid") or []
+    if not grid:
+        return
+    styles_rc = block.get("styles") or {}
+    merges = block.get("mergedCells") or []
+    header_rows = int(block.get("headerRowCount") or 1)
+    grid, styles_rc, merges = _drop_fully_blank_columns(grid, styles_rc, merges, header_rows)
+    grid = _drop_blank_spacer_rows(grid, styles_rc, header_rows)
+    block["grid"] = grid
+    block["styles"] = styles_rc
+    block["mergedCells"] = merges
+
+
+def _preferred_text_instruction_col_widths(grid: list[list[str]]) -> list[int]:
+    """Topic/Step 15–25%, instruction/guideline text 65–80% of body width."""
+    n_cols = max((len(r) for r in grid), default=0)
+    if not n_cols:
+        return []
+    target = int(BODY_W * 0.92)
+    header_row = _find_header_row_index(grid)
+    header = grid[header_row] if grid else []
+    classes = [_col_header_class(str(header[c]) if c < len(header) else "") for c in range(n_cols)]
+
+    if n_cols == 2:
+        narrow, wide = int(target * 0.22), int(target * 0.70)
+        c0 = classes[0]
+        if c0 in ("narrative", "other") and classes[1] in ("section", "other"):
+            widths = [wide, narrow]
+        else:
+            widths = [narrow, wide]
+    else:
+        shares: list[float] = []
+        for cls in classes:
+            if cls == "section":
+                shares.append(0.20)
+            elif cls == "narrative":
+                shares.append(0.72)
+            elif cls == "status":
+                shares.append(0.08)
+            elif cls == "notes":
+                shares.append(0.10)
+            else:
+                shares.append(0.15)
+        total = sum(shares) or 1.0
+        widths = [max(48, int(round(target * s / total))) for s in shares]
+        diff = target - sum(widths)
+        if diff and widths:
+            widest = max(range(n_cols), key=lambda i: shares[i])
+            widths[widest] += diff
+
+    lo = int(BODY_W * 0.85)
+    if sum(widths) < lo:
+        widths[-1] += lo - sum(widths)
+    return widths
 
 
 def _trim_trailing_blank_ranges(
@@ -2023,6 +2171,8 @@ def import_workbook(
         elif use_exact:
             render_ws = _filter_index_payload_for_output(ws) if page_type == "index" else ws
             exact_block = _excel_range_block(render_ws, f"{ws['id']}_xr", split_settings)
+            if family == "text" and layout_profile in ("front_matter_table", "instruction_table"):
+                _compact_text_instruction_block(exact_block)
             if "lighting" in f"{ws['name']} {title}".lower():
                 exact_block["minScale"] = max(float(exact_block.get("minScale") or EXCEL_MIN_SCALE), 0.58)
             _apply_table_geometry(exact_block, family, page_type, layout_profile)

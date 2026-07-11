@@ -146,9 +146,9 @@ export default function NormalizedPage({
             case 'companyInfo':
               return <CompanyInfoRenderer key={b.id} block={b} project={project} />;
             case 'excelRange':
-              return <ExcelRangeRenderer key={b.id} block={b} reservedTop={bandReserve} />;
+              return <ExcelRangeRenderer key={b.id} block={b} reservedTop={bandReserve} exporting={exporting} />;
             case 'idfNetworkTable':
-              return <NetworkTwoUpRenderer key={b.id} block={b} />;
+              return <NetworkTwoUpRenderer key={b.id} block={b} exporting={exporting} />;
             case 'table':
               return <TablePageRenderer key={b.id} block={b} onChange={patch} onDuplicateTable={() => onDuplicateBlock(page.id, b.id)} />;
             case 'matrix':

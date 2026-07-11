@@ -1850,6 +1850,17 @@ def delete_project(project_id: str):
 # PDF export — 11x17 Tabloid via Playwright headless Chromium
 # --------------------------------------------------------------------------
 
+@app.get("/api/projects/<project_id>/export/warnings")
+def export_warnings_preview(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    from core.export_qa import compute_export_warnings
+
+    doc = ensure_project_shape(doc)
+    return jsonify({"ok": True, "warnings": compute_export_warnings(doc)})
+
+
 @app.post("/api/export/pdf/<project_id>")
 @app.post("/api/projects/<project_id>/export/pdf")
 def export_pdf(project_id: str):
@@ -1857,18 +1868,10 @@ def export_pdf(project_id: str):
     if doc is None:
         abort(404)
 
-    from core.export_qa import compute_export_warnings
-
     doc = ensure_project_shape(doc)
-    export_warnings = compute_export_warnings(doc)
-    if export_warnings:
-        return jsonify(
-            {
-                "ok": False,
-                "error": "PDF export blocked by QA gate — fix the issues below before exporting.",
-                "warnings": export_warnings,
-            }
-        ), 409
+    pages = [p for p in doc.get("pages", []) if p.get("include", True)]
+    if not pages:
+        return jsonify(_err("No included pages to export.")), 400
 
     body = request.get_json(silent=True) or {}
     try:
