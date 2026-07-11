@@ -60,6 +60,7 @@ interface Props {
     matchObjectSize: (w: 'width'|'height'|'both') => void;
     addLegend: (presetIds?: string[]) => void;
     addSymbolLegend: (config: SymbolLegendInsertConfig) => void;
+    normalizeSymbolSize: () => void;
     addBus: () => void;
   };
   onUploadFile: (file: File) => void;
@@ -362,6 +363,7 @@ export default function Ribbon({
               <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.matchObjectSize('width')} title="Match width to the first selected object">= Width</button>
               <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.matchObjectSize('height')} title="Match height to the first selected object">= Height</button>
               <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.matchObjectSize('both')} title="Match both width and height to the first selected object">= Both</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={canvas.normalizeSymbolSize} title="Resize selected symbols to standard marker size">Normalize Symbol Size</button>
             </Group>
           </>
         )}

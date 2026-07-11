@@ -146,7 +146,7 @@ CATEGORY_DEFAULTS: dict[str, CategoryDefault] = {
     "hvac": CategoryDefault("HVAC", "device", "device", 120, 64, "bottom", _lr_ports(True)),
     "lighting": CategoryDefault("Lighting", "device", "device", 108, 44, "bottom", _lr_ports(True)),
     "logos": CategoryDefault("Logos", "logo", "logo", 140, 60, "none", []),
-    "symbols_markers": CategoryDefault("Symbols / Markers", "connector", "marker", 40, 40, "bottom", []),
+    "symbols_markers": CategoryDefault("Symbols / Markers", "connector", "marker", 18, 18, "bottom", []),
     "reference_pages": CategoryDefault("Reference Pages", "reference", "reference", 320, 240, "none", []),
     "custom": CategoryDefault("Custom", "device", "device", 120, 42, "bottom", _lr_ports(False)),
 }

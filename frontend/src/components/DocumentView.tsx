@@ -55,7 +55,14 @@ interface Props {
   onRenamePageTitle: (id: string, title: string) => void;
   onPageContextMenu: (id: string, x: number, y: number) => void;
   onDropImageFile: (file: File) => void;
-  onDropComponent: (url: string, name: string, label: string | null, clientX: number, clientY: number) => void;
+  onDropComponent?: (
+    url: string,
+    name: string,
+    label: string | null,
+    clientX: number,
+    clientY: number,
+    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number },
+  ) => void;
   onScaleChange: (scale: number) => void;
   onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
@@ -188,8 +195,19 @@ export default function DocumentView({
           if (payload) {
             e.preventDefault();
             try {
-              const { url, name, label } = JSON.parse(payload) as { url: string; name: string; label: string | null };
-              onDropComponent(url, name, label ?? null, e.clientX, e.clientY);
+              const { url, name, label, category, defaultWidth, defaultHeight } = JSON.parse(payload) as {
+                url: string;
+                name: string;
+                label: string | null;
+                category?: string;
+                defaultWidth?: number;
+                defaultHeight?: number;
+              };
+              onDropComponent?.(url, name, label ?? null, e.clientX, e.clientY, {
+                category,
+                defaultWidth,
+                defaultHeight,
+              });
             } catch {
               /* ignore malformed payload */
             }

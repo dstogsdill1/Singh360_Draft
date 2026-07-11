@@ -645,16 +645,28 @@ export default function App() {
   };
 
   // Insert a library component (image asset) onto the ACTIVE page only.
-  const onInsertComponent = (name: string, url: string, label: string | null) => {
+  const onInsertComponent = (
+    name: string,
+    url: string,
+    label: string | null,
+    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number },
+  ) => {
     if (!isCanvasContext()) return;
     setOverlayMode(true);
-    canvasApiRef.current?.addComponent(url, name, label);
+    canvasApiRef.current?.addComponent(url, name, label, undefined, meta);
   };
 
-  const onDropComponent = (url: string, name: string, label: string | null, clientX: number, clientY: number) => {
+  const onDropComponent = (
+    url: string,
+    name: string,
+    label: string | null,
+    clientX: number,
+    clientY: number,
+    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number },
+  ) => {
     if (!isCanvasContext()) return;
     setOverlayMode(true);
-    canvasApiRef.current?.addComponent(url, name, label, { clientX, clientY });
+    canvasApiRef.current?.addComponent(url, name, label, { clientX, clientY }, meta);
   };
 
   // Explicit "Paste Image" via the app context menu. Uses the async Clipboard
@@ -1492,6 +1504,7 @@ export default function App() {
         matchObjectSize: (w) => canvasApiRef.current?.matchObjectSize(w),
         addLegend: (ids) => { setOverlayMode(true); canvasApiRef.current?.addLegend(ids); },
         addSymbolLegend: (config: SymbolLegendInsertConfig) => { setOverlayMode(true); canvasApiRef.current?.addSymbolLegend(config); },
+        normalizeSymbolSize: () => canvasApiRef.current?.normalizeSymbolSize(),
         addBus: () => setBusOpen(true),
       }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
@@ -1922,7 +1935,8 @@ export default function App() {
           { label: 'Copy', disabled: !selection, onClick: () => canvasApiRef.current?.copySelected() },
           { label: 'Paste', onClick: () => canvasApiRef.current?.pasteCopied() },
           { label: 'Delete', disabled: !selection, onClick: () => canvasApiRef.current?.deleteSelected() },
-          { label: 'Group', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.group() },
+          { label: 'Normalize Symbol Size', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.normalizeSymbolSize() },
+          { label: 'Group', disabled: !selection, onClick: () => canvasApiRef.current?.group() },
           { label: 'Ungroup', disabled: !selection, onClick: () => canvasApiRef.current?.ungroup() },
           { label: 'Bring to Front', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.bringToFront() },
           { label: 'Send to Back', disabled: !selection, onClick: () => canvasApiRef.current?.sendToBack() },

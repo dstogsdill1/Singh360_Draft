@@ -9,6 +9,9 @@ export interface SymbolLegendRowDraft {
   symbolUrl?: string;
   searchTerms?: string[];
   preferredRep?: 'edge' | 'bw' | 'source';
+  category?: string;
+  defaultWidth?: number;
+  defaultHeight?: number;
 }
 
 export interface SymbolLegendTemplate {
@@ -23,6 +26,11 @@ export interface SymbolLegendInsertRow {
   label: string;
   symbolUrl?: string;
   name?: string;
+  acronym?: string;
+  iconSize?: number;
+  category?: string;
+  defaultWidth?: number;
+  defaultHeight?: number;
 }
 
 export interface SymbolLegendInsertConfig {
@@ -36,15 +44,15 @@ function row(
   searchTerms: string[],
   acronym?: string,
 ): SymbolLegendRowDraft {
-  return { id, enabled: true, label, acronym, searchTerms };
+  return { id, enabled: true, label, acronym, searchTerms, preferredRep: 'bw' };
 }
 
 export const BUILTIN_SYMBOL_LEGEND_TEMPLATES: SymbolLegendTemplate[] = [
   {
     id: 'refrigeration_wicp',
-    name: 'Refrigeration / WICP Symbols',
+    name: 'Refrigeration Standard',
     category: 'refrigeration',
-    title: 'Symbol Legend',
+    title: 'SYMBOL LEGEND',
     rows: [
       row('li', 'LI — Leak Indicator Horn/Strobe', ['leak indicator', 'li leak'], 'LI'),
       row('da', 'DA — Door Open Horn/Strobe', ['door open', 'da door'], 'DA'),
@@ -52,35 +60,41 @@ export const BUILTIN_SYMBOL_LEGEND_TEMPLATES: SymbolLegendTemplate[] = [
       row('lsc', 'LSc — CO2 Refrigerant Leak Sensor', ['co2 refrigerant leak', 'lsc'], 'LSc'),
       row('es', 'ES — Entrapment Horn/Strobe', ['entrapment horn', 'es entrapment'], 'ES'),
       row('ea', 'EA — Entrapment Alarm', ['entrapment alarm', 'ea entrapment'], 'EA'),
-      row('t', 'T — BBQ Stack Temp Input', ['bbq stack', 'stack temp'], 'T'),
-      row('llv', 'LLV — Liquid Line Solenoid', ['liquid line solenoid', 'llv'], 'LLV'),
-      row('eev', 'EEV — Electronic Expansion Valve', ['electronic expansion', 'eev'], 'EEV'),
+    ],
+  },
+  {
+    id: 'signage',
+    name: 'Signage Standard',
+    category: 'signage',
+    title: 'SYMBOL LEGEND',
+    rows: [
+      row('person_trapped', 'Person Trapped Inside', ['person trapped inside', 'person trapped'], ''),
+      row('leak_dne', 'When Lit Leak Do Not Enter', ['leak do not enter', 'when lit'], ''),
+      row('help_trapped', 'HELP TRAPPED', ['help trapped'], ''),
     ],
   },
   {
     id: 'interior_devices',
-    name: 'Interior Device Location Symbols',
+    name: 'Interior Device Standard',
     category: 'interior',
-    title: 'Symbol Legend',
+    title: 'SYMBOL LEGEND',
     rows: [
       row('rdm_dm', 'RDM Data Manager', ['rdm data manager', 'data manager']),
       row('rdm_idf', 'RDM IDF', ['rdm idf', 'idf network']),
       row('wicp', 'WICP', ['wicp']),
       row('lcp', 'LCP', ['lcp panel', 'lcp']),
-      row('powerscout', 'PowerScout / Power Monitor', ['powerscout', 'power monitor']),
+      row('powerscout', 'Power Monitor', ['powerscout', 'power monitor', 'power scout']),
       row('orbit', 'Orbit TouchXL', ['orbit touch']),
-      row('amber', 'Amber Alarm Strobe', ['amber alarm strobe', 'amber strobe']),
-      row('red', 'Red Alarm Strobe', ['red alarm strobe', 'red strobe']),
-      row('crt', 'Computer Room Temp Probe', ['computer room temp']),
-      row('pharm', 'Pharmacy Temp Probe', ['pharmacy temp']),
-      row('bbq', 'BBQ Stack Temp Sensor', ['bbq stack temp']),
+      row('amber', 'Amber Strobe', ['amber alarm strobe', 'amber strobe']),
+      row('red', 'Red Strobe', ['red alarm strobe', 'red strobe']),
+      row('temp_probe', 'Temp Probe', ['temp probe', 'computer room temp', 'pharmacy temp']),
     ],
   },
   {
     id: 'exterior_devices',
     name: 'Exterior Device Location Symbols',
     category: 'exterior',
-    title: 'Symbol Legend',
+    title: 'SYMBOL LEGEND',
     rows: [
       row('pacu', 'PACU', ['pacu']),
       row('oau', 'OAU', ['oau outside air']),
@@ -97,7 +111,7 @@ export const BUILTIN_SYMBOL_LEGEND_TEMPLATES: SymbolLegendTemplate[] = [
     id: 'lighting',
     name: 'Lighting Symbols',
     category: 'lighting',
-    title: 'Symbol Legend',
+    title: 'SYMBOL LEGEND',
     rows: [
       row('lcp', 'LCP', ['lcp']),
       row('contactor', 'Lighting Contactor', ['lighting contactor', 'contactor']),
@@ -111,7 +125,7 @@ export const BUILTIN_SYMBOL_LEGEND_TEMPLATES: SymbolLegendTemplate[] = [
     id: 'power_metering',
     name: 'Power Metering Symbols',
     category: 'power',
-    title: 'Symbol Legend',
+    title: 'SYMBOL LEGEND',
     rows: [
       row('ps48', 'PowerScout PS48', ['powerscout ps48', 'ps48']),
       row('ct', 'Split-Core CT', ['split-core ct', 'split core ct']),
@@ -125,23 +139,23 @@ export const BUILTIN_SYMBOL_LEGEND_TEMPLATES: SymbolLegendTemplate[] = [
     id: 'custom',
     name: 'Custom',
     category: 'custom',
-    title: 'Symbol Legend',
+    title: 'SYMBOL LEGEND',
     rows: [],
   },
 ];
 
 function repUrl(c: LibV2Component, rep: 'edge' | 'bw' | 'source'): string {
-  if (rep === 'edge' && c.edgeUrl) return c.edgeUrl;
   if (rep === 'bw' && c.bwUrl) return c.bwUrl;
-  if (c.edgeUrl) return c.edgeUrl;
+  if (rep === 'edge' && c.edgeUrl) return c.edgeUrl;
   if (c.bwUrl) return c.bwUrl;
+  if (c.edgeUrl) return c.edgeUrl;
   return c.thumbnailUrl || c.sourceUrl || '';
 }
 
 export function matchComponent(
   components: LibV2Component[],
   terms: string[],
-  preferredRep: 'edge' | 'bw' | 'source' = 'edge',
+  preferredRep: 'edge' | 'bw' | 'source' = 'bw',
 ): LibV2Component | undefined {
   const needles = terms.map((t) => t.toLowerCase().trim()).filter(Boolean);
   if (!needles.length) return undefined;
@@ -173,13 +187,16 @@ export function hydrateTemplateRows(
 ): SymbolLegendRowDraft[] {
   return template.rows.map((r) => {
     const comp = r.searchTerms?.length
-      ? matchComponent(components, r.searchTerms, r.preferredRep || 'edge')
+      ? matchComponent(components, r.searchTerms, r.preferredRep || 'bw')
       : undefined;
-    const url = comp ? repUrl(comp, r.preferredRep || 'edge') : r.symbolUrl;
+    const url = comp ? repUrl(comp, r.preferredRep || 'bw') : r.symbolUrl;
     return {
       ...r,
       componentId: comp?.id || r.componentId,
       symbolUrl: url || r.symbolUrl,
+      category: comp?.category || r.category,
+      defaultWidth: comp?.defaultWidth ?? r.defaultWidth,
+      defaultHeight: comp?.defaultHeight ?? r.defaultHeight,
       label: r.label,
     };
   });
@@ -189,7 +206,7 @@ export function rowsFromTemplatePayload(
   payload: { title?: string; rows?: Array<Record<string, unknown>> },
   components: LibV2Component[],
 ): { title: string; rows: SymbolLegendRowDraft[] } {
-  const title = String(payload.title || 'Symbol Legend');
+  const title = String(payload.title || 'SYMBOL LEGEND');
   const rows: SymbolLegendRowDraft[] = (payload.rows || []).map((raw, i) => {
     const searchTerms = Array.isArray(raw.searchTerms)
       ? raw.searchTerms.map(String)
@@ -204,17 +221,28 @@ export function rowsFromTemplatePayload(
       componentId: raw.componentId ? String(raw.componentId) : undefined,
       symbolUrl: raw.symbolUrl ? String(raw.symbolUrl) : undefined,
       searchTerms,
-      preferredRep: (raw.preferredRep as 'edge' | 'bw' | 'source') || 'edge',
+      preferredRep: (raw.preferredRep as 'edge' | 'bw' | 'source') || 'bw',
+      category: raw.category ? String(raw.category) : undefined,
+      defaultWidth: raw.defaultWidth != null ? Number(raw.defaultWidth) : undefined,
+      defaultHeight: raw.defaultHeight != null ? Number(raw.defaultHeight) : undefined,
     };
     if (!draft.symbolUrl && draft.componentId) {
       const comp = components.find((c) => c.id === draft.componentId);
-      if (comp) draft.symbolUrl = repUrl(comp, draft.preferredRep || 'edge');
+      if (comp) {
+        draft.symbolUrl = repUrl(comp, draft.preferredRep || 'bw');
+        draft.category = comp.category;
+        draft.defaultWidth = comp.defaultWidth;
+        draft.defaultHeight = comp.defaultHeight;
+      }
     }
     if (!draft.symbolUrl && searchTerms.length) {
-      const comp = matchComponent(components, searchTerms, draft.preferredRep || 'edge');
+      const comp = matchComponent(components, searchTerms, draft.preferredRep || 'bw');
       if (comp) {
         draft.componentId = comp.id;
-        draft.symbolUrl = repUrl(comp, draft.preferredRep || 'edge');
+        draft.symbolUrl = repUrl(comp, draft.preferredRep || 'bw');
+        draft.category = comp.category;
+        draft.defaultWidth = comp.defaultWidth;
+        draft.defaultHeight = comp.defaultHeight;
       }
     }
     return draft;

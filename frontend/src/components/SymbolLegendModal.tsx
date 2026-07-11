@@ -15,6 +15,7 @@ import {
   type SymbolLegendInsertConfig,
   type SymbolLegendRowDraft,
 } from '../model/symbolLegendPresets';
+import { SYMBOL_SIZE_SMALL } from '../model/symbolSizing';
 
 interface Props {
   onInsert: (config: SymbolLegendInsertConfig) => void;
@@ -22,17 +23,16 @@ interface Props {
 }
 
 function repUrl(c: LibV2Component): string {
-  return c.edgeUrl || c.bwUrl || c.thumbnailUrl || c.sourceUrl || (c.edgeFile ? libV2AssetUrl(c.edgeFile) : '');
+  return c.bwUrl || c.edgeUrl || c.thumbnailUrl || c.sourceUrl || (c.bwFile ? libV2AssetUrl(c.bwFile) : '');
 }
 
 export default function SymbolLegendModal({ onInsert, onClose }: Props) {
   const [components, setComponents] = useState<LibV2Component[]>([]);
   const [savedTemplates, setSavedTemplates] = useState<LegendTemplateEntry[]>([]);
   const [templateId, setTemplateId] = useState(BUILTIN_SYMBOL_LEGEND_TEMPLATES[0].id);
-  const [title, setTitle] = useState('Symbol Legend');
+  const [title, setTitle] = useState('SYMBOL LEGEND');
   const [rows, setRows] = useState<SymbolLegendRowDraft[]>([]);
   const [search, setSearch] = useState('');
-  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -62,7 +62,6 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
     if (builtin) {
       setTitle(builtin.title);
       setRows(hydrateTemplateRows(builtin, components));
-      setSelectedRowIds(new Set());
       return;
     }
     const saved = savedTemplates.find((t) => t.id === id);
@@ -73,7 +72,6 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
     const hydrated = rowsFromTemplatePayload(data.template || {}, components);
     setTitle(hydrated.title);
     setRows(hydrated.rows);
-    setSelectedRowIds(new Set());
   };
 
   useEffect(() => {
@@ -92,6 +90,8 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
       .slice(0, 12);
   }, [components, search]);
 
+  const activeRows = useMemo(() => rows.filter((r) => r.enabled && r.label.trim()), [rows]);
+
   const toggleRow = (id: string) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
   };
@@ -100,11 +100,8 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, label } : r)));
   };
 
-  const removeSelected = () => {
-    if (!selectedRowIds.size) return;
-    setRows((prev) => prev.filter((r) => !selectedRowIds.has(r.id)));
-    setSelectedRowIds(new Set());
-  };
+  const selectAll = () => setRows((prev) => prev.map((r) => ({ ...r, enabled: true })));
+  const clearAll = () => setRows((prev) => prev.map((r) => ({ ...r, enabled: false })));
 
   const moveRow = (id: string, dir: -1 | 1) => {
     setRows((prev) => {
@@ -134,6 +131,9 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
         label: c.displayName,
         componentId: c.id,
         symbolUrl: repUrl(c),
+        category: c.category,
+        defaultWidth: c.defaultWidth,
+        defaultHeight: c.defaultHeight,
       },
     ]);
     setSearch('');
@@ -154,7 +154,10 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
         componentId: r.componentId,
         symbolUrl: r.symbolUrl,
         searchTerms: r.searchTerms,
-        preferredRep: r.preferredRep || 'edge',
+        preferredRep: r.preferredRep || 'bw',
+        category: r.category,
+        defaultWidth: r.defaultWidth,
+        defaultHeight: r.defaultHeight,
       })),
     });
     const saved = await listLegendTemplates();
@@ -177,17 +180,21 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
   };
 
   const handleInsert = () => {
-    const active = rows.filter((r) => r.enabled && r.label.trim());
-    if (!active.length) {
-      window.alert('Select at least one legend row.');
+    if (!activeRows.length) {
+      window.alert('Select at least one legend row (Use checkbox).');
       return;
     }
     onInsert({
-      title: title.trim() || 'Symbol Legend',
-      rows: active.map((r) => ({
+      title: title.trim() || 'SYMBOL LEGEND',
+      rows: activeRows.map((r) => ({
         label: r.label.trim(),
         symbolUrl: r.symbolUrl,
         name: r.componentId || r.label,
+        acronym: r.acronym,
+        iconSize: SYMBOL_SIZE_SMALL,
+        category: r.category,
+        defaultWidth: r.defaultWidth,
+        defaultHeight: r.defaultHeight,
       })),
     });
     onClose();
@@ -203,10 +210,7 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
         <div className="modal-body">
           <div className="field">
             <label>Legend template</label>
-            <select
-              value={templateId}
-              onChange={(e) => void applyTemplate(e.target.value)}
-            >
+            <select value={templateId} onChange={(e) => void applyTemplate(e.target.value)}>
               {templateOptions.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
@@ -234,16 +238,31 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
             </div>
           )}
           <div className="sym-legend-toolbar">
+            <button type="button" className="btn btn-sm" onClick={selectAll}>Select All</button>
+            <button type="button" className="btn btn-sm" onClick={clearAll}>Clear All</button>
             <button type="button" className="btn btn-sm" onClick={addBlankRow}>Add Row</button>
-            <button type="button" className="btn btn-sm" onClick={removeSelected} disabled={!selectedRowIds.size}>Remove Selected</button>
-            <button type="button" className="btn btn-sm" onClick={() => void handleSaveTemplate()}>Save As Template</button>
+            <button type="button" className="btn btn-sm" onClick={() => void handleSaveTemplate()}>Save Current Legend as Template</button>
             <button type="button" className="btn btn-sm" onClick={() => void handleDeleteTemplate()}>Delete Template</button>
+          </div>
+          <div className="sym-legend-preview">
+            <div className="sym-legend-preview-title">{title || 'SYMBOL LEGEND'}</div>
+            {activeRows.length ? activeRows.map((r) => (
+              <div key={r.id} className="sym-legend-preview-row">
+                {r.symbolUrl ? (
+                  <img src={r.symbolUrl} alt="" className="sym-legend-preview-icon" />
+                ) : (
+                  <span className="sym-legend-preview-icon sym-legend-missing">□</span>
+                )}
+                <span>{r.label}</span>
+              </div>
+            )) : (
+              <p className="cw-note">No rows selected — check Use for symbols to include.</p>
+            )}
           </div>
           <table className="op-table sym-legend-table">
             <thead>
               <tr>
-                <th style={{ width: 36 }}>Use</th>
-                <th style={{ width: 36 }}>Sel</th>
+                <th style={{ width: 40 }}>Use</th>
                 <th style={{ width: 52 }}>Icon</th>
                 <th>Label</th>
                 <th style={{ width: 90 }}>Order</th>
@@ -251,23 +270,9 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className={r.enabled ? '' : 'sym-legend-row-off'}>
                   <td>
-                    <input type="checkbox" checked={r.enabled} onChange={() => toggleRow(r.id)} />
-                  </td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selectedRowIds.has(r.id)}
-                      onChange={(e) => {
-                        setSelectedRowIds((prev) => {
-                          const next = new Set(prev);
-                          if (e.target.checked) next.add(r.id);
-                          else next.delete(r.id);
-                          return next;
-                        });
-                      }}
-                    />
+                    <input type="checkbox" checked={r.enabled} onChange={() => toggleRow(r.id)} title="Include in legend" />
                   </td>
                   <td>
                     {r.symbolUrl ? (

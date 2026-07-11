@@ -5,6 +5,7 @@ import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
 import { BODY_W, BODY_H } from '../model/sheetGeometry';
 import { normalizeAssetUrl, normalizeCanvasObjects } from '../model/assetUrl';
+import { scaleImageToSize, standardSymbolSize, SYMBOL_SIZE_SMALL } from '../model/symbolSizing';
 
 interface Props {
   serialized: Record<string, unknown>[];
@@ -957,17 +958,28 @@ export default function CanvasEditor({
           c.requestRenderAll();
         });
       },
-      addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => {
+      addComponent: (
+        url: string,
+        name: string,
+        label: string | null,
+        at?: { clientX: number; clientY: number },
+        meta?: { category?: string; defaultWidth?: number; defaultHeight?: number; acronym?: string },
+      ) => {
         const c = fabricRef.current;
         if (!c) return;
         const assetUrl = normalizeAssetUrl(url) || url;
         void FabricImage.fromURL(assetUrl, { crossOrigin: 'anonymous' }).then((img) => {
           applyBwIfRequested(img, assetUrl);
-          const maxW = CANVAS_W * 0.35;
-          const maxH = CANVAS_H * 0.35;
+          const size = standardSymbolSize({
+            category: meta?.category,
+            defaultWidth: meta?.defaultWidth,
+            defaultHeight: meta?.defaultHeight,
+            acronym: meta?.acronym,
+            name,
+          });
           const iw = img.width || 1;
           const ih = img.height || 1;
-          const scale = Math.min(1, maxW / iw, maxH / ih);
+          const scale = scaleImageToSize(iw, ih, size.w, size.h);
           let left = (CANVAS_W - iw * scale) / 2;
           let top = (CANVAS_H - ih * scale) / 2;
           const el = canvasRef.current;
@@ -978,8 +990,17 @@ export default function CanvasEditor({
               top = ((at.clientY - rect.top) / rect.height) * CANVAS_H - (ih * scale) / 2;
             }
           }
-          img.set({ left, top, scaleX: scale, scaleY: scale });
+          img.set({
+            left,
+            top,
+            scaleX: scale,
+            scaleY: scale,
+            originX: 'left',
+            originY: 'top',
+          });
           (img as unknown as Record<string, unknown>).objName = name;
+          if (meta?.category) (img as unknown as Record<string, unknown>).symCategory = meta.category;
+          if (meta?.acronym) (img as unknown as Record<string, unknown>).symAcronym = meta.acronym;
           styleForSelection(img);
           c.add(img);
           if (label) {
@@ -1112,14 +1133,17 @@ export default function CanvasEditor({
         const rows = config.rows.filter((r) => r.label.trim());
         if (!rows.length) return;
 
-        const padX = 12;
-        const padY = 10;
-        const iconW = 32;
-        const rowH = 28;
-        const titleH = 24;
-        const fontSize = 9;
-        const boxW = 300;
-        const boxH = titleH + padY + rows.length * rowH + padY;
+        const LEGEND_W = 260;
+        const ROW_H = 24;
+        const PAD = 10;
+        const TITLE_H = 26;
+        const ICON_SIZE = SYMBOL_SIZE_SMALL;
+        const LABEL_FONT = 8.5;
+        const ICON_COL = PAD;
+        const LABEL_LEFT = PAD + ICON_SIZE + 8;
+        const LABEL_W = LEGEND_W - LABEL_LEFT - PAD;
+        const title = (config.title || 'SYMBOL LEGEND').trim().toUpperCase();
+        const boxH = TITLE_H + PAD + rows.length * ROW_H + PAD;
 
         const loadIcon = (url?: string) => {
           if (!url) return Promise.resolve<FabricImage | null>(null);
@@ -1128,57 +1152,149 @@ export default function CanvasEditor({
 
         void Promise.all(rows.map((r) => loadIcon(r.symbolUrl))).then((images) => {
           const parts: FabricObject[] = [];
+
           parts.push(new Rect({
-            left: 0, top: 0, width: boxW, height: boxH,
-            fill: '#ffffff', stroke: '#333333', strokeWidth: 1, rx: 2, ry: 2,
-          }));
-          parts.push(new Textbox(config.title || 'Symbol Legend', {
-            left: padX, top: 6, width: boxW - padX * 2,
-            fontSize: 10, fontWeight: 'bold', fontFamily: 'Arial', fill: '#111', textAlign: 'left',
+            left: 0,
+            top: 0,
+            width: LEGEND_W,
+            height: boxH,
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeWidth: 1,
+            rx: 2,
+            ry: 2,
+            originX: 'left',
+            originY: 'top',
           }));
 
+          parts.push(new Textbox(title, {
+            left: PAD,
+            top: 6,
+            width: LEGEND_W - PAD * 2,
+            fontSize: 9,
+            fontWeight: 'bold',
+            fontFamily: 'Arial',
+            fill: '#111111',
+            textAlign: 'left',
+            originX: 'left',
+            originY: 'top',
+            editable: true,
+          }));
+          (parts[1] as unknown as Record<string, unknown>).objName = 'Legend Title';
+
           rows.forEach((row, i) => {
-            const y = titleH + padY + i * rowH;
+            const rowTop = TITLE_H + PAD + i * ROW_H;
+            if (i > 0) {
+              parts.push(new Line([PAD, rowTop, LEGEND_W - PAD, rowTop], {
+                stroke: '#dddddd',
+                strokeWidth: 0.5,
+                originX: 'left',
+                originY: 'top',
+              }));
+            }
+
+            const iconTarget = row.iconSize ?? ICON_SIZE;
             const img = images[i];
             if (img) {
-              const scale = Math.min(1, iconW / (img.width || iconW), (rowH - 6) / (img.height || rowH));
+              const iw = img.width || 1;
+              const ih = img.height || 1;
+              const scale = scaleImageToSize(iw, ih, iconTarget, iconTarget);
               img.set({
-                left: padX,
-                top: y + (rowH - (img.height || 1) * scale) / 2,
+                left: ICON_COL,
+                top: rowTop + (ROW_H - ih * scale) / 2,
                 scaleX: scale,
                 scaleY: scale,
+                originX: 'left',
+                originY: 'top',
               });
-              (img as unknown as Record<string, unknown>).objName = `Symbol: ${row.name || row.label}`;
+              (img as unknown as Record<string, unknown>).objName = `Symbol: ${row.acronym || row.name || row.label}`;
               parts.push(img);
             } else {
               parts.push(new Rect({
-                left: padX, top: y + 6, width: iconW, height: rowH - 12,
-                fill: '#f4f4f4', stroke: '#bbb', strokeWidth: 0.5,
+                left: ICON_COL,
+                top: rowTop + (ROW_H - iconTarget) / 2,
+                width: iconTarget,
+                height: iconTarget,
+                fill: '#f4f4f4',
+                stroke: '#bbbbbb',
+                strokeWidth: 0.5,
+                originX: 'left',
+                originY: 'top',
               }));
             }
-            parts.push(new Textbox(row.label, {
-              left: padX + iconW + 8,
-              top: y + 6,
-              width: boxW - (padX + iconW + 8) - padX,
-              fontSize,
+
+            const lbl = new Textbox(row.label, {
+              left: LABEL_LEFT,
+              top: rowTop + 5,
+              width: LABEL_W,
+              fontSize: LABEL_FONT,
               fontFamily: 'Arial',
-              fill: '#111',
+              fill: '#111111',
               textAlign: 'left',
-              splitByGrapheme: false,
+              originX: 'left',
+              originY: 'top',
               editable: true,
-            }));
-            const last = parts[parts.length - 1];
-            (last as unknown as Record<string, unknown>).objName = `Legend Label: ${row.label}`;
+              splitByGrapheme: false,
+            });
+            (lbl as unknown as Record<string, unknown>).objName = `Legend Label: ${row.label}`;
+            parts.push(lbl);
           });
 
-          const grp = new Group(parts, { left: CANVAS_W * 0.58, top: CANVAS_H * 0.1 });
+          const grp = new Group(parts, {
+            left: CANVAS_W * 0.58,
+            top: CANVAS_H * 0.1,
+            originX: 'left',
+            originY: 'top',
+            subTargetCheck: true,
+          });
           (grp as unknown as Record<string, unknown>).objName = 'Symbol Legend';
           styleForSelection(grp);
           c.add(grp);
           c.setActiveObject(grp);
           c.requestRenderAll();
-          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         });
+      },
+      normalizeSymbolSize: () => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const active = c.getActiveObject();
+        if (!active) return;
+        const objs: FabricObject[] = active.type === 'activeselection'
+          ? (active as ActiveSelection).getObjects()
+          : active.type === 'group'
+            ? (active as Group).getObjects().filter((o) => o.type === 'image')
+            : active.type === 'image'
+              ? [active]
+              : [];
+        const images = objs.filter((o) => o.type === 'image');
+        if (!images.length) return;
+        images.forEach((obj) => {
+          const img = obj as FabricImage;
+          const name = String((img as unknown as Record<string, unknown>).objName || '');
+          if (name.startsWith('Legend ') || name.includes('Label')) return;
+          const rec = img as unknown as Record<string, unknown>;
+          const size = standardSymbolSize({
+            name,
+            category: String(rec.symCategory || ''),
+            acronym: String(rec.symAcronym || ''),
+          });
+          const iw = img.width || 1;
+          const ih = img.height || 1;
+          const cx = (img.left ?? 0) + (iw * (img.scaleX ?? 1)) / 2;
+          const cy = (img.top ?? 0) + (ih * (img.scaleY ?? 1)) / 2;
+          const scale = scaleImageToSize(iw, ih, size.w, size.h);
+          img.set({
+            scaleX: scale,
+            scaleY: scale,
+            left: cx - (iw * scale) / 2,
+            top: cy - (ih * scale) / 2,
+            originX: 'left',
+            originY: 'top',
+          });
+          img.setCoords();
+        });
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
       deleteSelected: () => {
         const c = fabricRef.current;

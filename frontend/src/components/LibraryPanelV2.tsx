@@ -16,7 +16,12 @@ import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
 import '../styles/libraryV2.css';
 
 interface Props {
-  onInsert: (name: string, url: string, label: string | null) => void;
+  onInsert: (
+    name: string,
+    url: string,
+    label: string | null,
+    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number },
+  ) => void;
   canInsert: boolean;
   activePageType?: string;
 }
@@ -146,14 +151,23 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
     if (!canInsert) return;
     const url = previewUrl(c, which);
     if (!url) return;
-    onInsert(displayNameFor(c), url, withLabel ? labelFor(c) : null);
+    onInsert(displayNameFor(c), url, withLabel ? labelFor(c) : null, {
+      category: c.category,
+      defaultWidth: c.defaultWidth,
+      defaultHeight: c.defaultHeight,
+    });
   };
 
   const onDragStart = (e: React.DragEvent, c: LibV2Component) => {
     const url = previewUrl(c, rep);
     if (!url) return;
     e.dataTransfer.setData(COMPONENT_DRAG_TYPE, JSON.stringify({
-      name: displayNameFor(c), url, label: labelFor(c),
+      name: displayNameFor(c),
+      url,
+      label: labelFor(c),
+      category: c.category,
+      defaultWidth: c.defaultWidth,
+      defaultHeight: c.defaultHeight,
     }));
     e.dataTransfer.effectAllowed = 'copy';
   };

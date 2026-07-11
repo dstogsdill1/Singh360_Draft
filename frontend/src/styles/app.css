@@ -722,6 +722,36 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 .sym-legend-table .sym-legend-label-input { width: 100%; padding: 4px 6px; font-size: 13px; border: 1px solid var(--panel-line); }
 .sym-legend-icon { width: 28px; height: 22px; object-fit: contain; display: block; }
 .sym-legend-missing { color: var(--ink-soft); font-size: 12px; }
+.sym-legend-row-off { opacity: 0.45; }
+.sym-legend-preview {
+  border: 1px solid #333;
+  background: #fff;
+  padding: 8px 10px;
+  margin: 10px 0;
+  max-width: 280px;
+  font-size: 11px;
+}
+.sym-legend-preview-title {
+  font-weight: 700;
+  font-size: 9px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.sym-legend-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  border-top: 1px solid #eee;
+  padding: 2px 0;
+}
+.sym-legend-preview-row:first-of-type { border-top: none; }
+.sym-legend-preview-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
 .btn-sm { padding: 3px 8px; font-size: 11px; }
 
 /* -- PAGE TEMPLATE LIBRARY (PHASE F) -- */

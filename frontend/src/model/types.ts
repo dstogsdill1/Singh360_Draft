@@ -310,6 +310,11 @@ export interface SymbolLegendInsertRow {
   label: string;
   symbolUrl?: string;
   name?: string;
+  acronym?: string;
+  iconSize?: number;
+  category?: string;
+  defaultWidth?: number;
+  defaultHeight?: number;
 }
 
 export interface SymbolLegendInsertConfig {
@@ -336,10 +341,17 @@ export interface CanvasApi {
   startBus: (opts: BusOptions) => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
   addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; meta?: PdfCropInsertMeta }) => void;
-  addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
+  addComponent: (
+    url: string,
+    name: string,
+    label: string | null,
+    at?: { clientX: number; clientY: number },
+    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number; acronym?: string },
+  ) => void;
   addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addLegend: (presetIds?: string[]) => void;
   addSymbolLegend: (config: SymbolLegendInsertConfig) => void;
+  normalizeSymbolSize: () => void;
   addPageTitle: (text: string) => void;
   addSectionHeader: (text: string) => void;
   addNote: (text: string) => void;
