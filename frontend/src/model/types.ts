@@ -306,6 +306,17 @@ export interface PdfCropInsertMeta {
   pdfCrop?: string; // "x0,y0,x1,y1" in PDF points
 }
 
+export interface SymbolLegendInsertRow {
+  label: string;
+  symbolUrl?: string;
+  name?: string;
+}
+
+export interface SymbolLegendInsertConfig {
+  title: string;
+  rows: SymbolLegendInsertRow[];
+}
+
 export interface CanvasApi {
   /** Synchronously read and return the current Fabric canvas serialisation.
    *  Call this before any page-switch or save so you always capture the
@@ -328,6 +339,7 @@ export interface CanvasApi {
   addComponent: (url: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addLegend: (presetIds?: string[]) => void;
+  addSymbolLegend: (config: SymbolLegendInsertConfig) => void;
   addPageTitle: (text: string) => void;
   addSectionHeader: (text: string) => void;
   addNote: (text: string) => void;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import type { FitMode } from './DocumentView';
-import type { CanvasSelection, LineStyle } from '../model/types';
+import type { CanvasSelection, LineStyle, SymbolLegendInsertConfig } from '../model/types';
 import { CONNECTOR_PRESETS } from '../model/connectorPresets';
 
 export interface ViewControls {
@@ -59,6 +59,7 @@ interface Props {
     distributeObjects: (d: 'horizontal'|'vertical') => void;
     matchObjectSize: (w: 'width'|'height'|'both') => void;
     addLegend: (presetIds?: string[]) => void;
+    addSymbolLegend: (config: SymbolLegendInsertConfig) => void;
     addBus: () => void;
   };
   onUploadFile: (file: File) => void;
@@ -76,6 +77,7 @@ interface Props {
   onSavePageTemplate: () => void;
   onInsertPageTemplate: () => void;
   onManagePageTemplates: () => void;
+  onInsertSymbolLegend: () => void;
   onArchiveCurrentProject: () => void;
   renumberBadge?: boolean;
   theme: 'dark' | 'light';
@@ -135,6 +137,7 @@ export default function Ribbon({
   onSavePageTemplate,
   onInsertPageTemplate,
   onManagePageTemplates,
+  onInsertSymbolLegend,
   onArchiveCurrentProject,
   renumberBadge,
   theme,
@@ -293,6 +296,9 @@ export default function Ribbon({
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.addSectionHeader} title="Add a section header">Section Header</button>
               <button className="ribbon-btn" disabled={!cx} onClick={canvas.addNote} title="Add a small note label">Note Label</button>
             </Group>
+            <Group title="Legend">
+              <button className="ribbon-btn" disabled={!cx} onClick={onInsertSymbolLegend} title="Insert an editable symbol legend from the component library">Symbol Legend</button>
+            </Group>
           </>
         )}
 
@@ -433,7 +439,8 @@ export default function Ribbon({
                 ))}
               </Group>
               <Group title="Legend">
-                <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.addLegend()} title="Insert an editable connector legend (grouped) using the presets">Insert Legend</button>
+                <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.addLegend()} title="Insert an editable connector legend (grouped) using the presets">Connector Legend</button>
+                <button className="ribbon-btn" disabled={!cx} onClick={onInsertSymbolLegend} title="Insert an editable symbol legend from the component library">Symbol Legend</button>
               </Group>
             </>
           );

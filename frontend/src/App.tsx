@@ -14,7 +14,7 @@ import {
   uploadAssetFile,
   type ExportWarning,
 } from './api/client';
-import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from './model/types';
+import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, SymbolLegendInsertConfig, ViewMode, Worksheet } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
 import { normalizeProjectAssetUrls } from './model/assetUrl';
 import ContinuationPreviewModal from './components/ContinuationPreviewModal';
@@ -40,6 +40,7 @@ import ExportModal from './components/ExportModal';
 import ExportWarningsModal from './components/ExportWarningsModal';
 import SavePageTemplateModal from './components/SavePageTemplateModal';
 import PageTemplateLibraryModal, { type TemplateInsertMode } from './components/PageTemplateLibraryModal';
+import SymbolLegendModal from './components/SymbolLegendModal';
 import PdfCropModal from './components/PdfCropModal';
 import BackupRecoveryModal from './components/BackupRecoveryModal';
 import BusModal from './components/BusModal';
@@ -119,6 +120,7 @@ export default function App() {
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateLibOpen, setTemplateLibOpen] = useState(false);
   const [templateLibManageOnly, setTemplateLibManageOnly] = useState(false);
+  const [symbolLegendOpen, setSymbolLegendOpen] = useState(false);
   const [pdfCropOpen, setPdfCropOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [busOpen, setBusOpen] = useState(false);
@@ -1412,6 +1414,7 @@ export default function App() {
         distributeObjects: (d) => canvasApiRef.current?.distributeObjects(d),
         matchObjectSize: (w) => canvasApiRef.current?.matchObjectSize(w),
         addLegend: (ids) => { setOverlayMode(true); canvasApiRef.current?.addLegend(ids); },
+        addSymbolLegend: (config: SymbolLegendInsertConfig) => { setOverlayMode(true); canvasApiRef.current?.addSymbolLegend(config); },
         addBus: () => setBusOpen(true),
       }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
@@ -1434,6 +1437,7 @@ export default function App() {
       onSavePageTemplate={() => setSaveTemplateOpen(true)}
       onInsertPageTemplate={() => { setTemplateLibManageOnly(false); setTemplateLibOpen(true); }}
       onManagePageTemplates={() => { setTemplateLibManageOnly(true); setTemplateLibOpen(true); }}
+      onInsertSymbolLegend={() => setSymbolLegendOpen(true)}
       onArchiveCurrentProject={() => void onArchiveCurrentProject()}
       theme={theme}
       onSetTheme={setThemeState}
@@ -1749,6 +1753,15 @@ export default function App() {
         onExportAnyway={() => void onExportPdfDespiteWarnings()}
       />
     )}
+    {symbolLegendOpen && (
+      <SymbolLegendModal
+        onClose={() => setSymbolLegendOpen(false)}
+        onInsert={(config: SymbolLegendInsertConfig) => {
+          setOverlayMode(true);
+          canvasApiRef.current?.addSymbolLegend(config);
+        }}
+      />
+    )}
     {saveTemplateOpen && activePage && (
       <SavePageTemplateModal
         page={activePage}
@@ -1809,6 +1822,7 @@ export default function App() {
           { label: 'Insert Polyline', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addPolyline(); } },
           { label: 'Insert Elbow Connector', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addElbow(); } },
           { label: 'Insert Connector Legend', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addLegend(); } },
+          { label: 'Insert Symbol Legend', onClick: () => setSymbolLegendOpen(true) },
           { label: 'Import Worksheet from Excel', divider: true, onClick: () => setImportWsOpen({ afterPageId: activePageId ?? undefined }) },
           { label: 'Add Blank Sheet After', onClick: () => activePageId && addPage(activePageId, 'after') },
           { label: 'Duplicate Current Sheet', onClick: () => activePageId && duplicatePage(activePageId) },

@@ -304,6 +304,43 @@ export async function renamePageTemplate(templateId: string, name: string): Prom
   if (!res.ok) throw new Error(await res.text());
 }
 
+export interface LegendTemplateEntry {
+  id: string;
+  name: string;
+  category?: string;
+  rowCount?: number;
+  updatedAt?: string;
+}
+
+export async function listLegendTemplates(): Promise<LegendTemplateEntry[]> {
+  const res = await fetch('/api/lib/legend-templates');
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.templates ?? [];
+}
+
+export async function saveLegendTemplate(payload: {
+  id?: string;
+  name: string;
+  category?: string;
+  title: string;
+  rows: Record<string, unknown>[];
+}): Promise<LegendTemplateEntry> {
+  const res = await fetch('/api/lib/legend-templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.template;
+}
+
+export async function deleteLegendTemplate(templateId: string): Promise<void> {
+  const res = await fetch(`/api/lib/legend-templates/${templateId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await res.text());
+}
+
 export async function uploadAssetDataUrl(
   projectId: string,
   dataUrl: string,

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, filters, type FabricObject } from 'fabric';
-import type { BusOptions, CanvasApi, CanvasSelection, LineStyle } from '../model/types';
+import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, SymbolLegendInsertConfig } from '../model/types';
 import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
 import { BODY_W, BODY_H } from '../model/sheetGeometry';
@@ -1105,6 +1105,80 @@ export default function CanvasEditor({
         c.add(grp);
         c.setActiveObject(grp);
         c.requestRenderAll();
+      },
+      addSymbolLegend: (config: SymbolLegendInsertConfig) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const rows = config.rows.filter((r) => r.label.trim());
+        if (!rows.length) return;
+
+        const padX = 12;
+        const padY = 10;
+        const iconW = 32;
+        const rowH = 28;
+        const titleH = 24;
+        const fontSize = 9;
+        const boxW = 300;
+        const boxH = titleH + padY + rows.length * rowH + padY;
+
+        const loadIcon = (url?: string) => {
+          if (!url) return Promise.resolve<FabricImage | null>(null);
+          return FabricImage.fromURL(normalizeAssetUrl(url), { crossOrigin: 'anonymous' }).catch(() => null);
+        };
+
+        void Promise.all(rows.map((r) => loadIcon(r.symbolUrl))).then((images) => {
+          const parts: FabricObject[] = [];
+          parts.push(new Rect({
+            left: 0, top: 0, width: boxW, height: boxH,
+            fill: '#ffffff', stroke: '#333333', strokeWidth: 1, rx: 2, ry: 2,
+          }));
+          parts.push(new Textbox(config.title || 'Symbol Legend', {
+            left: padX, top: 6, width: boxW - padX * 2,
+            fontSize: 10, fontWeight: 'bold', fontFamily: 'Arial', fill: '#111', textAlign: 'left',
+          }));
+
+          rows.forEach((row, i) => {
+            const y = titleH + padY + i * rowH;
+            const img = images[i];
+            if (img) {
+              const scale = Math.min(1, iconW / (img.width || iconW), (rowH - 6) / (img.height || rowH));
+              img.set({
+                left: padX,
+                top: y + (rowH - (img.height || 1) * scale) / 2,
+                scaleX: scale,
+                scaleY: scale,
+              });
+              (img as unknown as Record<string, unknown>).objName = `Symbol: ${row.name || row.label}`;
+              parts.push(img);
+            } else {
+              parts.push(new Rect({
+                left: padX, top: y + 6, width: iconW, height: rowH - 12,
+                fill: '#f4f4f4', stroke: '#bbb', strokeWidth: 0.5,
+              }));
+            }
+            parts.push(new Textbox(row.label, {
+              left: padX + iconW + 8,
+              top: y + 6,
+              width: boxW - (padX + iconW + 8) - padX,
+              fontSize,
+              fontFamily: 'Arial',
+              fill: '#111',
+              textAlign: 'left',
+              splitByGrapheme: false,
+              editable: true,
+            }));
+            const last = parts[parts.length - 1];
+            (last as unknown as Record<string, unknown>).objName = `Legend Label: ${row.label}`;
+          });
+
+          const grp = new Group(parts, { left: CANVAS_W * 0.58, top: CANVAS_H * 0.1 });
+          (grp as unknown as Record<string, unknown>).objName = 'Symbol Legend';
+          styleForSelection(grp);
+          c.add(grp);
+          c.setActiveObject(grp);
+          c.requestRenderAll();
+          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+        });
       },
       deleteSelected: () => {
         const c = fabricRef.current;

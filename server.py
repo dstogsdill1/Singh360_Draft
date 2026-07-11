@@ -25,6 +25,7 @@ from core.csv_importer import build_csv_worksheet_and_pages, import_csv_to_grid
 from core.export_pdf import export_pdf_via_playwright
 from core.library_store import LibraryStore
 from core.library_v2 import LibraryV2
+from core.legend_template_store import LegendTemplateStore
 from core.page_template_store import PageTemplateStore
 from core import pdf_import_v2
 from core.drawing_generators import (
@@ -67,6 +68,10 @@ def _ensure_minimal_runtime_workspace(docs: Path) -> None:
     (docs / "library" / "thumbnails").mkdir(parents=True, exist_ok=True)
     (docs / "library" / "page_templates").mkdir(parents=True, exist_ok=True)
     (docs / "library" / "page_templates" / "thumbnails").mkdir(parents=True, exist_ok=True)
+    (docs / "library" / "legend_templates").mkdir(parents=True, exist_ok=True)
+    lt_manifest = docs / "library" / "legend_templates" / "manifest.json"
+    if not lt_manifest.exists():
+        lt_manifest.write_text('{\n  "version": 1,\n  "templates": []\n}\n', encoding="utf-8")
     pt_manifest = docs / "library" / "page_templates" / "manifest.json"
     if not pt_manifest.exists():
         pt_manifest.write_text('{\n  "version": 1,\n  "templates": []\n}\n', encoding="utf-8")
@@ -883,6 +888,8 @@ lib2 = LibraryV2(DOCS_DIR)
 lib2.ensure()
 page_templates = PageTemplateStore(DOCS_DIR)
 page_templates.ensure()
+legend_templates = LegendTemplateStore(DOCS_DIR)
+legend_templates.ensure()
 
 
 @app.get("/api/lib")
@@ -1152,6 +1159,65 @@ def page_template_thumbnail(template_id: str):
     if not thumb.is_file():
         abort(404)
     return send_file(thumb, mimetype="image/png")
+
+
+# --------------------------------------------------------------------------
+# Symbol Legend Templates — editable symbol legend row presets
+# --------------------------------------------------------------------------
+
+
+@app.get("/api/lib/legend-templates")
+def list_legend_templates():
+    return jsonify({"ok": True, "templates": legend_templates.list_templates()})
+
+
+@app.post("/api/lib/legend-templates")
+def save_legend_template():
+    body = request.get_json(force=True, silent=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return jsonify(_err("Template name is required.")), 400
+    rows = body.get("rows")
+    if not isinstance(rows, list):
+        return jsonify(_err("rows array is required.")), 400
+    try:
+        entry = legend_templates.save_template(
+            name=name,
+            category=(body.get("category") or "custom"),
+            title=(body.get("title") or "Symbol Legend"),
+            rows=rows,
+            template_id=(body.get("id") or None),
+        )
+    except Exception as exc:
+        app.logger.error("save legend template failed: %s", exc)
+        return jsonify(_err("Failed to save legend template.", str(exc))), 500
+    return jsonify({"ok": True, "template": entry})
+
+
+@app.get("/api/lib/legend-templates/<template_id>")
+def get_legend_template(template_id: str):
+    payload = legend_templates.get_template(template_id)
+    if payload is None:
+        abort(404)
+    return jsonify({"ok": True, "template": payload})
+
+
+@app.delete("/api/lib/legend-templates/<template_id>")
+def delete_legend_template(template_id: str):
+    if not legend_templates.delete_template(template_id):
+        abort(404)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/lib/legend-templates/<template_id>/rename")
+def rename_legend_template(template_id: str):
+    body = request.get_json(force=True, silent=True) or {}
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        return jsonify(_err("New template name is required.")), 400
+    if not legend_templates.rename_template(template_id, new_name):
+        abort(404)
+    return jsonify({"ok": True, "name": new_name})
 
 
 @app.get("/api/lib/sheet-index")

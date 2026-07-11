@@ -716,6 +716,14 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 .pdf-page-num { font-size: 11px; color: var(--ink-soft); }
 .pdf-insert-hint { margin-top: 8px; }
 
+/* -- SYMBOL LEGEND MODAL -- */
+.sym-legend-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.sym-legend-search-hits { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.sym-legend-table .sym-legend-label-input { width: 100%; padding: 4px 6px; font-size: 13px; border: 1px solid var(--panel-line); }
+.sym-legend-icon { width: 28px; height: 22px; object-fit: contain; display: block; }
+.sym-legend-missing { color: var(--ink-soft); font-size: 12px; }
+.btn-sm { padding: 3px 8px; font-size: 11px; }
+
 /* -- PAGE TEMPLATE LIBRARY (PHASE F) -- */
 .pt-lib-grid {
   display: grid;
