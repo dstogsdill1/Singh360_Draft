@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-12T20:35:08Z",
+  "generatedAt": "2026-07-12T21:13:12Z",
   "components": [
     {
       "id": "alarm_door_annunciator_strobe",
@@ -196,22 +196,24 @@
     },
     {
       "id": "callout_number_01",
-      "displayName": "Data Manager Location Callout",
+      "displayName": "Callout Number 1",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "network_data"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "1",
       "defaultLabel": "1",
       "aliases": [
         "1",
-        "callout 1",
-        "control note"
+        "Callout 1",
+        "Control Note 1"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_01/real.svg",
@@ -221,22 +223,24 @@
     },
     {
       "id": "callout_number_02",
-      "displayName": "RDM IDF Location Callout",
+      "displayName": "Callout Number 2",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "network_data"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "2",
       "defaultLabel": "2",
       "aliases": [
         "2",
-        "callout 2",
-        "control note"
+        "Callout 2",
+        "Control Note 2"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_02/real.svg",
@@ -246,22 +250,24 @@
     },
     {
       "id": "callout_number_03",
-      "displayName": "WICP Location Callout",
+      "displayName": "Callout Number 3",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "panels_enclosures"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "3",
       "defaultLabel": "3",
       "aliases": [
         "3",
-        "callout 3",
-        "control note"
+        "Callout 3",
+        "Control Note 3"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_03/real.svg",
@@ -271,23 +277,24 @@
     },
     {
       "id": "callout_number_04",
-      "displayName": "LCP Location Callout",
+      "displayName": "Callout Number 4",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "lighting",
-        "panels_enclosures"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "4",
       "defaultLabel": "4",
       "aliases": [
         "4",
-        "callout 4",
-        "control note"
+        "Callout 4",
+        "Control Note 4"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_04/real.svg",
@@ -297,23 +304,24 @@
     },
     {
       "id": "callout_number_05",
-      "displayName": "Refrigeration Temperature Sensor Callout",
+      "displayName": "Callout Number 5",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "sensors_transducers",
-        "refrigeration"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "5",
       "defaultLabel": "5",
       "aliases": [
         "5",
-        "callout 5",
-        "control note"
+        "Callout 5",
+        "Control Note 5"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_05/real.svg",
@@ -323,22 +331,24 @@
     },
     {
       "id": "callout_number_06",
-      "displayName": "Power Monitor Location Callout",
+      "displayName": "Callout Number 6",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "electrical_power"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "6",
       "defaultLabel": "6",
       "aliases": [
         "6",
-        "callout 6",
-        "control note"
+        "Callout 6",
+        "Control Note 6"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_06/real.svg",
@@ -348,23 +358,24 @@
     },
     {
       "id": "callout_number_07",
-      "displayName": "Orbit TouchXL Location Callout",
+      "displayName": "Callout Number 7",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "controllers",
-        "network_data"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "7",
       "defaultLabel": "7",
       "aliases": [
         "7",
-        "callout 7",
-        "control note"
+        "Callout 7",
+        "Control Note 7"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_07/real.svg",
@@ -374,22 +385,24 @@
     },
     {
       "id": "callout_number_08",
-      "displayName": "Amber Alarm Strobe Callout",
+      "displayName": "Callout Number 8",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "alarms_safety"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "8",
       "defaultLabel": "8",
       "aliases": [
         "8",
-        "callout 8",
-        "control note"
+        "Callout 8",
+        "Control Note 8"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_08/real.svg",
@@ -399,22 +412,24 @@
     },
     {
       "id": "callout_number_09",
-      "displayName": "Red Alarm Strobe Callout",
+      "displayName": "Callout Number 9",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "alarms_safety"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "9",
       "defaultLabel": "9",
       "aliases": [
         "9",
-        "callout 9",
-        "control note"
+        "Callout 9",
+        "Control Note 9"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_09/real.svg",
@@ -424,22 +439,24 @@
     },
     {
       "id": "callout_number_10",
-      "displayName": "Pharmacy Temperature Probe Callout",
+      "displayName": "Callout Number 10",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "sensors_transducers"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "10",
       "defaultLabel": "10",
       "aliases": [
         "10",
-        "callout 10",
-        "control note"
+        "Callout 10",
+        "Control Note 10"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_10/real.svg",
@@ -449,23 +466,24 @@
     },
     {
       "id": "callout_number_11",
-      "displayName": "Computer Room Temperature Probe Callout",
+      "displayName": "Callout Number 11",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "sensors_transducers",
-        "hvac"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "11",
       "defaultLabel": "11",
       "aliases": [
         "11",
-        "callout 11",
-        "control note"
+        "Callout 11",
+        "Control Note 11"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_11/real.svg",
@@ -475,22 +493,24 @@
     },
     {
       "id": "callout_number_12",
-      "displayName": "High-Temperature BBQ Sensor Callout",
+      "displayName": "Callout Number 12",
       "category": "symbols_markers",
       "categories": [
-        "symbols_markers",
-        "sensors_transducers"
+        "symbols_markers"
       ],
-      "collection": "Singh360 Standard - Location Callouts",
+      "collection": "Numbered Callouts 1-12",
       "manufacturer": "Singh360",
       "partNumber": "12",
       "defaultLabel": "12",
       "aliases": [
         "12",
-        "callout 12",
-        "control note"
+        "Callout 12",
+        "Control Note 12"
       ],
-      "tags": [],
+      "tags": [
+        "Callout",
+        "Numbered Marker"
+      ],
       "defaultWidth": 18,
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_12/real.svg",
@@ -688,25 +708,120 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/ct_split_core/edge.svg"
     },
     {
-      "id": "dent_powerscout_ps48",
-      "displayName": "PowerScout PS48",
+      "id": "dent_powerscout_ps12",
+      "displayName": "DENT PowerScout PS12",
       "category": "custom",
       "categories": [
         "custom",
         "electrical_power"
       ],
-      "collection": "",
-      "manufacturer": "Dent",
-      "partNumber": "PS48",
+      "collection": "DENT PowerScout",
+      "manufacturer": "DENT Instruments",
+      "partNumber": "PS12HD-C-D-N",
+      "defaultLabel": "PS12",
+      "aliases": [
+        "PS12",
+        "DENT PowerScout PS12",
+        "PS12HD-C-D-N",
+        "DENT PowerScout"
+      ],
+      "tags": [
+        "Power Metering",
+        "DENT",
+        "Real Photo"
+      ],
+      "defaultWidth": 130,
+      "defaultHeight": 92,
+      "real": "assets/custom/dent_powerscout_ps12/real.jpg",
+      "edge": "assets/custom/dent_powerscout_ps12/edge.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/dent_powerscout_ps12/real.jpg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/dent_powerscout_ps12/edge.png"
+    },
+    {
+      "id": "dent_powerscout_ps24",
+      "displayName": "DENT PowerScout PS24",
+      "category": "custom",
+      "categories": [
+        "custom",
+        "electrical_power"
+      ],
+      "collection": "DENT PowerScout",
+      "manufacturer": "DENT Instruments",
+      "partNumber": "PS24HD-C-D-N",
+      "defaultLabel": "PS24",
+      "aliases": [
+        "PS24",
+        "DENT PowerScout PS24",
+        "PS24HD-C-D-N",
+        "DENT PowerScout"
+      ],
+      "tags": [
+        "Power Metering",
+        "DENT",
+        "Real Photo"
+      ],
+      "defaultWidth": 130,
+      "defaultHeight": 92,
+      "real": "assets/custom/dent_powerscout_ps24/real.jpg",
+      "edge": "assets/custom/dent_powerscout_ps24/edge.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/dent_powerscout_ps24/real.jpg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/dent_powerscout_ps24/edge.png"
+    },
+    {
+      "id": "dent_powerscout_ps3",
+      "displayName": "DENT PowerScout PS3",
+      "category": "custom",
+      "categories": [
+        "custom",
+        "electrical_power"
+      ],
+      "collection": "DENT PowerScout",
+      "manufacturer": "DENT Instruments",
+      "partNumber": "PS3HD-C-D-N",
+      "defaultLabel": "PS3",
+      "aliases": [
+        "PS3",
+        "DENT PowerScout PS3",
+        "PS3HD-C-D-N",
+        "DENT PowerScout"
+      ],
+      "tags": [
+        "Power Metering",
+        "DENT",
+        "Real Photo"
+      ],
+      "defaultWidth": 130,
+      "defaultHeight": 92,
+      "real": "assets/custom/dent_powerscout_ps3/real.png",
+      "edge": "assets/custom/dent_powerscout_ps3/edge.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/dent_powerscout_ps3/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/dent_powerscout_ps3/edge.png"
+    },
+    {
+      "id": "dent_powerscout_ps48",
+      "displayName": "DENT PowerScout PS48",
+      "category": "custom",
+      "categories": [
+        "custom",
+        "electrical_power"
+      ],
+      "collection": "DENT PowerScout",
+      "manufacturer": "DENT Instruments",
+      "partNumber": "PS48HD-C-D-N",
       "defaultLabel": "PS48",
       "aliases": [
-        "PowerScout",
         "PS48",
-        "Power Meter"
+        "DENT PowerScout PS48",
+        "PS48HD-C-D-N",
+        "DENT PowerScout"
       ],
-      "tags": [],
-      "defaultWidth": 96,
-      "defaultHeight": 48,
+      "tags": [
+        "Power Metering",
+        "DENT",
+        "Real Photo"
+      ],
+      "defaultWidth": 130,
+      "defaultHeight": 92,
       "real": "assets/custom/dent_powerscout_ps48/real.png",
       "edge": "assets/custom/dent_powerscout_ps48/edge.png",
       "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/dent_powerscout_ps48/real.png",
@@ -1336,298 +1451,6 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/lighting/lighting_lcp1_controller_group/edge.svg"
     },
     {
-      "id": "marker_01_data_manager",
-      "displayName": "Data Manager Location Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "network_data"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "1",
-      "defaultLabel": "1",
-      "aliases": [
-        "1",
-        "Data Manager marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_01_data_manager/real.svg",
-      "edge": "assets/symbols_markers/marker_01_data_manager/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_01_data_manager/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_01_data_manager/edge.svg"
-    },
-    {
-      "id": "marker_02_rdm_idf",
-      "displayName": "RDM IDF Location Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "network_data"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "2",
-      "defaultLabel": "2",
-      "aliases": [
-        "2",
-        "RDM IDF marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_02_rdm_idf/real.svg",
-      "edge": "assets/symbols_markers/marker_02_rdm_idf/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_02_rdm_idf/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_02_rdm_idf/edge.svg"
-    },
-    {
-      "id": "marker_03_wicp",
-      "displayName": "WICP Location Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "panels_enclosures"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "3",
-      "defaultLabel": "3",
-      "aliases": [
-        "3",
-        "WICP location marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_03_wicp/real.svg",
-      "edge": "assets/symbols_markers/marker_03_wicp/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_03_wicp/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_03_wicp/edge.svg"
-    },
-    {
-      "id": "marker_04_lcp",
-      "displayName": "LCP Location Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "lighting",
-        "panels_enclosures"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "4",
-      "defaultLabel": "4",
-      "aliases": [
-        "4",
-        "LCP marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_04_lcp/real.svg",
-      "edge": "assets/symbols_markers/marker_04_lcp/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_04_lcp/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_04_lcp/edge.svg"
-    },
-    {
-      "id": "marker_05_refrig_temp_sensor",
-      "displayName": "Refrigeration Temperature Sensor Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "sensors_transducers",
-        "refrigeration"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "5",
-      "defaultLabel": "5",
-      "aliases": [
-        "5",
-        "refrigeration temp sensor"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_05_refrig_temp_sensor/real.svg",
-      "edge": "assets/symbols_markers/marker_05_refrig_temp_sensor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_05_refrig_temp_sensor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_05_refrig_temp_sensor/edge.svg"
-    },
-    {
-      "id": "marker_06_power_monitor",
-      "displayName": "Power Monitor Location Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "electrical_power"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "6",
-      "defaultLabel": "6",
-      "aliases": [
-        "6",
-        "Power Monitor marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_06_power_monitor/real.svg",
-      "edge": "assets/symbols_markers/marker_06_power_monitor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_06_power_monitor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_06_power_monitor/edge.svg"
-    },
-    {
-      "id": "marker_07_orbit_touchxl",
-      "displayName": "Orbit TouchXL Location Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "controllers",
-        "network_data"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "7",
-      "defaultLabel": "7",
-      "aliases": [
-        "7",
-        "Orbit marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_07_orbit_touchxl/real.svg",
-      "edge": "assets/symbols_markers/marker_07_orbit_touchxl/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_07_orbit_touchxl/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_07_orbit_touchxl/edge.svg"
-    },
-    {
-      "id": "marker_08_amber_strobe",
-      "displayName": "Amber Alarm Strobe Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "alarms_safety"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "8",
-      "defaultLabel": "8",
-      "aliases": [
-        "8",
-        "amber strobe marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_08_amber_strobe/real.svg",
-      "edge": "assets/symbols_markers/marker_08_amber_strobe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_08_amber_strobe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_08_amber_strobe/edge.svg"
-    },
-    {
-      "id": "marker_09_red_strobe",
-      "displayName": "Red Alarm Strobe Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "alarms_safety"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "9",
-      "defaultLabel": "9",
-      "aliases": [
-        "9",
-        "red strobe marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_09_red_strobe/real.svg",
-      "edge": "assets/symbols_markers/marker_09_red_strobe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_09_red_strobe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_09_red_strobe/edge.svg"
-    },
-    {
-      "id": "marker_10_pharmacy_temp_probe",
-      "displayName": "Pharmacy Temperature Probe Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "sensors_transducers"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "10",
-      "defaultLabel": "10",
-      "aliases": [
-        "10",
-        "pharmacy temp probe marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_10_pharmacy_temp_probe/real.svg",
-      "edge": "assets/symbols_markers/marker_10_pharmacy_temp_probe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_10_pharmacy_temp_probe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_10_pharmacy_temp_probe/edge.svg"
-    },
-    {
-      "id": "marker_11_computer_room_temp_probe",
-      "displayName": "Computer Room Temperature Probe Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "sensors_transducers",
-        "hvac"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "11",
-      "defaultLabel": "11",
-      "aliases": [
-        "11",
-        "computer room temp probe marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_11_computer_room_temp_probe/real.svg",
-      "edge": "assets/symbols_markers/marker_11_computer_room_temp_probe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_11_computer_room_temp_probe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_11_computer_room_temp_probe/edge.svg"
-    },
-    {
-      "id": "marker_12_high_temp_bbq_sensor",
-      "displayName": "High-Temperature BBQ Sensor Callout",
-      "category": "symbols_markers",
-      "categories": [
-        "symbols_markers",
-        "sensors_transducers"
-      ],
-      "collection": "Singh360 Standard - Location Callouts",
-      "manufacturer": "Singh360",
-      "partNumber": "12",
-      "defaultLabel": "12",
-      "aliases": [
-        "12",
-        "BBQ high temp sensor marker"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/marker_12_high_temp_bbq_sensor/real.svg",
-      "edge": "assets/symbols_markers/marker_12_high_temp_bbq_sensor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_12_high_temp_bbq_sensor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_12_high_temp_bbq_sensor/edge.svg"
-    },
-    {
       "id": "mdf_idf_rack",
       "displayName": "MDF / IDF Rack",
       "category": "network_data",
@@ -1789,107 +1612,6 @@
       "edge": "assets/panels_enclosures/pcp_enclosure/edge.svg",
       "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/panels_enclosures/pcp_enclosure/real.svg",
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/panels_enclosures/pcp_enclosure/edge.svg"
-    },
-    {
-      "id": "powerscout_ps12",
-      "displayName": "Powerscout PS12 Meter",
-      "category": "custom",
-      "categories": [
-        "custom",
-        "electrical_power"
-      ],
-      "collection": "",
-      "manufacturer": "Dent",
-      "partNumber": "PS12",
-      "defaultLabel": "PS12",
-      "aliases": [
-        "PS12",
-        "PowerScout",
-        "Dent meter"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/powerscout_ps12/real.svg",
-      "edge": "assets/custom/powerscout_ps12/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/powerscout_ps12/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/powerscout_ps12/edge.svg"
-    },
-    {
-      "id": "powerscout_ps24",
-      "displayName": "Powerscout PS24 Meter",
-      "category": "custom",
-      "categories": [
-        "custom",
-        "electrical_power"
-      ],
-      "collection": "",
-      "manufacturer": "Dent",
-      "partNumber": "PS24",
-      "defaultLabel": "PS24",
-      "aliases": [
-        "PS24",
-        "PowerScout",
-        "Dent meter"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/powerscout_ps24/real.svg",
-      "edge": "assets/custom/powerscout_ps24/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/powerscout_ps24/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/powerscout_ps24/edge.svg"
-    },
-    {
-      "id": "powerscout_ps3",
-      "displayName": "Powerscout PS3 Meter",
-      "category": "custom",
-      "categories": [
-        "custom",
-        "electrical_power"
-      ],
-      "collection": "",
-      "manufacturer": "Dent",
-      "partNumber": "PS3",
-      "defaultLabel": "PS3",
-      "aliases": [
-        "PS3",
-        "PowerScout",
-        "Dent meter"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/powerscout_ps3/real.svg",
-      "edge": "assets/custom/powerscout_ps3/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/powerscout_ps3/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/powerscout_ps3/edge.svg"
-    },
-    {
-      "id": "powerscout_ps48",
-      "displayName": "Powerscout PS48 Meter",
-      "category": "custom",
-      "categories": [
-        "custom",
-        "electrical_power"
-      ],
-      "collection": "",
-      "manufacturer": "Dent",
-      "partNumber": "PS48",
-      "defaultLabel": "PS48",
-      "aliases": [
-        "PS48",
-        "PowerScout",
-        "Dent meter",
-        "Power monitor"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/powerscout_ps48/real.svg",
-      "edge": "assets/custom/powerscout_ps48/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/powerscout_ps48/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/powerscout_ps48/edge.svg"
     },
     {
       "id": "rdm_data_manager",
