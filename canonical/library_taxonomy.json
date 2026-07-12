@@ -1,0 +1,42 @@
+{
+  "categories": [
+    "Controllers",
+    "Expansion Modules",
+    "Panels / Enclosures",
+    "Network / Data",
+    "Electrical / Power",
+    "Sensors / Transducers",
+    "Alarms / Safety",
+    "Refrigeration Devices",
+    "HVAC",
+    "Lighting Devices",
+    "Symbols / Markers",
+    "Legends",
+    "Logos",
+    "Reference Pages",
+    "Unknown / Needs Review"
+  ],
+  "statuses": [
+    "approved",
+    "candidate",
+    "needs_review",
+    "duplicate",
+    "reference_page",
+    "retired"
+  ],
+  "collections": [
+    "RDM Controllers",
+    "RDM Expansion Modules",
+    "WICP / Leak / Entrapment",
+    "Power Metering",
+    "Network / RDM IDF",
+    "Panels / Enclosures",
+    "Lighting",
+    "HVAC / BACnet",
+    "Refrigeration IO",
+    "Symbols / Layout Markers",
+    "Signage",
+    "Logos",
+    "Reference Pages"
+  ]
+}

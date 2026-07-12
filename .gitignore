@@ -81,3 +81,14 @@ pnpm-debug.log*
 # Allow synthetic demo inputs
 !sample_data/
 !sample_data/**
+# Published Singh360 component catalog (generated intentionally)
+!docs/component-library/
+!docs/component-library/**
+
+# Local personal PowerPoint palette - keep in the working folder, never commit
+Singh360_Component_Library_Real*.pptx
+Singh360 Component Library Real*.pptx
+
+# Published component catalog - intentionally committed for team access
+!docs/component-library/
+!docs/component-library/**

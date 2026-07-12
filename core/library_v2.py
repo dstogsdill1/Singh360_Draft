@@ -75,6 +75,9 @@ EDITABLE_FIELDS = {
     "symbolFile",
     "retired",
     "shortName",
+    "collection",
+    "status",
+    "tags",
 }
 
 EDGE_VARIANT_PRIORITY = ["lineart", "edges", "outline", "silhouette"]
@@ -811,7 +814,7 @@ class LibraryV2:
         }
 
     # ---- read ------------------------------------------------------------
-    def load(self, include_legacy: bool = False) -> dict:
+    def load(self, include_legacy: bool = False, include_retired: bool = False) -> dict:
         self.ensure()
         export = self._load_builder_export()
         legacy_count = 0
@@ -826,12 +829,13 @@ class LibraryV2:
                 ov = override_by_id.get(c.get("id"))
                 if ov:
                     for key in EDITABLE_FIELDS:
-                        if key in ov and ov[key] not in (None, ""):
+                        # Presence in an override is authoritative, even when cleared.
+                        if key in ov:
                             merged[key] = ov[key]
                     if ov.get("favorite"):
                         merged["favorite"] = True
                 payload = self._compose_component_payload(merged)
-                if payload.get("retired"):
+                if payload.get("retired") and not include_retired:
                     continue
                 approved.append(payload)
                 approved_keys.update(self._identity_keys(payload))
@@ -841,7 +845,7 @@ class LibraryV2:
                 if raw.get("origin") == "override":
                     continue
                 payload = self._compose_component_payload(raw)
-                if payload.get("retired"):
+                if payload.get("retired") and not include_retired:
                     continue
                 legacy_candidates.append(payload)
 
@@ -857,7 +861,7 @@ class LibraryV2:
             comps = approved + (legacy_visible if include_legacy else [])
         else:
             manifest = self._read_manifest()
-            comps = [self._compose_component_payload(c) for c in manifest["components"] if not c.get("retired")]
+            comps = [self._compose_component_payload(c) for c in manifest["components"] if include_retired or not c.get("retired")]
         counts: dict[str, int] = {}
         for c in comps:
             counts[c.get("category", "custom")] = counts.get(c.get("category", "custom"), 0) + 1

@@ -26,6 +26,11 @@ from core.csv_importer import build_csv_worksheet_and_pages, import_csv_to_grid
 from core.export_pdf import export_pdf_via_playwright
 from core.library_store import LibraryStore
 from core.library_v2 import LibraryV2
+from core.component_interop import (
+    archive_component, restore_component, permanent_delete_component,
+    publish_active_library, read_published_map, build_powerpoint_palette,
+    build_powerpoint_template,
+)
 from core.legend_template_store import LegendTemplateStore
 from core.page_template_store import PageTemplateStore
 from core import pdf_import_v2
@@ -55,6 +60,7 @@ from core.workbook_importer import import_workbook
 HERE = Path(__file__).resolve().parent
 WEB_DIR = HERE / "web"
 FRONTEND_DIST_DIR = HERE / "frontend" / "dist"
+COMPONENT_CATALOG_DIR = HERE / "tools" / "component_catalog"
 DOCS_DIR = HERE / ".docs"
 DOCS_DIR.mkdir(exist_ok=True)
 
@@ -111,7 +117,7 @@ app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 MB
 
 
-_NO_CACHE_PATHS = {"/", "/app", "/editor"}
+_NO_CACHE_PATHS = {"/", "/app", "/editor", "/component-catalog", "/component-catalog/"}
 
 
 @app.after_request
@@ -230,6 +236,28 @@ def app_modular_index():
         return send_from_directory(FRONTEND_DIST_DIR, "index.html")
     return _frontend_build_instructions_html(), 503
 
+
+@app.get("/component-catalog")
+@app.get("/component-catalog/")
+def component_catalog_index():
+    if (COMPONENT_CATALOG_DIR / "index.html").is_file():
+        return send_from_directory(COMPONENT_CATALOG_DIR, "index.html")
+    abort(404)
+
+
+@app.get("/published-components")
+@app.get("/published-components/")
+def published_components_index():
+    if (PUBLISHED_COMPONENT_DIR / "index.html").is_file():
+        return send_from_directory(PUBLISHED_COMPONENT_DIR, "index.html")
+    return redirect("/component-catalog", code=302)
+
+
+@app.get("/published-components/<path:rel>")
+def published_components_asset(rel: str):
+    if not PUBLISHED_COMPONENT_DIR.is_dir():
+        abort(404)
+    return send_from_directory(PUBLISHED_COMPONENT_DIR, rel)
 
 @app.get("/assets/<path:asset_path>")
 def app_modular_assets(asset_path: str):
@@ -936,7 +964,8 @@ legend_templates.ensure()
 @app.get("/api/lib")
 def lib2_get():
     include_legacy = request.args.get("includeLegacy", "0") in {"1", "true", "True", "yes"}
-    return jsonify(lib2.load(include_legacy=include_legacy))
+    include_retired = request.args.get("includeRetired", "0") in {"1", "true", "True", "yes"}
+    return jsonify(lib2.load(include_legacy=include_legacy, include_retired=include_retired))
 
 
 @app.post("/api/lib/refresh")
@@ -1060,6 +1089,55 @@ def lib2_asset(rel: str):
         abort(404)
     return send_file(str(target))
 
+
+# S360 INTEROP API
+@app.post("/api/lib/components/<comp_id>/archive")
+def lib2_archive_component(comp_id: str):
+    result = archive_component(lib2, comp_id)
+    return jsonify(result), (200 if result.get("ok") else 404)
+
+
+@app.post("/api/lib/components/<comp_id>/restore")
+def lib2_restore_component(comp_id: str):
+    result = restore_component(lib2, comp_id)
+    return jsonify(result), (200 if result.get("ok") else 404)
+
+
+@app.delete("/api/lib/components/<comp_id>/permanent")
+def lib2_permanent_delete_component(comp_id: str):
+    result = permanent_delete_component(lib2, comp_id)
+    return jsonify(result), (200 if result.get("ok") else 404)
+
+
+@app.post("/api/lib/publish-active")
+def lib2_publish_active():
+    try:
+        return jsonify(publish_active_library(lib2, HERE))
+    except Exception as exc:
+        app.logger.error("component publish failed: %s", exc)
+        return jsonify(_err("Component publish failed.", str(exc))), 500
+
+
+@app.get("/api/lib/published-map")
+def lib2_published_map():
+    return jsonify(read_published_map(lib2))
+
+
+@app.get("/api/lib/export/powerpoint-template")
+def lib2_powerpoint_template():
+    out = DOCS_DIR / "exports" / "powerpoint" / "Singh360_EMS_17x11_Layout_Template.pptx"
+    build_powerpoint_template(out)
+    return send_file(out, as_attachment=True, download_name=out.name)
+
+
+@app.get("/api/lib/export/powerpoint-palette/<variant>")
+def lib2_powerpoint_palette(variant: str):
+    variant = variant.lower()
+    if variant not in {"real", "edge"}:
+        abort(404)
+    out = DOCS_DIR / "exports" / "powerpoint" / f"Singh360_Component_Library_{variant.title()}.pptx"
+    build_powerpoint_palette(lib2, out, variant)
+    return send_file(out, as_attachment=True, download_name=out.name)
 
 # ---- PDF underlay import (Phase 6) ----
 @app.post("/api/lib/pdf/info")
