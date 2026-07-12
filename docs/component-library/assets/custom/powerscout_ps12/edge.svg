@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Singh360 component symbol</title>
+  <rect width="100%" height="100%" fill="none"/>
+
+  <rect x="78" y="64" width="356" height="384" rx="16" fill="#2d2d2d" stroke="#111" stroke-width="14"/>
+  <rect x="142" y="104" width="180" height="74" rx="8" fill="#ffffff" stroke="#111" stroke-width="8"/>
+  <g fill="#000000" stroke="#111" stroke-width="5">
+    <circle cx="154" cy="230" r="28"/><circle cx="228" cy="230" r="28"/><circle cx="302" cy="230" r="28"/><circle cx="376" cy="230" r="28"/>
+  </g>
+  <g fill="#f57c00"><rect x="118" y="300" width="36" height="38" rx="3"/><rect x="198" y="300" width="36" height="38" rx="3"/><rect x="278" y="300" width="36" height="38" rx="3"/><rect x="358" y="300" width="36" height="38" rx="3"/><rect x="118" y="352" width="36" height="38" rx="3"/><rect x="198" y="352" width="36" height="38" rx="3"/><rect x="278" y="352" width="36" height="38" rx="3"/><rect x="358" y="352" width="36" height="38" rx="3"/></g>
+  <text x="256" y="416" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="800" fill="#fff" text-anchor="middle" dominant-baseline="middle" >PS12</text>
+
+</svg>

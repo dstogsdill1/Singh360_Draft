@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+
+  <rect width="128" height="128" fill="none"/>
+  <line x1="16" y1="64" x2="112" y2="64" stroke="#111111" stroke-width="7" stroke-linecap="round"/>
+  <polygon points="44,44 64,64 44,84" fill="#ffffff" stroke="#111111" stroke-width="7" stroke-linejoin="round"/>
+  <polygon points="84,44 64,64 84,84" fill="#ffffff" stroke="#111111" stroke-width="7" stroke-linejoin="round"/>
+  <rect x="52" y="18" width="24" height="24" rx="4" fill="#ffffff" stroke="#111111" stroke-width="5"/>
+  <line x1="64" y1="42" x2="64" y2="58" stroke="#111111" stroke-width="5"/>
+  <text x="64" y="115" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#111111">LLSV</text>
+</svg>

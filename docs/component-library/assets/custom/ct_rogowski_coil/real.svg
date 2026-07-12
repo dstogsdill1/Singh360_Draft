@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Singh360 component symbol</title>
+  <rect width="100%" height="100%" fill="none"/>
+
+  <ellipse cx="256" cy="256" rx="144" ry="178" fill="none" stroke="#00a6d6" stroke-width="28"/>
+  <rect x="240" y="390" width="36" height="50" fill="#555"/>
+  <line x1="258" y1="420" x2="414" y2="476" stroke="#111" stroke-width="10"/>
+  <line x1="258" y1="420" x2="100" y2="476" stroke="#111" stroke-width="10"/>
+
+</svg>

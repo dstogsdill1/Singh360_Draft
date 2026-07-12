@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Singh360 component symbol</title>
+  <rect width="100%" height="100%" fill="none"/>
+
+  <rect x="82" y="96" width="348" height="286" rx="20" fill="#1f2937" stroke="#111" stroke-width="14"/>
+  <rect x="112" y="132" width="288" height="196" rx="8" fill="#26394a" stroke="#000000" stroke-width="6"/>
+  <g>
+  <rect x="132" y="154" width="76" height="58" fill="#1a2b3a"/><rect x="222" y="154" width="76" height="58" fill="#1a2b3a"/><rect x="312" y="154" width="56" height="58" fill="#1a2b3a"/>
+  <circle cx="170" cy="242" r="34" fill="none" stroke="#ffffff" stroke-width="12"/><path d="M170 208 A34 34 0 0 1 204 242" stroke="#ffc000" stroke-width="12" fill="none"/>
+  <rect x="230" y="226" width="120" height="36" rx="4" fill="#ffffff"/>
+  </g>
+  <rect x="198" y="74" width="116" height="14" rx="7" fill="#000000"/>
+
+</svg>

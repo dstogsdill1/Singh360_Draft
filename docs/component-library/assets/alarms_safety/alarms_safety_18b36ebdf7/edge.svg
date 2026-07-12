@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Singh360 component symbol</title>
+  <rect width="100%" height="100%" fill="none"/>
+
+  <rect x="144" y="162" width="224" height="188" rx="16" fill="#ffffff" stroke="#111" stroke-width="14"/>
+  <circle cx="256" cy="256" r="64" fill="#ffffff" stroke="#111" stroke-width="12"/>
+  <path d="M256 142 V82 M256 430 V370 M134 256 H76 M436 256 H378 M166 166 L118 118 M346 166 L394 118 M166 346 L118 394 M346 346 L394 394" stroke="#ffffff" stroke-width="16" stroke-linecap="round"/>
+  <text x="256" y="440" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="800" fill="#111" text-anchor="middle" dominant-baseline="middle" >EA</text>
+
+</svg>

@@ -6,7 +6,9 @@ export const SYMBOL_SIZE_EQUIPMENT = 34;
 export const SYMBOL_SIZE_LARGE = 80;
 
 const SMALL_ACRONYMS = new Set([
-  'LI', 'DA', 'LS', 'LSc', 'LSC', 'ES', 'EA', 'T', 'OAT', 'LT', 'NC', 'NO', 'DI',
+  'LI', 'DA', 'LS', 'LSB', 'LSG', 'LSc', 'LSC', 'ES', 'EA', 'HS',
+  'T', 'TS', 'DS', 'DTS', 'OAT', 'LT', 'NC', 'NO', 'DI',
+  'EEV', 'LLS', 'E-EEPR', 'M-EEPR', 'DEF',
 ]);
 
 const EQUIPMENT_TERMS = [

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Singh360 component symbol</title>
+  <rect width="100%" height="100%" fill="none"/>
+
+  <rect x="54" y="140" width="404" height="230" rx="22" fill="#b7d57a" stroke="#111" stroke-width="14"/>
+  <rect x="90" y="186" width="145.44" height="73.60000000000001" rx="8" fill="#e7f7c4" stroke="#333" stroke-width="8"/>
+  <rect x="276.20000000000005" y="188" width="129.28" height="27.599999999999998" rx="6" fill="#d8e7a9" stroke="#333" stroke-width="6"/>
+  <g fill="#111"><rect x="74" y="104" width="18" height="36" fill="#111"/><rect x="102" y="104" width="18" height="36" fill="#111"/><rect x="130" y="104" width="18" height="36" fill="#111"/><rect x="158" y="104" width="18" height="36" fill="#111"/><rect x="186" y="104" width="18" height="36" fill="#111"/><rect x="214" y="104" width="18" height="36" fill="#111"/><rect x="242" y="104" width="18" height="36" fill="#111"/><rect x="270" y="104" width="18" height="36" fill="#111"/><rect x="298" y="104" width="18" height="36" fill="#111"/><rect x="326" y="104" width="18" height="36" fill="#111"/><rect x="354" y="104" width="18" height="36" fill="#111"/><rect x="382" y="104" width="18" height="36" fill="#111"/><rect x="410" y="104" width="18" height="36" fill="#111"/><rect x="74" y="370" width="18" height="36" fill="#111"/><rect x="102" y="370" width="18" height="36" fill="#111"/><rect x="130" y="370" width="18" height="36" fill="#111"/><rect x="158" y="370" width="18" height="36" fill="#111"/><rect x="186" y="370" width="18" height="36" fill="#111"/><rect x="214" y="370" width="18" height="36" fill="#111"/><rect x="242" y="370" width="18" height="36" fill="#111"/><rect x="270" y="370" width="18" height="36" fill="#111"/><rect x="298" y="370" width="18" height="36" fill="#111"/><rect x="326" y="370" width="18" height="36" fill="#111"/><rect x="354" y="370" width="18" height="36" fill="#111"/><rect x="382" y="370" width="18" height="36" fill="#111"/><rect x="410" y="370" width="18" height="36" fill="#111"/></g>
+  <circle cx="416" cy="255.0" r="16" fill="#333"/>
+  <circle cx="96" cy="255.0" r="16" fill="#333"/>
+
+</svg>
