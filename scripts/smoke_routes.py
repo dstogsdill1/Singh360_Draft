@@ -25,9 +25,6 @@ def main() -> int:
     print(f"GET /app         -> status {r_app.status_code}")
     print(f"  first 200 chars: {body}")
 
-    r_editor = client.get("/editor")
-    print(f"GET /editor      -> status {r_editor.status_code}")
-
     r_health = client.get("/api/health")
     print(f"GET /api/health  -> status {r_health.status_code}")
 

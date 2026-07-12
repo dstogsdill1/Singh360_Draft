@@ -13,8 +13,10 @@ TOOLS = Path(__file__).resolve().parent
 TEMPLATES = TOOLS / "templates"
 DOCS = ROOT / "docs"
 STAMP = datetime.now().strftime("%Y%m%d-%H%M%S")
-BACKUP = ROOT / ".docs" / "archive" / f"current_app_repo_reset_v2_{STAMP}"
+BACKUP = ROOT / ".docs" / "archive" / f"current_app_repo_reset_v3_{STAMP}"
 REPORT = BACKUP / "cleanup_report.txt"
+SUCCESS_FLAG = ROOT / ".reset_v3_success"
+ARCHIVE_POINTER = ROOT / ".reset_v3_archive_path"
 
 LEGACY_FILES = [
     "main_generator.py", "pipeline_cli.py", "config.py",
@@ -29,11 +31,11 @@ LEGACY_DIRS = ["web", "core/extractors", "engines/doc_templates"]
 KEEP_ROOT = {
     ".gitignore", "AGENTS.md", "README.md", "requirements.txt", "server.py",
     "start-local.ps1", "start-live.ps1", "START_SINGH360.bat",
-    "RESET_TO_CURRENT_APP.bat", "RESET_TO_CURRENT_APP_V2.bat",
+    "RESET_TO_CURRENT_APP_V3.bat",
 }
 PREFIX_JUNK = (
     "README_", "ROLLBACK_", "INSTALL_", "RUN_", "PUBLISH_", "PUSH_",
-    "OPEN_", "SEND_", "IMPORT_", "ENABLE_",
+    "OPEN_", "SEND_", "IMPORT_", "ENABLE_", "RESET_TO_CURRENT_APP",
 )
 NAME_JUNK = {
     "readme", "KANBAN.md", "Microsoft.Services.Store.winmd", "temp.py",
@@ -49,9 +51,9 @@ def log(text: str = "") -> None:
         fh.write(text + "\n")
 
 
-def run(cmd: list[str], cwd: Path = ROOT, check: bool = True) -> subprocess.CompletedProcess:
+def run(cmd: list[str], cwd: Path = ROOT, check: bool = True, env=None):
     log("$ " + " ".join(map(str, cmd)))
-    result = subprocess.run(cmd, cwd=cwd)
+    result = subprocess.run(cmd, cwd=cwd, env=env)
     if check and result.returncode:
         raise RuntimeError(f"Command failed: {' '.join(map(str, cmd))}")
     return result
@@ -68,8 +70,27 @@ def backup(path: Path) -> None:
         else:
             shutil.copy2(path, dest)
     except (PermissionError, OSError) as exc:
-        # Locked local-only folders are never destroyed by V2. Log and continue.
         log(f"Backup skipped for locked path {path.relative_to(ROOT)}: {exc}")
+
+
+def add_gitignore(line: str) -> None:
+    path = ROOT / ".gitignore"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    if re.search(rf"(?m)^{re.escape(line)}$", text):
+        return
+    backup(path)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write("\n" + line + "\n")
+    log(f"Added to .gitignore: {line}")
+
+
+def git_remove_cached(rel: str) -> None:
+    subprocess.run(
+        ["git", "rm", "-r", "--cached", "-f", "--ignore-unmatch", "--", rel],
+        cwd=ROOT,
+        check=False,
+    )
+    add_gitignore(rel.rstrip("/") + "/")
 
 
 def remove_file_or_dir(path: Path) -> None:
@@ -84,28 +105,8 @@ def remove_file_or_dir(path: Path) -> None:
             path.unlink()
         log(f"Removed (backed up): {rel}")
     except (PermissionError, OSError) as exc:
-        log(f"Could not physically remove {rel}; leaving local copy ignored: {exc}")
+        log(f"Could not physically remove {rel}; leaving local ignored copy: {exc}")
         git_remove_cached(rel)
-
-
-def git_remove_cached(rel: str) -> None:
-    subprocess.run(
-        ["git", "rm", "-r", "--cached", "-f", "--ignore-unmatch", "--", rel],
-        cwd=ROOT,
-        check=False,
-    )
-    add_gitignore(rel.rstrip("/") + "/")
-
-
-def add_gitignore(line: str) -> None:
-    path = ROOT / ".gitignore"
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
-    if re.search(rf"(?m)^{re.escape(line)}$", text):
-        return
-    backup(path)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write("\n" + line + "\n")
-    log(f"Added to .gitignore: {line}")
 
 
 def replace(path: Path, template_name: str) -> None:
@@ -115,40 +116,86 @@ def replace(path: Path, template_name: str) -> None:
     log(f"Updated: {path.relative_to(ROOT).as_posix()}")
 
 
+def repair_previous_failed_runs() -> None:
+    for rel in ("RESET_TO_CURRENT_APP.bat", "ems"):
+        subprocess.run(
+            ["git", "restore", "--worktree", "--", rel],
+            cwd=ROOT,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    log("Repaired residual tracked deletions from prior failed reset, when present.")
+
+
 def patch_server() -> bool:
     path = ROOT / "server.py"
     text = path.read_text(encoding="utf-8-sig")
     old = text
+
+    text = text.replace(
+        "packages. The legacy /editor page is retained only as a fallback.",
+        "packages.",
+    )
     text = re.sub(r'^WEB_DIR\s*=\s*HERE\s*/\s*"web"\s*\n', "", text, flags=re.M)
     text = text.replace(', "/editor"', "").replace('"/editor", ', "")
+
     text = re.sub(
         r'\n@app\.get\("/editor"\)\ndef legacy_editor_index\(\):\n(?:[ \t]+.*\n)+',
-        "\n", text, count=1,
+        "\n",
+        text,
+        count=1,
     )
-    text = re.sub(r'^.*Legacy fallback.*\n', "", text, flags=re.M)
-    text = re.sub(r'^.*legacy fallback.*\n', "", text, flags=re.M)
-    text = re.sub(r'^.*href="/editor".*\n', "", text, flags=re.M)
+    text = re.sub(
+        r'\n\s*<p>Legacy fallback editor remains available at <a href="/editor">/editor</a>\.</p>',
+        "",
+        text,
+        count=1,
+    )
+
+    title_pattern = (
+        r'def serve_title_block\(\):\n'
+        r'(?:[ \t]+.*\n)+?'
+        r'[ \t]+abort\(404\)'
+    )
+    title_replacement = (
+        'def serve_title_block():\n'
+        '    # Serve the master title block from the current repository root.\n'
+        '    candidate = HERE / "title_block.png"\n'
+        '    if candidate.is_file():\n'
+        '        return send_file(candidate)\n'
+        '    abort(404)'
+    )
+    text = re.sub(title_pattern, title_replacement, text, count=1)
+
     if text != old:
         backup(path)
         path.write_text(text, encoding="utf-8")
-        log("Patched server.py: removed legacy /editor fallback.")
+        log("Patched server.py: removed legacy editor/web fallback.")
+
     return "/editor" not in text and "WEB_DIR" not in text
 
 
-def patch_smoke_routes() -> None:
-    path = ROOT / "scripts" / "smoke_routes.py"
-    if not path.exists():
-        return
-    text = path.read_text(encoding="utf-8")
-    old = text
-    text = re.sub(
-        r'\n\s*r_editor = client\.get\("/editor"\)\n\s*print\(f"GET /editor.*?\n',
-        "\n", text, count=1,
+def patch_smokes() -> None:
+    routes = ROOT / "scripts" / "smoke_routes.py"
+    if routes.exists():
+        text = routes.read_text(encoding="utf-8")
+        old = text
+        text = re.sub(
+            r'\n\s*r_editor = client\.get\("/editor"\)\n\s*print\(f"GET /editor.*?\n',
+            "\n",
+            text,
+            count=1,
+        )
+        if text != old:
+            backup(routes)
+            routes.write_text(text, encoding="utf-8")
+            log("Updated smoke_routes.py.")
+
+    replace(
+        ROOT / "scripts" / "smoke_component_library.py",
+        "smoke_component_library.py",
     )
-    if text != old:
-        backup(path)
-        path.write_text(text, encoding="utf-8")
-        log("Updated smoke_routes.py.")
 
 
 def clean_docs() -> None:
@@ -182,13 +229,14 @@ def clean_root() -> None:
         if junk:
             remove_file_or_dir(path)
 
+    for old_tool in ("_repo_reset", "_repo_reset_v2"):
+        remove_file_or_dir(ROOT / old_tool)
+
 
 def clean_legacy() -> None:
     server_clean = patch_server()
-    patch_smoke_routes()
+    patch_smokes()
 
-    # ems/ is old, but its exports folder is frequently locked by OneDrive.
-    # Remove it from Git and ignore the local copy instead of aborting.
     ems = ROOT / "ems"
     if ems.exists():
         log("Removing legacy ems/ from Git index; locked local copy may remain.")
@@ -199,7 +247,7 @@ def clean_legacy() -> None:
             shutil.move(str(ems), str(archive_target))
             log(f"Moved local ems/ to {archive_target}")
         except (PermissionError, OSError) as exc:
-            log(f"Local ems/ remains in place and ignored because Windows locked it: {exc}")
+            log(f"Local ems/ remains ignored because Windows locked it: {exc}")
 
     for rel in LEGACY_FILES:
         remove_file_or_dir(ROOT / rel)
@@ -217,38 +265,50 @@ def clean_legacy() -> None:
 
 def ensure_gitignore() -> None:
     for line in (
-        ".docs/", "*.pptx", "Singh360_Component_Library_Real*.pptx",
-        "Singh360 Component Library Real*.pptx", "ems/",
+        ".docs/",
+        "*.pptx",
+        "Singh360_Component_Library_Real*.pptx",
+        "Singh360 Component Library Real*.pptx",
+        "ems/",
+        "engines/doc_templates/",
     ):
         add_gitignore(line)
 
 
 def restore() -> None:
     files = BACKUP / "files"
-    if not files.exists():
-        return
-    log("Validation failed. Restoring file backup.")
-    for src in sorted(files.rglob("*")):
-        if src.is_file():
-            dest = ROOT / src.relative_to(files)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
+    if files.exists():
+        log("Validation failed. Restoring file backup.")
+        for src in sorted(files.rglob("*")):
+            if src.is_file():
+                dest = ROOT / src.relative_to(files)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
     subprocess.run(["git", "reset"], cwd=ROOT, check=False)
+    repair_previous_failed_runs()
     log("Backup restored; no commit made.")
 
 
 def validate() -> None:
     py = ROOT / ".venv" / "Scripts" / "python.exe"
     python = str(py) if py.exists() else sys.executable
-    run([python, "-m", "compileall", "server.py", "core", "engines", "scripts"])
+    env = os.environ.copy()
+    env["SINGH360_PORT"] = "8766"
+    env["SINGH360_SKIP_SERVE"] = "1"
+
+    run(
+        [python, "-m", "compileall", "server.py", "core", "engines", "scripts"],
+        env=env,
+    )
     frontend = ROOT / "frontend"
     if (frontend / "package.json").exists():
         npm = "npm.cmd" if os.name == "nt" else "npm"
-        run([npm, "run", "build"], cwd=frontend)
+        run([npm, "run", "build"], cwd=frontend, env=env)
+
     for name in ("smoke_routes.py", "smoke_component_library.py"):
         smoke = ROOT / "scripts" / name
         if smoke.exists():
-            run([python, str(smoke)])
+            run([python, str(smoke)], env=env)
 
 
 def main() -> int:
@@ -259,18 +319,25 @@ def main() -> int:
         print("docs/component-library is missing. Publish the catalog first.")
         return 1
 
+    SUCCESS_FLAG.unlink(missing_ok=True)
+    repair_previous_failed_runs()
+
     BACKUP.mkdir(parents=True, exist_ok=True)
+    ARCHIVE_POINTER.write_text(str(BACKUP), encoding="utf-8")
     log(f"Repository: {ROOT}")
     log(f"Backup: {BACKUP}")
     status = subprocess.run(
-        ["git", "status", "--short"], cwd=ROOT, text=True, capture_output=True
+        ["git", "status", "--short"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
     )
     log("Git status before reset:")
     log(status.stdout.rstrip())
 
-    print("\nV2 will not abort on the locked ems/library/exports folder.")
-    print("It removes ems/ from Git and ignores any locked local copy.")
-    print("Everything else is backed up before removal.")
+    print("\nV3 replaces the obsolete legacy-library smoke with a current /api/lib smoke.")
+    print("It also repairs the leftover deletions from the failed V2 run.")
+    print("Everything removed is backed up first.")
     if input("\nType RESET to continue: ").strip() != "RESET":
         print("Cancelled.")
         return 0
@@ -300,16 +367,30 @@ def main() -> int:
     run(["git", "add", "-A"])
     staged = subprocess.run(
         ["git", "diff", "--cached", "--name-only"],
-        cwd=ROOT, text=True, capture_output=True,
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
     ).stdout.strip()
     if not staged:
         print("Nothing to commit.")
         return 0
-    run(["git", "commit", "-m", "Remove legacy generator and reset Pages to current app"])
+
+    run(
+        [
+            "git",
+            "commit",
+            "-m",
+            "Remove legacy generator and reset Pages to current app",
+        ]
+    )
     branch = subprocess.check_output(
-        ["git", "branch", "--show-current"], cwd=ROOT, text=True
+        ["git", "branch", "--show-current"],
+        cwd=ROOT,
+        text=True,
     ).strip() or "main"
     run(["git", "push", "origin", branch])
+
+    SUCCESS_FLAG.write_text("ok", encoding="utf-8")
     print("\nPushed. GitHub Pages should redeploy in 1-3 minutes.")
     print("https://dstogsdill1.github.io/Singh360_SmartDraw/")
     return 0

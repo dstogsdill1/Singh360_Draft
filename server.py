@@ -2,7 +2,7 @@
 
 Serves the modular /app editor build, ingests Excel workbooks, persists project
 state JSON, and routes PDF export (Playwright) for 17x11 engineering document
-packages. The legacy /editor page is retained only as a fallback.
+packages.
 """
 from __future__ import annotations
 
@@ -58,7 +58,6 @@ from core.vsdx_importer import import_vsdx
 from core.workbook_importer import import_workbook
 
 HERE = Path(__file__).resolve().parent
-WEB_DIR = HERE / "web"
 FRONTEND_DIST_DIR = HERE / "frontend" / "dist"
 COMPONENT_CATALOG_DIR = HERE / "tools" / "component_catalog"
 DOCS_DIR = HERE / ".docs"
@@ -117,7 +116,7 @@ app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 MB
 
 
-_NO_CACHE_PATHS = {"/", "/app", "/editor", "/component-catalog", "/component-catalog/"}
+_NO_CACHE_PATHS = {"/", "/app", "/component-catalog", "/component-catalog/"}
 
 
 @app.after_request
@@ -211,7 +210,6 @@ npm run build
 cd ..
 python server.py</pre>
             <p>Then open <a href="/app">/app</a>.</p>
-            <p>Legacy fallback editor remains available at <a href="/editor">/editor</a>.</p>
         </div>
     </body>
 </html>
@@ -225,9 +223,6 @@ def root_index():
         return _frontend_build_instructions_html(), 503
 
 
-@app.get("/editor")
-def legacy_editor_index():
-        return send_from_directory(WEB_DIR, "index.html")
 
 
 @app.get("/app")
@@ -303,10 +298,10 @@ def debug_routes():
 
 @app.get("/static/title_block.png")
 def serve_title_block():
-    """Serve the master title block image from the project root (or web fallback)."""
-    for candidate in (HERE / "title_block.png", WEB_DIR / "title_block_placeholder.png"):
-        if candidate.is_file():
-            return send_file(candidate)
+    # Serve the master title block from the current repository root.
+    candidate = HERE / "title_block.png"
+    if candidate.is_file():
+        return send_file(candidate)
     abort(404)
 
 

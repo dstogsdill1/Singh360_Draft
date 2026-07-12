@@ -23,10 +23,10 @@ Open:
 ## Folder roles
 
 - `docs/` - public GitHub Pages content only; committed to Git.
-- `.docs/` - local runtime data: projects, library, exports, backups; never committed.
+- `.docs/` - local runtime data: projects, component library, exports, backups;
+  never committed.
 
-Do not merge or rename those folders. The dot-folder is the local application
-database; the non-dot folder is the public website.
+Do not merge or rename those folders.
 
 ## Active architecture
 

@@ -92,3 +92,9 @@ Singh360 Component Library Real*.pptx
 # Published component catalog - intentionally committed for team access
 !docs/component-library/
 !docs/component-library/**
+
+engines/doc_templates/
+
+_repo_reset/
+
+_repo_reset_v2/
