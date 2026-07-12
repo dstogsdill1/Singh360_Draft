@@ -1,11 +1,14 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-12T18:52:30Z",
+  "generatedAt": "2026-07-12T20:35:08Z",
   "components": [
     {
       "id": "alarm_door_annunciator_strobe",
       "displayName": "Door Annunciator / Strobe",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "S360/DA",
@@ -27,6 +30,9 @@
       "id": "alarm_door_open_da",
       "displayName": "Door Open Horn/Strobe DA",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "S360/DA",
@@ -48,6 +54,9 @@
       "id": "alarm_entrapment_ea",
       "displayName": "Entrapment Alarm EA",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "S360/EA",
@@ -68,6 +77,9 @@
       "id": "alarm_entrapment_strobe",
       "displayName": "Entrapment Alarm Strobe",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "S360/EA",
@@ -89,6 +101,9 @@
       "id": "alarm_entrapment_switch_es",
       "displayName": "Entrapment Switch ES",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "5320-0",
@@ -110,6 +125,9 @@
       "id": "alarm_leak_annunciator_strobe",
       "displayName": "Leak Annunciator / Strobe",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "S360/LI",
@@ -128,30 +146,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/alarm_leak_annunciator_strobe/edge.svg"
     },
     {
-      "id": "alarm_leak_indicator_li",
-      "displayName": "Leak Indicator Horn/Strobe LI",
-      "category": "alarms_safety",
-      "collection": "",
-      "manufacturer": "Singh360",
-      "partNumber": "S360/LI",
-      "defaultLabel": "S360/LI",
-      "aliases": [
-        "LI",
-        "Leak Indicator",
-        "Horn Strobe"
-      ],
-      "tags": [],
-      "defaultWidth": 44,
-      "defaultHeight": 44,
-      "real": "assets/alarms_safety/alarm_leak_indicator_li/real.png",
-      "edge": "assets/alarms_safety/alarm_leak_indicator_li/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/alarm_leak_indicator_li/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/alarm_leak_indicator_li/edge.png"
-    },
-    {
       "id": "alarm_red_strobe",
       "displayName": "Red Alarm Strobe",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "CS-24WRW",
@@ -173,6 +173,10 @@
       "id": "bacnet_router_basrt_b",
       "displayName": "Bacnet Router Basrt-b",
       "category": "network_data",
+      "categories": [
+        "network_data",
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Contemporary Controls",
       "partNumber": "BASRT-B",
@@ -192,9 +196,13 @@
     },
     {
       "id": "callout_number_01",
-      "displayName": "Numbered Control Note Callout 1",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Data Manager Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "network_data"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "1",
       "defaultLabel": "1",
@@ -204,18 +212,22 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_01/real.svg",
-      "edge": "assets/custom/callout_number_01/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_01/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_01/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_01/real.svg",
+      "edge": "assets/symbols_markers/callout_number_01/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_01/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_01/edge.svg"
     },
     {
       "id": "callout_number_02",
-      "displayName": "Numbered Control Note Callout 2",
-      "category": "custom",
-      "collection": "",
+      "displayName": "RDM IDF Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "network_data"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "2",
       "defaultLabel": "2",
@@ -225,18 +237,22 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_02/real.svg",
-      "edge": "assets/custom/callout_number_02/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_02/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_02/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_02/real.svg",
+      "edge": "assets/symbols_markers/callout_number_02/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_02/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_02/edge.svg"
     },
     {
       "id": "callout_number_03",
-      "displayName": "Numbered Control Note Callout 3",
-      "category": "custom",
-      "collection": "",
+      "displayName": "WICP Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "panels_enclosures"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "3",
       "defaultLabel": "3",
@@ -246,18 +262,23 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_03/real.svg",
-      "edge": "assets/custom/callout_number_03/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_03/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_03/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_03/real.svg",
+      "edge": "assets/symbols_markers/callout_number_03/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_03/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_03/edge.svg"
     },
     {
       "id": "callout_number_04",
-      "displayName": "Numbered Control Note Callout 4",
-      "category": "custom",
-      "collection": "",
+      "displayName": "LCP Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "lighting",
+        "panels_enclosures"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "4",
       "defaultLabel": "4",
@@ -267,18 +288,23 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_04/real.svg",
-      "edge": "assets/custom/callout_number_04/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_04/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_04/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_04/real.svg",
+      "edge": "assets/symbols_markers/callout_number_04/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_04/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_04/edge.svg"
     },
     {
       "id": "callout_number_05",
-      "displayName": "Numbered Control Note Callout 5",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Refrigeration Temperature Sensor Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "refrigeration"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "5",
       "defaultLabel": "5",
@@ -288,18 +314,22 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_05/real.svg",
-      "edge": "assets/custom/callout_number_05/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_05/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_05/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_05/real.svg",
+      "edge": "assets/symbols_markers/callout_number_05/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_05/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_05/edge.svg"
     },
     {
       "id": "callout_number_06",
-      "displayName": "Numbered Control Note Callout 6",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Power Monitor Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "electrical_power"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "6",
       "defaultLabel": "6",
@@ -309,18 +339,23 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_06/real.svg",
-      "edge": "assets/custom/callout_number_06/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_06/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_06/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_06/real.svg",
+      "edge": "assets/symbols_markers/callout_number_06/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_06/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_06/edge.svg"
     },
     {
       "id": "callout_number_07",
-      "displayName": "Numbered Control Note Callout 7",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Orbit TouchXL Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "controllers",
+        "network_data"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "7",
       "defaultLabel": "7",
@@ -330,18 +365,22 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_07/real.svg",
-      "edge": "assets/custom/callout_number_07/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_07/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_07/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_07/real.svg",
+      "edge": "assets/symbols_markers/callout_number_07/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_07/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_07/edge.svg"
     },
     {
       "id": "callout_number_08",
-      "displayName": "Numbered Control Note Callout 8",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Amber Alarm Strobe Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "8",
       "defaultLabel": "8",
@@ -351,18 +390,22 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_08/real.svg",
-      "edge": "assets/custom/callout_number_08/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_08/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_08/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_08/real.svg",
+      "edge": "assets/symbols_markers/callout_number_08/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_08/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_08/edge.svg"
     },
     {
       "id": "callout_number_09",
-      "displayName": "Numbered Control Note Callout 9",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Red Alarm Strobe Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "9",
       "defaultLabel": "9",
@@ -372,18 +415,22 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_09/real.svg",
-      "edge": "assets/custom/callout_number_09/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_09/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_09/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_09/real.svg",
+      "edge": "assets/symbols_markers/callout_number_09/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_09/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_09/edge.svg"
     },
     {
       "id": "callout_number_10",
-      "displayName": "Numbered Control Note Callout 10",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Pharmacy Temperature Probe Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "10",
       "defaultLabel": "10",
@@ -393,18 +440,23 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_10/real.svg",
-      "edge": "assets/custom/callout_number_10/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_10/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_10/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_10/real.svg",
+      "edge": "assets/symbols_markers/callout_number_10/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_10/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_10/edge.svg"
     },
     {
       "id": "callout_number_11",
-      "displayName": "Numbered Control Note Callout 11",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Computer Room Temperature Probe Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "hvac"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "11",
       "defaultLabel": "11",
@@ -414,18 +466,22 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_11/real.svg",
-      "edge": "assets/custom/callout_number_11/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_11/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_11/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_11/real.svg",
+      "edge": "assets/symbols_markers/callout_number_11/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_11/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_11/edge.svg"
     },
     {
       "id": "callout_number_12",
-      "displayName": "Numbered Control Note Callout 12",
-      "category": "custom",
-      "collection": "",
+      "displayName": "High-Temperature BBQ Sensor Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "12",
       "defaultLabel": "12",
@@ -435,17 +491,20 @@
         "control note"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/callout_number_12/real.svg",
-      "edge": "assets/custom/callout_number_12/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_12/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/callout_number_12/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/callout_number_12/real.svg",
+      "edge": "assets/symbols_markers/callout_number_12/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_12/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/callout_number_12/edge.svg"
     },
     {
       "id": "ccp_enclosure",
       "displayName": "CCP Case Control Panel",
       "category": "panels_enclosures",
+      "categories": [
+        "panels_enclosures"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "CCP",
@@ -466,6 +525,9 @@
       "id": "cd_controls_isolation_amplifier",
       "displayName": "Isolation Amplifier",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "100-4004",
@@ -485,28 +547,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/cd_controls_isolation_amplifier/edge.png"
     },
     {
-      "id": "compressor",
-      "displayName": "Compressor",
-      "category": "refrigeration",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "Compressor",
-      "defaultLabel": "Compressor",
-      "aliases": [
-        "compressor"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 56,
-      "real": "assets/refrigeration/compressor/real.svg",
-      "edge": "assets/refrigeration/compressor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/compressor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/compressor/edge.svg"
-    },
-    {
       "id": "control_24vdc_power_supply",
       "displayName": "24VDC Power Supply",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "APV-25-24",
@@ -528,6 +574,9 @@
       "id": "control_contactor_1pole",
       "displayName": "1-pole Power Contactor",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "1P Contactor",
@@ -548,6 +597,9 @@
       "id": "control_contactor_2pole",
       "displayName": "2-pole Power Contactor",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "2P Contactor",
@@ -568,6 +620,9 @@
       "id": "control_contactor_3pole",
       "displayName": "3-pole Power Contactor",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "3P Contactor",
@@ -588,6 +643,9 @@
       "id": "ct_rogowski_coil",
       "displayName": "Rogowski Coil CT",
       "category": "custom",
+      "categories": [
+        "custom"
+      ],
       "collection": "",
       "manufacturer": "Dent",
       "partNumber": "CT-R36",
@@ -609,6 +667,9 @@
       "id": "ct_split_core",
       "displayName": "Split Core CT",
       "category": "custom",
+      "categories": [
+        "custom"
+      ],
       "collection": "",
       "manufacturer": "Dent",
       "partNumber": "CT-SMC/HMC",
@@ -627,72 +688,13 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/ct_split_core/edge.svg"
     },
     {
-      "id": "dent_powerscout_ps12",
-      "displayName": "Dent Powerscout PS12",
-      "category": "electrical_power",
-      "collection": "",
-      "manufacturer": "Dent",
-      "partNumber": "PS12",
-      "defaultLabel": "PS12",
-      "aliases": [
-        "PowerScout",
-        "PS12",
-        "Power Meter"
-      ],
-      "tags": [],
-      "defaultWidth": 96,
-      "defaultHeight": 48,
-      "real": "assets/electrical_power/dent_powerscout_ps12/real.png",
-      "edge": "assets/electrical_power/dent_powerscout_ps12/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/dent_powerscout_ps12/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/dent_powerscout_ps12/edge.png"
-    },
-    {
-      "id": "dent_powerscout_ps24",
-      "displayName": "Dent Powerscout PS24",
-      "category": "electrical_power",
-      "collection": "",
-      "manufacturer": "Dent",
-      "partNumber": "PS24",
-      "defaultLabel": "PS24",
-      "aliases": [
-        "PowerScout",
-        "PS24",
-        "Power Meter"
-      ],
-      "tags": [],
-      "defaultWidth": 96,
-      "defaultHeight": 48,
-      "real": "assets/electrical_power/dent_powerscout_ps24/real.png",
-      "edge": "assets/electrical_power/dent_powerscout_ps24/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/dent_powerscout_ps24/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/dent_powerscout_ps24/edge.png"
-    },
-    {
-      "id": "dent_powerscout_ps3",
-      "displayName": "Dent Powerscout PS3",
-      "category": "electrical_power",
-      "collection": "",
-      "manufacturer": "Dent",
-      "partNumber": "PS3",
-      "defaultLabel": "PS3",
-      "aliases": [
-        "PowerScout",
-        "PS3",
-        "Power Meter"
-      ],
-      "tags": [],
-      "defaultWidth": 96,
-      "defaultHeight": 48,
-      "real": "assets/electrical_power/dent_powerscout_ps3/real.png",
-      "edge": "assets/electrical_power/dent_powerscout_ps3/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/dent_powerscout_ps3/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/dent_powerscout_ps3/edge.png"
-    },
-    {
       "id": "dent_powerscout_ps48",
       "displayName": "PowerScout PS48",
-      "category": "electrical_power",
+      "category": "custom",
+      "categories": [
+        "custom",
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Dent",
       "partNumber": "PS48",
@@ -705,15 +707,18 @@
       "tags": [],
       "defaultWidth": 96,
       "defaultHeight": 48,
-      "real": "assets/electrical_power/dent_powerscout_ps48/real.png",
-      "edge": "assets/electrical_power/dent_powerscout_ps48/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/dent_powerscout_ps48/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/dent_powerscout_ps48/edge.png"
+      "real": "assets/custom/dent_powerscout_ps48/real.png",
+      "edge": "assets/custom/dent_powerscout_ps48/edge.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/dent_powerscout_ps48/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/dent_powerscout_ps48/edge.png"
     },
     {
       "id": "door_contact_switch",
       "displayName": "Magnetic Door Contact Switch",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "VIP100-69L",
@@ -732,51 +737,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/door_contact_switch/edge.svg"
     },
     {
-      "id": "electrical_contactor_1_pole",
-      "displayName": "Generic Contactor 1-pole",
-      "category": "electrical_power",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "Generic Contactor 1-Pole",
-      "aliases": [
-        "Contactor",
-        "1 Pole",
-        "Lighting Contactor"
-      ],
-      "tags": [],
-      "defaultWidth": 96,
-      "defaultHeight": 48,
-      "real": "assets/electrical_power/electrical_contactor_1_pole/real.png",
-      "edge": "assets/electrical_power/electrical_contactor_1_pole/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/electrical_contactor_1_pole/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/electrical_contactor_1_pole/edge.svg"
-    },
-    {
-      "id": "electrical_contactor_2_pole",
-      "displayName": "Generic Contactor 2-pole",
-      "category": "electrical_power",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "Generic Contactor 2-Pole",
-      "aliases": [
-        "Contactor",
-        "2 Pole",
-        "Lighting Contactor"
-      ],
-      "tags": [],
-      "defaultWidth": 96,
-      "defaultHeight": 48,
-      "real": "assets/electrical_power/electrical_contactor_2_pole/real.png",
-      "edge": "assets/electrical_power/electrical_contactor_2_pole/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/electrical_contactor_2_pole/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/electrical_contactor_2_pole/edge.svg"
-    },
-    {
       "id": "electrical_contactor_3_pole",
       "displayName": "Generic Contactor 3-pole",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -798,6 +764,9 @@
       "id": "electrical_lighting_contactor_bank",
       "displayName": "Lighting Contactor Bank",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -818,6 +787,9 @@
       "id": "entrapment_light_switch",
       "displayName": "Entrapment Light Switch",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "54161",
@@ -838,6 +810,9 @@
       "id": "entrapment_switch_box",
       "displayName": "Entrapment Switch Box",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "5320-0",
@@ -855,48 +830,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/entrapment_switch_box/edge.svg"
     },
     {
-      "id": "fan_condenser",
-      "displayName": "Condenser Fan",
-      "category": "refrigeration",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "Condenser Fan",
-      "defaultLabel": "Condenser Fan",
-      "aliases": [
-        "condenser fan"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 56,
-      "real": "assets/refrigeration/fan_condenser/real.svg",
-      "edge": "assets/refrigeration/fan_condenser/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/fan_condenser/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/fan_condenser/edge.svg"
-    },
-    {
-      "id": "fan_evaporator",
-      "displayName": "Evaporator Fan",
-      "category": "refrigeration",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "Evap Fan",
-      "defaultLabel": "Evap Fan",
-      "aliases": [
-        "evap fan",
-        "fan"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 56,
-      "real": "assets/refrigeration/fan_evaporator/real.svg",
-      "edge": "assets/refrigeration/fan_evaporator/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/fan_evaporator/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/fan_evaporator/edge.svg"
-    },
-    {
       "id": "generator_monitor",
       "displayName": "Generator Monitor",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "Generator",
@@ -917,6 +856,9 @@
       "id": "generic_coldroom",
       "displayName": "Coldroom",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -934,6 +876,9 @@
       "id": "generic_condenser",
       "displayName": "Condenser",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -951,6 +896,9 @@
       "id": "generic_condensing_unit",
       "displayName": "Condensing Unit",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -968,6 +916,9 @@
       "id": "generic_glycol_pump_skid",
       "displayName": "Glycol Pump Skid",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -985,6 +936,9 @@
       "id": "generic_idf",
       "displayName": "IDF",
       "category": "network_data",
+      "categories": [
+        "network_data"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1002,6 +956,9 @@
       "id": "generic_mau",
       "displayName": "MAU",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1019,6 +976,9 @@
       "id": "generic_mdf",
       "displayName": "MDF",
       "category": "network_data",
+      "categories": [
+        "network_data"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1033,43 +993,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/network_data/generic_mdf/edge.png"
     },
     {
-      "id": "generic_pacu_main",
-      "displayName": "PACU Main",
-      "category": "hvac",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "PACU  Main",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 64,
-      "real": "assets/hvac/generic_pacu_main/real.png",
-      "edge": "assets/hvac/generic_pacu_main/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/hvac/generic_pacu_main/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/hvac/generic_pacu_main/edge.png"
-    },
-    {
-      "id": "generic_pacu_munters_dehumid",
-      "displayName": "PACU Munters Dehumid",
-      "category": "hvac",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "PACU Munters Dehumid",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 64,
-      "real": "assets/hvac/generic_pacu_munters_dehumid/real.png",
-      "edge": "assets/hvac/generic_pacu_munters_dehumid/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/hvac/generic_pacu_munters_dehumid/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/hvac/generic_pacu_munters_dehumid/edge.png"
-    },
-    {
       "id": "generic_pacu_rtu_york",
       "displayName": "PACU RTU York",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1087,6 +1016,9 @@
       "id": "generic_rack_rtu",
       "displayName": "Rack RTU",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1104,6 +1036,9 @@
       "id": "generic_rack_zero_zone",
       "displayName": "Rack Zero Zone",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1121,6 +1056,9 @@
       "id": "generic-alarm-strobe",
       "displayName": "Alarm Strobe Horn",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1140,29 +1078,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/generic-alarm-strobe/edge.png"
     },
     {
-      "id": "generic-amber-strobe",
-      "displayName": "Amber Strobe",
-      "category": "alarms_safety",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "Amber Strobe",
-      "aliases": [
-        "Amber Alarm",
-        "Warning Light"
-      ],
-      "tags": [],
-      "defaultWidth": 44,
-      "defaultHeight": 44,
-      "real": "assets/alarms_safety/generic-amber-strobe/real.png",
-      "edge": "assets/alarms_safety/generic-amber-strobe/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/generic-amber-strobe/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/generic-amber-strobe/edge.png"
-    },
-    {
       "id": "generic-din-rail",
       "displayName": "DIN Rail",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1179,85 +1100,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/generic-din-rail/edge.png"
     },
     {
-      "id": "generic-red-strobe",
-      "displayName": "Red Strobe",
-      "category": "alarms_safety",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "Red Strobe",
-      "aliases": [
-        "Red Alarm",
-        "Warning Light"
-      ],
-      "tags": [],
-      "defaultWidth": 44,
-      "defaultHeight": 44,
-      "real": "assets/alarms_safety/generic-red-strobe/real.jpeg",
-      "edge": "assets/alarms_safety/generic-red-strobe/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/generic-red-strobe/real.jpeg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/generic-red-strobe/edge.png"
-    },
-    {
-      "id": "heater_anti_sweat",
-      "displayName": "Anti-sweat Heater",
-      "category": "refrigeration",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "AS Heater",
-      "defaultLabel": "AS Heater",
-      "aliases": [
-        "anti-sweat",
-        "antisweat heater"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 56,
-      "real": "assets/refrigeration/heater_anti_sweat/real.svg",
-      "edge": "assets/refrigeration/heater_anti_sweat/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/heater_anti_sweat/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/heater_anti_sweat/edge.svg"
-    },
-    {
-      "id": "heater_defrost",
-      "displayName": "Defrost Heater",
-      "category": "refrigeration",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "Defrost",
-      "defaultLabel": "Defrost",
-      "aliases": [
-        "defrost heater"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 56,
-      "real": "assets/refrigeration/heater_defrost/real.svg",
-      "edge": "assets/refrigeration/heater_defrost/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/heater_defrost/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/heater_defrost/edge.svg"
-    },
-    {
-      "id": "heb_customer_heb_logo",
-      "displayName": "HEB Logo",
-      "category": "logos",
-      "collection": "",
-      "manufacturer": "H-E-B / Customer",
-      "partNumber": "",
-      "defaultLabel": "",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 140,
-      "defaultHeight": 60,
-      "real": "assets/logos/heb_customer_heb_logo/real.png",
-      "edge": "assets/logos/heb_customer_heb_logo/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/logos/heb_customer_heb_logo/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/logos/heb_customer_heb_logo/edge.png"
-    },
-    {
       "id": "horn_silencer_button",
       "displayName": "Horn Silencer Button",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "56PB",
@@ -1278,6 +1126,9 @@
       "id": "hvac_bacnet_pacu_oau_loop",
       "displayName": "Bacnet PACU/OAU Loop",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1299,6 +1150,9 @@
       "id": "hvac_oau_unit",
       "displayName": "OAU Unit",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "OAU",
@@ -1319,6 +1173,9 @@
       "id": "hvac_pacu_unit",
       "displayName": "PACU Unit",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "PACU",
@@ -1339,6 +1196,9 @@
       "id": "idf_48_port_switch",
       "displayName": "48-port RDM IDF Switch",
       "category": "network_data",
+      "categories": [
+        "network_data"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "48-port",
@@ -1360,6 +1220,9 @@
       "id": "idf_switch_stack",
       "displayName": "RDM IDF Switch Stack",
       "category": "network_data",
+      "categories": [
+        "network_data"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "IDF Stack",
@@ -1381,6 +1244,9 @@
       "id": "lcp_enclosure",
       "displayName": "LCP Enclosure",
       "category": "panels_enclosures",
+      "categories": [
+        "panels_enclosures"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "LCP",
@@ -1402,6 +1268,9 @@
       "id": "lighting_dimming_module",
       "displayName": "Dimming Module",
       "category": "lighting",
+      "categories": [
+        "lighting"
+      ],
       "collection": "",
       "manufacturer": "CD Controls",
       "partNumber": "100-4004",
@@ -1423,6 +1292,9 @@
       "id": "lighting_dimming_zone_marker",
       "displayName": "Dimming Zone Marker",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "DZ",
@@ -1444,6 +1316,9 @@
       "id": "lighting_lcp1_controller_group",
       "displayName": "LCP1 Lighting Controls",
       "category": "lighting",
+      "categories": [
+        "lighting"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "LCP1",
@@ -1461,149 +1336,14 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/lighting/lighting_lcp1_controller_group/edge.svg"
     },
     {
-      "id": "line_bacnet",
-      "displayName": "Line Legend - Bacnet",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "Singh360",
-      "partNumber": "BACnet",
-      "defaultLabel": "BACnet",
-      "aliases": [
-        "BACnet",
-        "MS/TP"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/line_bacnet/real.svg",
-      "edge": "assets/symbols_markers/line_bacnet/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_bacnet/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_bacnet/edge.svg"
-    },
-    {
-      "id": "line_canbus",
-      "displayName": "Line Legend - Canbus",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "Singh360",
-      "partNumber": "CANbus",
-      "defaultLabel": "CANbus",
-      "aliases": [
-        "CANbus",
-        "CAN"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/line_canbus/real.svg",
-      "edge": "assets/symbols_markers/line_canbus/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_canbus/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_canbus/edge.svg"
-    },
-    {
-      "id": "line_cat6",
-      "displayName": "Line Legend - CAT6",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "Singh360",
-      "partNumber": "CAT6",
-      "defaultLabel": "CAT6",
-      "aliases": [
-        "CAT6",
-        "ethernet line"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/line_cat6/real.svg",
-      "edge": "assets/symbols_markers/line_cat6/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_cat6/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_cat6/edge.svg"
-    },
-    {
-      "id": "line_control_wiring",
-      "displayName": "Line Legend - Control Wiring",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "Singh360",
-      "partNumber": "Control Wiring",
-      "defaultLabel": "Control Wiring",
-      "aliases": [
-        "control wiring"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/line_control_wiring/real.svg",
-      "edge": "assets/symbols_markers/line_control_wiring/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_control_wiring/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_control_wiring/edge.svg"
-    },
-    {
-      "id": "line_existing_reference",
-      "displayName": "Line Legend - Existing / Reference",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "Singh360",
-      "partNumber": "Existing",
-      "defaultLabel": "Existing",
-      "aliases": [
-        "existing",
-        "reference line"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/line_existing_reference/real.svg",
-      "edge": "assets/symbols_markers/line_existing_reference/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_existing_reference/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_existing_reference/edge.svg"
-    },
-    {
-      "id": "line_fiber",
-      "displayName": "Line Legend - Fiber",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "Singh360",
-      "partNumber": "Fiber",
-      "defaultLabel": "Fiber",
-      "aliases": [
-        "fiber",
-        "fiber optic"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/line_fiber/real.svg",
-      "edge": "assets/symbols_markers/line_fiber/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_fiber/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_fiber/edge.svg"
-    },
-    {
-      "id": "line_line_voltage",
-      "displayName": "Line Legend - Line Voltage",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "Singh360",
-      "partNumber": "Line Voltage",
-      "defaultLabel": "Line Voltage",
-      "aliases": [
-        "line voltage",
-        "power line"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/line_line_voltage/real.svg",
-      "edge": "assets/symbols_markers/line_line_voltage/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_line_voltage/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/line_line_voltage/edge.svg"
-    },
-    {
       "id": "marker_01_data_manager",
-      "displayName": "Control Note 1 Marker - Data Manager",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Data Manager Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "network_data"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "1",
       "defaultLabel": "1",
@@ -1612,18 +1352,22 @@
         "Data Manager marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_01_data_manager/real.svg",
-      "edge": "assets/custom/marker_01_data_manager/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_01_data_manager/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_01_data_manager/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_01_data_manager/real.svg",
+      "edge": "assets/symbols_markers/marker_01_data_manager/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_01_data_manager/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_01_data_manager/edge.svg"
     },
     {
       "id": "marker_02_rdm_idf",
-      "displayName": "Control Note 2 Marker - RDM IDF",
-      "category": "custom",
-      "collection": "",
+      "displayName": "RDM IDF Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "network_data"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "2",
       "defaultLabel": "2",
@@ -1632,18 +1376,22 @@
         "RDM IDF marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_02_rdm_idf/real.svg",
-      "edge": "assets/custom/marker_02_rdm_idf/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_02_rdm_idf/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_02_rdm_idf/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_02_rdm_idf/real.svg",
+      "edge": "assets/symbols_markers/marker_02_rdm_idf/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_02_rdm_idf/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_02_rdm_idf/edge.svg"
     },
     {
       "id": "marker_03_wicp",
-      "displayName": "Control Note 3 Marker - WICP",
-      "category": "custom",
-      "collection": "",
+      "displayName": "WICP Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "panels_enclosures"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "3",
       "defaultLabel": "3",
@@ -1652,18 +1400,23 @@
         "WICP location marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_03_wicp/real.svg",
-      "edge": "assets/custom/marker_03_wicp/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_03_wicp/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_03_wicp/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_03_wicp/real.svg",
+      "edge": "assets/symbols_markers/marker_03_wicp/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_03_wicp/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_03_wicp/edge.svg"
     },
     {
       "id": "marker_04_lcp",
-      "displayName": "Control Note 4 Marker - LCP",
-      "category": "custom",
-      "collection": "",
+      "displayName": "LCP Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "lighting",
+        "panels_enclosures"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "4",
       "defaultLabel": "4",
@@ -1672,18 +1425,23 @@
         "LCP marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_04_lcp/real.svg",
-      "edge": "assets/custom/marker_04_lcp/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_04_lcp/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_04_lcp/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_04_lcp/real.svg",
+      "edge": "assets/symbols_markers/marker_04_lcp/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_04_lcp/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_04_lcp/edge.svg"
     },
     {
       "id": "marker_05_refrig_temp_sensor",
-      "displayName": "Control Note 5 Marker - Refrigeration Temp Sensor",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Refrigeration Temperature Sensor Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "refrigeration"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "5",
       "defaultLabel": "5",
@@ -1692,18 +1450,22 @@
         "refrigeration temp sensor"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_05_refrig_temp_sensor/real.svg",
-      "edge": "assets/custom/marker_05_refrig_temp_sensor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_05_refrig_temp_sensor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_05_refrig_temp_sensor/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_05_refrig_temp_sensor/real.svg",
+      "edge": "assets/symbols_markers/marker_05_refrig_temp_sensor/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_05_refrig_temp_sensor/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_05_refrig_temp_sensor/edge.svg"
     },
     {
       "id": "marker_06_power_monitor",
-      "displayName": "Control Note 6 Marker - Power Monitor",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Power Monitor Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "electrical_power"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "6",
       "defaultLabel": "6",
@@ -1712,18 +1474,23 @@
         "Power Monitor marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_06_power_monitor/real.svg",
-      "edge": "assets/custom/marker_06_power_monitor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_06_power_monitor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_06_power_monitor/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_06_power_monitor/real.svg",
+      "edge": "assets/symbols_markers/marker_06_power_monitor/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_06_power_monitor/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_06_power_monitor/edge.svg"
     },
     {
       "id": "marker_07_orbit_touchxl",
-      "displayName": "Control Note 7 Marker - Orbit Touch XL",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Orbit TouchXL Location Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "controllers",
+        "network_data"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "7",
       "defaultLabel": "7",
@@ -1732,18 +1499,22 @@
         "Orbit marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_07_orbit_touchxl/real.svg",
-      "edge": "assets/custom/marker_07_orbit_touchxl/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_07_orbit_touchxl/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_07_orbit_touchxl/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_07_orbit_touchxl/real.svg",
+      "edge": "assets/symbols_markers/marker_07_orbit_touchxl/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_07_orbit_touchxl/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_07_orbit_touchxl/edge.svg"
     },
     {
       "id": "marker_08_amber_strobe",
-      "displayName": "Control Note 8 Marker - Amber Alarm Strobe",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Amber Alarm Strobe Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "8",
       "defaultLabel": "8",
@@ -1752,18 +1523,22 @@
         "amber strobe marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_08_amber_strobe/real.svg",
-      "edge": "assets/custom/marker_08_amber_strobe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_08_amber_strobe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_08_amber_strobe/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_08_amber_strobe/real.svg",
+      "edge": "assets/symbols_markers/marker_08_amber_strobe/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_08_amber_strobe/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_08_amber_strobe/edge.svg"
     },
     {
       "id": "marker_09_red_strobe",
-      "displayName": "Control Note 9 Marker - Red Alarm Strobe",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Red Alarm Strobe Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "9",
       "defaultLabel": "9",
@@ -1772,18 +1547,22 @@
         "red strobe marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_09_red_strobe/real.svg",
-      "edge": "assets/custom/marker_09_red_strobe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_09_red_strobe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_09_red_strobe/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_09_red_strobe/real.svg",
+      "edge": "assets/symbols_markers/marker_09_red_strobe/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_09_red_strobe/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_09_red_strobe/edge.svg"
     },
     {
       "id": "marker_10_pharmacy_temp_probe",
-      "displayName": "Control Note 10 Marker - Pharmacy Temp Probe",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Pharmacy Temperature Probe Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "10",
       "defaultLabel": "10",
@@ -1792,18 +1571,23 @@
         "pharmacy temp probe marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_10_pharmacy_temp_probe/real.svg",
-      "edge": "assets/custom/marker_10_pharmacy_temp_probe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_10_pharmacy_temp_probe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_10_pharmacy_temp_probe/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_10_pharmacy_temp_probe/real.svg",
+      "edge": "assets/symbols_markers/marker_10_pharmacy_temp_probe/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_10_pharmacy_temp_probe/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_10_pharmacy_temp_probe/edge.svg"
     },
     {
       "id": "marker_11_computer_room_temp_probe",
-      "displayName": "Control Note 11 Marker - Computer Room Temp Probe",
-      "category": "custom",
-      "collection": "",
+      "displayName": "Computer Room Temperature Probe Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "hvac"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "11",
       "defaultLabel": "11",
@@ -1812,18 +1596,22 @@
         "computer room temp probe marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_11_computer_room_temp_probe/real.svg",
-      "edge": "assets/custom/marker_11_computer_room_temp_probe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_11_computer_room_temp_probe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_11_computer_room_temp_probe/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_11_computer_room_temp_probe/real.svg",
+      "edge": "assets/symbols_markers/marker_11_computer_room_temp_probe/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_11_computer_room_temp_probe/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_11_computer_room_temp_probe/edge.svg"
     },
     {
       "id": "marker_12_high_temp_bbq_sensor",
-      "displayName": "Control Note 12 Marker - High Temp BBQ Sensor",
-      "category": "custom",
-      "collection": "",
+      "displayName": "High-Temperature BBQ Sensor Callout",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers"
+      ],
+      "collection": "Singh360 Standard - Location Callouts",
       "manufacturer": "Singh360",
       "partNumber": "12",
       "defaultLabel": "12",
@@ -1832,17 +1620,20 @@
         "BBQ high temp sensor marker"
       ],
       "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/marker_12_high_temp_bbq_sensor/real.svg",
-      "edge": "assets/custom/marker_12_high_temp_bbq_sensor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_12_high_temp_bbq_sensor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/marker_12_high_temp_bbq_sensor/edge.svg"
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/marker_12_high_temp_bbq_sensor/real.svg",
+      "edge": "assets/symbols_markers/marker_12_high_temp_bbq_sensor/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_12_high_temp_bbq_sensor/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/marker_12_high_temp_bbq_sensor/edge.svg"
     },
     {
       "id": "mdf_idf_rack",
       "displayName": "MDF / IDF Rack",
       "category": "network_data",
+      "categories": [
+        "network_data"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "MDF/IDF",
@@ -1861,50 +1652,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/network_data/mdf_idf_rack/edge.svg"
     },
     {
-      "id": "network_cat6_drop",
-      "displayName": "CAT6 Drop",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "CAT6 Drop",
-      "aliases": [
-        "CAT6",
-        "Ethernet",
-        "Data Drop"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/network_cat6_drop/real.png",
-      "edge": "assets/symbols_markers/network_cat6_drop/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/network_cat6_drop/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/network_cat6_drop/edge.svg"
-    },
-    {
-      "id": "network_fiber_link",
-      "displayName": "Fiber Link",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "Fiber Link",
-      "aliases": [
-        "Fiber",
-        "Fiber Optic"
-      ],
-      "tags": [],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/network_fiber_link/real.png",
-      "edge": "assets/symbols_markers/network_fiber_link/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/network_fiber_link/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/network_fiber_link/edge.svg"
-    },
-    {
       "id": "network_mdf_rack",
       "displayName": "MDF Rack",
       "category": "network_data",
+      "categories": [
+        "network_data"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1925,6 +1678,9 @@
       "id": "network_rdm_idf_48_port_switch",
       "displayName": "RDM IDF 48-port Switch",
       "category": "network_data",
+      "categories": [
+        "network_data"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -1946,6 +1702,9 @@
       "id": "oau_unit",
       "displayName": "OAU Outside Air Unit",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "OAU",
@@ -1966,6 +1725,9 @@
       "id": "pacu_unit",
       "displayName": "PACU Rooftop Unit",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "PACU",
@@ -1986,6 +1748,9 @@
       "id": "panel_lcp_enclosure",
       "displayName": "LCP Lighting Control Panel",
       "category": "panels_enclosures",
+      "categories": [
+        "panels_enclosures"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "LCP",
@@ -2006,6 +1771,9 @@
       "id": "pcp_enclosure",
       "displayName": "PCP Pharmacy Control Panel",
       "category": "panels_enclosures",
+      "categories": [
+        "panels_enclosures"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "PCP",
@@ -2026,6 +1794,10 @@
       "id": "powerscout_ps12",
       "displayName": "Powerscout PS12 Meter",
       "category": "custom",
+      "categories": [
+        "custom",
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Dent",
       "partNumber": "PS12",
@@ -2047,6 +1819,10 @@
       "id": "powerscout_ps24",
       "displayName": "Powerscout PS24 Meter",
       "category": "custom",
+      "categories": [
+        "custom",
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Dent",
       "partNumber": "PS24",
@@ -2068,6 +1844,10 @@
       "id": "powerscout_ps3",
       "displayName": "Powerscout PS3 Meter",
       "category": "custom",
+      "categories": [
+        "custom",
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Dent",
       "partNumber": "PS3",
@@ -2089,6 +1869,10 @@
       "id": "powerscout_ps48",
       "displayName": "Powerscout PS48 Meter",
       "category": "custom",
+      "categories": [
+        "custom",
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Dent",
       "partNumber": "PS48",
@@ -2111,6 +1895,10 @@
       "id": "rdm_data_manager",
       "displayName": "RDM Data Manager",
       "category": "network_data",
+      "categories": [
+        "network_data",
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0510",
@@ -2133,6 +1921,9 @@
       "id": "rdm_mercury_switch",
       "displayName": "Mercury Switch",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "Mercury",
@@ -2150,6 +1941,9 @@
       "id": "rdm_orbit_touchxl",
       "displayName": "Orbit TouchXL",
       "category": "network_data",
+      "categories": [
+        "network_data"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0617-OB-E-BK",
@@ -2172,6 +1966,9 @@
       "id": "rdm_orbit_touchxl_console",
       "displayName": "Orbit Touchxl Console",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0617-OB-E-BK",
@@ -2190,31 +1987,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/rdm_orbit_touchxl_console/edge.png"
     },
     {
-      "id": "rdm_pr0650cd_tdb_controller",
-      "displayName": "Pr0650cd-tdb Controller",
-      "category": "controllers",
-      "collection": "",
-      "manufacturer": "RDM",
-      "partNumber": "PR0650CD-TDB",
-      "defaultLabel": "PR0650CD-TDB",
-      "aliases": [
-        "PR0650",
-        "PR0650CD-TDB",
-        "TDB",
-        "RDM controller"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/controllers/rdm_pr0650cd_tdb_controller/real.svg",
-      "edge": "assets/controllers/rdm_pr0650cd_tdb_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/rdm_pr0650cd_tdb_controller/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/rdm_pr0650cd_tdb_controller/edge.svg"
-    },
-    {
       "id": "rdm_pr0652_cct_controller",
       "displayName": "Pr0652-cct Case Controller",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0652-CCT",
@@ -2235,6 +2013,9 @@
       "id": "rdm_pr0653_top_row_connections",
       "displayName": "PR0653 Top Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0653",
@@ -2254,6 +2035,9 @@
       "id": "rdm_pr0656_expansion_module",
       "displayName": "PR0656 Expansion Module",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0656",
@@ -2274,6 +2058,9 @@
       "id": "rdm_pr0660_bottom_row_connections",
       "displayName": "PR0660 Bottom Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0660",
@@ -2293,6 +2080,9 @@
       "id": "rdm_pr0660_stepper_expansion_module",
       "displayName": "PR0660 Stepper Expansion Module",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0660",
@@ -2314,6 +2104,9 @@
       "id": "rdm_pr0660_top_row_connections",
       "displayName": "PR0660 Top Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0660",
@@ -2333,6 +2126,9 @@
       "id": "rdm_pr0660_top_row_controller",
       "displayName": "PR0660 Top Row Controller",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0660",
@@ -2353,6 +2149,9 @@
       "id": "rdm_pr0661_bottom_row_connections",
       "displayName": "PR0661 Bottom Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0661",
@@ -2369,29 +2168,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/expansion_modules/rdm_pr0661_bottom_row_connections/edge.png"
     },
     {
-      "id": "rdm_pr0661_bottom_row_controller",
-      "displayName": "PR0661 Bottom Row Controller",
-      "category": "controllers",
-      "collection": "",
-      "manufacturer": "RDM",
-      "partNumber": "PR0661",
-      "defaultLabel": "PR0661",
-      "aliases": [
-        "PR0661",
-        "bottom row controller"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/controllers/rdm_pr0661_bottom_row_controller/real.svg",
-      "edge": "assets/controllers/rdm_pr0661_bottom_row_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/rdm_pr0661_bottom_row_controller/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/rdm_pr0661_bottom_row_controller/edge.svg"
-    },
-    {
       "id": "rdm_pr0661_io_expansion",
       "displayName": "PR0661 IO Expansion",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0661",
@@ -2412,6 +2194,9 @@
       "id": "rdm_pr0661_io_expansion_module",
       "displayName": "PR0661 I/O Expansion Module",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0661",
@@ -2432,6 +2217,9 @@
       "id": "rdm_pr0661_top_row_connections",
       "displayName": "PR0661 Top Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0661",
@@ -2451,6 +2239,9 @@
       "id": "rdm_pr0662_connections",
       "displayName": "PR0662 Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0662",
@@ -2470,6 +2261,9 @@
       "id": "rdm_pr0663_4_4_bottom_row_connections",
       "displayName": "PR0663 4-4 Bottom Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0663",
@@ -2489,6 +2283,9 @@
       "id": "rdm_pr0663_4_4_top_row_connections",
       "displayName": "PR0663 4-4 Top Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0663",
@@ -2508,6 +2305,9 @@
       "id": "rdm_pr0663_bottom_row_connections",
       "displayName": "PR0663 Bottom Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0663",
@@ -2527,6 +2327,9 @@
       "id": "rdm_pr0663_expansion_module",
       "displayName": "PR0663 Expansion I/O Module",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0663",
@@ -2548,6 +2351,9 @@
       "id": "rdm_pr0663_mini_io_expansion",
       "displayName": "PR0663 Mini I/O Expansion",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0663",
@@ -2569,6 +2375,9 @@
       "id": "rdm_pr0663_top_row_connections",
       "displayName": "PR0663 Top Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0663",
@@ -2585,30 +2394,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/expansion_modules/rdm_pr0663_top_row_connections/edge.png"
     },
     {
-      "id": "rdm_pr0680cd_tdb_controller",
-      "displayName": "Pr0680cd-tdb Mini Controller",
-      "category": "controllers",
-      "collection": "",
-      "manufacturer": "RDM",
-      "partNumber": "PR0680CD-TDB",
-      "defaultLabel": "PR0680CD-TDB",
-      "aliases": [
-        "PR0680",
-        "PR0680CD-TDB",
-        "Mini controller"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/controllers/rdm_pr0680cd_tdb_controller/real.svg",
-      "edge": "assets/controllers/rdm_pr0680cd_tdb_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/rdm_pr0680cd_tdb_controller/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/rdm_pr0680cd_tdb_controller/edge.svg"
-    },
-    {
       "id": "rdm_pr0681_mini_io_expansion",
       "displayName": "PR0681 Mini I/O Expansion",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0681",
@@ -2629,6 +2420,9 @@
       "id": "rdm_pr0681_top_bottom_connections",
       "displayName": "PR0681 Top Bottom Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0681",
@@ -2648,6 +2442,9 @@
       "id": "rdm_pr0681_top_row_connections",
       "displayName": "PR0681 Top Row Connections",
       "category": "expansion_modules",
+      "categories": [
+        "expansion_modules"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0681",
@@ -2667,6 +2464,9 @@
       "id": "rdm_pr0685_3ec_case_controller",
       "displayName": "Pr0685-3ec Case Controller",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0685-3EC",
@@ -2687,6 +2487,9 @@
       "id": "rdm_pr0685_case_controller",
       "displayName": "PR0685 Case Controller",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0685",
@@ -2707,6 +2510,9 @@
       "id": "rdm_pr0740_case_controller",
       "displayName": "PR0740 Case Controller",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0740",
@@ -2727,6 +2533,9 @@
       "id": "rdm_pr0751_evap_controller",
       "displayName": "PR0751 Evaporator Controller",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0751-IP",
@@ -2748,6 +2557,9 @@
       "id": "rdm_pr0751_ip_evap_controller",
       "displayName": "Pr0751-ip EEV Evaporator Controller",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0751-IP",
@@ -2769,6 +2581,9 @@
       "id": "rdm_rdm_bluetooth",
       "displayName": "RDM Bluetooth",
       "category": "custom",
+      "categories": [
+        "custom"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "",
@@ -2786,6 +2601,9 @@
       "id": "rdm_rdm_logo",
       "displayName": "RDM Logo",
       "category": "logos",
+      "categories": [
+        "logos"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "",
@@ -2803,6 +2621,9 @@
       "id": "rdm-data-manager",
       "displayName": "PRO Pack",
       "category": "network_data",
+      "categories": [
+        "network_data"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "Data Manager",
@@ -2824,6 +2645,9 @@
       "id": "rdm-mercury",
       "displayName": "Mercury Controller",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "Mercury",
@@ -2844,6 +2668,9 @@
       "id": "rdm-pr0680",
       "displayName": "PR0680 TDB Touchscreen Controller",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0680",
@@ -2865,6 +2692,9 @@
       "id": "rdm-touchxl",
       "displayName": "Touchxl",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "TouchXL",
@@ -2885,6 +2715,9 @@
       "id": "refrigeration_co2_rack",
       "displayName": "CO2 Refrigeration Rack",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -2902,29 +2735,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_co2_rack/edge.svg"
     },
     {
-      "id": "refrigeration_rack",
-      "displayName": "Refrigeration Rack",
-      "category": "refrigeration",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "Rack",
-      "defaultLabel": "Rack",
-      "aliases": [
-        "rack",
-        "refrigeration rack"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 56,
-      "real": "assets/refrigeration/refrigeration_rack/real.svg",
-      "edge": "assets/refrigeration/refrigeration_rack/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_rack/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_rack/edge.svg"
-    },
-    {
       "id": "refrigeration_rack_ra",
       "displayName": "Refrigeration Rack RA",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "RA",
@@ -2945,6 +2761,9 @@
       "id": "refrigeration_rack_rb",
       "displayName": "Refrigeration Rack RB",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "RB",
@@ -2965,6 +2784,9 @@
       "id": "refrigeration_rack_rc",
       "displayName": "Refrigeration Rack RC",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "RC",
@@ -2982,47 +2804,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_rack_rc/edge.svg"
     },
     {
-      "id": "refrigeration_valve_closed",
-      "displayName": "Valve Closed",
-      "category": "refrigeration",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "Valve Closed",
-      "aliases": [
-        "Valve Closed"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 56,
-      "real": "assets/refrigeration/refrigeration_valve_closed/real.png",
-      "edge": "assets/refrigeration/refrigeration_valve_closed/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_valve_closed/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_valve_closed/edge.svg"
-    },
-    {
-      "id": "refrigeration_valve_open",
-      "displayName": "Valve Open",
-      "category": "refrigeration",
-      "collection": "",
-      "manufacturer": "Generic",
-      "partNumber": "",
-      "defaultLabel": "Valve Open",
-      "aliases": [
-        "Valve Open"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 56,
-      "real": "assets/refrigeration/refrigeration_valve_open/real.png",
-      "edge": "assets/refrigeration/refrigeration_valve_open/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_valve_open/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_valve_open/edge.svg"
-    },
-    {
       "id": "sensor_10k_temp_probe",
       "displayName": "10K Temperature Probe",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers"
+      ],
       "collection": "",
       "manufacturer": "RDM",
       "partNumber": "PR0250-P4",
@@ -3044,6 +2831,9 @@
       "id": "sensor_10k2_temp_probe",
       "displayName": "10K2 Temperature Probe",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "10K2",
@@ -3065,6 +2855,9 @@
       "id": "sensor_clean_switch",
       "displayName": "Clean Switch",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -3085,6 +2878,11 @@
       "id": "sensor_co2_leak_transducer",
       "displayName": "CO2 Leak Transducer",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers",
+        "refrigeration",
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "CT1O-A3D",
@@ -3106,6 +2904,9 @@
       "id": "sensor_defrost_termination",
       "displayName": "Defrost Termination Sensor",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -3126,6 +2927,11 @@
       "id": "sensor_hfc_leak_ls",
       "displayName": "HFC Refrigerant Leak Sensor LS",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers",
+        "refrigeration",
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "REF-LK-832",
@@ -3147,6 +2953,11 @@
       "id": "sensor_hfc_leak_transducer",
       "displayName": "HFC Leak Transducer",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers",
+        "refrigeration",
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "REF-LK-832",
@@ -3168,6 +2979,9 @@
       "id": "sensor_humidity_temp_rh",
       "displayName": "Temp / RH Sensor",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "A/RH3-CP-R",
@@ -3189,6 +3003,9 @@
       "id": "sensor_indoor_temp_rh",
       "displayName": "Indoor Temp / RH Sensor",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "A/RH3-CP-R",
@@ -3210,6 +3027,9 @@
       "id": "sensor_light_level_oat",
       "displayName": "Light Level / OAT Sensor",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "PR0198-10K2",
@@ -3232,6 +3052,9 @@
       "id": "sensor_pressure_transducer",
       "displayName": "Pressure Transducer",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "",
@@ -3253,6 +3076,9 @@
       "id": "sensor_zone_temp",
       "displayName": "Zone Temperature Sensor",
       "category": "sensors_transducers",
+      "categories": [
+        "sensors_transducers"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "A/CP-R",
@@ -3274,6 +3100,10 @@
       "id": "signage_legend_strip",
       "displayName": "Signage Legend Strip",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "Signage Legend",
@@ -3294,7 +3124,11 @@
     {
       "id": "sym_dm_data_manager_marker",
       "displayName": "DM Data Manager Marker",
-      "category": "symbols_markers",
+      "category": "network_data",
+      "categories": [
+        "network_data",
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "DM",
@@ -3306,15 +3140,18 @@
       "tags": [],
       "defaultWidth": 18,
       "defaultHeight": 18,
-      "real": "assets/symbols_markers/sym_dm_data_manager_marker/real.svg",
-      "edge": "assets/symbols_markers/sym_dm_data_manager_marker/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/sym_dm_data_manager_marker/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/sym_dm_data_manager_marker/edge.svg"
+      "real": "assets/network_data/sym_dm_data_manager_marker/real.svg",
+      "edge": "assets/network_data/sym_dm_data_manager_marker/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/network_data/sym_dm_data_manager_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/network_data/sym_dm_data_manager_marker/edge.svg"
     },
     {
       "id": "sym_idf_network_marker",
       "displayName": "IDF Network Marker",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "IDF",
@@ -3336,6 +3173,9 @@
       "id": "sym_lcp_panel_marker",
       "displayName": "LCP Panel Marker",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "LCP",
@@ -3356,6 +3196,9 @@
       "id": "sym_lt_light_level_sensor",
       "displayName": "LT Light Level / OAT Sensor",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "LT",
@@ -3378,6 +3221,9 @@
       "id": "sym_oat_outdoor_air_temp",
       "displayName": "OAT Outdoor Air Temp Sensor",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "OAT",
@@ -3399,6 +3245,9 @@
       "id": "sym_pm_power_monitor_marker",
       "displayName": "PM Power Monitor Marker",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "PM",
@@ -3420,6 +3269,9 @@
       "id": "sym_t_temp_input",
       "displayName": "T Temperature Input",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "T",
@@ -3441,6 +3293,9 @@
       "id": "sym_wicp_panel_marker",
       "displayName": "WICP Panel Marker",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "WICP",
@@ -3461,6 +3316,9 @@
       "id": "ups_power",
       "displayName": "UPS / Backup Power",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "UPS",
@@ -3481,6 +3339,9 @@
       "id": "valve_liquid_line_solenoid",
       "displayName": "Liquid Line Solenoid Valve",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "Generic",
       "partNumber": "LLV",
@@ -3502,6 +3363,9 @@
       "id": "wicp_enclosure",
       "displayName": "WICP Enclosure",
       "category": "panels_enclosures",
+      "categories": [
+        "panels_enclosures"
+      ],
       "collection": "",
       "manufacturer": "Singh360",
       "partNumber": "WICP",
@@ -3523,6 +3387,9 @@
       "id": "wicp_ds_door_switch",
       "displayName": "DS Door Switch",
       "category": "custom",
+      "categories": [
+        "custom"
+      ],
       "collection": "",
       "manufacturer": "Singh360 / H-E-B functional standard",
       "partNumber": "DS",
@@ -3544,6 +3411,9 @@
       "id": "wicp_et_entrapment_switch",
       "displayName": "ET Entrapment Switch",
       "category": "custom",
+      "categories": [
+        "custom"
+      ],
       "collection": "",
       "manufacturer": "Singh360 / H-E-B functional standard",
       "partNumber": "ET",
@@ -3565,6 +3435,9 @@
       "id": "wicp_llsv_liquid_line_solenoid_valve",
       "displayName": "LLSV Liquid Line Solenoid Valve",
       "category": "custom",
+      "categories": [
+        "custom"
+      ],
       "collection": "",
       "manufacturer": "Singh360 / H-E-B functional standard",
       "partNumber": "LLSV",
@@ -3586,7 +3459,11 @@
     {
       "id": "sign_help_trapped_symbol",
       "displayName": "HELP TRAPPED Symbol",
-      "category": "custom",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Singh360 / H-E-B functional standard",
       "partNumber": "HELP TRAPPED",
@@ -3598,15 +3475,19 @@
       "tags": [],
       "defaultWidth": 120,
       "defaultHeight": 42,
-      "real": "assets/custom/sign_help_trapped_symbol/real.svg",
-      "edge": "assets/custom/sign_help_trapped_symbol/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/sign_help_trapped_symbol/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/sign_help_trapped_symbol/edge.svg"
+      "real": "assets/symbols_markers/sign_help_trapped_symbol/real.svg",
+      "edge": "assets/symbols_markers/sign_help_trapped_symbol/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/sign_help_trapped_symbol/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/sign_help_trapped_symbol/edge.svg"
     },
     {
       "id": "signage_legend_safety_trapped_leak_help",
       "displayName": "Signage Legend - Safety / Trapped / Leak",
-      "category": "custom",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "Singh360 / H-E-B functional standard",
       "partNumber": "Signage Legend",
@@ -3620,16 +3501,20 @@
       "tags": [],
       "defaultWidth": 120,
       "defaultHeight": 42,
-      "real": "assets/custom/signage_legend_safety_trapped_leak_help/real.svg",
-      "edge": "assets/custom/signage_legend_safety_trapped_leak_help/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/signage_legend_safety_trapped_leak_help/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/signage_legend_safety_trapped_leak_help/edge.svg"
+      "real": "assets/symbols_markers/signage_legend_safety_trapped_leak_help/real.svg",
+      "edge": "assets/symbols_markers/signage_legend_safety_trapped_leak_help/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/signage_legend_safety_trapped_leak_help/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/signage_legend_safety_trapped_leak_help/edge.svg"
     },
     {
       "id": "s360_rdm_li",
       "displayName": "LI Leak Indicator Horn/Strobe",
       "category": "symbols_markers",
-      "collection": "RDM Standard — WICP Plan",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "collection": "RDM Standard — WICP Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "LI",
@@ -3639,9 +3524,8 @@
         "LI Alarm"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -3654,7 +3538,11 @@
       "id": "s360_rdm_da",
       "displayName": "DA Door Open Horn/Strobe",
       "category": "symbols_markers",
-      "collection": "RDM Standard — WICP Plan",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "collection": "RDM Standard — WICP Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "DA",
@@ -3664,9 +3552,8 @@
         "Door Open Horn/Strobe"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -3677,20 +3564,28 @@
     },
     {
       "id": "s360_rdm_ls",
-      "displayName": "LS HFC Refrigerant Leak Sensor",
+      "displayName": "LS Leak Sensor",
       "category": "symbols_markers",
-      "collection": "RDM Standard — WICP Plan",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers"
+      ],
+      "collection": "RDM Standard — WICP Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "LS",
       "aliases": [
         "HFC Leak Sensor",
-        "Refrigerant Leak Sensor"
+        "CO2 Leak Sensor",
+        "Refrigerant Leak Sensor",
+        "LSB",
+        "LSG",
+        "LSC",
+        "HSC"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -3700,85 +3595,14 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_ls/edge.svg"
     },
     {
-      "id": "s360_rdm_lsb",
-      "displayName": "LSB HFC Leak Sensor — Metal Enclosure",
-      "category": "symbols_markers",
-      "collection": "RDM Standard — WICP Plan",
-      "manufacturer": "Singh360",
-      "partNumber": "",
-      "defaultLabel": "LSB",
-      "aliases": [
-        "LS-B",
-        "Leak Sensor Metal Enclosure",
-        "HFC Leak Sensor Box"
-      ],
-      "tags": [
-        "RDM",
-        "Singh360 Standard",
-        "Canonical Symbol"
-      ],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/s360_rdm_lsb/real.svg",
-      "edge": "assets/symbols_markers/s360_rdm_lsb/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_lsb/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_lsb/edge.svg"
-    },
-    {
-      "id": "s360_rdm_lsg",
-      "displayName": "LSG CTI HFC Refrigerant Leak Sensor",
-      "category": "symbols_markers",
-      "collection": "RDM Standard — WICP Plan",
-      "manufacturer": "Singh360",
-      "partNumber": "",
-      "defaultLabel": "LSG",
-      "aliases": [
-        "LS-G",
-        "CTI HFC Leak Sensor"
-      ],
-      "tags": [
-        "RDM",
-        "Singh360 Standard",
-        "Canonical Symbol"
-      ],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/s360_rdm_lsg/real.svg",
-      "edge": "assets/symbols_markers/s360_rdm_lsg/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_lsg/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_lsg/edge.svg"
-    },
-    {
-      "id": "s360_rdm_lsc",
-      "displayName": "LSC CO2 Refrigerant Leak Sensor",
-      "category": "symbols_markers",
-      "collection": "RDM Standard — WICP Plan",
-      "manufacturer": "Singh360",
-      "partNumber": "",
-      "defaultLabel": "LSC",
-      "aliases": [
-        "LSc",
-        "LS CO2",
-        "CO2 Leak Sensor",
-        "CO2 Refrigerant Leak"
-      ],
-      "tags": [
-        "RDM",
-        "Singh360 Standard",
-        "Canonical Symbol"
-      ],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/s360_rdm_lsc/real.svg",
-      "edge": "assets/symbols_markers/s360_rdm_lsc/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_lsc/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_lsc/edge.svg"
-    },
-    {
       "id": "s360_rdm_es",
       "displayName": "ES Entrapment Switch",
       "category": "symbols_markers",
-      "collection": "RDM Standard — WICP Plan",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "collection": "RDM Standard — WICP Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "ES",
@@ -3787,9 +3611,8 @@
         "Person Entrapment Switch"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -3802,7 +3625,11 @@
       "id": "s360_rdm_ea",
       "displayName": "EA Entrapment Horn/Strobe",
       "category": "symbols_markers",
-      "collection": "RDM Standard — WICP Plan",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "collection": "RDM Standard — WICP Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "EA",
@@ -3812,9 +3639,8 @@
         "Entrapment Strobe"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -3825,9 +3651,13 @@
     },
     {
       "id": "s360_rdm_hs",
-      "displayName": "HS Leak / Horn Silencer Button",
+      "displayName": "HS Horn Silencer Button",
       "category": "symbols_markers",
-      "collection": "RDM Standard — WICP Plan",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "collection": "RDM Standard — WICP Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "HS",
@@ -3837,9 +3667,8 @@
         "Silence Button"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -3852,7 +3681,12 @@
       "id": "s360_rdm_ts",
       "displayName": "TS Temperature Sensor",
       "category": "symbols_markers",
-      "collection": "RDM Standard — Refrigeration Plan",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "refrigeration"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "TS",
@@ -3862,9 +3696,8 @@
         "Temperature Probe"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -3877,7 +3710,12 @@
       "id": "s360_rdm_ds",
       "displayName": "DS Defrost Sensor",
       "category": "symbols_markers",
-      "collection": "RDM Standard — Refrigeration Plan",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "refrigeration"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "DS",
@@ -3886,9 +3724,8 @@
         "Defrost Termination Sensor"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -3901,7 +3738,12 @@
       "id": "s360_rdm_dts",
       "displayName": "DTS Dual Temperature Switch",
       "category": "symbols_markers",
-      "collection": "RDM Standard — Refrigeration Plan",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "refrigeration"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "DTS",
@@ -3910,9 +3752,8 @@
         "Dual Temperature Sensor"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -3925,6 +3766,10 @@
       "id": "s360_rdm_sign_pti",
       "displayName": "Person Trapped Inside Sign Symbol",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
       "collection": "RDM Standard — Safety Signage",
       "manufacturer": "Singh360",
       "partNumber": "",
@@ -3935,9 +3780,8 @@
         "PTI Sign"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 22,
       "defaultHeight": 22,
@@ -3948,8 +3792,12 @@
     },
     {
       "id": "s360_rdm_sign_li",
-      "displayName": "When Lit Refrigerant Leak — Do Not Enter Sign Symbol",
+      "displayName": "When Lit Refrigerant Leak — Do Not Enter Sign",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
       "collection": "RDM Standard — Safety Signage",
       "manufacturer": "Singh360",
       "partNumber": "",
@@ -3960,9 +3808,8 @@
         "When Lit Refrigerant Leak"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 22,
       "defaultHeight": 22,
@@ -3973,8 +3820,12 @@
     },
     {
       "id": "s360_rdm_sign_help",
-      "displayName": "HELP TRAPPED / PERSONA ATRAPADA Sign Symbol",
+      "displayName": "HELP TRAPPED / PERSONA ATRAPADA Sign",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
       "collection": "RDM Standard — Safety Signage",
       "manufacturer": "Singh360",
       "partNumber": "",
@@ -3986,9 +3837,8 @@
         "Man Trap Sign"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 22,
       "defaultHeight": 22,
@@ -3999,68 +3849,82 @@
     },
     {
       "id": "s360_rdm_eepr_electronic",
-      "displayName": "Electronic EEPR Plan Marker",
-      "category": "symbols_markers",
-      "collection": "RDM Standard — Refrigeration Plan",
+      "displayName": "EEPR Electronic Evaporator Pressure Regulator",
+      "category": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
-      "defaultLabel": "Electronic EEPR",
+      "defaultLabel": "EEPR",
       "aliases": [
-        "EEPR Electronic",
-        "Sporlan Electronic EEPR"
+        "Electronic EEPR",
+        "Electronic Evaporator Pressure Regulator",
+        "Sporlan EEPR",
+        "ERV"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/s360_rdm_eepr_electronic/real.svg",
-      "edge": "assets/symbols_markers/s360_rdm_eepr_electronic/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_eepr_electronic/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_eepr_electronic/edge.svg"
+      "defaultWidth": 28,
+      "defaultHeight": 28,
+      "real": "assets/refrigeration/s360_rdm_eepr_electronic/real.svg",
+      "edge": "assets/refrigeration/s360_rdm_eepr_electronic/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_electronic/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_electronic/edge.svg"
     },
     {
       "id": "s360_rdm_eepr_mechanical",
-      "displayName": "Mechanical EEPR Plan Marker",
-      "category": "symbols_markers",
-      "collection": "RDM Standard — Refrigeration Plan",
+      "displayName": "EPR Mechanical Evaporator Pressure Regulator",
+      "category": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
-      "defaultLabel": "Mechanical EEPR",
+      "defaultLabel": "EPR",
       "aliases": [
-        "EEPR Mechanical",
-        "Sporlan Mechanical EEPR"
+        "Mechanical EPR",
+        "Mechanical Evaporator Pressure Regulator",
+        "Sporlan EPR",
+        "Mechanical ERP"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
-      "defaultWidth": 18,
-      "defaultHeight": 18,
-      "real": "assets/symbols_markers/s360_rdm_eepr_mechanical/real.svg",
-      "edge": "assets/symbols_markers/s360_rdm_eepr_mechanical/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_eepr_mechanical/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_rdm_eepr_mechanical/edge.svg"
+      "defaultWidth": 28,
+      "defaultHeight": 28,
+      "real": "assets/refrigeration/s360_rdm_eepr_mechanical/real.svg",
+      "edge": "assets/refrigeration/s360_rdm_eepr_mechanical/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_mechanical/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_mechanical/edge.svg"
     },
     {
       "id": "s360_rdm_electric_defrost",
-      "displayName": "Electric Defrost Plan Marker",
+      "displayName": "Electric Defrost Marker",
       "category": "symbols_markers",
-      "collection": "RDM Standard — Refrigeration Plan",
+      "categories": [
+        "symbols_markers",
+        "refrigeration"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
-      "defaultLabel": "Electric Defrost",
+      "defaultLabel": "DEF",
       "aliases": [
         "Defrost Heater",
-        "Electric Defrost Heater"
+        "Electric Defrost Heater",
+        "Electric Defrost"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -4071,20 +3935,23 @@
     },
     {
       "id": "s360_rdm_liquid_solenoid_plan",
-      "displayName": "Liquid Line Solenoid Plan Marker",
+      "displayName": "Liquid Line Solenoid Marker",
       "category": "symbols_markers",
-      "collection": "RDM Standard — Refrigeration Plan",
+      "categories": [
+        "symbols_markers",
+        "refrigeration"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
-      "defaultLabel": "Liquid Solenoid",
+      "defaultLabel": "LLS",
       "aliases": [
         "Liquid Line Solenoid",
         "LLS Plan"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 18,
       "defaultHeight": 18,
@@ -4097,6 +3964,10 @@
       "id": "s360_rdm_strobe_li_blue",
       "displayName": "Blue Refrigerant Leak Horn/Strobe",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety",
+        "symbols_markers"
+      ],
       "collection": "RDM Standard — WICP Hardware",
       "manufacturer": "Singh360",
       "partNumber": "",
@@ -4106,9 +3977,8 @@
         "Refrigerant Leak Strobe"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 44,
       "defaultHeight": 44,
@@ -4121,6 +3991,10 @@
       "id": "s360_rdm_strobe_da_yellow",
       "displayName": "Yellow Door Open Horn/Strobe",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety",
+        "symbols_markers"
+      ],
       "collection": "RDM Standard — WICP Hardware",
       "manufacturer": "Singh360",
       "partNumber": "",
@@ -4130,9 +4004,8 @@
         "Door Open Strobe"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 44,
       "defaultHeight": 44,
@@ -4145,6 +4018,10 @@
       "id": "s360_rdm_strobe_ea_red",
       "displayName": "Red Entrapment Horn/Strobe",
       "category": "alarms_safety",
+      "categories": [
+        "alarms_safety",
+        "symbols_markers"
+      ],
       "collection": "RDM Standard — WICP Hardware",
       "manufacturer": "Singh360",
       "partNumber": "",
@@ -4154,9 +4031,8 @@
         "Entrapment Strobe"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 44,
       "defaultHeight": 44,
@@ -4169,7 +4045,11 @@
       "id": "s360_rdm_lls_open",
       "displayName": "Liquid Line Solenoid — Open",
       "category": "refrigeration",
-      "collection": "RDM Standard — Refrigeration Line",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "LLS Open",
@@ -4178,9 +4058,8 @@
         "Valve Open"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 56,
       "defaultHeight": 32,
@@ -4193,7 +4072,11 @@
       "id": "s360_rdm_lls_closed",
       "displayName": "Liquid Line Solenoid — Closed",
       "category": "refrigeration",
-      "collection": "RDM Standard — Refrigeration Line",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "LLS Closed",
@@ -4202,9 +4085,8 @@
         "Valve Closed"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 56,
       "defaultHeight": 32,
@@ -4215,21 +4097,24 @@
     },
     {
       "id": "s360_rdm_eev",
-      "displayName": "Electronic Expansion Valve",
+      "displayName": "EEV Electronic Expansion Valve",
       "category": "refrigeration",
-      "collection": "RDM Standard — Refrigeration Line",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
       "manufacturer": "Singh360",
       "partNumber": "",
       "defaultLabel": "EEV",
       "aliases": [
-        "Electronic EEPR Valve",
+        "Electronic Expansion Valve",
         "Stepper Valve",
         "Expansion Valve"
       ],
       "tags": [
-        "RDM",
         "Singh360 Standard",
-        "Canonical Symbol"
+        "Canonical"
       ],
       "defaultWidth": 48,
       "defaultHeight": 32,
@@ -4239,9 +4124,238 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_rdm_eev/edge.svg"
     },
     {
+      "id": "s360_std_anti_sweat_trim",
+      "displayName": "Anti-Sweat / Trim Heater",
+      "category": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "electrical_power",
+        "symbols_markers"
+      ],
+      "collection": "RDM Standard — Refrigeration Symbols",
+      "manufacturer": "Singh360",
+      "partNumber": "",
+      "defaultLabel": "AS / TRIM",
+      "aliases": [
+        "Anti Sweat Heater",
+        "Trim Heater",
+        "Anti-Sweat Trim"
+      ],
+      "tags": [
+        "Singh360 Standard",
+        "Canonical"
+      ],
+      "defaultWidth": 28,
+      "defaultHeight": 28,
+      "real": "assets/refrigeration/s360_std_anti_sweat_trim/real.svg",
+      "edge": "assets/refrigeration/s360_std_anti_sweat_trim/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_anti_sweat_trim/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_anti_sweat_trim/edge.svg"
+    },
+    {
+      "id": "s360_std_evaporator_fan",
+      "displayName": "Evaporator Fan",
+      "category": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "hvac"
+      ],
+      "collection": "RDM Standard — Equipment",
+      "manufacturer": "Singh360",
+      "partNumber": "",
+      "defaultLabel": "Evaporator Fan",
+      "aliases": [
+        "Evap Fan",
+        "Walk-In Evaporator Fan"
+      ],
+      "tags": [
+        "Singh360 Standard",
+        "Canonical"
+      ],
+      "defaultWidth": 34,
+      "defaultHeight": 34,
+      "real": "assets/refrigeration/s360_std_evaporator_fan/real.svg",
+      "edge": "assets/refrigeration/s360_std_evaporator_fan/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_evaporator_fan/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_evaporator_fan/edge.svg"
+    },
+    {
+      "id": "s360_std_condenser_fan",
+      "displayName": "Condenser Fan",
+      "category": "hvac",
+      "categories": [
+        "hvac",
+        "refrigeration"
+      ],
+      "collection": "RDM Standard — Equipment",
+      "manufacturer": "Singh360",
+      "partNumber": "",
+      "defaultLabel": "Condenser Fan",
+      "aliases": [
+        "Rack Condenser Fan",
+        "Condenser Control Fan"
+      ],
+      "tags": [
+        "Singh360 Standard",
+        "Canonical"
+      ],
+      "defaultWidth": 34,
+      "defaultHeight": 34,
+      "real": "assets/hvac/s360_std_condenser_fan/real.svg",
+      "edge": "assets/hvac/s360_std_condenser_fan/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/hvac/s360_std_condenser_fan/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/hvac/s360_std_condenser_fan/edge.svg"
+    },
+    {
+      "id": "s360_std_evaporator_coil",
+      "displayName": "Evaporator Coil",
+      "category": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "hvac"
+      ],
+      "collection": "RDM Standard — Equipment",
+      "manufacturer": "Singh360",
+      "partNumber": "",
+      "defaultLabel": "Evaporator",
+      "aliases": [
+        "Evaporator",
+        "Walk-In Evaporator",
+        "Evap Coil"
+      ],
+      "tags": [
+        "Singh360 Standard",
+        "Canonical"
+      ],
+      "defaultWidth": 42,
+      "defaultHeight": 28,
+      "real": "assets/refrigeration/s360_std_evaporator_coil/real.svg",
+      "edge": "assets/refrigeration/s360_std_evaporator_coil/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_evaporator_coil/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_evaporator_coil/edge.svg"
+    },
+    {
+      "id": "s360_std_compressor",
+      "displayName": "Compressor",
+      "category": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "hvac"
+      ],
+      "collection": "RDM Standard — Equipment",
+      "manufacturer": "Singh360",
+      "partNumber": "",
+      "defaultLabel": "Compressor",
+      "aliases": [
+        "Refrigeration Compressor",
+        "Rack Compressor"
+      ],
+      "tags": [
+        "Singh360 Standard",
+        "Canonical"
+      ],
+      "defaultWidth": 34,
+      "defaultHeight": 34,
+      "real": "assets/refrigeration/s360_std_compressor/real.svg",
+      "edge": "assets/refrigeration/s360_std_compressor/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_compressor/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_compressor/edge.svg"
+    },
+    {
+      "id": "s360_std_refrigeration_rack",
+      "displayName": "Refrigeration Rack",
+      "category": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "collection": "RDM Standard — Equipment",
+      "manufacturer": "Singh360",
+      "partNumber": "",
+      "defaultLabel": "Rack",
+      "aliases": [
+        "Rack A",
+        "Rack B",
+        "Rack C",
+        "CO2 Rack",
+        "Refrigeration Rack A",
+        "Refrigeration Rack B"
+      ],
+      "tags": [
+        "Singh360 Standard",
+        "Canonical"
+      ],
+      "defaultWidth": 46,
+      "defaultHeight": 30,
+      "real": "assets/refrigeration/s360_std_refrigeration_rack/real.svg",
+      "edge": "assets/refrigeration/s360_std_refrigeration_rack/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_refrigeration_rack/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/s360_std_refrigeration_rack/edge.svg"
+    },
+    {
+      "id": "s360_std_rdm_idf_marker",
+      "displayName": "RDM IDF Marker",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "network_data"
+      ],
+      "collection": "RDM Standard — Location Markers",
+      "manufacturer": "Singh360",
+      "partNumber": "",
+      "defaultLabel": "RDM IDF",
+      "aliases": [
+        "IDF Network Marker",
+        "RDM IDF",
+        "IDF"
+      ],
+      "tags": [
+        "Singh360 Standard",
+        "Canonical"
+      ],
+      "defaultWidth": 34,
+      "defaultHeight": 34,
+      "real": "assets/symbols_markers/s360_std_rdm_idf_marker/real.svg",
+      "edge": "assets/symbols_markers/s360_std_rdm_idf_marker/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_std_rdm_idf_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_std_rdm_idf_marker/edge.svg"
+    },
+    {
+      "id": "s360_std_mdf_marker",
+      "displayName": "MDF Server Rack Marker",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "network_data"
+      ],
+      "collection": "RDM Standard — Location Markers",
+      "manufacturer": "Singh360",
+      "partNumber": "",
+      "defaultLabel": "MDF",
+      "aliases": [
+        "MDF",
+        "MDF Rack",
+        "Server Rack",
+        "Main Distribution Frame"
+      ],
+      "tags": [
+        "Singh360 Standard",
+        "Canonical"
+      ],
+      "defaultWidth": 34,
+      "defaultHeight": 34,
+      "real": "assets/symbols_markers/s360_std_mdf_marker/real.svg",
+      "edge": "assets/symbols_markers/s360_std_mdf_marker/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_std_mdf_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_std_mdf_marker/edge.svg"
+    },
+    {
       "id": "controllers_15376f3636",
       "displayName": "RDM 652",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4259,6 +4373,9 @@
       "id": "controllers_c2d84cf54c",
       "displayName": "Mercury - Review",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4276,6 +4393,9 @@
       "id": "controllers_3965ac381f",
       "displayName": "Mini TDB - Review",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4293,6 +4413,9 @@
       "id": "controllers_bf6e23224a",
       "displayName": "RDM's Bluetooth",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4310,6 +4433,9 @@
       "id": "controllers_b3dd7272f4",
       "displayName": "TDB - Review",
       "category": "controllers",
+      "categories": [
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4327,6 +4453,9 @@
       "id": "hvac_fa4b6c660e",
       "displayName": "Fans",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4344,6 +4473,9 @@
       "id": "hvac_b599ad8242",
       "displayName": "Humidistat",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4361,6 +4493,9 @@
       "id": "hvac_f49879e234",
       "displayName": "Thermometer",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4378,6 +4513,9 @@
       "id": "logos_672af5074f",
       "displayName": "Singhg360 Logo",
       "category": "logos",
+      "categories": [
+        "logos"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4394,7 +4532,11 @@
     {
       "id": "refrigeration_edc036b96c",
       "displayName": "Data Manager",
-      "category": "controllers",
+      "category": "network_data",
+      "categories": [
+        "network_data",
+        "controllers"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4403,15 +4545,18 @@
       "tags": [],
       "defaultWidth": 120,
       "defaultHeight": 56,
-      "real": "assets/controllers/refrigeration_edc036b96c/real.jpg",
+      "real": "assets/network_data/refrigeration_edc036b96c/real.jpg",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/refrigeration_edc036b96c/real.jpg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/network_data/refrigeration_edc036b96c/real.jpg",
       "edgeRaw": ""
     },
     {
       "id": "refrigeration_e568bd2258",
       "displayName": "Mercury 2",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4429,6 +4574,9 @@
       "id": "refrigeration_357aa1d210",
       "displayName": "PR0282 Pack",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4446,6 +4594,9 @@
       "id": "refrigeration_59037723d5",
       "displayName": "PR0710 Mercury Mk2",
       "category": "refrigeration",
+      "categories": [
+        "refrigeration"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4460,46 +4611,12 @@
       "edgeRaw": ""
     },
     {
-      "id": "controllers_285f3efd02",
-      "displayName": "RDM Mercury",
-      "category": "controllers",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "RDM Mercury",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/controllers/controllers_285f3efd02/real.png",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/controllers_285f3efd02/real.png",
-      "edgeRaw": ""
-    },
-    {
-      "id": "expansion_modules_58e20bb1f1",
-      "displayName": "RDM PR0653-C Stepper Auto-Close Controller",
-      "category": "controllers",
-      "collection": "",
-      "manufacturer": "RDM",
-      "partNumber": "PR0653-C",
-      "defaultLabel": "PR0653-C",
-      "aliases": [
-        "PR0653C",
-        "Stepper Auto Close"
-      ],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/controllers/expansion_modules_58e20bb1f1/real.png",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/expansion_modules_58e20bb1f1/real.png",
-      "edgeRaw": ""
-    },
-    {
       "id": "hvac_46f8be2deb",
       "displayName": "PACU",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4517,6 +4634,9 @@
       "id": "hvac_c767ec30e7",
       "displayName": "Munters Dehumid",
       "category": "hvac",
+      "categories": [
+        "hvac"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4531,43 +4651,12 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/hvac/hvac_c767ec30e7/edge.png"
     },
     {
-      "id": "symbols_markers_217d38cbae",
-      "displayName": "Generic Din Rail",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Generic Din Rail",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 40,
-      "defaultHeight": 40,
-      "real": "assets/symbols_markers/symbols_markers_217d38cbae/real.png",
-      "edge": "assets/symbols_markers/symbols_markers_217d38cbae/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_217d38cbae/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_217d38cbae/edge.png"
-    },
-    {
-      "id": "controllers_1464fd1985",
-      "displayName": "RDM PR0685 3ec Case Controller",
-      "category": "controllers",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "RDM PR0685 3ec Case Controller",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/controllers/controllers_1464fd1985/real.png",
-      "edge": "assets/controllers/controllers_1464fd1985/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/controllers_1464fd1985/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/controllers/controllers_1464fd1985/edge.svg"
-    },
-    {
       "id": "electrical_power_5ef0773845",
       "displayName": "1-Pole Lighting Contactor",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4587,6 +4676,9 @@
       "id": "electrical_power_3be42fee38",
       "displayName": "2-Pole Lighting Contactor",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4606,6 +4698,9 @@
       "id": "electrical_power_2a8fad2edb",
       "displayName": "Electrical Generator Monitor",
       "category": "electrical_power",
+      "categories": [
+        "electrical_power"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -4620,419 +4715,13 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/electrical_power/electrical_power_2a8fad2edb/edge.svg"
     },
     {
-      "id": "lighting_2585437ef0",
-      "displayName": "Control Panel Enclosure",
-      "category": "panels_enclosures",
-      "collection": "",
-      "manufacturer": "Singh360",
-      "partNumber": "",
-      "defaultLabel": "LCP",
-      "aliases": [
-        "Control Panel"
-      ],
-      "tags": [],
-      "defaultWidth": 140,
-      "defaultHeight": 96,
-      "real": "assets/panels_enclosures/lighting_2585437ef0/real.png",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/panels_enclosures/lighting_2585437ef0/real.png",
-      "edgeRaw": ""
-    },
-    {
-      "id": "sensors_transducers_1bad96b17d",
-      "displayName": "Sensor",
-      "category": "sensors_transducers",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Sensor",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 40,
-      "defaultHeight": 40,
-      "real": "assets/sensors_transducers/sensors_transducers_1bad96b17d/real.png",
-      "edge": "assets/sensors_transducers/sensors_transducers_1bad96b17d/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/sensors_transducers/sensors_transducers_1bad96b17d/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/sensors_transducers/sensors_transducers_1bad96b17d/edge.svg"
-    },
-    {
-      "id": "alarms_safety_e57a9a1a1c",
-      "displayName": "Alarm Door Annunciator Strobe",
-      "category": "alarms_safety",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Alarm Door Annunciator Strobe",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 44,
-      "defaultHeight": 44,
-      "real": "assets/alarms_safety/alarms_safety_e57a9a1a1c/real.svg",
-      "edge": "assets/alarms_safety/alarms_safety_e57a9a1a1c/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/alarms_safety_e57a9a1a1c/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/alarms_safety_e57a9a1a1c/edge.svg"
-    },
-    {
-      "id": "alarms_safety_18b36ebdf7",
-      "displayName": "Alarm Entrapment Strobe",
-      "category": "alarms_safety",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Alarm Entrapment Strobe",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 44,
-      "defaultHeight": 44,
-      "real": "assets/alarms_safety/alarms_safety_18b36ebdf7/real.svg",
-      "edge": "assets/alarms_safety/alarms_safety_18b36ebdf7/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/alarms_safety_18b36ebdf7/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/alarms_safety_18b36ebdf7/edge.svg"
-    },
-    {
-      "id": "alarms_safety_1571c75cad",
-      "displayName": "Alarm Leak Annunciator Strobe",
-      "category": "alarms_safety",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Alarm Leak Annunciator Strobe",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 44,
-      "defaultHeight": 44,
-      "real": "assets/alarms_safety/alarms_safety_1571c75cad/real.svg",
-      "edge": "assets/alarms_safety/alarms_safety_1571c75cad/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/alarms_safety_1571c75cad/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/alarms_safety/alarms_safety_1571c75cad/edge.svg"
-    },
-    {
-      "id": "layout_markers_4bf12cf4c1",
-      "displayName": "Callout Number 01",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 01",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_4bf12cf4c1/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_4bf12cf4c1/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_0598bb320d",
-      "displayName": "Callout Number 02",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 02",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_0598bb320d/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_0598bb320d/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_eb07adf190",
-      "displayName": "Callout Number 03",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 03",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_eb07adf190/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_eb07adf190/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_c631b73027",
-      "displayName": "Callout Number 04",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 04",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_c631b73027/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_c631b73027/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_e465ec1c7d",
-      "displayName": "Callout Number 05",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 05",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_e465ec1c7d/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_e465ec1c7d/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_11c2e1d81c",
-      "displayName": "Callout Number 06",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 06",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_11c2e1d81c/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_11c2e1d81c/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_616e0c28b1",
-      "displayName": "Callout Number 07",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 07",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_616e0c28b1/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_616e0c28b1/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_6ad87cacf5",
-      "displayName": "Callout Number 08",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 08",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_6ad87cacf5/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_6ad87cacf5/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_ffb855c42a",
-      "displayName": "Callout Number 09",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 09",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_ffb855c42a/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_ffb855c42a/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_3ca33b0866",
-      "displayName": "Callout Number 10",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 10",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_3ca33b0866/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_3ca33b0866/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_5d36f4210e",
-      "displayName": "Callout Number 11",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 11",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_5d36f4210e/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_5d36f4210e/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_bdb3bbeb40",
-      "displayName": "Callout Number 12",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Callout Number 12",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_bdb3bbeb40/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_bdb3bbeb40/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_79acd969fb",
-      "displayName": "Marker 05 Refrig Temp Sensor",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Marker 05 Refrig Temp Sensor",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_79acd969fb/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_79acd969fb/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_db654986a2",
-      "displayName": "Marker 06 Power Monitor",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Marker 06 Power Monitor",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_db654986a2/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_db654986a2/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "layout_markers_ba4a5941d6",
-      "displayName": "High Temp BBQ Sensor",
-      "category": "custom",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "High Temp BBQ Sensor",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 42,
-      "real": "assets/custom/layout_markers_ba4a5941d6/real.svg",
-      "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/custom/layout_markers_ba4a5941d6/real.svg",
-      "edgeRaw": ""
-    },
-    {
-      "id": "refrigeration_8ce39e564c",
-      "displayName": "Heater Defrost",
-      "category": "refrigeration",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Heater Defrost",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 120,
-      "defaultHeight": 56,
-      "real": "assets/refrigeration/refrigeration_8ce39e564c/real.svg",
-      "edge": "assets/refrigeration/refrigeration_8ce39e564c/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_8ce39e564c/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/refrigeration/refrigeration_8ce39e564c/edge.svg"
-    },
-    {
-      "id": "sensors_transducers_0f923883cf",
-      "displayName": "Sensor CO2 Leak Transducer",
-      "category": "sensors_transducers",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Sensor CO2 Leak Transducer",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 40,
-      "defaultHeight": 40,
-      "real": "assets/sensors_transducers/sensors_transducers_0f923883cf/real.svg",
-      "edge": "assets/sensors_transducers/sensors_transducers_0f923883cf/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/sensors_transducers/sensors_transducers_0f923883cf/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/sensors_transducers/sensors_transducers_0f923883cf/edge.svg"
-    },
-    {
-      "id": "sensors_transducers_7015022495",
-      "displayName": "Sensor HFC Leak Transducer",
-      "category": "sensors_transducers",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "Sensor HFC Leak Transducer",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 40,
-      "defaultHeight": 40,
-      "real": "assets/sensors_transducers/sensors_transducers_7015022495/real.svg",
-      "edge": "assets/sensors_transducers/sensors_transducers_7015022495/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/sensors_transducers/sensors_transducers_7015022495/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/sensors_transducers/sensors_transducers_7015022495/edge.svg"
-    },
-    {
-      "id": "symbols_markers_d3bef45cf0",
-      "displayName": "T Temp Input",
-      "category": "symbols_markers",
-      "collection": "",
-      "manufacturer": "",
-      "partNumber": "",
-      "defaultLabel": "T Temp Input",
-      "aliases": [],
-      "tags": [],
-      "defaultWidth": 40,
-      "defaultHeight": 40,
-      "real": "assets/symbols_markers/symbols_markers_d3bef45cf0/real.svg",
-      "edge": "assets/symbols_markers/symbols_markers_d3bef45cf0/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_d3bef45cf0/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_d3bef45cf0/edge.svg"
-    },
-    {
       "id": "signage_safety_51011bbb37",
       "displayName": "Signage Legend Safety Trapped Leak Help",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -5050,6 +4739,9 @@
       "id": "symbols_markers_964f42d000",
       "displayName": "Sym Pm Power Monitor Marker",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
@@ -5067,6 +4759,9 @@
       "id": "symbols_markers_014e762bc2",
       "displayName": "Sym T Temp Input",
       "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
       "collection": "",
       "manufacturer": "",
       "partNumber": "",

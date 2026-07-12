@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Refrigeration Rack</title>
+  <rect width="512" height="512" fill="none"/>
+
+  <rect x="52" y="128" width="408" height="250" rx="20" fill="#ffffff" stroke="#111111" stroke-width="16"/>
+  <rect x="76" y="154" width="360" height="62" fill="#ffffff" stroke="#111111" stroke-width="8"/>
+  <g fill="#ffffff" stroke="#111111" stroke-width="7">
+    <circle cx="132" cy="286" r="42"/><circle cx="256" cy="286" r="42"/><circle cx="380" cy="286" r="42"/>
+  </g>
+  <path d="M92 354 H420" stroke="#111111" stroke-width="12"/>
+  <text x="256" y="193" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="44" font-weight="800" fill="#111">REFRIGERATION RACK</text>
+
+</svg>

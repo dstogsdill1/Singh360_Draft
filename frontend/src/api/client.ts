@@ -868,6 +868,7 @@ export interface LibV2Component {
   displayName: string;
   shortName?: string;
   category: string;
+  categories?: string[];
   subcategory?: string;
   manufacturer?: string;
   partNumber?: string;

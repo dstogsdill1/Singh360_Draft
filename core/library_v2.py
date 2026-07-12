@@ -54,6 +54,7 @@ PHASH_THRESHOLD = 4  # Hamming distance for near-duplicate perceptual match.
 EDITABLE_FIELDS = {
     "displayName",
     "category",
+    "categories",
     "subcategory",
     "manufacturer",
     "partNumber",
@@ -351,6 +352,7 @@ class LibraryV2:
             "id": f"{category}_{uuid.uuid4().hex[:10]}",
             "displayName": stem.replace("_", " ").strip() or stem,
             "category": category,
+            "categories": [category],
             "subcategory": "",
             "manufacturer": "",
             "partNumber": "",
@@ -864,7 +866,10 @@ class LibraryV2:
             comps = [self._compose_component_payload(c) for c in manifest["components"] if include_retired or not c.get("retired")]
         counts: dict[str, int] = {}
         for c in comps:
-            counts[c.get("category", "custom")] = counts.get(c.get("category", "custom"), 0) + 1
+            primary = c.get("category", "custom")
+            for cat_id in c.get("categories") or [primary]:
+                if cat_id in LIBRARY_CATEGORIES:
+                    counts[cat_id] = counts.get(cat_id, 0) + 1
         categories = [{"id": cid, "label": category_default(cid).label, "count": counts.get(cid, 0)}
                       for cid in LIBRARY_CATEGORIES]
         return {
@@ -954,6 +959,7 @@ class LibraryV2:
                 "id": cid,
                 "displayName": display,
                 "category": category,
+                "categories": e.get("categories") or [category],
                 "subcategory": "",
                 "manufacturer": e.get("manufacturer", "") or "",
                 "partNumber": part,
@@ -1079,6 +1085,17 @@ class LibraryV2:
 
         is_export = raw.get("origin") == "builder_export"
 
+        raw_categories = raw.get("categories") or [category]
+        categories: list[str] = []
+        for raw_cat in raw_categories:
+            cat_id = str(raw_cat or "").strip().lower()
+            cat_id = LEGACY_CATEGORY_MAP.get(cat_id, cat_id)
+            if cat_id in LIBRARY_CATEGORIES and cat_id not in categories:
+                categories.append(cat_id)
+        if category not in categories:
+            categories.insert(0, category)
+
+
         source_rel = self._rel_from_any(raw.get("sourceFile") or raw.get("sourceComponent") or "")
         edge_override = self._rel_from_any(raw.get("edgeFile") or "")
         bw_override = self._rel_from_any(raw.get("bwFile") or "")
@@ -1172,6 +1189,7 @@ class LibraryV2:
             "id": cid,
             "displayName": display,
             "category": category,
+            "categories": categories,
             "partNumber": part,
             "defaultLabel": label,
             "aliases": aliases,
@@ -1206,6 +1224,7 @@ class LibraryV2:
             "id": new_id,
             "displayName": f"{source.get('displayName') or 'Component'} Copy",
             "category": source.get("category") or "custom",
+            "categories": list(source.get("categories") or [source.get("category") or "custom"]),
             "partNumber": source.get("partNumber") or "",
             "aliases": list(source.get("aliases") or []),
             "sourceFile": source.get("sourceFile") or "",

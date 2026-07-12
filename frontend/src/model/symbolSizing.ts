@@ -6,14 +6,15 @@ export const SYMBOL_SIZE_EQUIPMENT = 34;
 export const SYMBOL_SIZE_LARGE = 80;
 
 const SMALL_ACRONYMS = new Set([
-  'LI', 'DA', 'LS', 'LSB', 'LSG', 'LSc', 'LSC', 'ES', 'EA', 'HS',
+  'LI', 'DA', 'LS', 'ES', 'EA', 'HS',
   'T', 'TS', 'DS', 'DTS', 'OAT', 'LT', 'NC', 'NO', 'DI',
-  'EEV', 'LLS', 'E-EEPR', 'M-EEPR', 'DEF',
+  'EEV', 'LLS', 'EEPR', 'EPR', 'DEF', 'AS/TRIM',
 ]);
 
 const EQUIPMENT_TERMS = [
-  'wicp', 'lcp', 'idf', 'mdf', 'rdm data manager', 'data manager', 'orbit touch',
-  'powerscout', 'power monitor', 'power scout',
+  'wicp', 'lcp', 'rdm idf', 'mdf', 'rdm data manager', 'data manager', 'orbit touch',
+  'powerscout', 'power monitor', 'refrigeration rack', 'evaporator fan',
+  'condenser fan', 'evaporator coil', 'compressor',
 ];
 
 const SIGNAGE_TERMS = [

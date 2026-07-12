@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>MDF Server Rack</title>
+  <rect width="512" height="512" fill="none"/>
+
+  <rect x="120" y="64" width="272" height="360" rx="16" fill="#ffffff" stroke="#111" stroke-width="16"/>
+  <g fill="#dbe3ef" stroke="#111" stroke-width="8">
+    <rect x="152" y="104" width="208" height="52"/><rect x="152" y="180" width="208" height="52"/>
+    <rect x="152" y="256" width="208" height="52"/><rect x="152" y="332" width="208" height="52"/>
+  </g>
+  <g fill="#64748b"><circle cx="334" cy="130" r="8"/><circle cx="334" cy="206" r="8"/><circle cx="334" cy="282" r="8"/><circle cx="334" cy="358" r="8"/></g>
+  <text x="256" y="466" text-anchor="middle" font-family="Arial" font-size="60" font-weight="800" fill="#111">MDF</text>
+
+</svg>

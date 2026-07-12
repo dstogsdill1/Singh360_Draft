@@ -176,6 +176,9 @@ def _github_raw(relative_to_repo: str) -> str:
 
 
 def _public_catalog_html() -> str:
+    template = Path(__file__).resolve().parents[1] / "tools" / "component_catalog" / "published_index.html"
+    if template.is_file():
+        return template.read_text(encoding="utf-8")
     return r'''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Singh360 Published Component Library</title>
@@ -340,6 +343,7 @@ def publish_active_library(lib: Any, repo_root: Path) -> dict[str, Any]:
             "id": cid,
             "displayName": comp.get("displayName") or cid,
             "category": comp.get("category") or "custom",
+            "categories": comp.get("categories") or [comp.get("category") or "custom"],
             "collection": comp.get("collection") or "",
             "manufacturer": comp.get("manufacturer") or "",
             "partNumber": comp.get("partNumber") or "",

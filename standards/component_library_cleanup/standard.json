@@ -1,0 +1,588 @@
+{
+  "version": 2,
+  "name": "Singh360 Component Library Cleanup Standard",
+  "generatedAt": "2026-07-12",
+  "notes": [
+    "Removes individual line-legend components; connector lines remain available through the connector tool.",
+    "Supports one primary category plus multiple additional categories.",
+    "Keeps one generic LS Leak Sensor while retaining HFC/CO2/LSB/LSG/LSC as search aliases.",
+    "Uses EPR for mechanical evaporator pressure regulator and EEPR for electronic.",
+    "Creates distinct evaporator and condenser fan symbols, plus evaporator coil and compressor.",
+    "Archives duplicates instead of deleting files."
+  ],
+  "components": [
+    {
+      "id": "s360_rdm_li",
+      "slug": "rdm_li",
+      "name": "LI Leak Indicator Horn/Strobe",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "coll": "RDM Standard — WICP Symbols",
+      "label": "LI",
+      "aliases": [
+        "Leak Indicator",
+        "Refrigerant Leak Horn/Strobe",
+        "LI Alarm"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_da",
+      "slug": "rdm_da",
+      "name": "DA Door Open Horn/Strobe",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "coll": "RDM Standard — WICP Symbols",
+      "label": "DA",
+      "aliases": [
+        "Door Open",
+        "Door Alarm",
+        "Door Open Horn/Strobe"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_ls",
+      "slug": "rdm_ls",
+      "name": "LS Leak Sensor",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers"
+      ],
+      "coll": "RDM Standard — WICP Symbols",
+      "label": "LS",
+      "aliases": [
+        "HFC Leak Sensor",
+        "CO2 Leak Sensor",
+        "Refrigerant Leak Sensor",
+        "LSB",
+        "LSG",
+        "LSC",
+        "HSC"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_es",
+      "slug": "rdm_es",
+      "name": "ES Entrapment Switch",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "coll": "RDM Standard — WICP Symbols",
+      "label": "ES",
+      "aliases": [
+        "Entrapment Switch",
+        "Person Entrapment Switch"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_ea",
+      "slug": "rdm_ea",
+      "name": "EA Entrapment Horn/Strobe",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "coll": "RDM Standard — WICP Symbols",
+      "label": "EA",
+      "aliases": [
+        "Entrapment Alarm",
+        "Entrapment Horn",
+        "Entrapment Strobe"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_hs",
+      "slug": "rdm_hs",
+      "name": "HS Horn Silencer Button",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "coll": "RDM Standard — WICP Symbols",
+      "label": "HS",
+      "aliases": [
+        "Horn Silencer",
+        "Leak Silencer Button",
+        "Silence Button"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_ts",
+      "slug": "rdm_ts",
+      "name": "TS Temperature Sensor",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "refrigeration"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "TS",
+      "aliases": [
+        "T",
+        "Temp Sensor",
+        "Temperature Probe"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_ds",
+      "slug": "rdm_ds",
+      "name": "DS Defrost Sensor",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "refrigeration"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "DS",
+      "aliases": [
+        "Defrost Sensor",
+        "Defrost Termination Sensor"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_dts",
+      "slug": "rdm_dts",
+      "name": "DTS Dual Temperature Switch",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "sensors_transducers",
+        "refrigeration"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "DTS",
+      "aliases": [
+        "Dual Temp Switch",
+        "Dual Temperature Sensor"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_sign_pti",
+      "slug": "rdm_sign_person_trapped",
+      "name": "Person Trapped Inside Sign Symbol",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "coll": "RDM Standard — Safety Signage",
+      "label": "Person Trapped Inside",
+      "aliases": [
+        "EA-PTI",
+        "Person Trapped",
+        "PTI Sign"
+      ],
+      "w": 22,
+      "h": 22
+    },
+    {
+      "id": "s360_rdm_sign_li",
+      "slug": "rdm_sign_leak_dne",
+      "name": "When Lit Refrigerant Leak — Do Not Enter Sign",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "coll": "RDM Standard — Safety Signage",
+      "label": "When Lit — Leak / Do Not Enter",
+      "aliases": [
+        "LI-A",
+        "Leak Do Not Enter",
+        "When Lit Refrigerant Leak"
+      ],
+      "w": 22,
+      "h": 22
+    },
+    {
+      "id": "s360_rdm_sign_help",
+      "slug": "rdm_sign_help_trapped",
+      "name": "HELP TRAPPED / PERSONA ATRAPADA Sign",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "alarms_safety"
+      ],
+      "coll": "RDM Standard — Safety Signage",
+      "label": "HELP TRAPPED / PERSONA ATRAPADA",
+      "aliases": [
+        "EA-MTS",
+        "Help Trapped",
+        "Persona Atrapada",
+        "Man Trap Sign"
+      ],
+      "w": 22,
+      "h": 22
+    },
+    {
+      "id": "s360_rdm_eepr_electronic",
+      "slug": "rdm_eepr_electronic",
+      "name": "EEPR Electronic Evaporator Pressure Regulator",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "EEPR",
+      "aliases": [
+        "Electronic EEPR",
+        "Electronic Evaporator Pressure Regulator",
+        "Sporlan EEPR",
+        "ERV"
+      ],
+      "w": 28,
+      "h": 28
+    },
+    {
+      "id": "s360_rdm_eepr_mechanical",
+      "slug": "rdm_eepr_mechanical",
+      "name": "EPR Mechanical Evaporator Pressure Regulator",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "EPR",
+      "aliases": [
+        "Mechanical EPR",
+        "Mechanical Evaporator Pressure Regulator",
+        "Sporlan EPR",
+        "Mechanical ERP"
+      ],
+      "w": 28,
+      "h": 28
+    },
+    {
+      "id": "s360_rdm_electric_defrost",
+      "slug": "rdm_electric_defrost",
+      "name": "Electric Defrost Marker",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "refrigeration"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "DEF",
+      "aliases": [
+        "Defrost Heater",
+        "Electric Defrost Heater",
+        "Electric Defrost"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_liquid_solenoid_plan",
+      "slug": "rdm_liquid_solenoid_plan",
+      "name": "Liquid Line Solenoid Marker",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "refrigeration"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "LLS",
+      "aliases": [
+        "Liquid Line Solenoid",
+        "LLS Plan"
+      ],
+      "w": 18,
+      "h": 18
+    },
+    {
+      "id": "s360_rdm_lls_open",
+      "slug": "rdm_lls_open",
+      "name": "Liquid Line Solenoid — Open",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "LLS Open",
+      "aliases": [
+        "Liquid Solenoid Open",
+        "Valve Open"
+      ],
+      "w": 56,
+      "h": 32
+    },
+    {
+      "id": "s360_rdm_lls_closed",
+      "slug": "rdm_lls_closed",
+      "name": "Liquid Line Solenoid — Closed",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "LLS Closed",
+      "aliases": [
+        "Liquid Solenoid Closed",
+        "Valve Closed"
+      ],
+      "w": 56,
+      "h": 32
+    },
+    {
+      "id": "s360_rdm_eev",
+      "slug": "rdm_eev",
+      "name": "EEV Electronic Expansion Valve",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "EEV",
+      "aliases": [
+        "Electronic Expansion Valve",
+        "Stepper Valve",
+        "Expansion Valve"
+      ],
+      "w": 48,
+      "h": 32
+    },
+    {
+      "id": "s360_std_anti_sweat_trim",
+      "slug": "anti_sweat_trim_heater",
+      "name": "Anti-Sweat / Trim Heater",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "electrical_power",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — Refrigeration Symbols",
+      "label": "AS / TRIM",
+      "aliases": [
+        "Anti Sweat Heater",
+        "Trim Heater",
+        "Anti-Sweat Trim"
+      ],
+      "w": 28,
+      "h": 28
+    },
+    {
+      "id": "s360_std_evaporator_fan",
+      "slug": "evaporator_fan",
+      "name": "Evaporator Fan",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "hvac"
+      ],
+      "coll": "RDM Standard — Equipment",
+      "label": "Evaporator Fan",
+      "aliases": [
+        "Evap Fan",
+        "Walk-In Evaporator Fan"
+      ],
+      "w": 34,
+      "h": 34
+    },
+    {
+      "id": "s360_std_condenser_fan",
+      "slug": "condenser_fan",
+      "name": "Condenser Fan",
+      "cat": "hvac",
+      "categories": [
+        "hvac",
+        "refrigeration"
+      ],
+      "coll": "RDM Standard — Equipment",
+      "label": "Condenser Fan",
+      "aliases": [
+        "Rack Condenser Fan",
+        "Condenser Control Fan"
+      ],
+      "w": 34,
+      "h": 34
+    },
+    {
+      "id": "s360_std_evaporator_coil",
+      "slug": "evaporator_coil",
+      "name": "Evaporator Coil",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "hvac"
+      ],
+      "coll": "RDM Standard — Equipment",
+      "label": "Evaporator",
+      "aliases": [
+        "Evaporator",
+        "Walk-In Evaporator",
+        "Evap Coil"
+      ],
+      "w": 42,
+      "h": 28
+    },
+    {
+      "id": "s360_std_compressor",
+      "slug": "compressor",
+      "name": "Compressor",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "hvac"
+      ],
+      "coll": "RDM Standard — Equipment",
+      "label": "Compressor",
+      "aliases": [
+        "Refrigeration Compressor",
+        "Rack Compressor"
+      ],
+      "w": 34,
+      "h": 34
+    },
+    {
+      "id": "s360_std_refrigeration_rack",
+      "slug": "refrigeration_rack",
+      "name": "Refrigeration Rack",
+      "cat": "refrigeration",
+      "categories": [
+        "refrigeration",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — Equipment",
+      "label": "Rack",
+      "aliases": [
+        "Rack A",
+        "Rack B",
+        "Rack C",
+        "CO2 Rack",
+        "Refrigeration Rack A",
+        "Refrigeration Rack B"
+      ],
+      "w": 46,
+      "h": 30
+    },
+    {
+      "id": "s360_std_rdm_idf_marker",
+      "slug": "rdm_idf_marker",
+      "name": "RDM IDF Marker",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "network_data"
+      ],
+      "coll": "RDM Standard — Location Markers",
+      "label": "RDM IDF",
+      "aliases": [
+        "IDF Network Marker",
+        "RDM IDF",
+        "IDF"
+      ],
+      "w": 34,
+      "h": 34
+    },
+    {
+      "id": "s360_std_mdf_marker",
+      "slug": "mdf_server_rack",
+      "name": "MDF Server Rack Marker",
+      "cat": "symbols_markers",
+      "categories": [
+        "symbols_markers",
+        "network_data"
+      ],
+      "coll": "RDM Standard — Location Markers",
+      "label": "MDF",
+      "aliases": [
+        "MDF",
+        "MDF Rack",
+        "Server Rack",
+        "Main Distribution Frame"
+      ],
+      "w": 34,
+      "h": 34
+    },
+    {
+      "id": "s360_rdm_strobe_li_blue",
+      "slug": "rdm_strobe_li_blue",
+      "name": "Blue Refrigerant Leak Horn/Strobe",
+      "cat": "alarms_safety",
+      "categories": [
+        "alarms_safety",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — WICP Hardware",
+      "label": "LI Horn/Strobe",
+      "aliases": [
+        "Blue LI Horn/Strobe",
+        "Refrigerant Leak Strobe"
+      ],
+      "w": 44,
+      "h": 44
+    },
+    {
+      "id": "s360_rdm_strobe_da_yellow",
+      "slug": "rdm_strobe_da_yellow",
+      "name": "Yellow Door Open Horn/Strobe",
+      "cat": "alarms_safety",
+      "categories": [
+        "alarms_safety",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — WICP Hardware",
+      "label": "DA Horn/Strobe",
+      "aliases": [
+        "Yellow DA Horn/Strobe",
+        "Door Open Strobe"
+      ],
+      "w": 44,
+      "h": 44
+    },
+    {
+      "id": "s360_rdm_strobe_ea_red",
+      "slug": "rdm_strobe_ea_red",
+      "name": "Red Entrapment Horn/Strobe",
+      "cat": "alarms_safety",
+      "categories": [
+        "alarms_safety",
+        "symbols_markers"
+      ],
+      "coll": "RDM Standard — WICP Hardware",
+      "label": "EA Horn/Strobe",
+      "aliases": [
+        "Red EA Horn/Strobe",
+        "Entrapment Strobe"
+      ],
+      "w": 44,
+      "h": 44
+    }
+  ]
+}

@@ -88,6 +88,19 @@ function arrayToCsv(value: unknown): string {
   return String(value || '');
 }
 
+function categoriesFor(c: LibV2Component): string[] {
+  const x = asAny(c);
+  const values = Array.isArray(x.categories) ? x.categories : [x.category || 'custom'];
+  return Array.from(new Set([x.category || 'custom', ...values].map((v) => String(v || '').trim()).filter(Boolean)));
+}
+
+function editedCategories(c: LibV2Component, edits: Record<string, Partial<AnyComp>>): string[] {
+  const raw = patchValue(c, edits, 'categories', categoriesFor(c));
+  const values = csvToArray(raw);
+  const primary = String(patchValue(c, edits, 'category', c.category || 'custom'));
+  return Array.from(new Set([primary, ...values].filter(Boolean)));
+}
+
 function normalizeText(value: unknown): string {
   return String(value || '').trim();
 }
@@ -193,6 +206,7 @@ function componentSearchBlob(c: LibV2Component, edits: Record<string, Partial<An
     edit.defaultLabel ?? x.defaultLabel,
     edit.partNumber ?? x.partNumber,
     edit.category ?? x.category,
+    arrayToCsv(edit.categories ?? x.categories),
     edit.collection ?? x.collection,
     edit.shortName ?? x.shortName,
     edit.status ?? x.status,
@@ -274,9 +288,11 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
   const categories = useMemo(() => {
     const ids = new Set<string>();
     CATEGORY_PRESETS.forEach((c) => ids.add(c.id));
-    components.forEach((c) => { if (c.category) ids.add(c.category); });
+    components.forEach((c) => { categoriesFor(c).forEach((id) => ids.add(id)); });
     const counts = new Map<string, number>();
-    components.forEach((c) => counts.set(c.category || 'custom', (counts.get(c.category || 'custom') || 0) + 1));
+    components.forEach((c) => {
+      categoriesFor(c).forEach((id) => counts.set(id, (counts.get(id) || 0) + 1));
+    });
     return Array.from(ids).sort().map((id) => ({
       id,
       label: niceCategoryLabel(id),
@@ -297,7 +313,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
   const visibleCards = useMemo(() => {
     const q = query.trim().toLowerCase();
     return components.filter((c) => {
-      if (category !== 'all' && c.category !== category) return false;
+      if (category !== 'all' && !categoriesFor(c).includes(category)) return false;
       if (isRetired(c)) return false;
       if (!q) return true;
       return componentSearchBlob(c, edits).includes(q);
@@ -311,12 +327,12 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
       const x = asAny(c);
       const retired = isRetired(c);
       const status = String(patchValue(c, edits, 'status', x.status || '') || '').toLowerCase();
-      const cat = String(patchValue(c, edits, 'category', x.category || '') || '');
+      const cats = editedCategories(c, edits);
       const collection = String(patchValue(c, edits, 'collection', collectionFor(c)) || '');
 
       if (!showRetired && retired) return false;
       if (!showNeedsReview && status === 'needsreview') return false;
-      if (builderCategory !== 'all' && cat !== builderCategory) return false;
+      if (builderCategory !== 'all' && !cats.includes(builderCategory)) return false;
       if (builderCollection !== 'all' && collection !== builderCollection) return false;
 
       if (builderStatus === 'active' && retired) return false;
@@ -419,6 +435,9 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
         if (Object.prototype.hasOwnProperty.call(patch, 'tags')) {
           patch.tags = csvToArray(patch.tags);
         }
+        if (Object.prototype.hasOwnProperty.call(patch, 'categories')) {
+          patch.categories = csvToArray(patch.categories);
+        }
 
         if (patch.status === 'retired' || patch.status === 'duplicate' || patch.status === 'junk') {
           patch.retired = true;
@@ -444,6 +463,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
       ...patch,
       aliases: Object.prototype.hasOwnProperty.call(patch, 'aliases') ? csvToArray(patch.aliases) : undefined,
       tags: Object.prototype.hasOwnProperty.call(patch, 'tags') ? csvToArray((patch as AnyComp).tags) : undefined,
+      categories: Object.prototype.hasOwnProperty.call(patch, 'categories') ? csvToArray((patch as AnyComp).categories) : undefined,
       retired: ['retired', 'duplicate', 'junk'].includes(String((patch as AnyComp).status || '').toLowerCase()) ? true : undefined,
     } as any);
     clearEditsFor(c.id);
@@ -459,7 +479,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
       for (const c of components) {
         if (!selectedSet.has(c.id)) continue;
         const row = { ...(next[c.id] || {}) } as AnyComp;
-        if (bulkCategory) row.category = bulkCategory;
+        if (bulkCategory) { row.category = bulkCategory; row.categories = Array.from(new Set([bulkCategory, ...categoriesFor(c)])); }
         if (bulkCollection) row.collection = bulkCollection;
         if (bulkStatus) {
           row.status = bulkStatus;
@@ -536,7 +556,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
   };
 
   const exportCsv = () => {
-    const header = ['id', 'displayName', 'category', 'collection', 'partNumber', 'shortName', 'status', 'defaultLabel', 'aliases', 'tags', 'notes', 'path'];
+    const header = ['id', 'displayName', 'category', 'categories', 'collection', 'partNumber', 'shortName', 'status', 'defaultLabel', 'aliases', 'tags', 'notes', 'path'];
     const rows = dashboardRows.map((c) => {
       const x = asAny(c);
       const e = edits[c.id] || {};
@@ -544,6 +564,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
         c.id,
         e.displayName ?? x.displayName ?? '',
         e.category ?? x.category ?? '',
+        arrayToCsv((e as AnyComp).categories ?? x.categories ?? categoriesFor(c)),
         e.collection ?? collectionFor(c),
         e.partNumber ?? x.partNumber ?? '',
         e.shortName ?? x.shortName ?? '',
@@ -748,7 +769,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
                           <td className="preview"><CardPreview c={c} rep={rep} small /></td>
                           <td><input value={String(patchValue(c, edits, 'displayName', x.displayName || ''))} onChange={(e) => setEdit(c.id, 'displayName', e.target.value)} /></td>
                           <td>
-                            <select value={String(patchValue(c, edits, 'category', x.category || 'custom'))} onChange={(e) => setEdit(c.id, 'category', e.target.value)}>
+                            <select value={String(patchValue(c, edits, 'category', x.category || 'custom'))} onChange={(e) => { const primary = e.target.value; setEdit(c.id, 'category', primary); setEdit(c.id, 'categories', Array.from(new Set([primary, ...editedCategories(c, edits)]))); }}>
                               {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.label}</option>)}
                             </select>
                           </td>
@@ -787,7 +808,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
                     <CardPreview c={selected} rep={rep} />
                     <strong>{displayNameFor(selected)}</strong>
                     <div className="libv2-inspector-line">{asAny(selected).partNumber || asAny(selected).defaultLabel || 'No part number'}</div>
-                    <div className="libv2-inspector-line">{niceCategoryLabel(selected.category || 'custom')} · {collectionFor(selected) || 'No collection'}</div>
+                    <div className="libv2-inspector-line">{categoriesFor(selected).map(niceCategoryLabel).join(' / ')} · {collectionFor(selected) || 'No collection'}</div>
                     <div className="libv2-inspector-line">Default size: {defaultSizeLabel(selected) || 'not set'}</div>
                     <div className="libv2-inspector-variants">
                       <button onClick={() => insertAs(selected, 'source')} disabled={!canInsert || !sourceUrl(selected)}>Insert Source</button>
@@ -807,6 +828,29 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
                       <button onClick={() => { setEdit(selected.id, 'status', 'approved'); setEdit(selected.id, 'retired', false); }}>Approve</button>
                       <button onClick={() => { setEdit(selected.id, 'status', 'needsReview'); setEdit(selected.id, 'retired', false); }}>Needs Review</button>
                       <button onClick={() => { setEdit(selected.id, 'status', 'retired'); setEdit(selected.id, 'retired', true); }}>Retire</button>
+                    </div>
+                    <div className="libv2-inspector-categories">
+                      <strong>Show in categories</strong>
+                      {categories.map((cat) => {
+                        const current = editedCategories(selected, edits);
+                        const checked = current.includes(cat.id);
+                        return (
+                          <label key={cat.id} className="libv2-check">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const primary = String(patchValue(selected, edits, 'category', selected.category || 'custom'));
+                                const next = e.target.checked
+                                  ? Array.from(new Set([primary, ...current, cat.id]))
+                                  : current.filter((id) => id !== cat.id || id === primary);
+                                setEdit(selected.id, 'categories', next);
+                              }}
+                            />
+                            {cat.label}
+                          </label>
+                        );
+                      })}
                     </div>
                     <textarea
                       className="libv2-inspector-notes"

@@ -367,3 +367,21 @@
 }
 /* === S360 COMPONENT DASHBOARD PATCH END === */
 
+
+
+/* Singh360 V4 multi-category inspector */
+.libv2-inspector-categories {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  max-height: 190px;
+  overflow: auto;
+  border: 1px solid #c8d0dc;
+  border-radius: 4px;
+  padding: 7px;
+  margin: 8px 0;
+}
+.libv2-inspector-categories > strong {
+  grid-column: 1 / -1;
+  margin-bottom: 3px;
+}
