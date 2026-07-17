@@ -32,6 +32,14 @@ from core.table_style_profile import (
     apply_singh360_profile,
 )
 
+from core.table_layout_profiles import (
+    infer_named_layout_profile,
+    preferred_named_col_widths,
+    profile_body_font_px,
+    profile_min_scale,
+    profile_nowrap_columns,
+)
+
 # Default Singh360 normalized header style applied to every non-cover page.
 DEFAULT_HEADER_STYLE = "orange"
 
@@ -899,19 +907,8 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
 
 
 def _layout_profile_for(family: str, page_type: str, blob: str) -> str:
-    """Rendering-options profile per page type (TABLE STYLE 4F / SA31 4I)."""
-    if family == "companyInfo":
-        return "company_info"
-    if family == "idfTable":
-        return "network_48_port"
-    if family in ("matrix", "ioSchedule", "panelDetail", "rackLayout"):
-        return "io_table"
-    if family == "text" and "instruction" in blob:
-        return "instruction_table"
-    # Front-matter narrative pages with long Section / Scope Language cells.
-    if family == "text" and any(k in blob for k in ("scope", "workflow", "milestone")):
-        return "front_matter_narrative_table"
-    return "front_matter_table"
+    """Single named profile resolver used by import, rebuild, and migration."""
+    return infer_named_layout_profile(family, page_type, blob)
 
 
 # --------------------------------------------------------------------------
@@ -1468,6 +1465,9 @@ def _preferred_col_widths(
     layout_profile: str = "",
 ) -> list[int]:
     """Deterministic normalized column sizing before placement/export."""
+    named = preferred_named_col_widths(grid, layout_profile, BODY_W)
+    if named is not None:
+        return named
     if layout_profile == "front_matter_narrative_table":
         return _preferred_narrative_col_widths(grid)
     if layout_profile in ("front_matter_table", "instruction_table") and family == "text":
@@ -1591,11 +1591,13 @@ def _apply_table_geometry(
     if not grid:
         return
     profile = layout_profile or block.get("layoutProfile") or ""
+    named_font_px = profile_body_font_px(profile)
+    named_min_scale = profile_min_scale(profile)
     widths = _preferred_col_widths(grid, family, page_type, profile)
     if widths:
         block["colWidths"] = widths
     header_rows = int(block.get("headerRowCount") or 1)
-    font_px = None
+    font_px = named_font_px
     if profile == "front_matter_narrative_table":
         # 8.5pt ≈ 11.3 CSS px; keep Section labels from stacking word-by-word.
         font_px = 12
@@ -1627,6 +1629,26 @@ def _apply_table_geometry(
         block["wordWrapColumns"] = sorted(narrative_cols) if narrative_cols else sorted(
             i for i in range(len(widths)) if i not in nowrap
         )
+    if named_min_scale is not None:
+        block["minScale"] = max(
+            float(block.get("minScale") or EXCEL_MIN_SCALE),
+            named_min_scale,
+        )
+    if named_font_px is not None:
+        block["bodyFontPx"] = named_font_px
+        block["bodyFontPt"] = 8.0
+        block["minFontPt"] = 7.0
+    if profile in {
+        "equipment_supply_schedule",
+        "cable_termination_schedule",
+        "bill_of_materials_schedule",
+        "responsibility_matrix",
+    }:
+        block["layoutProfile"] = profile
+        block["noGrow"] = False
+        block["preventStackedLabels"] = True
+        block["nowrapColumns"] = profile_nowrap_columns(grid, profile)
+        block["scaleMode"] = "fit_body"
     block["rowHeights"] = _estimated_row_heights(
         grid, block.get("colWidths") or widths, family, header_rows, font_px=font_px,
     )

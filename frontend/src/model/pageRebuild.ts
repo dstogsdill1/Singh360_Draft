@@ -3,6 +3,7 @@ import {
   refreshPageFromSource,
   splitExcelRangeBlock,
 } from './excelRange';
+import { inferLayoutProfile, reflowExcelRangeBlock } from './tableLayoutProfiles';
 import { buildIdfNetworkBlock, idfHeaderRow, isIdfNetworkPage } from './idfNetworkTable';
 import type { PageModel, ProjectModel, Worksheet } from './types';
 
@@ -35,12 +36,13 @@ export function rebuildSinglePageFromSource(page: PageModel, ws: Worksheet): Pag
     if (existing?.type === 'excelRange' && existing.srcRows && !page.generatedContinuation) {
       return refreshPageFromSource(page, ws);
     }
-    const full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
+    let full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
     full.splitMode = page.splitMode ?? full.splitMode;
     full.minScale = page.minScale ?? full.minScale;
     full.allowContinuation = page.allowContinuation ?? full.allowContinuation;
     full.repeatRows = page.repeatRows ?? full.repeatRows;
     full.scaleMode = page.scaleMode ?? full.scaleMode;
+    full = reflowExcelRangeBlock(page, full);
     const parts = splitExcelRangeBlock(full);
     const partIndex = page.continuationIndex ?? 0;
     const part = parts[partIndex] ?? parts[0];
@@ -48,6 +50,7 @@ export function rebuildSinglePageFromSource(page: PageModel, ws: Worksheet): Pag
       ...page,
       blocks: [part],
       canvasObjects: page.canvasObjects ?? [],
+      layoutProfile: inferLayoutProfile(page),
       layoutWarnings: part.layoutWarnings ?? [],
       sourceRevision: (page.sourceRevision ?? 0) + 1,
     };

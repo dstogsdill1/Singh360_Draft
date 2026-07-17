@@ -535,3 +535,13 @@
   letter-spacing: 0.04em;
   color: #6b7682;
 }
+
+/* === S360 TABLE CENTERING V10 ===
+ * The renderer writes the post-scale width onto .np-xr-fit. Auto margins
+ * center short and named tables instead of leaving spare space on the right.
+ */
+.np-xr-fit {
+  margin-left: auto;
+  margin-right: auto;
+}
+/* === S360 TABLE CENTERING V10 END === */

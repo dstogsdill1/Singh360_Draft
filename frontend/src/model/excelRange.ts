@@ -8,6 +8,8 @@ import type { ExcelCellStyle, MergedCell, PageBlock, PageModel, ProjectModel, Wo
 import { buildIdfNetworkBlock, idfHeaderRow, isIdfNetworkPage } from './idfNetworkTable';
 import { inferMetadataFromWorksheet, isCoverWorksheet, mergeCoverMetadata } from './metadataInference';
 
+import { reflowExcelRangeBlock } from './tableLayoutProfiles';
+
 export const PAGE_BODY_WIDTH = 1600;
 export const PAGE_BODY_BUDGET = 720;
 const BODY_W = PAGE_BODY_WIDTH;
@@ -443,7 +445,11 @@ export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel
   const blocks = page.blocks ?? [];
   let nextBlocks: PageBlock[];
   if (page.renderMode === 'excel_exact') {
-    nextBlocks = blocks.map((b) => (b.type === 'excelRange' ? refreshBlockFromWorksheet(b, ws) : b));
+    nextBlocks = blocks.map((b) => (
+      b.type === 'excelRange'
+        ? reflowExcelRangeBlock(page, refreshBlockFromWorksheet(b, ws))
+        : b
+    ));
   } else {
     const coverIdx = blocks.findIndex((b) => b.type === 'cover');
     if (coverIdx >= 0 || page.pageType === 'cover') {
@@ -558,12 +564,13 @@ export function regenerateExcelGroup(project: ProjectModel, wsId: string): PageM
 
   const groupId = base.pageGroupId ?? base.id;
   const canonicalBaseCode = (base.displaySheetCode || base.sheetCode || '').trim();
-  const full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
+  let full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
   full.splitMode = base.splitMode ?? full.splitMode;
   full.minScale = base.minScale ?? full.minScale;
   full.allowContinuation = base.allowContinuation ?? full.allowContinuation;
   full.repeatRows = base.repeatRows ?? full.repeatRows;
   full.scaleMode = base.scaleMode ?? full.scaleMode;
+  full = reflowExcelRangeBlock(base, full);
   const parts = splitExcelRangeBlock(full);
 
   const byId = new Map(project.pages.map((p) => [p.id, p]));
