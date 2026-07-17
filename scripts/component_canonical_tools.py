@@ -309,13 +309,13 @@ def canonical_rules(c: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
 
     # power
     elif re.search(r"ps48|powerscout\s*48|dent\s*48", sn):
-        set_meta("DENT PowerScout PS48 Power Meter", "Electrical / Power", "PS48HD-C-D-N", "Power Metering", aliases=["PowerScout PS48", "Dent PS48"])
+        set_meta("DENT PowerScout 48 HD", "Electrical / Power", "PS48HD-C-D-N", "Power Metering", aliases=["PowerScout 48 HD", "PowerScout PS48", "DENT PS48"])
     elif re.search(r"ps24|powerscout\s*24", sn):
-        set_meta("DENT PowerScout PS24 Power Meter", "Electrical / Power", "PS24", "Power Metering", aliases=["PowerScout PS24"])
+        set_meta("DENT PowerScout 24 HD", "Electrical / Power", "PS24HD-C-D-N", "Power Metering", aliases=["PowerScout 24 HD", "PowerScout PS24", "DENT PS24"])
     elif re.search(r"ps12|powerscout\s*12", sn):
-        set_meta("DENT PowerScout PS12 Power Meter", "Electrical / Power", "PS12", "Power Metering", aliases=["PowerScout PS12"])
+        set_meta("DENT PowerScout 12 HD", "Electrical / Power", "PS12HD-C-D-N", "Power Metering", aliases=["PowerScout 12 HD", "PowerScout PS12", "DENT PS12"])
     elif re.search(r"ps3|powerscout\s*3", sn):
-        set_meta("DENT PowerScout PS3 Power Meter", "Electrical / Power", "PS3", "Power Metering", aliases=["PowerScout PS3"])
+        set_meta("DENT PowerScout 3 HD", "Electrical / Power", "PS3HD-C-D-N", "Power Metering", aliases=["PowerScout 3 HD", "PowerScout PS3", "DENT PS3"])
     elif "rogowski" in tn or "rocoil" in tn or "ctr36" in sn or "ct r36" in tn:
         set_meta("Rogowski Rope CT - 36 inch", "Electrical / Power", "CT-R36-A4U", "Power Metering", aliases=["RoCoil", "Rogowski CT"])
     elif "cthmc0100" in sn or "0100" in sn and "ct" in sn:

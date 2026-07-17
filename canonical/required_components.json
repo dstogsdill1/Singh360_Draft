@@ -137,43 +137,54 @@
   },
   {
     "partNumber": "PS48HD-C-D-N",
-    "displayName": "DENT PowerScout PS48 Power Meter",
+    "displayName": "DENT PowerScout 48 HD",
     "category": "Electrical / Power",
     "collection": "Power Metering",
     "aliases": [
-      "Dent PS48",
+      "DENT PS48",
       "PowerScout 48",
-      "PS48"
+      "PowerScout 48 HD",
+      "PS48",
+      "PS48HD"
     ]
   },
   {
-    "partNumber": "PS24",
-    "displayName": "DENT PowerScout PS24 Power Meter",
+    "partNumber": "PS24HD-C-D-N",
+    "displayName": "DENT PowerScout 24 HD",
     "category": "Electrical / Power",
     "collection": "Power Metering",
     "aliases": [
+      "DENT PS24",
       "PowerScout 24",
-      "PS24"
+      "PowerScout 24 HD",
+      "PS24",
+      "PS24HD"
     ]
   },
   {
-    "partNumber": "PS12",
-    "displayName": "DENT PowerScout PS12 Power Meter",
+    "partNumber": "PS12HD-C-D-N",
+    "displayName": "DENT PowerScout 12 HD",
     "category": "Electrical / Power",
     "collection": "Power Metering",
     "aliases": [
+      "DENT PS12",
       "PowerScout 12",
-      "PS12"
+      "PowerScout 12 HD",
+      "PS12",
+      "PS12HD"
     ]
   },
   {
-    "partNumber": "PS3",
-    "displayName": "DENT PowerScout PS3 Power Meter",
+    "partNumber": "PS3HD-C-D-N",
+    "displayName": "DENT PowerScout 3 HD",
     "category": "Electrical / Power",
     "collection": "Power Metering",
     "aliases": [
+      "DENT PS3",
       "PowerScout 3",
-      "PS3"
+      "PowerScout 3 HD",
+      "PS3",
+      "PS3HD"
     ]
   },
   {
