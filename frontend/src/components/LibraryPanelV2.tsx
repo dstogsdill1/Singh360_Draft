@@ -16,7 +16,12 @@ import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
 import '../styles/libraryV2.css';
 
 interface Props {
-  onInsert: (name: string, url: string, label: string | null) => void;
+  onInsert: (
+    name: string,
+    url: string,
+    label: string | null,
+    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number; acronym?: string },
+  ) => void;
   canInsert: boolean;
   activePageType?: string;
 }
@@ -225,12 +230,47 @@ function defaultSizeLabel(c: LibV2Component): string {
   return `${w || '?'} × ${h || '?'}`;
 }
 
+function insertMetaFor(c: LibV2Component): {
+  category?: string;
+  defaultWidth?: number;
+  defaultHeight?: number;
+  acronym?: string;
+} {
+  const x = asAny(c);
+  const width = Number(x.defaultWidth || x.width || 0);
+  const height = Number(x.defaultHeight || x.height || 0);
+  const acronym = String(x.shortName || x.defaultLabel || '').trim();
+  return {
+    category: String(c.category || '').trim() || undefined,
+    defaultWidth: width > 0 ? width : undefined,
+    defaultHeight: height > 0 ? height : undefined,
+    acronym: acronym || undefined,
+  };
+}
+
 function CardPreview({ c, rep, small = false }: { c: LibV2Component; rep: ViewRep; small?: boolean }) {
   const url = previewUrl(c, rep);
-  if (!url) return <div className={small ? 'libv2-mini-preview empty' : 'libv2-preview empty'}>No image</div>;
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [url]);
+
+  if (!url || broken) {
+    return (
+      <div className={small ? 'libv2-mini-preview empty' : 'libv2-preview empty'}>
+        {url ? 'Image unavailable' : 'No image'}
+      </div>
+    );
+  }
+
   return (
     <div className={small ? 'libv2-mini-preview' : 'libv2-preview'}>
-      <img src={url} alt={displayNameFor(c)} />
+      <img
+        src={url}
+        alt={displayNameFor(c)}
+        title={displayNameFor(c)}
+        loading="lazy"
+        draggable={false}
+        onError={() => setBroken(true)}
+      />
     </div>
   );
 }
@@ -396,7 +436,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
     if (!canInsert) return;
     const url = variantUrl(c, which) || previewUrl(c, which);
     if (!url) return;
-    onInsert(displayNameFor(c), url, withLabel ? labelFor(c) : null);
+    onInsert(displayNameFor(c), url, withLabel ? labelFor(c) : null, insertMetaFor(c));
   };
 
   const onDragStart = (e: React.DragEvent, c: LibV2Component) => {
@@ -406,6 +446,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
       name: displayNameFor(c),
       url,
       label: labelFor(c),
+      ...insertMetaFor(c),
     }));
     e.dataTransfer.effectAllowed = 'copy';
   };
@@ -640,7 +681,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
         {visibleCards.map((c) => {
           const canCurrent = !!(variantUrl(c, rep) || previewUrl(c, rep));
           return (
-            <div key={c.id} className="libv2-card" draggable={canInsert && canCurrent} onDragStart={(e) => onDragStart(e, c)}>
+            <div key={c.id} className="libv2-card" title={displayNameFor(c)} draggable={canInsert && canCurrent} onDragStart={(e) => onDragStart(e, c)}>
               <CardPreview c={c} rep={rep} />
               <div className="libv2-meta">
                 <div className="libv2-name">{displayNameFor(c)}</div>

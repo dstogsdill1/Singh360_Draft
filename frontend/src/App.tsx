@@ -649,7 +649,7 @@ export default function App() {
     name: string,
     url: string,
     label: string | null,
-    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number },
+    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number; acronym?: string },
   ) => {
     if (!isCanvasContext()) return;
     setOverlayMode(true);
@@ -1326,13 +1326,18 @@ export default function App() {
     if (!project) return;
     const ok = await captureAndSave();
     if (!ok) return;
-    const blob = await exportPackage(project.id);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${project.metadata.projectName || project.id}_package.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = await exportPackage(project.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project.metadata.projectName || project.id}_package.zip`;
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      console.error('Package export failed', err);
+      window.alert(`Package export failed: ${String(err)}`);
+    }
   };
 
   const onRenumber = () => {

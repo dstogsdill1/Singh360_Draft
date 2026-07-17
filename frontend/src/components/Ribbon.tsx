@@ -164,7 +164,10 @@ export default function Ribbon({
   }, [selection]);
   const cx = canvasEnabled;
   const sourceMode = viewMode === 'source';
-  const historyEnabled = sourceMode ? !!hasProject : cx;
+  // Canvas edit/order commands must never stay active while Source view is
+  // showing the worksheet editor. Source mode keeps its own Undo/Redo only.
+  const historyEnabled = cx;
+  const hasSelection = cx && !!selection;
   const undoEnabled = sourceMode ? !!sourceCanUndo : cx;
   const redoEnabled = sourceMode ? !!sourceCanRedo : cx;
 
@@ -256,14 +259,14 @@ export default function Ribbon({
               <button className="ribbon-btn" disabled={!redoEnabled} onClick={canvas.redo} title="Redo (Ctrl+Y)">Redo</button>
             </Group>
             <Group title="Edit">
-              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.deleteSelected} title="Delete selected object (Del)">Delete</button>
-              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.copySelected} title="Copy selected object(s) (Ctrl+C)">Copy</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.deleteSelected} title="Delete selected object (Del)">Delete</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.copySelected} title="Copy selected object(s) (Ctrl+C)">Copy</button>
               <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.pasteCopied} title="Paste copied object(s) (Ctrl+V)">Paste</button>
-              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.duplicateSelected} title="Duplicate selected object (Ctrl+D)">Duplicate</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.duplicateSelected} title="Duplicate selected object (Ctrl+D)">Duplicate</button>
             </Group>
             <Group title="Group">
-              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.group} title="Group selected objects">Group</button>
-              <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.ungroup} title="Ungroup selected group">Ungroup</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.group} title="Group selected objects">Group</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.ungroup} title="Ungroup selected group">Ungroup</button>
               <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.unlockAll} title="Unlock all objects on this page">Unlock All</button>
             </Group>
           </>
@@ -338,32 +341,32 @@ export default function Ribbon({
         {tab === 'Arrange' && (
           <>
             <Group title="Order">
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.bringForward} title="Bring selected object forward one step">Forward</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.sendBackward} title="Send selected object backward one step">Backward</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.bringToFront} title="Bring selected object to the front">To Front</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.sendToBack} title="Send selected object to the back">To Back</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.bringForward} title="Bring selected object forward one step">Forward</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.sendBackward} title="Send selected object backward one step">Backward</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.bringToFront} title="Bring selected object to the front">To Front</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.sendToBack} title="Send selected object to the back">To Back</button>
             </Group>
             <Group title="Align">
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('left')} title="Align left edges">⊣ Left</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('center')} title="Align horizontal centers">⊟ H Center</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('right')} title="Align right edges">⊢ Right</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('top')} title="Align top edges">⊤ Top</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('middle')} title="Align vertical middles">⊞ V Middle</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('bottom')} title="Align bottom edges">⊥ Bottom</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('left')} title="Align left edges">⊣ Left</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('center')} title="Align horizontal centers">⊟ H Center</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('right')} title="Align right edges">⊢ Right</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('top')} title="Align top edges">⊤ Top</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('middle')} title="Align vertical middles">⊞ V Middle</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('bottom')} title="Align bottom edges">⊥ Bottom</button>
             </Group>
             <Group title="Page Center">
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('page-center-h')} title="Center on page horizontally">⇔ Horiz</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.alignObjects('page-center-v')} title="Center on page vertically">⇕ Vert</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('page-center-h')} title="Center on page horizontally">⇔ Horiz</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('page-center-v')} title="Center on page vertically">⇕ Vert</button>
             </Group>
             <Group title="Distribute">
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.distributeObjects('horizontal')} title="Distribute objects horizontally (need 3+)">↔ Horiz</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.distributeObjects('vertical')} title="Distribute objects vertically (need 3+)">↕ Vert</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.distributeObjects('horizontal')} title="Distribute objects horizontally (need 3+)">↔ Horiz</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.distributeObjects('vertical')} title="Distribute objects vertically (need 3+)">↕ Vert</button>
             </Group>
             <Group title="Match Size">
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.matchObjectSize('width')} title="Match width to the first selected object">= Width</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.matchObjectSize('height')} title="Match height to the first selected object">= Height</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={() => canvas.matchObjectSize('both')} title="Match both width and height to the first selected object">= Both</button>
-              <button className="ribbon-btn" disabled={!cx} onClick={canvas.normalizeSymbolSize} title="Resize selected symbols to standard marker size">Normalize Symbol Size</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.matchObjectSize('width')} title="Match width to the first selected object">= Width</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.matchObjectSize('height')} title="Match height to the first selected object">= Height</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.matchObjectSize('both')} title="Match both width and height to the first selected object">= Both</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.normalizeSymbolSize} title="Resize selected symbols to standard marker size">Normalize Symbol Size</button>
             </Group>
           </>
         )}

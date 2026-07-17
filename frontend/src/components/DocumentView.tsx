@@ -61,7 +61,7 @@ interface Props {
     label: string | null,
     clientX: number,
     clientY: number,
-    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number },
+    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number; acronym?: string },
   ) => void;
   onScaleChange: (scale: number) => void;
   onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
@@ -195,18 +195,20 @@ export default function DocumentView({
           if (payload) {
             e.preventDefault();
             try {
-              const { url, name, label, category, defaultWidth, defaultHeight } = JSON.parse(payload) as {
+              const { url, name, label, category, defaultWidth, defaultHeight, acronym } = JSON.parse(payload) as {
                 url: string;
                 name: string;
                 label: string | null;
                 category?: string;
                 defaultWidth?: number;
                 defaultHeight?: number;
+                acronym?: string;
               };
               onDropComponent?.(url, name, label ?? null, e.clientX, e.clientY, {
                 category,
                 defaultWidth,
                 defaultHeight,
+                acronym,
               });
             } catch {
               /* ignore malformed payload */

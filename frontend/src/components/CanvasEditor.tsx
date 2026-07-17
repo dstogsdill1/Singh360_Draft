@@ -980,16 +980,20 @@ export default function CanvasEditor({
           const iw = img.width || 1;
           const ih = img.height || 1;
           const scale = scaleImageToSize(iw, ih, size.w, size.h);
-          let left = (CANVAS_W - iw * scale) / 2;
-          let top = (CANVAS_H - ih * scale) / 2;
+          const renderW = iw * scale;
+          const renderH = ih * scale;
+          let left = (CANVAS_W - renderW) / 2;
+          let top = (CANVAS_H - renderH) / 2;
           const el = canvasRef.current;
           if (at && el) {
             const rect = el.getBoundingClientRect();
             if (rect.width > 0 && rect.height > 0) {
-              left = ((at.clientX - rect.left) / rect.width) * CANVAS_W - (iw * scale) / 2;
-              top = ((at.clientY - rect.top) / rect.height) * CANVAS_H - (ih * scale) / 2;
+              left = ((at.clientX - rect.left) / rect.width) * CANVAS_W - renderW / 2;
+              top = ((at.clientY - rect.top) / rect.height) * CANVAS_H - renderH / 2;
             }
           }
+          left = Math.max(0, Math.min(Math.max(0, CANVAS_W - renderW), left));
+          top = Math.max(0, Math.min(Math.max(0, CANVAS_H - renderH), top));
           img.set({
             left,
             top,
@@ -1006,8 +1010,8 @@ export default function CanvasEditor({
           if (label) {
             const lbl = new Textbox(label, {
               left,
-              top: top + ih * scale + 6,
-              width: Math.max(120, iw * scale),
+              top: top + renderH + 6,
+              width: Math.max(120, renderW),
               fontSize: 14,
               fontFamily: 'Arial',
               textAlign: 'center',
@@ -1018,6 +1022,9 @@ export default function CanvasEditor({
           }
           c.setActiveObject(img);
           c.requestRenderAll();
+        }).catch((err) => {
+          console.error('Component image load failed', { name, assetUrl, err });
+          window.alert(`Could not load component "${name}". Refresh the library or replace its source image.`);
         });
       },
       addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => {
