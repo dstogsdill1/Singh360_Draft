@@ -860,7 +860,8 @@ class LibraryV2:
                 legacy_visible.append(c)
 
             legacy_count = stale_hidden + len(legacy_visible)
-            comps = approved + (legacy_visible if include_legacy else [])
+            # The manifest and component-builder export are both active metadata sources. Always return their non-duplicate active union so the Draft sidebar, full catalog, legend picker, and publisher show the same components.
+            comps = approved + legacy_visible
         else:
             manifest = self._read_manifest()
             comps = [self._compose_component_payload(c) for c in manifest["components"] if include_retired or not c.get("retired")]

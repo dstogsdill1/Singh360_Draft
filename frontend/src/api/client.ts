@@ -922,7 +922,7 @@ export interface LibV2Data {
 
 export const libV2AssetUrl = (rel: string) => `/api/lib/asset/${rel}`;
 
-export async function getLibV2(includeLegacy: boolean = false): Promise<LibV2Data> {
+export async function getLibV2(includeLegacy: boolean = true): Promise<LibV2Data> {
   const q = includeLegacy ? '?includeLegacy=1' : '';
   const res = await fetch(`/api/lib${q}`);
   if (!res.ok) throw new Error(await res.text());

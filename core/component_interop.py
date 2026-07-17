@@ -320,7 +320,7 @@ def publish_active_library(lib: Any, repo_root: Path) -> dict[str, Any]:
         backup = lib.archive / f"published_component_library_{_stamp()}"
         backup.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(target, backup, dirs_exist_ok=True)
-        shutil.rmtree(target)
+        # Keep the live folder in place. OneDrive/Windows may lock individual asset directories; generated catalog.json controls visibility, so stale orphan files are harmless and can be cleaned later.
     target.mkdir(parents=True, exist_ok=True)
     assets_root = target / "assets"; assets_root.mkdir(parents=True, exist_ok=True)
 

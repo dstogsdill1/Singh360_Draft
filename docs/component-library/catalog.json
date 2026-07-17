@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-12T21:13:12Z",
+  "generatedAt": "2026-07-17T18:59:36Z",
   "components": [
     {
       "id": "alarm_door_annunciator_strobe",
@@ -4072,6 +4072,87 @@
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/s360_std_mdf_marker/edge.svg"
     },
     {
+      "id": "heb_logo",
+      "displayName": "H-E-B Logo",
+      "category": "logos",
+      "categories": [
+        "logos"
+      ],
+      "collection": "Core Logos",
+      "manufacturer": "H-E-B",
+      "partNumber": "",
+      "defaultLabel": "",
+      "aliases": [
+        "H-E-B",
+        "HEB",
+        "H-E-B Logo"
+      ],
+      "tags": [
+        "Logo",
+        "Core"
+      ],
+      "defaultWidth": 150,
+      "defaultHeight": 62,
+      "real": "assets/logos/heb_logo/real.png",
+      "edge": "",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/logos/heb_logo/real.png",
+      "edgeRaw": ""
+    },
+    {
+      "id": "singh360_logo",
+      "displayName": "Singh360 Logo",
+      "category": "logos",
+      "categories": [
+        "logos"
+      ],
+      "collection": "Core Logos",
+      "manufacturer": "Singh360",
+      "partNumber": "",
+      "defaultLabel": "",
+      "aliases": [
+        "Singh360",
+        "Singh 360",
+        "Singh360 Logo"
+      ],
+      "tags": [
+        "Logo",
+        "Core"
+      ],
+      "defaultWidth": 150,
+      "defaultHeight": 62,
+      "real": "assets/logos/singh360_logo/real.png",
+      "edge": "",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/logos/singh360_logo/real.png",
+      "edgeRaw": ""
+    },
+    {
+      "id": "rdm_logo",
+      "displayName": "RDM Logo",
+      "category": "logos",
+      "categories": [
+        "logos"
+      ],
+      "collection": "Core Logos",
+      "manufacturer": "Resource Data Management",
+      "partNumber": "",
+      "defaultLabel": "",
+      "aliases": [
+        "RDM",
+        "Resource Data Management",
+        "RDM Logo"
+      ],
+      "tags": [
+        "Logo",
+        "Core"
+      ],
+      "defaultWidth": 150,
+      "defaultHeight": 62,
+      "real": "assets/logos/rdm_logo/real.png",
+      "edge": "",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/logos/rdm_logo/real.png",
+      "edgeRaw": ""
+    },
+    {
       "id": "controllers_15376f3636",
       "displayName": "RDM 652",
       "category": "controllers",
@@ -4496,6 +4577,46 @@
       "edge": "assets/symbols_markers/symbols_markers_014e762bc2/edge.svg",
       "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_014e762bc2/real.png",
       "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_014e762bc2/edge.svg"
+    },
+    {
+      "id": "symbols_markers_d644f03cfd",
+      "displayName": "rdm eepr electronic",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
+      "collection": "",
+      "manufacturer": "",
+      "partNumber": "",
+      "defaultLabel": "rdm_eepr_electronic",
+      "aliases": [],
+      "tags": [],
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/symbols_markers_d644f03cfd/real.svg",
+      "edge": "assets/symbols_markers/symbols_markers_d644f03cfd/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_d644f03cfd/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_d644f03cfd/edge.svg"
+    },
+    {
+      "id": "symbols_markers_9c448a579e",
+      "displayName": "rdm eepr mechanical",
+      "category": "symbols_markers",
+      "categories": [
+        "symbols_markers"
+      ],
+      "collection": "",
+      "manufacturer": "",
+      "partNumber": "",
+      "defaultLabel": "rdm_eepr_mechanical",
+      "aliases": [],
+      "tags": [],
+      "defaultWidth": 18,
+      "defaultHeight": 18,
+      "real": "assets/symbols_markers/symbols_markers_9c448a579e/real.svg",
+      "edge": "assets/symbols_markers/symbols_markers_9c448a579e/edge.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_9c448a579e/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_SmartDraw/main/docs/component-library/assets/symbols_markers/symbols_markers_9c448a579e/edge.svg"
     }
   ]
 }

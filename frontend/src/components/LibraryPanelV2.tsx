@@ -242,7 +242,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
   const [category, setCategory] = useState('all');
   const [rep, setRep] = useState<ViewRep>('source');
   const [showDashboard, setShowDashboard] = useState(false);
-  const [showLegacyItems, setShowLegacyItems] = useState(false);
+  const [showLegacyItems, setShowLegacyItems] = useState(true);
 
   const [builderQuery, setBuilderQuery] = useState('');
   const [builderCategory, setBuilderCategory] = useState('all');
@@ -265,7 +265,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
   const replaceBwRef = useRef<HTMLInputElement>(null);
   const addFilesRef = useRef<HTMLInputElement>(null);
 
-  const load = async (includeLegacy = showLegacyItems) => {
+  const load = async (includeLegacy = true) => {
     setLoading(true);
     try {
       const lib = await getLibV2(includeLegacy);
@@ -276,7 +276,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
     }
   };
 
-  useEffect(() => { void load(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { void load(true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   useEffect(() => { setRep(defaultRepForPage(activePageType, data)); }, [activePageType, data]);
 
   const components = data?.components ?? [];
