@@ -1,4 +1,7 @@
+import { useEffect, useMemo } from 'react';
 import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, Worksheet } from '../../model/types';
+import { sanitizeCanvasObjectsForPage } from '../../model/canvasCleanup';
+import { projectForWorksheetRender } from '../../model/sourceProjection';
 import TextPageRenderer from './TextPageRenderer';
 import TablePageRenderer from './TablePageRenderer';
 import MatrixPageRenderer from './MatrixPageRenderer';
@@ -29,17 +32,14 @@ interface Props {
 }
 
 /**
- * Normalized output page. Every page is composed of two layers:
- *  - a BASE layer (normalized blocks: cover / text / table / matrix / image), and
- *  - an editable OVERLAY canvas (screenshots, shapes, arrows, text boxes).
- *
- * The overlay exists on every page so users can paste/annotate anywhere. Pointer
- * events on the overlay are enabled only when overlay edit mode is on or a draw
- * tool is active, so base content (editable tables/text) stays clickable.
+ * Normalized output page. The worksheet is the geometry/style source of truth;
+ * persisted normalized blocks are only a fallback/cache. Every page is composed
+ * of a source-projected BASE layer and an editable OVERLAY canvas.
  */
 export default function NormalizedPage({
   page,
   project,
+  worksheet,
   activeTool,
   snap,
   overlayMode,
@@ -52,35 +52,41 @@ export default function NormalizedPage({
   onDuplicateBlock,
   onCanvasChange,
 }: Props) {
-  const blocks = page.blocks ?? [];
-  const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
-  const isIndexPage = page.pageType === 'index';
-  const indexUsesExcelExact = isIndexPage && page.renderMode === 'excel_exact';
-  const isCoverPage = page.pageType === 'cover' || blocks.some((b) => b.type === 'cover');
-  // Singh360 standard dark page-header band: every non-cover included page,
-  // even blank drawing/layout/pdf-vector pages (FINAL RENDER POLISH 4G,
-  // Phase D) — those pages still need the top title/subtitle band, they
-  // just have no table body underneath it.
-  const headerStyle = (page.normalizedHeaderStyle as string | undefined) ?? 'orange';
+  const projected = useMemo(
+    () => projectForWorksheetRender(project, page, worksheet),
+    [project, page, worksheet],
+  );
+  const renderPage = projected.page;
+  const renderProject = projected.project;
+  const blocks = renderPage.blocks ?? [];
+  const isImageType = renderPage.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
+  const isIndexPage = renderPage.pageType === 'index';
+  const indexUsesExcelExact = isIndexPage && renderPage.renderMode === 'excel_exact';
+  const isCoverPage = renderPage.pageType === 'cover' || blocks.some((b) => b.type === 'cover');
+  const headerStyle = (renderPage.normalizedHeaderStyle as string | undefined) ?? 'orange';
   const showBand = headerStyle === 'orange' && !isCoverPage;
   const bandReserve = showBand ? 64 : 0;
-  const hasOverlay = (page.canvasObjects?.length ?? 0) > 0;
-  // A page has an editable base when it renders editable table/matrix/text cells
-  // (schedules, matrices, hybrid sheets, the generated index). For those pages
-  // we must NOT let the overlay steal pointer events just because annotations
-  // exist — otherwise the table underneath becomes unclickable/uneditable.
+
+  const rawCanvasObjects = page.canvasObjects ?? [];
+  const canvasObjects = useMemo(
+    () => sanitizeCanvasObjectsForPage(renderPage, rawCanvasObjects),
+    [renderPage.pageType, renderPage.sheetTitle, renderPage.sheetCode, renderPage.displaySheetCode, rawCanvasObjects],
+  );
+
+  // Persist the automatic cover cleanup as soon as that page is rendered. There
+  // is intentionally no "clean workspace/artifacts" button for this defect.
+  useEffect(() => {
+    if (canvasObjects !== rawCanvasObjects) onCanvasChange(page.id, canvasObjects);
+  }, [canvasObjects, rawCanvasObjects, onCanvasChange, page.id]);
+
+  const hasOverlay = canvasObjects.length > 0;
   const baseTypes = ['table', 'matrix', 'excelRange', 'idfNetworkTable', 'title', 'subtitle', 'paragraph', 'bulletList', 'sectionHeading', 'note', 'cover', 'companyInfo'];
   const hasEditableBase = isIndexPage || (!isImageType && blocks.some((b) => baseTypes.includes(b.type)));
-  // The overlay must capture clicks when: overlay-edit mode is on, a draw tool is
-  // active, OR (on pure drawing pages) the page already has overlay objects so a
-  // line you just drew stays selectable/movable. On pages with an editable base
-  // the overlay stays click-through unless the user explicitly turns it on.
   const overlayInteractive = overlayMode || activeTool !== 'select' || (hasOverlay && !hasEditableBase);
 
   const base = (() => {
-    // Workbook index / TOC from the Excel range (not a generated duplicate list).
     if (isIndexPage && !indexUsesExcelExact) {
-      return <GeneratedIndexRenderer project={project} page={page} onPatchPage={onPatchPage} />;
+      return <GeneratedIndexRenderer project={renderProject} page={renderPage} onPatchPage={onPatchPage} />;
     }
 
     if (isIndexPage && indexUsesExcelExact) {
@@ -103,24 +109,15 @@ export default function NormalizedPage({
           </div>
         );
       }
-      // A user has already drawn/pasted something on the overlay — never
-      // cover it with a placeholder note, exported or not (Phase C rule 6:
-      // preserve user-added canvas objects on re-import/re-render).
-      if (hasOverlay) {
-        return <div className="np np-image-base" />;
-      }
+      if (hasOverlay) return <div className="np np-image-base" />;
       if (exporting) {
-        // FINAL SA31 POLISH 4I Phase E: blank drawing/layout/schematic/
-        // location pages always export a clear centered note — never
-        // silently blank. Location pages use the same draft note.
-        const message = page.blankPagePlaceholder || 'DRAWING TO BE INSERTED';
+        const message = renderPage.blankPagePlaceholder || 'DRAWING TO BE INSERTED';
         return (
           <div className="np np-image-base">
             <div className="np-reserved-note">{message}</div>
           </div>
         );
       }
-      // Editor-only drop zone hint (never exported).
       return (
         <div className="np np-image-base">
           <div className="np-dropzone" data-noexport="1">
@@ -142,9 +139,9 @@ export default function NormalizedPage({
           const patch = (p: Partial<PageBlock>) => onBlockChange(page.id, b.id, p);
           switch (b.type) {
             case 'cover':
-              return <CoverPageRenderer key={b.id} block={b} project={project} />;
+              return <CoverPageRenderer key={b.id} block={b} project={renderProject} />;
             case 'companyInfo':
-              return <CompanyInfoRenderer key={b.id} block={b} project={project} />;
+              return <CompanyInfoRenderer key={b.id} block={b} project={renderProject} />;
             case 'excelRange':
               return <ExcelRangeRenderer key={b.id} block={b} reservedTop={bandReserve} exporting={exporting} />;
             case 'idfNetworkTable':
@@ -167,14 +164,14 @@ export default function NormalizedPage({
   return (
     <div className="np-page-root">
       <div className={`np-base-layer ${overlayInteractive ? 'passthrough' : ''} ${showBand ? 'np-has-band' : ''}`}>
-        {showBand && <SheetTitleBand page={page} />}
+        {showBand && <SheetTitleBand page={renderPage} />}
         {base}
       </div>
       <div className={`np-overlay-layer ${overlayInteractive ? 'active' : ''}`}>
         <CanvasEditor
           key={page.id}
-          serialized={page.canvasObjects || []}
-          onSerializedChange={(o) => onCanvasChange(page.id, o)}
+          serialized={canvasObjects}
+          onSerializedChange={(objects) => onCanvasChange(page.id, objects)}
           registerApi={onRegisterApi}
           onSelectionChange={onSelectionChange}
           activeTool={activeTool}
