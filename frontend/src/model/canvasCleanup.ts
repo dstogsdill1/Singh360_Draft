@@ -59,7 +59,8 @@ export function isCoverArtifact(object: CanvasObject): boolean {
   const minDimension = Math.min(width, height);
   const area = width * height;
   if (!Number.isFinite(maxDimension) || !Number.isFinite(area)) return true;
-  if (maxDimension <= 44 || area <= 1_100) return true;
+  if (maxDimension <= 44) return true;
+  if (area <= 1_100 && maxDimension <= 80) return true;
   if (minDimension <= 2 && maxDimension <= 80) return true;
   return false;
 }
