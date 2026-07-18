@@ -4,41 +4,22 @@ import { BODY_W } from '../../model/sheetGeometry';
 
 interface Props {
   block: PageBlock;
-  /** Vertical space (px) consumed above the range by the orange title band. */
+  /** Vertical space (px) consumed above the page body by the title band. */
   reservedTop?: number;
   /** When true (PDF export), suppress on-page diagnostic banners. */
   exporting?: boolean;
 }
 
-// Small insets so the range never touches the sheet frame / title block.
 const PAD_X = 10;
 const PAD_Y = 10;
 const DEFAULT_COL = 64;
 const DEFAULT_ROW = 20;
-// A small range is grown to use the full printable body width, up to this cap,
-// so front-matter tables fill the page instead of floating tiny in the corner.
 const GROW_CAP = 1.85;
-// FINAL RENDER POLISH 4G, Phase C: the previous fit-to-body scale used 100% of
-// the available height with zero margin, so any table that needed to shrink
-// landed flush against the title block (and a hair of rounding could clip a
-// row). Reserve a fixed safety gap so a table never touches the boundary.
 const MIN_BOTTOM_GAP = 20;
-// FINAL RELEASE CLEANUP 4H+SA38, Phase H fix: BODY_H (866) models the full
-// on-screen sheet body used for page-frame layout, but is taller than the
-// backend's proven-safe render budget (core/page_composer.py
-// SAFE_BODY_BUDGET = 700). A short, narrow table (e.g. a 2-column
-// instruction page) grow-scales width-first up to GROW_CAP, which also
-// scales its height by the same factor — using the optimistic BODY_H for
-// that height check let the scaled table overflow the page's real
-// overflow:hidden body and silently drop its bottom rows (confirmed via a
-// real SA31 export: only row 1 of 5 painted onto the PDF page). Match the
-// backend's conservative budget for this safety-critical height check only;
-// BODY_H itself is untouched everywhere else it's used for page-frame
-// layout, so this does not touch the wider, already-flagged 720/866
-// calibration mismatch.
 const SAFE_FIT_HEIGHT = 700;
+// .np has 48px horizontal padding and .np-xr has 10px horizontal padding.
+const MIN_FILL_WIDTH = BODY_W - 118;
 
-/** Map an Excel border side spec to a CSS border shorthand. */
 function borderCss(side?: BorderSide): string | undefined {
   if (!side || !side.style) return undefined;
   const color = side.color || '#000000';
@@ -68,14 +49,18 @@ function cellCss(
   bodyFontPx?: number,
   opts?: { nowrap?: boolean },
 ): React.CSSProperties {
+  // Source's Wrap/No Wrap flag is authoritative. Undefined/false means the
+  // Excel cell is not wrapped; a normalized heuristic may not override it.
+  const wraps = st?.wrap === true && !opts?.nowrap;
   const s: React.CSSProperties = {
     minHeight: rowH,
     padding: '2px 4px',
     verticalAlign:
       st?.vAlign === 'top' ? 'top' : st?.vAlign === 'bottom' ? 'bottom' : 'middle',
-    whiteSpace: opts?.nowrap ? 'nowrap' : 'normal',
-    overflowWrap: opts?.nowrap ? 'normal' : 'normal',
-    wordBreak: opts?.nowrap ? 'keep-all' : 'normal',
+    whiteSpace: wraps ? 'pre-wrap' : 'pre',
+    overflowWrap: wraps ? 'break-word' : 'normal',
+    wordBreak: 'normal',
+    overflow: 'hidden',
   };
   if (!st) {
     if (bodyFontPx) s.fontSize = bodyFontPx;
@@ -98,9 +83,6 @@ function cellCss(
           ? 'justify'
           : 'left';
 
-  // Normalized output tables always wrap as real table geometry. The backend
-  // sizes columns first, then rows are allowed to expand before final scaling.
-  if (st.wrap) s.overflowWrap = 'break-word';
   if (st.indent) s.paddingLeft = 3 + st.indent * 8;
 
   const rot = st.rotation ?? 0;
@@ -126,18 +108,15 @@ function cellCss(
     if (bottom) s.borderBottom = bottom;
     if (left) s.borderLeft = left;
   }
-  // Phase D: an explicit block-level body font (instruction_table pages)
-  // always wins over the per-cell Excel font size captured on import.
   if (bodyFontPx) s.fontSize = bodyFontPx;
   return s;
 }
 
 /**
- * Excel Exact Range renderer. Reproduces the source worksheet range as a real
- * table using the exact column widths, row heights, merged cells, fills,
- * borders, fonts, alignment and vertical text carried on the block. Nothing is
- * restyled with app defaults; the range is scaled proportionally to fit the
- * printable body (no scrollbars, no distortion).
+ * Excel Exact Range renderer. It uses the source worksheet's widths, heights,
+ * merges, fills, borders, fonts and wrap flags. When a table is narrower than
+ * the printable body, only its widest column receives the unused space; this
+ * keeps Step/ID columns narrow and lets Instructions/Notes use the page.
  */
 export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting = false }: Props) {
   const grid = block.grid ?? [];
@@ -153,13 +132,24 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
     [grid, colWidths],
   );
 
-  const naturalW = useMemo(() => {
-    let w = 0;
-    for (let c = 0; c < nCols; c += 1) w += colWidths[c] ?? DEFAULT_COL;
-    return Math.max(1, w);
+  const displayColWidths = useMemo(() => {
+    const widths = Array.from({ length: nCols }, (_, c) => colWidths[c] ?? DEFAULT_COL);
+    const sourceWidth = widths.reduce((sum, width) => sum + width, 0);
+    if (widths.length && sourceWidth < MIN_FILL_WIDTH) {
+      let flexColumn = 0;
+      for (let c = 1; c < widths.length; c += 1) {
+        if (widths[c] > widths[flexColumn]) flexColumn = c;
+      }
+      widths[flexColumn] += MIN_FILL_WIDTH - sourceWidth;
+    }
+    return widths;
   }, [colWidths, nCols]);
 
-  // Merged-cell bookkeeping: covered cells are skipped, top-left carries spans.
+  const naturalW = useMemo(
+    () => Math.max(1, displayColWidths.reduce((sum, width) => sum + width, 0)),
+    [displayColWidths],
+  );
+
   const { covered, spanAt } = useMemo(() => {
     const cov = new Set<string>();
     const span = new Map<string, { rs: number; cs: number }>();
@@ -192,8 +182,6 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
     let raf = 0;
     let last = -1;
     const fit = () => {
-      // Measure the real container so grow-to-fill fits inside whatever padding
-      // chain wraps the range (.np / .np-xr), never clipping on the right.
       const container = wrap.parentElement;
       const containerW = container?.clientWidth ?? BODY_W;
       const availW = Math.max(1, containerW - PAD_X * 2);
@@ -202,12 +190,7 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
       const h = table.scrollHeight || 1;
       const sw = availW / w;
       const sh = availH / h;
-      // A block marked noGrow (e.g. a narrow 2-column instruction table)
-      // never stretches past its natural size — only shrinks if it doesn't
-      // fit (see noGrow doc comment in model/types.ts for why).
       const growCap = block.noGrow ? 1 : GROW_CAP;
-      // Fit-to-body: grow small ranges to fill the width (up to growCap) while
-      // staying within the available height; shrink oversized ranges to fit.
       const scale =
         scaleMode === 'fit_width'
           ? Math.min(growCap, sw)
@@ -215,14 +198,6 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
       if (Math.abs(scale - last) < 0.003) return;
       last = scale;
       wrap.style.setProperty('--xr-scale', String(scale));
-      // `transform: scale()` only changes paint size, not layout size, so the
-      // parent `.np-xr` (auto-height, overflow:hidden) would still size itself
-      // from the pre-transform box. When scale > 1 (a narrow table grown to
-      // fill the body width) that leaves the visually-larger content taller
-      // than its own too-small ancestor box, silently clipping the bottom
-      // rows. Give the wrapper explicit post-scale dimensions so the ancestor
-      // always sizes to the real, visible footprint — never crops, never
-      // leaves a shrink-mode gap either.
       wrap.style.width = `${Math.ceil(w * scale)}px`;
       wrap.style.height = `${Math.ceil(h * scale)}px`;
     };
@@ -258,8 +233,8 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
           style={{ width: naturalW }}
         >
           <colgroup>
-            {Array.from({ length: nCols }, (_, c) => (
-              <col key={c} style={{ width: colWidths[c] ?? DEFAULT_COL }} />
+            {displayColWidths.map((width, c) => (
+              <col key={c} style={{ width }} />
             ))}
           </colgroup>
           <tbody>
