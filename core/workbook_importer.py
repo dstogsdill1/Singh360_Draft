@@ -32,20 +32,6 @@ from core.table_style_profile import (
     apply_singh360_profile,
 )
 
-from core.table_layout_profiles import (
-    compact_block_for_profile,
-    infer_named_layout_profile,
-    is_managed_profile,
-    normalize_manual_col_widths,
-    preferred_named_col_widths,
-    preferred_row_heights,
-    profile_body_font_pt,
-    profile_body_font_px,
-    profile_min_font_pt,
-    profile_min_scale,
-    profile_nowrap_columns,
-)
-
 # Default Singh360 normalized header style applied to every non-cover page.
 DEFAULT_HEADER_STYLE = "orange"
 
@@ -913,8 +899,19 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
 
 
 def _layout_profile_for(family: str, page_type: str, blob: str) -> str:
-    """Single named profile resolver used by import, rebuild, and migration."""
-    return infer_named_layout_profile(family, page_type, blob)
+    """Rendering-options profile per page type (TABLE STYLE 4F / SA31 4I)."""
+    if family == "companyInfo":
+        return "company_info"
+    if family == "idfTable":
+        return "network_48_port"
+    if family in ("matrix", "ioSchedule", "panelDetail", "rackLayout"):
+        return "io_table"
+    if family == "text" and "instruction" in blob:
+        return "instruction_table"
+    # Front-matter narrative pages with long Section / Scope Language cells.
+    if family == "text" and any(k in blob for k in ("scope", "workflow", "milestone")):
+        return "front_matter_narrative_table"
+    return "front_matter_table"
 
 
 # --------------------------------------------------------------------------
@@ -1471,9 +1468,6 @@ def _preferred_col_widths(
     layout_profile: str = "",
 ) -> list[int]:
     """Deterministic normalized column sizing before placement/export."""
-    named = preferred_named_col_widths(grid, layout_profile, BODY_W)
-    if named is not None:
-        return named
     if layout_profile == "front_matter_narrative_table":
         return _preferred_narrative_col_widths(grid)
     if layout_profile in ("front_matter_table", "instruction_table") and family == "text":
@@ -1592,91 +1586,72 @@ def _apply_table_geometry(
     page_type: str,
     layout_profile: str = "",
 ) -> None:
-    """Auto-size normalized/output geometry without touching Source dimensions."""
-    profile = layout_profile or block.get("layoutProfile") or ""
-    compact_block_for_profile(block, profile)
+    """Auto-size columns and rows for normalized/output table geometry."""
     grid = block.get("grid") or []
     if not grid:
         return
-
-    n_cols = max((len(row) for row in grid), default=0)
-    manual = bool(block.get("manualLayout"))
-    named_font_px = None if manual else profile_body_font_px(profile, n_cols)
-    named_min_scale = None if manual else profile_min_scale(profile, n_cols)
-
-    if manual:
-        widths = normalize_manual_col_widths(
-            list(block.get("colWidths") or []),
-            BODY_W,
-        )
-    else:
-        widths = _preferred_col_widths(grid, family, page_type, profile)
-
+    profile = layout_profile or block.get("layoutProfile") or ""
+    widths = _preferred_col_widths(grid, family, page_type, profile)
     if widths:
         block["colWidths"] = widths
     header_rows = int(block.get("headerRowCount") or 1)
-    font_px = named_font_px
-
+    font_px = None
     if profile == "front_matter_narrative_table":
+        # 8.5pt ≈ 11.3 CSS px; keep Section labels from stacking word-by-word.
         font_px = 12
         block["bodyFontPx"] = 12
         block["bodyFontPt"] = NARRATIVE_FONT_SIZE
         block["minFontPt"] = NARRATIVE_MIN_FONT_SIZE
         block["renderProfile"] = NARRATIVE_RENDER_PROFILE
         block["layoutProfile"] = "front_matter_narrative_table"
-        block["minScale"] = max(
-            float(block.get("minScale") or EXCEL_MIN_SCALE),
-            NARRATIVE_MIN_FONT_SIZE / 9.0,
-        )
-    elif profile in ("front_matter_table",) and family == "text":
+        block["minScale"] = max(float(block.get("minScale") or EXCEL_MIN_SCALE), NARRATIVE_MIN_FONT_SIZE / 9.0)
+    elif profile in ("front_matter_table", "instruction_table") and family == "text":
         font_px = 12
         block["bodyFontPx"] = 12
         block["bodyFontPt"] = NARRATIVE_FONT_SIZE
         block["minFontPt"] = NARRATIVE_MIN_FONT_SIZE
-        block["minScale"] = max(
-            float(block.get("minScale") or EXCEL_MIN_SCALE),
-            NARRATIVE_MIN_FONT_SIZE / 9.0,
-        )
-
-    if named_min_scale is not None:
-        block["minScale"] = max(
-            float(block.get("minScale") or EXCEL_MIN_SCALE),
-            named_min_scale,
-        )
-    if named_font_px is not None:
-        block["bodyFontPx"] = named_font_px
-        block["bodyFontPt"] = profile_body_font_pt(profile, n_cols)
-        block["minFontPt"] = profile_min_font_pt(profile, n_cols)
-
-    if is_managed_profile(profile):
-        block["layoutProfile"] = profile
-        block["noGrow"] = False
-        block["preventStackedLabels"] = True
-        block["nowrapColumns"] = profile_nowrap_columns(grid, profile)
-        block["scaleMode"] = "fit_body"
-        block["wordWrapColumns"] = [
-            index for index in range(len(widths))
-            if index not in set(block["nowrapColumns"])
+        block["minScale"] = max(float(block.get("minScale") or EXCEL_MIN_SCALE), NARRATIVE_MIN_FONT_SIZE / 9.0)
+        header = grid[_find_header_row_index(grid)] if grid else []
+        section_cols = [
+            i for i in range(len(widths))
+            if _col_header_class(str(header[i]) if i < len(header) else "") in ("section", "other")
+            and i < len(widths) and widths[i] <= 120
         ]
-    elif family in _TECH_TOKEN_FAMILIES:
-        token_cols = _technical_token_columns(grid, family, header_rows)
-        if token_cols:
-            block["nowrapColumns"] = sorted(token_cols.keys())
-            block["preventStackedLabels"] = True
-
-    block["rowHeights"] = preferred_row_heights(
-        grid,
-        block.get("colWidths") or widths,
-        block.get("mergedCells") or [],
-        profile,
-        header_rows,
-        font_px=font_px,
-        source_heights=list(block.get("rowHeights") or []),
-        manual=manual,
+        narrative_cols = [
+            i for i in range(len(widths))
+            if _col_header_class(str(header[i]) if i < len(header) else "") == "narrative"
+        ]
+        nowrap = set(section_cols)
+        block["nowrapColumns"] = sorted(nowrap)
+        block["preventStackedLabels"] = True
+        block["wordWrapColumns"] = sorted(narrative_cols) if narrative_cols else sorted(
+            i for i in range(len(widths)) if i not in nowrap
+        )
+    block["rowHeights"] = _estimated_row_heights(
+        grid, block.get("colWidths") or widths, family, header_rows, font_px=font_px,
     )
     block["pageFamily"] = family
     block["bodyRowFillMode"] = "none"
     block["gridLines"] = True
+    # Section column: prefer keep-together / nowrap cue for the frontend.
+    if profile == "front_matter_narrative_table" and widths:
+        header = grid[_find_header_row_index(grid)]
+        section_cols = [
+            i for i in range(len(widths))
+            if _col_header_class(str(header[i]) if i < len(header) else "") == "section"
+        ]
+        block["nowrapColumns"] = section_cols
+        block["preventStackedLabels"] = True
+    elif family in _TECH_TOKEN_FAMILIES:
+        # PHASE D fix: I/O / LCP panel schedule columns dominated by short
+        # technical tokens (0-10VDC, 10K2, NO, NC, DI, AIO1, PR0650CD-TDB...)
+        # must not wrap character-by-character — the column width above is
+        # already sized to fit the longest token; nowrap keeps it on one
+        # line instead of the browser breaking mid-token.
+        token_cols = _technical_token_columns(grid, family, header_rows)
+        if token_cols:
+            block["nowrapColumns"] = sorted(token_cols.keys())
+            block["preventStackedLabels"] = True
 
 
 def _meaningful_style(style: dict[str, Any] | None) -> bool:
@@ -2010,7 +1985,6 @@ def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[s
         "bodyRowFillMode": "none",
         "gridLines": True,
         "editable": True,
-        "manualLayout": ws.get("layoutMode") == "manual",
         "rowsBeforeTrim": rows_before,
         "colsBeforeTrim": cols_before,
         "rowsAfterTrim": n_rows,

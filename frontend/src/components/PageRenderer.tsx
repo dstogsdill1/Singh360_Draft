@@ -1,8 +1,6 @@
-import { useMemo, useState } from 'react';
 import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from '../model/types';
 import NormalizedPage from './renderers/NormalizedPage';
 import RawGridRenderer from './renderers/RawGridRenderer';
-import SourceLivePreview from './SourceLivePreview';
 
 interface Props {
   page: PageModel;
@@ -23,8 +21,6 @@ interface Props {
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
-  onApplySourcePreview?: () => void;
-  layoutEditing?: boolean;
 }
 
 export default function PageRenderer({
@@ -46,41 +42,18 @@ export default function PageRenderer({
   onCanvasChange,
   onReplacePageSource,
   onExportPageSource,
-  onApplySourcePreview,
-  layoutEditing,
 }: Props) {
-  const [sourcePreviewVisible, setSourcePreviewVisible] = useState(false);
-  const sourceWorkspaceClass = useMemo(
-    () => `gx-source-workspace ${sourcePreviewVisible ? 'has-preview' : ''}`,
-    [sourcePreviewVisible],
-  );
-
   if (viewMode === 'source') {
     return (
-      <div className={sourceWorkspaceClass}>
-        <div className="gx-source-editor-pane">
-          <RawGridRenderer
-            worksheet={worksheet}
-            onWorksheetChange={(patch, opts) => {
-              if (!page.linkedWorksheetId) return;
-              onWorksheetChange(page.linkedWorksheetId, patch, opts);
-            }}
-            onReplaceSource={onReplacePageSource}
-            onExportSource={onExportPageSource}
-            onApplyPreview={onApplySourcePreview}
-            previewVisible={sourcePreviewVisible}
-            onTogglePreview={() => setSourcePreviewVisible((value) => !value)}
-          />
-        </div>
-        {sourcePreviewVisible ? (
-          <SourceLivePreview
-            page={page}
-            project={project}
-            worksheet={worksheet}
-            onClose={() => setSourcePreviewVisible(false)}
-          />
-        ) : null}
-      </div>
+      <RawGridRenderer
+        worksheet={worksheet}
+        onWorksheetChange={(patch, opts) => {
+          if (!page.linkedWorksheetId) return;
+          onWorksheetChange(page.linkedWorksheetId, patch, opts);
+        }}
+        onReplaceSource={onReplacePageSource}
+        onExportSource={onExportPageSource}
+      />
     );
   }
 
@@ -100,7 +73,6 @@ export default function PageRenderer({
       onPatchPage={onPatchPage}
       onDuplicateBlock={onDuplicateBlock}
       onCanvasChange={onCanvasChange}
-      layoutEditing={layoutEditing}
     />
   );
 }

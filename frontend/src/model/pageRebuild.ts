@@ -3,7 +3,6 @@ import {
   refreshPageFromSource,
   splitExcelRangeBlock,
 } from './excelRange';
-import { inferLayoutProfile, reflowExcelRangeBlock } from './tableLayoutProfiles';
 import { buildIdfNetworkBlock, idfHeaderRow, isIdfNetworkPage } from './idfNetworkTable';
 import type { PageModel, ProjectModel, Worksheet } from './types';
 
@@ -36,34 +35,20 @@ export function rebuildSinglePageFromSource(page: PageModel, ws: Worksheet): Pag
     if (existing?.type === 'excelRange' && existing.srcRows && !page.generatedContinuation) {
       return refreshPageFromSource(page, ws);
     }
-    let full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
+    const full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
     full.splitMode = page.splitMode ?? full.splitMode;
     full.minScale = page.minScale ?? full.minScale;
     full.allowContinuation = page.allowContinuation ?? full.allowContinuation;
     full.repeatRows = page.repeatRows ?? full.repeatRows;
     full.scaleMode = page.scaleMode ?? full.scaleMode;
-    full = reflowExcelRangeBlock(page, full);
     const parts = splitExcelRangeBlock(full);
     const partIndex = page.continuationIndex ?? 0;
     const part = parts[partIndex] ?? parts[0];
-    const previousLayout = (page.blocks ?? []).find((block) => block.type === 'excelRange');
-    const outputPart = previousLayout?.pageLayoutManual
-      ? {
-          ...part,
-          colWidths: previousLayout.colWidths,
-          rowHeights: previousLayout.rowHeights,
-          bodyFontPx: previousLayout.bodyFontPx,
-          bodyFontPt: previousLayout.bodyFontPt,
-          minFontPt: previousLayout.minFontPt,
-          pageLayoutManual: true,
-        }
-      : part;
     return {
       ...page,
-      blocks: [outputPart],
+      blocks: [part],
       canvasObjects: page.canvasObjects ?? [],
-      layoutProfile: inferLayoutProfile(page),
-      layoutWarnings: outputPart.layoutWarnings ?? [],
+      layoutWarnings: part.layoutWarnings ?? [],
       sourceRevision: (page.sourceRevision ?? 0) + 1,
     };
   }

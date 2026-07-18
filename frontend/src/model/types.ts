@@ -99,17 +99,6 @@ export interface PageBlock {
    *  same factor, which can overflow the page's real safe render area for a
    *  narrow table and silently drop bottom rows in export. */
   noGrow?: boolean;
-  /** True when Source column/row sizing was manually adjusted by the user. */
-  manualLayout?: boolean;
-  /** True when the printable Normalized table was resized directly on the page. */
-  pageLayoutManual?: boolean;
-  /** Named normalized-output profile applied during import/rebuild/export. */
-  layoutProfile?: string;
-  /** Diagnostics and readable-font floor carried into export QA. */
-  layoutReflowed?: boolean;
-  bodyFontPt?: number;
-  minFontPt?: number;
-  wordWrapColumns?: number[];
   /** RDM / IDF network table (idfNetworkTable) payload — TABLE STYLE 4F. */
   layoutMode?: 'single' | 'two_up';
   sectionTitle?: string;
@@ -163,8 +152,6 @@ export interface Worksheet {
   sourceSheet?: string;
   sourceRange?: string;
   printArea?: string | null;
-  /** Auto uses Singh360 profile widths; manual preserves user-resized ratios. */
-  layoutMode?: 'auto' | 'manual';
 }
 
 export interface PageModel {

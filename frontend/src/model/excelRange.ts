@@ -8,8 +8,6 @@ import type { ExcelCellStyle, MergedCell, PageBlock, PageModel, ProjectModel, Wo
 import { buildIdfNetworkBlock, idfHeaderRow, isIdfNetworkPage } from './idfNetworkTable';
 import { inferMetadataFromWorksheet, isCoverWorksheet, mergeCoverMetadata } from './metadataInference';
 
-import { reflowExcelRangeBlock } from './tableLayoutProfiles';
-
 export const PAGE_BODY_WIDTH = 1600;
 export const PAGE_BODY_BUDGET = 720;
 const BODY_W = PAGE_BODY_WIDTH;
@@ -205,7 +203,6 @@ export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock 
     bodyRowFillMode: 'none',
     gridLines: true,
     editable: true,
-    manualLayout: ws.layoutMode === 'manual',
     rowsBeforeTrim: trimmed.rowsBefore,
     colsBeforeTrim: trimmed.colsBefore,
     rowsAfterTrim: nRows,
@@ -390,19 +387,10 @@ function preserveBlockPresentationMeta(prev: PageBlock, next: PageBlock): PageBl
   if (prev.styleRole !== undefined) out.styleRole = prev.styleRole;
   if (prev.orientation !== undefined) out.orientation = prev.orientation;
   if (prev.bodyFontPx !== undefined) out.bodyFontPx = prev.bodyFontPx;
-  if (prev.bodyFontPt !== undefined) out.bodyFontPt = prev.bodyFontPt;
-  const pageLayoutManual = prev.pageLayoutManual === true;
-  const geometryComesFromSource = next.manualLayout === true && !pageLayoutManual;
-  if (
-    pageLayoutManual
-    || (!geometryComesFromSource && (prev.renderProfile || (prev as PageBlock & { layoutProfile?: string }).layoutProfile))
-  ) {
+  if (prev.renderProfile || (prev as PageBlock & { layoutProfile?: string }).layoutProfile) {
     if (prev.colWidths?.length) out.colWidths = prev.colWidths;
     if (prev.rowHeights?.length) out.rowHeights = prev.rowHeights;
   }
-  if (pageLayoutManual) out.pageLayoutManual = true;
-  else if (next.pageLayoutManual !== undefined) out.pageLayoutManual = next.pageLayoutManual;
-  if (next.manualLayout !== undefined) out.manualLayout = next.manualLayout;
   const prevExt = prev as PageBlock & { layoutProfile?: string; columnPriorities?: number[] };
   const outExt = out as PageBlock & { layoutProfile?: string; columnPriorities?: number[] };
   if (prevExt.layoutProfile !== undefined) outExt.layoutProfile = prevExt.layoutProfile;
@@ -455,35 +443,7 @@ export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel
   const blocks = page.blocks ?? [];
   let nextBlocks: PageBlock[];
   if (page.renderMode === 'excel_exact') {
-    const refreshExcelRangeWithPageLayout = (block: PageBlock): PageBlock => {
-      const hasPageLayout = block.pageLayoutManual === true;
-      const sourceBlock = hasPageLayout
-        ? {
-            ...block,
-            pageLayoutManual: false,
-            colWidths: [],
-            rowHeights: [],
-            bodyFontPx: undefined,
-            bodyFontPt: undefined,
-          }
-        : block;
-      const refreshed = reflowExcelRangeBlock(page, refreshBlockFromWorksheet(sourceBlock, ws));
-      if (!hasPageLayout) return refreshed;
-      return {
-        ...refreshed,
-        colWidths: block.colWidths,
-        rowHeights: block.rowHeights,
-        bodyFontPx: block.bodyFontPx,
-        bodyFontPt: block.bodyFontPt,
-        minFontPt: block.minFontPt,
-        pageLayoutManual: true,
-      };
-    };
-    nextBlocks = blocks.map((b) => (
-      b.type === 'excelRange'
-        ? refreshExcelRangeWithPageLayout(b)
-        : b
-    ));
+    nextBlocks = blocks.map((b) => (b.type === 'excelRange' ? refreshBlockFromWorksheet(b, ws) : b));
   } else {
     const coverIdx = blocks.findIndex((b) => b.type === 'cover');
     if (coverIdx >= 0 || page.pageType === 'cover') {
@@ -598,25 +558,12 @@ export function regenerateExcelGroup(project: ProjectModel, wsId: string): PageM
 
   const groupId = base.pageGroupId ?? base.id;
   const canonicalBaseCode = (base.displaySheetCode || base.sheetCode || '').trim();
-  let full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
+  const full = buildExcelRangeBlock(ws, `${ws.id}_xr`);
   full.splitMode = base.splitMode ?? full.splitMode;
   full.minScale = base.minScale ?? full.minScale;
   full.allowContinuation = base.allowContinuation ?? full.allowContinuation;
   full.repeatRows = base.repeatRows ?? full.repeatRows;
   full.scaleMode = base.scaleMode ?? full.scaleMode;
-  full = reflowExcelRangeBlock(base, full);
-  const previousPageLayout = (base.blocks ?? []).find((block) => block.type === 'excelRange');
-  if (previousPageLayout?.pageLayoutManual) {
-    full = {
-      ...full,
-      colWidths: previousPageLayout.colWidths,
-      rowHeights: previousPageLayout.rowHeights,
-      bodyFontPx: previousPageLayout.bodyFontPx,
-      bodyFontPt: previousPageLayout.bodyFontPt,
-      minFontPt: previousPageLayout.minFontPt,
-      pageLayoutManual: true,
-    };
-  }
   const parts = splitExcelRangeBlock(full);
 
   const byId = new Map(project.pages.map((p) => [p.id, p]));

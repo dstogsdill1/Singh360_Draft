@@ -26,8 +26,6 @@ interface Props {
   onPatchPage: (pageId: string, patch: Partial<PageModel>) => void;
   onDuplicateBlock: (pageId: string, blockId: string) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
-  previewOnly?: boolean;
-  layoutEditing?: boolean;
 }
 
 /**
@@ -53,8 +51,6 @@ export default function NormalizedPage({
   onPatchPage,
   onDuplicateBlock,
   onCanvasChange,
-  previewOnly = false,
-  layoutEditing = false,
 }: Props) {
   const blocks = page.blocks ?? [];
   const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
@@ -79,7 +75,7 @@ export default function NormalizedPage({
   // active, OR (on pure drawing pages) the page already has overlay objects so a
   // line you just drew stays selectable/movable. On pages with an editable base
   // the overlay stays click-through unless the user explicitly turns it on.
-  const overlayInteractive = !previewOnly && (overlayMode || activeTool !== 'select' || (hasOverlay && !hasEditableBase));
+  const overlayInteractive = overlayMode || activeTool !== 'select' || (hasOverlay && !hasEditableBase);
 
   const base = (() => {
     // Workbook index / TOC from the Excel range (not a generated duplicate list).
@@ -92,12 +88,7 @@ export default function NormalizedPage({
       if (xr) {
         return (
           <div className="np">
-            <ExcelRangeRenderer
-              block={xr}
-              reservedTop={bandReserve}
-              layoutEditing={layoutEditing && !previewOnly}
-              onChange={(patch) => onBlockChange(page.id, xr.id, patch)}
-            />
+            <ExcelRangeRenderer block={xr} reservedTop={bandReserve} />
           </div>
         );
       }
@@ -155,16 +146,7 @@ export default function NormalizedPage({
             case 'companyInfo':
               return <CompanyInfoRenderer key={b.id} block={b} project={project} />;
             case 'excelRange':
-              return (
-                <ExcelRangeRenderer
-                  key={b.id}
-                  block={b}
-                  reservedTop={bandReserve}
-                  exporting={exporting}
-                  layoutEditing={layoutEditing && !previewOnly}
-                  onChange={patch}
-                />
-              );
+              return <ExcelRangeRenderer key={b.id} block={b} reservedTop={bandReserve} exporting={exporting} />;
             case 'idfNetworkTable':
               return <NetworkTwoUpRenderer key={b.id} block={b} exporting={exporting} />;
             case 'table':
@@ -188,21 +170,19 @@ export default function NormalizedPage({
         {showBand && <SheetTitleBand page={page} />}
         {base}
       </div>
-      {!previewOnly ? (
-        <div className={`np-overlay-layer ${overlayInteractive ? 'active' : ''}`}>
-          <CanvasEditor
-            key={page.id}
-            serialized={page.canvasObjects || []}
-            onSerializedChange={(o) => onCanvasChange(page.id, o)}
-            registerApi={onRegisterApi}
-            onSelectionChange={onSelectionChange}
-            activeTool={activeTool}
-            onToolConsumed={onToolConsumed}
-            snap={snap}
-            overlayMode={overlayMode}
-          />
-        </div>
-      ) : null}
+      <div className={`np-overlay-layer ${overlayInteractive ? 'active' : ''}`}>
+        <CanvasEditor
+          key={page.id}
+          serialized={page.canvasObjects || []}
+          onSerializedChange={(o) => onCanvasChange(page.id, o)}
+          registerApi={onRegisterApi}
+          onSelectionChange={onSelectionChange}
+          activeTool={activeTool}
+          onToolConsumed={onToolConsumed}
+          snap={snap}
+          overlayMode={overlayMode}
+        />
+      </div>
     </div>
   );
 }

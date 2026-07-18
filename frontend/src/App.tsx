@@ -25,7 +25,6 @@ import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource,
 import { isCoverWorksheet } from './model/metadataInference';
 import { SourceWorksheetHistory } from './model/sourceWorksheetHistory';
 import { PageRebuildHistory } from './model/pageRebuildHistory';
-import { sanitizeCanvasObjectsForPage } from './model/canvasCleanup';
 import { applyRebuiltPage, rebuildSinglePageFromSource } from './model/pageRebuild';
 import { validatePageRebuild } from './model/pageRebuildValidation';
 import RebuildValidationModal from './components/RebuildValidationModal';
@@ -237,14 +236,9 @@ export default function App() {
     const objects = canvas?.captureCanvas();
     const updated: ProjectModel = {
       ...projectRef.current,
-      pages: projectRef.current.pages.map((p) => {
-        const currentObjects = p.id === pageId && objects
-          ? objects
-          : (p.canvasObjects ?? []);
-        const cleaned = sanitizeCanvasObjectsForPage(p, currentObjects);
-        if (cleaned === p.canvasObjects && !(p.id === pageId && objects)) return p;
-        return { ...p, canvasObjects: cleaned };
-      }),
+      pages: projectRef.current.pages.map((p) =>
+        p.id === pageId && objects ? { ...p, canvasObjects: objects } : p,
+      ),
     };
     // Synchronously update the mutable ref so flushSave reads the right data.
     projectRef.current = updated;
@@ -513,7 +507,7 @@ export default function App() {
   }, []);
 
   /** Rebuild the active page's normalized blocks from its linked worksheet. */
-  const rebuildCurrentPageFromSource = useCallback(async (): Promise<boolean> => {
+  const rebuildCurrentPageFromSource = useCallback(async () => {
     document.dispatchEvent(new CustomEvent('singh360:capture-active-editors'));
     const el = document.activeElement as HTMLElement | null;
     el?.blur?.();
@@ -521,14 +515,14 @@ export default function App() {
     const p = projectRef.current;
     const pageId = page?.id;
     const wsId = page?.linkedWorksheetId;
-    if (!pageId || !wsId || !page || !p) return false;
+    if (!pageId || !wsId || !page || !p) return;
     const ws = p.worksheets.find((w) => w.id === wsId);
-    if (!ws) return false;
+    if (!ws) return;
 
     let serverSnapshotName: string | undefined;
     try {
-      const backupSnapshot = await savePageRebuildBackup(p.id, pageId, page);
-      serverSnapshotName = backupSnapshot.name;
+      const backup = await savePageRebuildBackup(p.id, pageId, page);
+      serverSnapshotName = backup.name;
     } catch {
       /* server backup is best-effort */
     }
@@ -539,10 +533,9 @@ export default function App() {
     const validation = validatePageRebuild(page, rebuilt);
     if (!validation.ok) {
       setRebuildValidationModal({ pageId, rebuilt, issues: validation.issues });
-      return false;
+      return;
     }
     applyPageRebuild(pageId, rebuilt);
-    return true;
   }, [applyPageRebuild]);
 
   const applyWorksheetPatch = useCallback((
@@ -610,41 +603,10 @@ export default function App() {
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     if (viewModeRef.current === 'source' && mode === 'normalized') {
-      void (async () => {
-        const applied = await rebuildCurrentPageFromSource();
-        if (applied) setViewMode('normalized');
-      })();
-      return;
+      rebuildCurrentPageFromSource();
     }
     setViewMode(mode);
   }, [rebuildCurrentPageFromSource]);
-
-  const cleanCurrentPageArtifacts = useCallback(() => {
-    const currentProject = projectRef.current;
-    const page = activePageRef.current;
-    if (!currentProject || !page) return;
-    const liveObjects = canvasApiRef.current?.captureCanvas() ?? (page.canvasObjects ?? []);
-    const cleaned = sanitizeCanvasObjectsForPage(page, liveObjects);
-    const removed = liveObjects.length - cleaned.length;
-    if (removed <= 0) {
-      window.alert('Clean Hidden Artifacts: no tiny hidden objects were found.');
-      return;
-    }
-    const next: ProjectModel = {
-      ...currentProject,
-      pages: currentProject.pages.map((item) =>
-        item.id === page.id
-          ? { ...item, canvasObjects: cleaned, sourceRevision: (item.sourceRevision ?? 0) + 1 }
-          : item,
-      ),
-    };
-    projectRef.current = next;
-    setProjectSync(next);
-    setSelection(null);
-    setOverlayMode(false);
-    writeRecoverySnapshot(next);
-    window.alert(`Clean Hidden Artifacts removed ${removed} hidden object${removed === 1 ? '' : 's'}.`);
-  }, [setProjectSync]);
 
   // Keep the mutable project ref in sync with committed React state only.
   // Do NOT assign this during render: a page-switch render can otherwise
@@ -1670,12 +1632,6 @@ export default function App() {
           canRestorePageRebuild={canRestorePageRebuild}
           onReplacePageSource={replaceCurrentPageSource}
           onExportPageSource={() => void exportCurrentSourceSheet()}
-          onCleanHiddenArtifacts={cleanCurrentPageArtifacts}
-          canCleanHiddenArtifacts={activePage?.pageType === 'cover'}
-          onSourceUndo={() => { sourceUndo(); }}
-          onSourceRedo={() => { sourceRedo(); }}
-          sourceCanUndo={sourceCanUndo}
-          sourceCanRedo={sourceCanRedo}
           activeTool={activeTool}
           snap={snap}
           overlayMode={overlayMode}

@@ -15,7 +15,6 @@ import PageTabs from './PageTabs';
 import ViewportToolbar from './ViewportToolbar';
 import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
 import type { ViewControls } from './Ribbon';
-import { rebuildSinglePageFromSource } from '../model/pageRebuild';
 
 export type FitMode = 'width' | 'page' | 'actual';
 
@@ -69,12 +68,6 @@ interface Props {
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
-  onCleanHiddenArtifacts?: () => void;
-  canCleanHiddenArtifacts?: boolean;
-  onSourceUndo?: () => void;
-  onSourceRedo?: () => void;
-  sourceCanUndo?: boolean;
-  sourceCanRedo?: boolean;
 }
 
 export default function DocumentView({
@@ -112,124 +105,12 @@ export default function DocumentView({
   onCanvasChange,
   onReplacePageSource,
   onExportPageSource,
-  onCleanHiddenArtifacts,
-  canCleanHiddenArtifacts,
-  onSourceUndo,
-  onSourceRedo,
-  sourceCanUndo,
-  sourceCanRedo,
 }: Props) {
   const worksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const scaleRef = useRef<HTMLDivElement | null>(null);
   const [fitScale, setFitScale] = useState(0.5);
-  const [layoutEditing, setLayoutEditing] = useState(false);
-  const layoutUndoRef = useRef<PageBlock[]>([]);
-  const layoutRedoRef = useRef<PageBlock[]>([]);
-  const [layoutHistoryTick, setLayoutHistoryTick] = useState(0);
-
-  useEffect(() => {
-    setLayoutEditing(false);
-    layoutUndoRef.current = [];
-    layoutRedoRef.current = [];
-    setLayoutHistoryTick((value) => value + 1);
-  }, [activePage.id, viewMode]);
-
-  const layoutBlock = (activePage.blocks ?? []).find((block) => block.type === 'excelRange');
-  const canEditPageLayout =
-    viewMode === 'normalized'
-    && activePage.renderMode === 'excel_exact'
-    && !!layoutBlock;
-
-  void layoutHistoryTick;
-  const layoutCanUndo = layoutUndoRef.current.length > 0;
-  const layoutCanRedo = layoutRedoRef.current.length > 0;
-
-  const rememberLayout = () => {
-    if (!layoutBlock) return;
-    layoutUndoRef.current.push(structuredClone(layoutBlock));
-    if (layoutUndoRef.current.length > 40) layoutUndoRef.current.shift();
-    layoutRedoRef.current = [];
-    setLayoutHistoryTick((value) => value + 1);
-  };
-
-  const applyBlockChangeWithHistory = (
-    pageId: string,
-    blockId: string,
-    patch: Partial<PageBlock>,
-  ) => {
-    if (layoutEditing && layoutBlock && pageId === activePage.id && blockId === layoutBlock.id) {
-      rememberLayout();
-    }
-    onBlockChange(pageId, blockId, patch);
-  };
-
-  const undoLayout = () => {
-    if (!layoutBlock || !layoutUndoRef.current.length) return;
-    const previous = layoutUndoRef.current.pop();
-    if (!previous) return;
-    layoutRedoRef.current.push(structuredClone(layoutBlock));
-    onBlockChange(activePage.id, layoutBlock.id, previous);
-    setLayoutHistoryTick((value) => value + 1);
-  };
-
-  const redoLayout = () => {
-    if (!layoutBlock || !layoutRedoRef.current.length) return;
-    const next = layoutRedoRef.current.pop();
-    if (!next) return;
-    layoutUndoRef.current.push(structuredClone(layoutBlock));
-    onBlockChange(activePage.id, layoutBlock.id, next);
-    setLayoutHistoryTick((value) => value + 1);
-  };
-
-  useEffect(() => {
-    if (!layoutEditing) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
-      const key = event.key.toLowerCase();
-      if (key !== 'z' && key !== 'y') return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (key === 'z') undoLayout();
-      else redoLayout();
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  });
-
-  const resetPageLayout = () => {
-    if (!layoutBlock || !worksheet) return;
-    rememberLayout();
-    const cleanPage: PageModel = {
-      ...activePage,
-      blocks: (activePage.blocks ?? []).map((block) =>
-        block.id === layoutBlock.id
-          ? {
-              ...block,
-              pageLayoutManual: false,
-              manualLayout: false,
-              colWidths: [],
-              rowHeights: [],
-              bodyFontPx: undefined,
-              bodyFontPt: undefined,
-            }
-          : block,
-      ),
-    };
-    const standard = rebuildSinglePageFromSource(
-      cleanPage,
-      { ...worksheet, layoutMode: 'auto' },
-    );
-    const standardBlock = (standard.blocks ?? []).find((block) => block.type === 'excelRange');
-    if (!standardBlock) return;
-    onBlockChange(activePage.id, layoutBlock.id, {
-      ...standardBlock,
-      pageLayoutManual: false,
-      manualLayout: false,
-    });
-    setLayoutEditing(false);
-  };
 
   // Recompute fit scale from the actual viewport size (excludes ribbon/tabs/panels).
   useEffect(() => {
@@ -301,19 +182,6 @@ export default function DocumentView({
         canRebuildFromSource={canRebuildFromSource}
         onRestorePageRebuild={onRestorePageRebuild}
         canRestorePageRebuild={canRestorePageRebuild}
-        onCleanHiddenArtifacts={onCleanHiddenArtifacts}
-        canCleanHiddenArtifacts={canCleanHiddenArtifacts}
-        layoutEditing={layoutEditing}
-        canEditPageLayout={canEditPageLayout}
-        onTogglePageLayout={() => {
-          if (!layoutEditing) view.setFitMode('width');
-          setLayoutEditing((value) => !value);
-        }}
-        onResetPageLayout={resetPageLayout}
-        onUndo={viewMode === 'source' ? onSourceUndo : undoLayout}
-        canUndo={viewMode === 'source' ? sourceCanUndo : layoutEditing && layoutCanUndo}
-        onRedo={viewMode === 'source' ? onSourceRedo : redoLayout}
-        canRedo={viewMode === 'source' ? sourceCanRedo : layoutEditing && layoutCanRedo}
       />
       <div
         className="sheet-viewport"
@@ -372,14 +240,13 @@ export default function DocumentView({
                 onToolConsumed={onToolConsumed}
                 onRegisterApi={onRegisterApi}
                 onSelectionChange={onSelectionChange}
-                onBlockChange={applyBlockChangeWithHistory}
+                onBlockChange={onBlockChange}
                 onPatchPage={onPatchPage}
                 onDuplicateBlock={onDuplicateBlock}
                 onWorksheetChange={onWorksheetChange}
                 onCanvasChange={onCanvasChange}
                 onReplacePageSource={onReplacePageSource}
                 onExportPageSource={onExportPageSource}
-                onApplySourcePreview={() => onViewModeChange('normalized')}
               />
             </SheetFrame>
           </div>
