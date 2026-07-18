@@ -390,10 +390,12 @@ function preserveBlockPresentationMeta(prev: PageBlock, next: PageBlock): PageBl
   if (prev.styleRole !== undefined) out.styleRole = prev.styleRole;
   if (prev.orientation !== undefined) out.orientation = prev.orientation;
   if (prev.bodyFontPx !== undefined) out.bodyFontPx = prev.bodyFontPx;
-  if (prev.renderProfile || (prev as PageBlock & { layoutProfile?: string }).layoutProfile) {
+  const geometryComesFromSource = next.manualLayout === true;
+  if (!geometryComesFromSource && (prev.renderProfile || (prev as PageBlock & { layoutProfile?: string }).layoutProfile)) {
     if (prev.colWidths?.length) out.colWidths = prev.colWidths;
     if (prev.rowHeights?.length) out.rowHeights = prev.rowHeights;
   }
+  if (next.manualLayout !== undefined) out.manualLayout = next.manualLayout;
   const prevExt = prev as PageBlock & { layoutProfile?: string; columnPriorities?: number[] };
   const outExt = out as PageBlock & { layoutProfile?: string; columnPriorities?: number[] };
   if (prevExt.layoutProfile !== undefined) outExt.layoutProfile = prevExt.layoutProfile;

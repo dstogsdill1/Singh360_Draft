@@ -200,15 +200,15 @@ function roleShare(profile: string, header: string, index: number, nCols: number
     if (h.includes('notes') || h.includes('remarks')) return 0.12;
   }
   if (profile === 'cable_termination_schedule') {
-    if (h.includes('marker')) return 0.05;
-    if (h.includes('circuit') || h.includes('tag')) return 0.085;
-    if (h.includes('cable type')) return 0.145;
-    if (h === 'from') return 0.12;
-    if (h === 'to') return 0.12;
-    if (h.includes('purpose') || h.includes('device')) return 0.18;
-    if (h.includes('cable standard')) return 0.13;
-    if (h.includes('installed')) return 0.075;
-    if (h.includes('notes')) return 0.095;
+    if (h.includes('marker')) return 0.045;
+    if (h.includes('circuit') || h.includes('tag')) return 0.075;
+    if (h.includes('cable type')) return 0.13;
+    if (h === 'from') return 0.11;
+    if (h === 'to') return 0.11;
+    if (h.includes('purpose') || h.includes('device')) return 0.19;
+    if (h.includes('cable standard')) return 0.11;
+    if (h.includes('installed')) return 0.10;
+    if (h.includes('notes')) return 0.13;
   }
   if (profile === 'bill_of_materials_schedule') {
     if (h.includes('qty') || h.includes('quantity')) return 0.06;
@@ -336,8 +336,10 @@ function nowrapColumns(grid: string[][], profile: string): number[] {
   const out: number[] = [];
   header.forEach((value, index) => {
     const h = norm(value);
-    if (NARROW.some((x) => h.includes(x))) out.push(index);
-    if (profile === 'cable_termination_schedule' && ['circuit', 'tag', 'cable type', 'installed'].some((x) => h.includes(x))) out.push(index);
+    const cableWrapColumn = profile === 'cable_termination_schedule'
+      && ['cable type', 'installed', 'notes'].some((x) => h.includes(x));
+    if (!cableWrapColumn && NARROW.some((x) => h.includes(x))) out.push(index);
+    if (profile === 'cable_termination_schedule' && ['circuit', 'tag'].some((x) => h.includes(x))) out.push(index);
     if (profile === 'equipment_supply_schedule' && ['item', 'part', 'supplied', 'installed'].some((x) => h.includes(x))) out.push(index);
     if (profile === 'contact_directory_table' && ['trade', 'phone', 'email'].some((x) => h.includes(x))) out.push(index);
   });

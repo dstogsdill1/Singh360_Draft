@@ -1,6 +1,8 @@
+import { useMemo, useState } from 'react';
 import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from '../model/types';
 import NormalizedPage from './renderers/NormalizedPage';
 import RawGridRenderer from './renderers/RawGridRenderer';
+import SourceLivePreview from './SourceLivePreview';
 
 interface Props {
   page: PageModel;
@@ -45,18 +47,38 @@ export default function PageRenderer({
   onExportPageSource,
   onApplySourcePreview,
 }: Props) {
+  const [sourcePreviewVisible, setSourcePreviewVisible] = useState(true);
+  const sourceWorkspaceClass = useMemo(
+    () => `gx-source-workspace ${sourcePreviewVisible ? 'has-preview' : ''}`,
+    [sourcePreviewVisible],
+  );
+
   if (viewMode === 'source') {
     return (
-      <RawGridRenderer
-        worksheet={worksheet}
-        onWorksheetChange={(patch, opts) => {
-          if (!page.linkedWorksheetId) return;
-          onWorksheetChange(page.linkedWorksheetId, patch, opts);
-        }}
-        onReplaceSource={onReplacePageSource}
-        onExportSource={onExportPageSource}
-        onApplyPreview={onApplySourcePreview}
-      />
+      <div className={sourceWorkspaceClass}>
+        <div className="gx-source-editor-pane">
+          <RawGridRenderer
+            worksheet={worksheet}
+            onWorksheetChange={(patch, opts) => {
+              if (!page.linkedWorksheetId) return;
+              onWorksheetChange(page.linkedWorksheetId, patch, opts);
+            }}
+            onReplaceSource={onReplacePageSource}
+            onExportSource={onExportPageSource}
+            onApplyPreview={onApplySourcePreview}
+            previewVisible={sourcePreviewVisible}
+            onTogglePreview={() => setSourcePreviewVisible((value) => !value)}
+          />
+        </div>
+        {sourcePreviewVisible ? (
+          <SourceLivePreview
+            page={page}
+            project={project}
+            worksheet={worksheet}
+            onClose={() => setSourcePreviewVisible(false)}
+          />
+        ) : null}
+      </div>
     );
   }
 

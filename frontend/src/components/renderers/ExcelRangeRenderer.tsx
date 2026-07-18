@@ -74,8 +74,9 @@ function cellCss(
     verticalAlign:
       st?.vAlign === 'top' ? 'top' : st?.vAlign === 'bottom' ? 'bottom' : 'middle',
     whiteSpace: opts?.nowrap ? 'nowrap' : 'normal',
-    overflowWrap: opts?.nowrap ? 'normal' : 'normal',
-    wordBreak: opts?.nowrap ? 'keep-all' : 'normal',
+    overflowWrap: opts?.nowrap ? 'normal' : 'anywhere',
+    wordBreak: opts?.nowrap ? 'keep-all' : 'break-word',
+    overflow: 'hidden',
   };
   if (!st) {
     if (bodyFontPx) s.fontSize = bodyFontPx;

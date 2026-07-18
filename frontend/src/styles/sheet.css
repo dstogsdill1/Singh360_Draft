@@ -570,3 +570,35 @@
   opacity: 0.7;
 }
 /* === S360 SOURCE LAYOUT CONTROLS V11 END === */
+
+/* === S360 SOURCE WYSIWYG + TOOLBAR V12 === */
+.gx-source-workspace{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(430px,.85fr);width:100%;height:100%;min-height:0;overflow:hidden;background:#eef1f4}
+.gx-source-workspace:not(.has-preview){grid-template-columns:minmax(0,1fr)}
+.gx-source-editor-pane{min-width:0;min-height:0;height:100%;overflow:auto;background:#fff}
+.gx-wrap{width:100%;min-width:0;outline:none}
+.gx-toolbar{position:sticky;top:0;z-index:20;display:flex;flex-direction:column;align-items:stretch;gap:4px;max-width:100%;padding:6px 8px;background:#f6f7f9;border-bottom:1px solid #d5d9de;box-sizing:border-box;overflow:visible}
+.gx-toolbar-primary,.gx-toolbar-menus,.gx-tool-popover{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.gx-toolbar-primary{min-height:30px}
+.gx-btn-primary{background:#12539b;color:#fff;border-color:#0d427c;font-weight:800}
+.gx-btn-primary:hover{background:#0f477f}
+.gx-btn.active{background:#e6f0fb;border-color:#12539b;color:#0d427c;font-weight:700}
+.gx-layout-mode{font-size:11px;font-weight:800;color:#26323d;border:1px solid #c2c7cd;border-radius:4px;padding:3px 7px;background:#fff}
+.gx-source-exit-hint{margin-left:auto;color:#5f6973;font-size:10px;font-weight:700}
+.gx-tool-menu{position:relative;z-index:22}
+.gx-tool-menu>summary{list-style:none;cursor:pointer;user-select:none;border:1px solid #c2c7cd;border-radius:4px;background:#fff;color:#222;font-size:11px;font-weight:700;padding:4px 9px}
+.gx-tool-menu>summary::-webkit-details-marker{display:none}
+.gx-tool-menu[open]>summary{background:#e6f0fb;border-color:#12539b}
+.gx-tool-popover{position:absolute;top:calc(100% + 3px);left:0;z-index:50;width:max-content;max-width:min(620px,90vw);padding:8px;background:#fff;border:1px solid #9aa3ac;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.gx-table{min-width:100%;width:max-content}
+.gx-live-preview{min-width:0;min-height:0;height:100%;display:flex;flex-direction:column;border-left:1px solid #b7bec7;background:#dfe4ea}
+.gx-live-preview-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;background:#26323d;color:#fff;border-bottom:1px solid #111}
+.gx-live-preview-head span{display:flex;flex-direction:column;gap:1px}
+.gx-live-preview-head strong{font-size:12px}
+.gx-live-preview-head small{color:#cad2da;font-size:9px}
+.gx-live-preview-scroll{flex:1;min-height:0;overflow:auto;padding:10px;display:flex;align-items:flex-start;justify-content:center}
+.gx-live-preview-stage{position:relative;flex:0 0 auto;box-shadow:0 2px 12px rgba(0,0,0,.35)}
+.gx-live-preview-sheet{position:absolute;left:0;top:0;transform-origin:top left;pointer-events:none;background:#fff}
+.vt-clean-artifacts{border-color:#a5661a;color:#7a4107;background:#fff6e5}
+.np-xr-table td{overflow:hidden;text-overflow:clip}
+@media(max-width:1220px){.gx-source-workspace{grid-template-columns:minmax(0,1fr)}.gx-live-preview{display:none}}
+/* === S360 SOURCE WYSIWYG + TOOLBAR V12 END === */

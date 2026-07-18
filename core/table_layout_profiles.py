@@ -350,23 +350,23 @@ def _role_share(
 
     if profile == "cable_termination_schedule":
         if "marker" in h:
-            return 0.05
+            return 0.045
         if "circuit" in h or "tag" in h:
-            return 0.085
-        if "cable type" in h:
-            return 0.145
-        if h == "from":
-            return 0.12
-        if h == "to":
-            return 0.12
-        if "purpose" in h or "device" in h:
-            return 0.18
-        if "cable standard" in h:
-            return 0.13
-        if "installed" in h:
             return 0.075
+        if "cable type" in h:
+            return 0.13
+        if h == "from":
+            return 0.11
+        if h == "to":
+            return 0.11
+        if "purpose" in h or "device" in h:
+            return 0.19
+        if "cable standard" in h:
+            return 0.11
+        if "installed" in h:
+            return 0.10
         if "notes" in h:
-            return 0.095
+            return 0.13
 
     if profile == "bill_of_materials_schedule":
         if "qty" in h or "quantity" in h:
@@ -508,10 +508,13 @@ def profile_nowrap_columns(grid: list[list[str]], profile: str) -> list[int]:
     out: list[int] = []
     for index, value in enumerate(header):
         h = _norm(value)
-        if any(token in h for token in _NARROW):
+        cable_wrap_column = profile == "cable_termination_schedule" and any(
+            token in h for token in ("cable type", "installed", "notes")
+        )
+        if not cable_wrap_column and any(token in h for token in _NARROW):
             out.append(index)
         if profile == "cable_termination_schedule" and any(
-            token in h for token in ("circuit", "tag", "cable type", "installed")
+            token in h for token in ("circuit", "tag")
         ):
             out.append(index)
         if profile == "equipment_supply_schedule" and any(

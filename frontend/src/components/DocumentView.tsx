@@ -68,6 +68,8 @@ interface Props {
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
+  onCleanHiddenArtifacts?: () => void;
+  canCleanHiddenArtifacts?: boolean;
 }
 
 export default function DocumentView({
@@ -105,6 +107,8 @@ export default function DocumentView({
   onCanvasChange,
   onReplacePageSource,
   onExportPageSource,
+  onCleanHiddenArtifacts,
+  canCleanHiddenArtifacts,
 }: Props) {
   const worksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -182,6 +186,8 @@ export default function DocumentView({
         canRebuildFromSource={canRebuildFromSource}
         onRestorePageRebuild={onRestorePageRebuild}
         canRestorePageRebuild={canRestorePageRebuild}
+        onCleanHiddenArtifacts={onCleanHiddenArtifacts}
+        canCleanHiddenArtifacts={canCleanHiddenArtifacts}
       />
       <div
         className="sheet-viewport"

@@ -27,20 +27,25 @@ function visibleSize(object: AnyObject): { width: number; height: number } {
   };
 }
 
-function protectedObject(object: AnyObject): boolean {
+function meaningfulText(object: AnyObject): boolean {
   const type = String(object.type ?? '').toLowerCase();
-  if (['text', 'i-text', 'textbox', 'image', 'group'].includes(type)) return true;
-  return ['text', 'label', 'componentId', 's360ComponentId', 'pdfSource', 'assetId']
-    .some((key) => String(object[key] ?? '').trim().length > 0);
+  return ['text', 'i-text', 'textbox'].includes(type)
+    && String(object.text ?? object.label ?? '').trim().length > 0;
 }
 
 export function isCoverMicroArtifact(object: AnyObject): boolean {
-  if (protectedObject(object)) return false;
+  if (meaningfulText(object)) return false;
   const { width, height } = visibleSize(object);
   const maxDimension = Math.max(width, height);
+  const minDimension = Math.min(width, height);
   const area = width * height;
+  const opacity = numeric(object.opacity, 1);
+
   if (!Number.isFinite(maxDimension) || !Number.isFinite(area)) return true;
-  return maxDimension <= 10 && area <= 70;
+  if (object.visible === false || opacity <= 0.001) return true;
+  if (maxDimension <= 42 || area <= 1100) return true;
+  if (minDimension <= 2 && maxDimension <= 72) return true;
+  return false;
 }
 
 export function sanitizeCanvasObjectsForPage(

@@ -29,6 +29,8 @@ interface Props {
   onReplaceSource?: () => void;
   onExportSource?: () => void;
   onApplyPreview?: () => void;
+  previewVisible?: boolean;
+  onTogglePreview?: () => void;
 }
 
 interface Rect {
@@ -78,6 +80,8 @@ export default function RawGridRenderer({
   onReplaceSource,
   onExportSource,
   onApplyPreview,
+  previewVisible = true,
+  onTogglePreview,
 }: Props) {
   const grid = worksheet?.grid ?? [];
   const styles = worksheet?.styles ?? {};
@@ -334,6 +338,12 @@ export default function RawGridRenderer({
   };
 
   const onWrapKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && onApplyPreview) {
+      e.preventDefault();
+      editingInputRef.current?.blur();
+      onApplyPreview();
+      return;
+    }
     if (editing) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
       e.preventDefault();
@@ -359,79 +369,48 @@ export default function RawGridRenderer({
   return (
     <div className="gx-wrap" tabIndex={0} onKeyDown={onWrapKeyDown}>
       <div className="gx-toolbar">
-        <span className="gx-tb-label">Highlight:</span>
-        {HIGHLIGHT_SWATCHES.map((s) => (
-          <button
-            key={s.color}
-            type="button"
-            className="gx-swatch"
-            title={s.label}
-            aria-label={s.label}
-            style={{ backgroundColor: s.color }}
-            onClick={() => applyFill(s.color)}
-          />
-        ))}
-        {tb('Clear Fill', () => applyFill(null))}
-        <span className="gx-tb-sep" />
-        {tb('Borders', () => applyBorders(true))}
-        {tb('No Borders', () => applyBorders(false))}
-        <span className="gx-tb-sep" />
-        {tb('Merge', mergeSel, 'Merge selected cells')}
-        {tb('Unmerge', unmergeSel, 'Unmerge selected merged cells')}
-        <span className="gx-tb-sep" />
-        {tb('Ins Row', () => commit(wsInsertRow(worksheet, anchorRow()), true), 'Insert row above selection')}
-        {tb('Del Row', () => commit(wsDeleteRow(worksheet, anchorRow()), true), 'Delete selected row')}
-        {tb('Ins Col', () => commit(wsInsertCol(worksheet, anchorCol()), true), 'Insert column left of selection')}
-        {tb('Del Col', deleteColumn, 'Delete selected column')}
-        <span className="gx-tb-sep" />
-        {tb('Fit Cols', autoFitCols, 'Auto-fit selected columns')}
-        {tb('Fit Rows', autoFitRows, 'Auto-fit selected rows')}
-        {tb('Fit Range', autoFitRange, 'Auto-fit selected range')}
-        {tb('Fit Sheet', autoFitSheet, 'Auto-fit the complete used worksheet range')}
-        <span className="gx-layout-mode" title="Manual preserves your drag/fit sizes; Auto uses the standard page profile.">
-          Layout: {worksheet.layoutMode === 'manual' ? 'Manual' : 'Auto'}
-        </span>
-        {worksheet.layoutMode === 'manual' ? tb('Auto Layout', useAutoLayout, 'Return normalized output to the Singh360 automatic profile') : null}
-        {onApplyPreview ? tb('Apply & Preview', onApplyPreview, 'Rebuild this page and switch to Normalized view') : null}
-        <span className="gx-tb-sep" />
-        {tb('Left', () => applyStyle({ hAlign: 'left' }))}
-        {tb('Center', () => applyStyle({ hAlign: 'center' }))}
-        {tb('Right', () => applyStyle({ hAlign: 'right' }))}
-        {tb('Top', () => applyStyle({ vAlign: 'top' }))}
-        {tb('Middle', () => applyStyle({ vAlign: 'center' }))}
-        {tb('Bottom', () => applyStyle({ vAlign: 'bottom' }))}
-        {tb('Wrap', () => applyStyle({ wrap: true }))}
-        {tb('No Wrap', () => applyStyle({ wrap: false }))}
-        <span className="gx-tb-sep" />
-        {tb('Bold', () => applyStyle({ bold: true }))}
-        {tb('Italic', () => applyStyle({ italic: true }))}
-        <select
-          className="gx-font-size"
-          title="Font size"
-          defaultValue=""
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            if (v) applyStyle({ fontSize: v });
-            e.target.value = '';
-          }}
-        >
-          <option value="" disabled>Size</option>
-          {FONT_SIZES.map((s) => (
-            <option key={s} value={s}>{s}pt</option>
-          ))}
-        </select>
-        <span className="gx-tb-sep" />
-        {tb('Copy', copySel)}
-        {tb('Paste', () => void pasteSel())}
-        {onReplaceSource ? (
-          <>
-            <span className="gx-tb-sep" />
-            {tb('Replace Source', onReplaceSource, 'Replace current page source from Excel file')}
-          </>
-        ) : null}
-        {onExportSource ? (
-          tb('Export Sheet', onExportSource, 'Export current source worksheet as .xlsx')
-        ) : null}
+        <div className="gx-toolbar-primary">
+          {onApplyPreview ? (
+            <button type="button" className="gx-btn gx-btn-primary" onClick={onApplyPreview}>
+              Done - Apply & Preview
+            </button>
+          ) : null}
+          {onTogglePreview ? (
+            <button type="button" className={`gx-btn ${previewVisible ? 'active' : ''}`} onClick={onTogglePreview}>
+              Page Preview: {previewVisible ? 'On' : 'Off'}
+            </button>
+          ) : null}
+          {tb('Fit Sheet', autoFitSheet, 'Auto-fit the complete used worksheet range')}
+          <span className="gx-layout-mode">Layout: {worksheet.layoutMode === 'manual' ? 'Manual' : 'Auto'}</span>
+          {worksheet.layoutMode === 'manual' ? tb('Auto Layout', useAutoLayout) : null}
+          <span className="gx-source-exit-hint">Esc = Done / Preview</span>
+        </div>
+        <div className="gx-toolbar-menus">
+          <details className="gx-tool-menu"><summary>Color & Borders</summary><div className="gx-tool-popover">
+            {HIGHLIGHT_SWATCHES.map((s) => <button key={s.color} type="button" className="gx-swatch" title={s.label} style={{ backgroundColor: s.color }} onClick={() => applyFill(s.color)} />)}
+            {tb('Clear Fill', () => applyFill(null))}{tb('Borders', () => applyBorders(true))}{tb('No Borders', () => applyBorders(false))}
+          </div></details>
+          <details className="gx-tool-menu"><summary>Rows, Columns & Merge</summary><div className="gx-tool-popover">
+            {tb('Merge', mergeSel)}{tb('Unmerge', unmergeSel)}
+            {tb('Ins Row', () => commit(wsInsertRow(worksheet, anchorRow()), true))}
+            {tb('Del Row', () => commit(wsDeleteRow(worksheet, anchorRow()), true))}
+            {tb('Ins Col', () => commit(wsInsertCol(worksheet, anchorCol()), true))}
+            {tb('Del Col', deleteColumn)}{tb('Fit Cols', autoFitCols)}{tb('Fit Rows', autoFitRows)}{tb('Fit Range', autoFitRange)}
+          </div></details>
+          <details className="gx-tool-menu"><summary>Text & Alignment</summary><div className="gx-tool-popover">
+            {tb('Left', () => applyStyle({ hAlign: 'left' }))}{tb('Center', () => applyStyle({ hAlign: 'center' }))}{tb('Right', () => applyStyle({ hAlign: 'right' }))}
+            {tb('Top', () => applyStyle({ vAlign: 'top' }))}{tb('Middle', () => applyStyle({ vAlign: 'center' }))}{tb('Bottom', () => applyStyle({ vAlign: 'bottom' }))}
+            {tb('Wrap', () => applyStyle({ wrap: true }))}{tb('No Wrap', () => applyStyle({ wrap: false }))}{tb('Bold', () => applyStyle({ bold: true }))}{tb('Italic', () => applyStyle({ italic: true }))}
+            <select className="gx-font-size" defaultValue="" onChange={(e) => { const v = Number(e.target.value); if (v) applyStyle({ fontSize: v }); e.target.value = ''; }}>
+              <option value="" disabled>Size</option>{FONT_SIZES.map((s) => <option key={s} value={s}>{s}pt</option>)}
+            </select>
+          </div></details>
+          <details className="gx-tool-menu"><summary>Clipboard & Source</summary><div className="gx-tool-popover">
+            {tb('Copy', copySel)}{tb('Paste', () => void pasteSel())}
+            {onReplaceSource ? tb('Replace Source', onReplaceSource) : null}
+            {onExportSource ? tb('Export Sheet', onExportSource) : null}
+          </div></details>
+        </div>
       </div>
 
       <table className="grid-table gx-table" style={{ tableLayout: 'fixed' }}>
