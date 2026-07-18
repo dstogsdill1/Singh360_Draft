@@ -1,16 +1,12 @@
-"""Regression smoke for Singh360 consistent table layouts V10."""
+"""Regression smoke for Singh360 table layouts after the V11 readability upgrade."""
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-# S360_REPO_ROOT_BOOTSTRAP
-# When a script is executed by absolute path, Python puts the scripts
-# directory—not the repository root—at sys.path[0]. Add the repo root
-# explicitly so `from core...` imports work reliably.
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from core.table_layout_profiles import (
     infer_named_layout_profile,
@@ -19,8 +15,6 @@ from core.table_layout_profiles import (
     profile_min_scale,
 )
 from core.workbook_importer import _layout_profile_for, _preferred_col_widths
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
@@ -53,17 +47,17 @@ def main() -> int:
         "equipment_supply_schedule",
     )
     assert imported == equipment_widths
-    assert profile_body_font_px("equipment_supply_schedule") == 11
-    assert profile_min_scale("equipment_supply_schedule") == 0.75
+    assert profile_body_font_px("equipment_supply_schedule") == 12
+    assert profile_min_scale("equipment_supply_schedule") == 0.80
 
-    frontend = (ROOT / "frontend" / "src" / "model" / "excelRange.ts").read_text(encoding="utf-8")
-    rebuild = (ROOT / "frontend" / "src" / "model" / "pageRebuild.ts").read_text(encoding="utf-8")
-    css = (ROOT / "frontend" / "src" / "styles" / "sheet.css").read_text(encoding="utf-8")
+    frontend = (ROOT / "frontend/src/model/excelRange.ts").read_text(encoding="utf-8")
+    rebuild = (ROOT / "frontend/src/model/pageRebuild.ts").read_text(encoding="utf-8")
+    css = (ROOT / "frontend/src/styles/sheet.css").read_text(encoding="utf-8")
     assert "reflowExcelRangeBlock" in frontend
     assert "reflowExcelRangeBlock" in rebuild
     assert "S360 TABLE CENTERING V10" in css
 
-    print("OK: named table profiles, deterministic widths, rebuild parity, and centering are present.")
+    print("OK: named table profiles, readable V11 schedule fonts, rebuild parity, and centering are present.")
     return 0
 
 

@@ -28,6 +28,7 @@ interface Props {
   onWorksheetChange: (patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
   onReplaceSource?: () => void;
   onExportSource?: () => void;
+  onApplyPreview?: () => void;
 }
 
 interface Rect {
@@ -37,7 +38,7 @@ interface Rect {
   c1: number;
 }
 
-const FONT_SIZES = [8, 9, 10, 11, 12];
+const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16];
 
 function norm(r: Rect): Rect {
   return {
@@ -76,6 +77,7 @@ export default function RawGridRenderer({
   onWorksheetChange,
   onReplaceSource,
   onExportSource,
+  onApplyPreview,
 }: Props) {
   const grid = worksheet?.grid ?? [];
   const styles = worksheet?.styles ?? {};
@@ -128,10 +130,16 @@ export default function RawGridRenderer({
       if (!rz || !worksheet) return;
       if (rz.kind === 'col') {
         const delta = e.clientX - rz.start;
-        onWorksheetChange(wsSetColWidth(worksheet, rz.index, rz.startSize + delta), { skipHistory: true });
+        onWorksheetChange(
+          { ...wsSetColWidth(worksheet, rz.index, rz.startSize + delta), layoutMode: 'manual' },
+          { skipHistory: true },
+        );
       } else {
         const delta = e.clientY - rz.start;
-        onWorksheetChange(wsSetRowHeight(worksheet, rz.index, rz.startSize + delta), { skipHistory: true });
+        onWorksheetChange(
+          { ...wsSetRowHeight(worksheet, rz.index, rz.startSize + delta), layoutMode: 'manual' },
+          { skipHistory: true },
+        );
       }
     };
     const onUp = () => {
@@ -230,20 +238,33 @@ export default function RawGridRenderer({
     const rect = selRect();
     if (!rect) return;
     const cols = Array.from({ length: rect.c1 - rect.c0 + 1 }, (_, i) => rect.c0 + i);
-    commit(wsAutoFitColumns(worksheet, cols), true);
+    commit({ ...wsAutoFitColumns(worksheet, cols), layoutMode: 'manual' }, true);
   };
 
   const autoFitRows = () => {
     const rect = selRect();
     if (!rect) return;
     const rows = Array.from({ length: rect.r1 - rect.r0 + 1 }, (_, i) => rect.r0 + i);
-    commit(wsAutoFitRows(worksheet, rows), true);
+    commit({ ...wsAutoFitRows(worksheet, rows), layoutMode: 'manual' }, true);
   };
 
   const autoFitRange = () => {
     const rect = selRect();
     if (!rect) return;
-    commit(wsAutoFitRange(worksheet, rect), true);
+    commit({ ...wsAutoFitRange(worksheet, rect), layoutMode: 'manual' }, true);
+  };
+
+  const autoFitSheet = () => {
+    const cols = Array.from({ length: nCols }, (_, index) => index);
+    const rows = Array.from({ length: grid.length }, (_, index) => index);
+    const colPatch = wsAutoFitColumns(worksheet, cols);
+    const interim: Worksheet = { ...worksheet, ...colPatch };
+    const rowPatch = wsAutoFitRows(interim, rows);
+    commit({ ...colPatch, ...rowPatch, layoutMode: 'manual' }, true);
+  };
+
+  const useAutoLayout = () => {
+    commit({ layoutMode: 'auto' }, true);
   };
 
   const copySel = () => {
@@ -366,6 +387,12 @@ export default function RawGridRenderer({
         {tb('Fit Cols', autoFitCols, 'Auto-fit selected columns')}
         {tb('Fit Rows', autoFitRows, 'Auto-fit selected rows')}
         {tb('Fit Range', autoFitRange, 'Auto-fit selected range')}
+        {tb('Fit Sheet', autoFitSheet, 'Auto-fit the complete used worksheet range')}
+        <span className="gx-layout-mode" title="Manual preserves your drag/fit sizes; Auto uses the standard page profile.">
+          Layout: {worksheet.layoutMode === 'manual' ? 'Manual' : 'Auto'}
+        </span>
+        {worksheet.layoutMode === 'manual' ? tb('Auto Layout', useAutoLayout, 'Return normalized output to the Singh360 automatic profile') : null}
+        {onApplyPreview ? tb('Apply & Preview', onApplyPreview, 'Rebuild this page and switch to Normalized view') : null}
         <span className="gx-tb-sep" />
         {tb('Left', () => applyStyle({ hAlign: 'left' }))}
         {tb('Center', () => applyStyle({ hAlign: 'center' }))}
@@ -429,8 +456,16 @@ export default function RawGridRenderer({
               >
                 {colLetter(c)}
                 <span
-                  className="gx-col-resize"
-                  onMouseDown={(e) => {
+                    className="gx-col-resize"
+                    title="Drag to resize; double-click to auto-fit this column"
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      commit({
+                        ...wsAutoFitColumns(worksheet, [c]),
+                        layoutMode: 'manual',
+                      }, true);
+                    }}
+                    onMouseDown={(e) => {
                     e.stopPropagation();
                     onWorksheetChange({});
                     resizeRef.current = {
@@ -458,8 +493,16 @@ export default function RawGridRenderer({
               >
                 {r + 1}
                 <span
-                  className="gx-row-resize"
-                  onMouseDown={(e) => {
+                   className="gx-row-resize"
+                   title="Drag to resize; double-click to auto-fit this row"
+                   onDoubleClick={(e) => {
+                     e.stopPropagation();
+                     commit({
+                       ...wsAutoFitRows(worksheet, [r]),
+                       layoutMode: 'manual',
+                     }, true);
+                   }}
+                   onMouseDown={(e) => {
                     e.stopPropagation();
                     onWorksheetChange({});
                     resizeRef.current = {

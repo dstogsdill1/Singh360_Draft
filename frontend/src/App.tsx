@@ -25,6 +25,7 @@ import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource,
 import { isCoverWorksheet } from './model/metadataInference';
 import { SourceWorksheetHistory } from './model/sourceWorksheetHistory';
 import { PageRebuildHistory } from './model/pageRebuildHistory';
+import { sanitizeCanvasObjectsForPage } from './model/canvasCleanup';
 import { applyRebuiltPage, rebuildSinglePageFromSource } from './model/pageRebuild';
 import { validatePageRebuild } from './model/pageRebuildValidation';
 import RebuildValidationModal from './components/RebuildValidationModal';
@@ -236,9 +237,14 @@ export default function App() {
     const objects = canvas?.captureCanvas();
     const updated: ProjectModel = {
       ...projectRef.current,
-      pages: projectRef.current.pages.map((p) =>
-        p.id === pageId && objects ? { ...p, canvasObjects: objects } : p,
-      ),
+      pages: projectRef.current.pages.map((p) => {
+        const currentObjects = p.id === pageId && objects
+          ? objects
+          : (p.canvasObjects ?? []);
+        const cleaned = sanitizeCanvasObjectsForPage(p, currentObjects);
+        if (cleaned === p.canvasObjects && !(p.id === pageId && objects)) return p;
+        return { ...p, canvasObjects: cleaned };
+      }),
     };
     // Synchronously update the mutable ref so flushSave reads the right data.
     projectRef.current = updated;

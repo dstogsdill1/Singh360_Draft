@@ -21,6 +21,7 @@ interface Props {
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
+  onApplySourcePreview?: () => void;
 }
 
 export default function PageRenderer({
@@ -42,6 +43,7 @@ export default function PageRenderer({
   onCanvasChange,
   onReplacePageSource,
   onExportPageSource,
+  onApplySourcePreview,
 }: Props) {
   if (viewMode === 'source') {
     return (
@@ -53,6 +55,7 @@ export default function PageRenderer({
         }}
         onReplaceSource={onReplacePageSource}
         onExportSource={onExportPageSource}
+        onApplyPreview={onApplySourcePreview}
       />
     );
   }

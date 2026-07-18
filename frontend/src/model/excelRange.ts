@@ -205,6 +205,7 @@ export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock 
     bodyRowFillMode: 'none',
     gridLines: true,
     editable: true,
+    manualLayout: ws.layoutMode === 'manual',
     rowsBeforeTrim: trimmed.rowsBefore,
     colsBeforeTrim: trimmed.colsBefore,
     rowsAfterTrim: nRows,

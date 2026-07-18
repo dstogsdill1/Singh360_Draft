@@ -545,3 +545,28 @@
   margin-right: auto;
 }
 /* === S360 TABLE CENTERING V10 END === */
+
+/* === S360 SOURCE LAYOUT CONTROLS V11 === */
+.gx-layout-mode {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid #aeb8c8;
+  border-radius: 4px;
+  background: #eef3fb;
+  color: #213047;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.gx-col-resize,
+.gx-row-resize {
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+.gx-colhead-resize:hover .gx-col-resize,
+.gx-rowhead-resize:hover .gx-row-resize {
+  background-color: #315efb;
+  opacity: 0.7;
+}
+/* === S360 SOURCE LAYOUT CONTROLS V11 END === */

@@ -247,6 +247,7 @@ export default function DocumentView({
                 onCanvasChange={onCanvasChange}
                 onReplacePageSource={onReplacePageSource}
                 onExportPageSource={onExportPageSource}
+                onApplySourcePreview={() => onViewModeChange('normalized')}
               />
             </SheetFrame>
           </div>
