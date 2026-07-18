@@ -167,7 +167,7 @@ def plan_reimport(existing_project: dict[str, Any], new_workbook_path: str | Pat
         else:
             to_update.append(entry)
 
-    to_archive = [
+    unmatched_existing = [
         {
             "existingPageId": p["id"],
             "sheetCode": p.get("displaySheetCode") or p.get("sheetCode"),
@@ -177,10 +177,22 @@ def plan_reimport(existing_project: dict[str, Any], new_workbook_path: str | Pat
         for p in existing_pages
         if p["id"] not in matched_existing_ids
     ]
+    # A workbook normally does not contain hand-built drawing/layout tabs.
+    # Those unmatched manual pages must remain active and byte-for-byte intact.
+    to_preserve_unmatched = [
+        entry for entry in unmatched_existing
+        if entry["classification"] == "manual"
+    ]
+    # Only unmatched source/table pages are archived.
+    to_archive = [
+        entry for entry in unmatched_existing
+        if entry["classification"] != "manual"
+    ]
 
     return {
         "toUpdate": to_update,
         "toPreserve": to_preserve,
+        "toPreserveUnmatched": to_preserve_unmatched,
         "toAdd": to_add,
         "toArchive": to_archive,
         "candidateWorksheetCount": len(candidate.get("worksheets", [])),
@@ -270,9 +282,12 @@ def apply_reimport(
         pages.append(new_page)
         added_codes.append(entry["sheetCode"] or new_page["id"])
 
-    # Archive unmatched existing pages instead of deleting them — never
-    # destroy existing project work just because a sheet was renamed/removed
-    # in the new workbook.
+    # Unmatched manual drawing pages remain active. Only unmatched source/table
+    # pages are archived.
+    preserved_codes.extend(
+        entry.get("sheetCode") or entry["existingPageId"]
+        for entry in plan.get("toPreserveUnmatched", [])
+    )
     archived_ids = {e["existingPageId"] for e in plan["toArchive"]}
     archived_codes: list[str] = []
     kept_pages: list[dict[str, Any]] = []
@@ -290,6 +305,13 @@ def apply_reimport(
     updated_project = dict(existing_project)
     updated_project["pages"] = kept_pages
     updated_project["archivedPages"] = archived_pages
+    # The candidate pages point at candidate worksheet ids. The old implementation
+    # updated output blocks but kept the old worksheet list, leaving Source Data
+    # stale and disconnected from the refreshed pages.
+    updated_project["worksheets"] = candidate.get("worksheets", [])
+    metadata = dict(existing_project.get("metadata") or {})
+    metadata["sourceFile"] = source_filename or Path(new_workbook_path).name
+    updated_project["metadata"] = metadata
     history_entry = {
         "sourceFile": source_filename or Path(new_workbook_path).name,
         "importedAt": _ts(),

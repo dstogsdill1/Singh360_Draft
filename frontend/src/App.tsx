@@ -1672,6 +1672,10 @@ export default function App() {
           onExportPageSource={() => void exportCurrentSourceSheet()}
           onCleanHiddenArtifacts={cleanCurrentPageArtifacts}
           canCleanHiddenArtifacts={activePage?.pageType === 'cover'}
+          onSourceUndo={() => { sourceUndo(); }}
+          onSourceRedo={() => { sourceRedo(); }}
+          sourceCanUndo={sourceCanUndo}
+          sourceCanRedo={sourceCanRedo}
           activeTool={activeTool}
           snap={snap}
           overlayMode={overlayMode}

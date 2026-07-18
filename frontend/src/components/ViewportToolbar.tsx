@@ -18,25 +18,28 @@ interface Props {
   canEditPageLayout?: boolean;
   onTogglePageLayout?: () => void;
   onResetPageLayout?: () => void;
+  onUndo?: () => void;
+  canUndo?: boolean;
+  onRedo?: () => void;
+  canRedo?: boolean;
 }
 
 export default function ViewportToolbar({
   activePage,
   view,
   viewMode,
-  sourceDirty,
   sourceStatusLabel,
   onViewModeChange,
-  onRebuildFromSource,
-  canRebuildFromSource,
-  onRestorePageRebuild,
-  canRestorePageRebuild,
   onCleanHiddenArtifacts,
   canCleanHiddenArtifacts,
   layoutEditing,
   canEditPageLayout,
   onTogglePageLayout,
   onResetPageLayout,
+  onUndo,
+  canUndo,
+  onRedo,
+  canRedo,
 }: Props) {
   const pageLabel =
     activePage.pageNumber != null
@@ -54,14 +57,16 @@ export default function ViewportToolbar({
         <button
           className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`}
           onClick={() => onViewModeChange('normalized')}
+          title="Finished printable sheet"
         >
-          Normalized
+          Page
         </button>
         <button
           className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`}
           onClick={() => onViewModeChange('source')}
+          title="Workbook cell values and source formatting"
         >
-          Source Data
+          Data
         </button>
 
         {canEditPageLayout && onTogglePageLayout ? (
@@ -69,42 +74,39 @@ export default function ViewportToolbar({
             type="button"
             className={`fit-btn vt-page-layout ${layoutEditing ? 'active' : ''}`}
             onClick={onTogglePageLayout}
-            title="Resize the actual printable normalized table directly on the sheet"
+            title="Drag the actual output-table boundaries on the finished sheet"
           >
-            {layoutEditing ? 'Finish Page Layout' : 'Edit Page Layout'}
+            {layoutEditing ? 'Finish Layout' : 'Edit Layout'}
           </button>
         ) : null}
+
+        <button
+          type="button"
+          className="fit-btn"
+          onClick={onUndo}
+          disabled={!canUndo}
+          title={viewMode === 'source' ? 'Undo the last data edit (Ctrl+Z)' : 'Undo the last page-layout edit (Ctrl+Z)'}
+        >
+          Undo
+        </button>
+        <button
+          type="button"
+          className="fit-btn"
+          onClick={onRedo}
+          disabled={!canRedo}
+          title={viewMode === 'source' ? 'Redo the last data edit (Ctrl+Y)' : 'Redo the last page-layout edit (Ctrl+Y)'}
+        >
+          Redo
+        </button>
 
         {canEditPageLayout && layoutEditing && onResetPageLayout ? (
           <button
             type="button"
             className="fit-btn"
             onClick={onResetPageLayout}
-            title="Discard manual output geometry and restore the Singh360 standard for this page"
+            title="Restore the standard Singh360 layout for this page"
           >
-            Reset Standard Layout
-          </button>
-        ) : null}
-
-        {canRebuildFromSource && onRebuildFromSource ? (
-          <button
-            className="fit-btn"
-            type="button"
-            onClick={onRebuildFromSource}
-            title="Refresh values and styles from Source Data while preserving a manual Page Layout"
-          >
-            Refresh From Source
-          </button>
-        ) : null}
-
-        {canRestorePageRebuild && onRestorePageRebuild ? (
-          <button
-            className="fit-btn"
-            type="button"
-            onClick={onRestorePageRebuild}
-            title="Restore the page from before the last refresh"
-          >
-            Restore Last Refresh
+            Reset Layout
           </button>
         ) : null}
 
@@ -113,15 +115,12 @@ export default function ViewportToolbar({
             className="fit-btn vt-clean-artifacts"
             type="button"
             onClick={onCleanHiddenArtifacts}
-            title="Remove tiny hidden overlay fragments from this cover page"
           >
             Clean Hidden Artifacts
           </button>
         ) : null}
 
-        {sourceStatusLabel ? (
-          <span className="vt-source-status sb-item">{sourceStatusLabel}</span>
-        ) : null}
+        {sourceStatusLabel ? <span className="vt-source-status sb-item">{sourceStatusLabel}</span> : null}
       </span>
 
       <span className="vt-spacer" />
@@ -129,10 +128,10 @@ export default function ViewportToolbar({
       <button className={`fit-btn ${view.fitMode === 'width' ? 'active' : ''}`} onClick={() => view.setFitMode('width')}>Fit Width</button>
       <button className={`fit-btn ${view.fitMode === 'page' ? 'active' : ''}`} onClick={() => view.setFitMode('page')}>Fit Page</button>
       <button className={`fit-btn ${view.fitMode === 'actual' ? 'active' : ''}`} onClick={view.setActual}>100%</button>
-      <button className="fit-btn" onClick={view.zoomOut} title="Zoom out">−</button>
+      <button className="fit-btn" onClick={view.zoomOut}>−</button>
       <span className="vt-zoom">{view.zoomPct}%</span>
-      <button className="fit-btn" onClick={view.zoomIn} title="Zoom in">+</button>
-      <button className={`fit-btn ${view.showGrid ? 'active' : ''}`} onClick={view.toggleGrid} title="Toggle grid">Grid</button>
+      <button className="fit-btn" onClick={view.zoomIn}>+</button>
+      <button className={`fit-btn ${view.showGrid ? 'active' : ''}`} onClick={view.toggleGrid}>Grid</button>
     </div>
   );
 }

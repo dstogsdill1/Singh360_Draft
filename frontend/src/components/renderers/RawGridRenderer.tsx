@@ -372,18 +372,14 @@ export default function RawGridRenderer({
         <div className="gx-toolbar-primary">
           {onApplyPreview ? (
             <button type="button" className="gx-btn gx-btn-primary" onClick={onApplyPreview}>
-              Done - Apply & Preview
+              Apply Data & Return
             </button>
           ) : null}
-          {onTogglePreview ? (
-            <button type="button" className={`gx-btn ${previewVisible ? 'active' : ''}`} onClick={onTogglePreview}>
-              Page Preview: {previewVisible ? 'On' : 'Off'}
-            </button>
-          ) : null}
-          {tb('Fit Sheet', autoFitSheet, 'Auto-fit the complete used worksheet range')}
-          <span className="gx-layout-mode">Layout: {worksheet.layoutMode === 'manual' ? 'Manual' : 'Auto'}</span>
-          {worksheet.layoutMode === 'manual' ? tb('Auto Layout', useAutoLayout) : null}
-          <span className="gx-source-exit-hint">Esc = Done / Preview</span>
+          {tb('Fit Sheet', autoFitSheet, 'Auto-fit the source-data worksheet only')}
+          <span className="gx-source-data-hint">
+            Data mode changes values and source formatting. Use Page → Edit Layout for printable sizing.
+          </span>
+          <span className="gx-source-exit-hint">Esc = Apply Data & Return</span>
         </div>
         <div className="gx-toolbar-menus">
           <details className="gx-tool-menu"><summary>Color & Borders</summary><div className="gx-tool-popover">

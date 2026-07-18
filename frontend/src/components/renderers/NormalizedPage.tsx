@@ -155,7 +155,16 @@ export default function NormalizedPage({
             case 'companyInfo':
               return <CompanyInfoRenderer key={b.id} block={b} project={project} />;
             case 'excelRange':
-              return <ExcelRangeRenderer key={b.id} block={b} reservedTop={bandReserve} exporting={exporting} />;
+              return (
+                <ExcelRangeRenderer
+                  key={b.id}
+                  block={b}
+                  reservedTop={bandReserve}
+                  exporting={exporting}
+                  layoutEditing={layoutEditing && !previewOnly}
+                  onChange={patch}
+                />
+              );
             case 'idfNetworkTable':
               return <NetworkTwoUpRenderer key={b.id} block={b} exporting={exporting} />;
             case 'table':
