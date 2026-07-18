@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MergedCell, Worksheet } from '../../model/types';
 import { HIGHLIGHT_SWATCHES } from '../../model/tableStyle';
+import { BODY_W } from '../../model/sheetGeometry';
 import {
   colLetter,
   a1,
@@ -14,11 +15,8 @@ import {
   wsMergeCells,
   wsUnmergeCells,
   wsSetStyle,
-  wsSetColWidth,
   wsSetRowHeight,
-  wsAutoFitColumns,
   wsAutoFitRows,
-  wsAutoFitRange,
   WS_MIN_COL_W,
   WS_MIN_ROW_H,
 } from '../../model/excelRange';
@@ -38,6 +36,9 @@ interface Rect {
 }
 
 const FONT_SIZES = [8, 9, 10, 11, 12];
+const SOURCE_DATA_WIDTH = BODY_W - 118;
+const SOURCE_MAX_COL_W = SOURCE_DATA_WIDTH;
+const DEFAULT_SOURCE_COL_W = WS_MIN_COL_W + 45;
 
 function norm(r: Rect): Rect {
   return {
@@ -50,6 +51,39 @@ function norm(r: Rect): Rect {
 
 function cellKey(r: number, c: number): string {
   return `${r}:${c}`;
+}
+
+function clampColumnWidth(value: number): number {
+  return Math.max(WS_MIN_COL_W, Math.min(SOURCE_MAX_COL_W, Math.round(value)));
+}
+
+function setSourceColumnWidth(ws: Worksheet, index: number, width: number): Partial<Worksheet> {
+  const colWidthsPx = [...(ws.colWidthsPx ?? [])];
+  while (colWidthsPx.length <= index) colWidthsPx.push(DEFAULT_SOURCE_COL_W);
+  colWidthsPx[index] = clampColumnWidth(width);
+  return { colWidthsPx };
+}
+
+function estimatedColumnWidth(ws: Worksheet, col: number): number {
+  let max = DEFAULT_SOURCE_COL_W;
+  for (let r = 0; r < (ws.grid ?? []).length; r += 1) {
+    const text = String(ws.grid?.[r]?.[col] ?? '');
+    const style = ws.styles?.[a1(r, col)];
+    const fontPx = Math.max(10, Math.round(Number(style?.fontSize ?? 9) * 4 / 3));
+    const longestLine = text.split(/\r?\n/).reduce((longest, line) => Math.max(longest, line.length), 0);
+    const estimate = 18 + longestLine * fontPx * 0.58 + Number(style?.indent ?? 0) * 8;
+    max = Math.max(max, estimate);
+  }
+  return clampColumnWidth(max);
+}
+
+function autoFitSourceColumns(ws: Worksheet, cols: number[]): Partial<Worksheet> {
+  const colWidthsPx = [...(ws.colWidthsPx ?? [])];
+  for (const col of cols) {
+    while (colWidthsPx.length <= col) colWidthsPx.push(DEFAULT_SOURCE_COL_W);
+    colWidthsPx[col] = estimatedColumnWidth(ws, col);
+  }
+  return { colWidthsPx };
 }
 
 function buildMergeMaps(merges: MergedCell[]) {
@@ -87,6 +121,21 @@ export default function RawGridRenderer({
     () => Math.max(1, ...(grid.length ? grid.map((r) => r.length) : [1])),
     [grid],
   );
+
+  const displayColWidths = useMemo(() => {
+    const widths = Array.from({ length: nCols }, (_, c) => colWidthsPx[c] ?? DEFAULT_SOURCE_COL_W);
+    const storedWidth = widths.reduce((sum, width) => sum + width, 0);
+    if (widths.length && storedWidth < SOURCE_DATA_WIDTH) {
+      let flexColumn = 0;
+      for (let c = 1; c < widths.length; c += 1) {
+        if (widths[c] > widths[flexColumn]) flexColumn = c;
+      }
+      widths[flexColumn] += SOURCE_DATA_WIDTH - storedWidth;
+    }
+    return widths;
+  }, [colWidthsPx, nCols]);
+
+  const sourceTableWidth = 36 + displayColWidths.reduce((sum, width) => sum + width, 0);
 
   const [sel, setSel] = useState<Rect | null>(null);
   const [toggleCells, setToggleCells] = useState<Set<string>>(new Set());
@@ -128,7 +177,7 @@ export default function RawGridRenderer({
       if (!rz || !worksheet) return;
       if (rz.kind === 'col') {
         const delta = e.clientX - rz.start;
-        onWorksheetChange(wsSetColWidth(worksheet, rz.index, rz.startSize + delta), { skipHistory: true });
+        onWorksheetChange(setSourceColumnWidth(worksheet, rz.index, rz.startSize + delta), { skipHistory: true });
       } else {
         const delta = e.clientY - rz.start;
         onWorksheetChange(wsSetRowHeight(worksheet, rz.index, rz.startSize + delta), { skipHistory: true });
@@ -230,7 +279,7 @@ export default function RawGridRenderer({
     const rect = selRect();
     if (!rect) return;
     const cols = Array.from({ length: rect.c1 - rect.c0 + 1 }, (_, i) => rect.c0 + i);
-    commit(wsAutoFitColumns(worksheet, cols), true);
+    commit(autoFitSourceColumns(worksheet, cols), true);
   };
 
   const autoFitRows = () => {
@@ -243,7 +292,12 @@ export default function RawGridRenderer({
   const autoFitRange = () => {
     const rect = selRect();
     if (!rect) return;
-    commit(wsAutoFitRange(worksheet, rect), true);
+    const cols = Array.from({ length: rect.c1 - rect.c0 + 1 }, (_, i) => rect.c0 + i);
+    const rows = Array.from({ length: rect.r1 - rect.r0 + 1 }, (_, i) => rect.r0 + i);
+    const colPatch = autoFitSourceColumns(worksheet, cols);
+    const widthAdjusted = { ...worksheet, ...colPatch };
+    const rowPatch = wsAutoFitRows(widthAdjusted, rows);
+    commit({ ...colPatch, ...rowPatch }, true);
   };
 
   const copySel = () => {
@@ -332,7 +386,7 @@ export default function RawGridRenderer({
     </button>
   );
 
-  const colWidth = (c: number) => colWidthsPx[c] ?? WS_MIN_COL_W + 45;
+  const colWidth = (c: number) => displayColWidths[c] ?? DEFAULT_SOURCE_COL_W;
   const rowHeight = (r: number) => rowHeightsPx[r] ?? WS_MIN_ROW_H + 4;
 
   return (
@@ -407,11 +461,11 @@ export default function RawGridRenderer({
         ) : null}
       </div>
 
-      <table className="grid-table gx-table" style={{ tableLayout: 'fixed' }}>
+      <table className="grid-table gx-table" style={{ tableLayout: 'fixed', width: sourceTableWidth }}>
         <colgroup>
           <col style={{ width: 36 }} />
-          {Array.from({ length: nCols }, (_, c) => (
-            <col key={c} style={{ width: colWidth(c) }} />
+          {displayColWidths.map((width, c) => (
+            <col key={c} style={{ width }} />
           ))}
         </colgroup>
         <thead>
@@ -477,19 +531,19 @@ export default function RawGridRenderer({
                 const fill = typeof st?.fill === 'string' ? st.fill : undefined;
                 const isEditing = editing?.r === r && editing?.c === c;
                 const span = spanAt.get(cellKey(r, c));
+                const wraps = st?.wrap === true;
                 const cellStyle: React.CSSProperties = {
                   backgroundColor: fill,
                   height: rowHeight(r),
                   textAlign: (st?.hAlign as React.CSSProperties['textAlign']) ?? 'left',
                   verticalAlign: (st?.vAlign as React.CSSProperties['verticalAlign']) ?? 'top',
+                  whiteSpace: wraps ? 'pre-wrap' : 'pre',
+                  wordBreak: wraps ? 'break-word' : 'normal',
+                  overflow: 'hidden',
                 };
                 if (st?.bold) cellStyle.fontWeight = 700;
                 if (st?.italic) cellStyle.fontStyle = 'italic';
                 if (st?.fontSize) cellStyle.fontSize = st.fontSize;
-                if (st?.wrap) {
-                  cellStyle.whiteSpace = 'pre-wrap';
-                  cellStyle.wordBreak = 'break-word';
-                }
                 return (
                   <td
                     key={c}
@@ -543,7 +597,7 @@ export default function RawGridRenderer({
                         }}
                       />
                     ) : (
-                      <span className={`gx-cell-text ${st?.wrap ? 'gx-wrap' : ''}`}>{grid[r]?.[c] ?? ''}</span>
+                      <span className={`gx-cell-text ${wraps ? 'gx-wrap' : ''}`}>{grid[r]?.[c] ?? ''}</span>
                     )}
                   </td>
                 );
