@@ -1,44 +1,30 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BorderSide, ExcelCellStyle, MergedCell, PageBlock } from '../../model/types';
 import { BODY_W } from '../../model/sheetGeometry';
 
 interface Props {
   block: PageBlock;
-  /** Vertical space (px) consumed above the range by the orange title band. */
+  /** Vertical space (px) consumed above the orange title band. */
   reservedTop?: number;
-  /** When true (PDF export), suppress on-page diagnostic banners. */
+  /** When true (PDF export), suppress diagnostics and editing controls. */
   exporting?: boolean;
+  /** Directly edit the printable normalized table, not the raw worksheet. */
+  layoutEditing?: boolean;
+  onChange?: (patch: Partial<PageBlock>) => void;
 }
 
-// Small insets so the range never touches the sheet frame / title block.
 const PAD_X = 10;
 const PAD_Y = 10;
 const DEFAULT_COL = 64;
 const DEFAULT_ROW = 20;
-// A small range is grown to use the full printable body width, up to this cap,
-// so front-matter tables fill the page instead of floating tiny in the corner.
 const GROW_CAP = 1.85;
-// FINAL RENDER POLISH 4G, Phase C: the previous fit-to-body scale used 100% of
-// the available height with zero margin, so any table that needed to shrink
-// landed flush against the title block (and a hair of rounding could clip a
-// row). Reserve a fixed safety gap so a table never touches the boundary.
 const MIN_BOTTOM_GAP = 20;
-// FINAL RELEASE CLEANUP 4H+SA38, Phase H fix: BODY_H (866) models the full
-// on-screen sheet body used for page-frame layout, but is taller than the
-// backend's proven-safe render budget (core/page_composer.py
-// SAFE_BODY_BUDGET = 700). A short, narrow table (e.g. a 2-column
-// instruction page) grow-scales width-first up to GROW_CAP, which also
-// scales its height by the same factor — using the optimistic BODY_H for
-// that height check let the scaled table overflow the page's real
-// overflow:hidden body and silently drop its bottom rows (confirmed via a
-// real SA31 export: only row 1 of 5 painted onto the PDF page). Match the
-// backend's conservative budget for this safety-critical height check only;
-// BODY_H itself is untouched everywhere else it's used for page-frame
-// layout, so this does not touch the wider, already-flagged 720/866
-// calibration mismatch.
 const SAFE_FIT_HEIGHT = 700;
+const MIN_LAYOUT_COL = 36;
+const MAX_LAYOUT_COL = 900;
+const MIN_LAYOUT_ROW = 18;
+const MAX_LAYOUT_ROW = 300;
 
-/** Map an Excel border side spec to a CSS border shorthand. */
 function borderCss(side?: BorderSide): string | undefined {
   if (!side || !side.style) return undefined;
   const color = side.color || '#000000';
@@ -99,8 +85,6 @@ function cellCss(
           ? 'justify'
           : 'left';
 
-  // Normalized output tables always wrap as real table geometry. The backend
-  // sizes columns first, then rows are allowed to expand before final scaling.
   if (st.wrap) s.overflowWrap = 'break-word';
   if (st.indent) s.paddingLeft = 3 + st.indent * 8;
 
@@ -127,58 +111,132 @@ function cellCss(
     if (bottom) s.borderBottom = bottom;
     if (left) s.borderLeft = left;
   }
-  // Phase D: an explicit block-level body font (instruction_table pages)
-  // always wins over the per-cell Excel font size captured on import.
   if (bodyFontPx) s.fontSize = bodyFontPx;
   return s;
 }
 
-/**
- * Excel Exact Range renderer. Reproduces the source worksheet range as a real
- * table using the exact column widths, row heights, merged cells, fills,
- * borders, fonts, alignment and vertical text carried on the block. Nothing is
- * restyled with app defaults; the range is scaled proportionally to fit the
- * printable body (no scrollbars, no distortion).
- */
-export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting = false }: Props) {
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function mergedMaps(merges: MergedCell[]) {
+  const covered = new Set<string>();
+  const spanAt = new Map<string, { rs: number; cs: number }>();
+  for (const merge of merges) {
+    for (let r = merge.startRow; r <= merge.endRow; r += 1) {
+      for (let c = merge.startCol; c <= merge.endCol; c += 1) {
+        if (r === merge.startRow && c === merge.startCol) continue;
+        covered.add(`${r}:${c}`);
+      }
+    }
+    spanAt.set(`${merge.startRow}:${merge.startCol}`, {
+      rs: merge.endRow - merge.startRow + 1,
+      cs: merge.endCol - merge.startCol + 1,
+    });
+  }
+  return { covered, spanAt };
+}
+
+function autoRowHeights(
+  grid: string[][],
+  widths: number[],
+  merges: MergedCell[],
+  fontPx: number,
+): number[] {
+  const { covered, spanAt } = mergedMaps(merges);
+  const nCols = Math.max(widths.length, ...(grid.length ? grid.map((row) => row.length) : [0]));
+  const lineHeight = Math.max(13, Math.round(fontPx * 1.25));
+
+  return grid.map((row, r) => {
+    let maxLines = 1;
+    let hasText = false;
+    for (let c = 0; c < nCols; c += 1) {
+      if (covered.has(`${r}:${c}`)) continue;
+      const text = String(row[c] ?? '').trim();
+      if (!text) continue;
+      hasText = true;
+      const span = spanAt.get(`${r}:${c}`)?.cs ?? 1;
+      const cellWidth = Array.from({ length: span }, (_, offset) => widths[c + offset] ?? DEFAULT_COL)
+        .reduce((sum, width) => sum + width, 0);
+      const charsPerLine = Math.max(8, Math.floor(Math.max(36, cellWidth - 10) / Math.max(5.2, fontPx * 0.52)));
+      const words = text.split(/\s+/);
+      let lines = 1;
+      let used = 0;
+      for (const word of words) {
+        if (used && used + word.length + 1 > charsPerLine) {
+          lines += 1;
+          used = word.length;
+        } else {
+          used += word.length + (used ? 1 : 0);
+        }
+      }
+      maxLines = Math.max(maxLines, lines);
+    }
+    if (!hasText) return MIN_LAYOUT_ROW;
+    return clamp(lineHeight * Math.min(maxLines, 14) + 8, MIN_LAYOUT_ROW, MAX_LAYOUT_ROW);
+  });
+}
+
+type DragState = {
+  kind: 'col' | 'row';
+  index: number;
+  startClient: number;
+  startValue: number;
+  /** Includes the table fit scale and the outer sheet viewport scale. */
+  effectiveScale: number;
+};
+
+export default function ExcelRangeRenderer({
+  block,
+  reservedTop = 0,
+  exporting = false,
+  layoutEditing = false,
+  onChange,
+}: Props) {
   const grid = block.grid ?? [];
   const styles = block.styles ?? {};
-  const colWidths = block.colWidths ?? [];
-  const rowHeights = block.rowHeights ?? [];
+  const sourceColWidths = block.colWidths ?? [];
+  const sourceRowHeights = block.rowHeights ?? [];
   const merges: MergedCell[] = block.mergedCells ?? [];
   const scaleMode = block.scaleMode ?? 'fit_body';
 
   const nRows = grid.length;
   const nCols = useMemo(
-    () => Math.max(colWidths.length, ...(grid.length ? grid.map((r) => r.length) : [0])),
-    [grid, colWidths],
+    () => Math.max(sourceColWidths.length, ...(grid.length ? grid.map((row) => row.length) : [0])),
+    [grid, sourceColWidths],
   );
 
+  const [draftCols, setDraftCols] = useState<number[]>(sourceColWidths);
+  const [draftRows, setDraftRows] = useState<number[]>(sourceRowHeights);
+  const draftColsRef = useRef<number[]>(sourceColWidths);
+  const draftRowsRef = useRef<number[]>(sourceRowHeights);
+  const dragRef = useRef<DragState | null>(null);
+  const scaleValueRef = useRef(1);
+
+  useEffect(() => {
+    if (dragRef.current) return;
+    const cols = Array.from({ length: nCols }, (_, index) => sourceColWidths[index] ?? DEFAULT_COL);
+    const rows = Array.from({ length: nRows }, (_, index) => sourceRowHeights[index] ?? DEFAULT_ROW);
+    draftColsRef.current = cols;
+    draftRowsRef.current = rows;
+    setDraftCols(cols);
+    setDraftRows(rows);
+  }, [sourceColWidths, sourceRowHeights, nCols, nRows]);
+
+  const colWidths = layoutEditing ? draftCols : sourceColWidths;
+  const rowHeights = layoutEditing ? draftRows : sourceRowHeights;
+
   const naturalW = useMemo(() => {
-    let w = 0;
-    for (let c = 0; c < nCols; c += 1) w += colWidths[c] ?? DEFAULT_COL;
-    return Math.max(1, w);
+    let width = 0;
+    for (let c = 0; c < nCols; c += 1) width += colWidths[c] ?? DEFAULT_COL;
+    return Math.max(1, width);
   }, [colWidths, nCols]);
+  const naturalH = useMemo(
+    () => Math.max(1, Array.from({ length: nRows }, (_, r) => rowHeights[r] ?? DEFAULT_ROW).reduce((sum, value) => sum + value, 0)),
+    [rowHeights, nRows],
+  );
 
-  // Merged-cell bookkeeping: covered cells are skipped, top-left carries spans.
-  const { covered, spanAt } = useMemo(() => {
-    const cov = new Set<string>();
-    const span = new Map<string, { rs: number; cs: number }>();
-    for (const m of merges) {
-      for (let r = m.startRow; r <= m.endRow; r += 1) {
-        for (let c = m.startCol; c <= m.endCol; c += 1) {
-          if (r === m.startRow && c === m.startCol) continue;
-          cov.add(`${r}:${c}`);
-        }
-      }
-      span.set(`${m.startRow}:${m.startCol}`, {
-        rs: m.endRow - m.startRow + 1,
-        cs: m.endCol - m.startCol + 1,
-      });
-    }
-    return { covered: cov, spanAt: span };
-  }, [merges]);
-
+  const { covered, spanAt } = useMemo(() => mergedMaps(merges), [merges]);
   const fitRef = useRef<HTMLDivElement | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
   const nowrapCols = useMemo(
@@ -187,106 +245,227 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
   );
 
   useEffect(() => {
+    const onMove = (event: MouseEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const client = drag.kind === 'col' ? event.clientX : event.clientY;
+      const delta = (client - drag.startClient) / Math.max(0.05, drag.effectiveScale);
+      if (drag.kind === 'col') {
+        const next = [...draftColsRef.current];
+        next[drag.index] = clamp(drag.startValue + delta, MIN_LAYOUT_COL, MAX_LAYOUT_COL);
+        draftColsRef.current = next;
+        setDraftCols(next);
+      } else {
+        const next = [...draftRowsRef.current];
+        next[drag.index] = clamp(drag.startValue + delta, MIN_LAYOUT_ROW, MAX_LAYOUT_ROW);
+        draftRowsRef.current = next;
+        setDraftRows(next);
+      }
+    };
+
+    const onUp = () => {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      onChange?.({
+        colWidths: [...draftColsRef.current],
+        rowHeights: [...draftRowsRef.current],
+        pageLayoutManual: true,
+        noGrow: false,
+        scaleMode: 'fit_body',
+      });
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [onChange]);
+
+  useEffect(() => {
     const wrap = fitRef.current;
     const table = tableRef.current;
     if (!wrap || !table) return;
     let raf = 0;
     let last = -1;
     const fit = () => {
-      // Measure the real container so grow-to-fill fits inside whatever padding
-      // chain wraps the range (.np / .np-xr), never clipping on the right.
       const container = wrap.parentElement;
       const containerW = container?.clientWidth ?? BODY_W;
       const availW = Math.max(1, containerW - PAD_X * 2);
       const availH = Math.max(1, SAFE_FIT_HEIGHT - PAD_Y * 2 - Math.max(0, reservedTop) - MIN_BOTTOM_GAP);
-      const w = table.scrollWidth || naturalW;
-      const h = table.scrollHeight || 1;
-      const sw = availW / w;
-      const sh = availH / h;
-      // A block marked noGrow (e.g. a narrow 2-column instruction table)
-      // never stretches past its natural size — only shrinks if it doesn't
-      // fit (see noGrow doc comment in model/types.ts for why).
+      const width = table.scrollWidth || naturalW;
+      const height = table.scrollHeight || naturalH;
+      const sw = availW / width;
+      const sh = availH / height;
       const growCap = block.noGrow ? 1 : GROW_CAP;
-      // Fit-to-body: grow small ranges to fill the width (up to growCap) while
-      // staying within the available height; shrink oversized ranges to fit.
       const scale =
         scaleMode === 'fit_width'
           ? Math.min(growCap, sw)
           : Math.min(growCap, sw, sh);
+      scaleValueRef.current = scale;
       if (Math.abs(scale - last) < 0.003) return;
       last = scale;
       wrap.style.setProperty('--xr-scale', String(scale));
-      // `transform: scale()` only changes paint size, not layout size, so the
-      // parent `.np-xr` (auto-height, overflow:hidden) would still size itself
-      // from the pre-transform box. When scale > 1 (a narrow table grown to
-      // fill the body width) that leaves the visually-larger content taller
-      // than its own too-small ancestor box, silently clipping the bottom
-      // rows. Give the wrapper explicit post-scale dimensions so the ancestor
-      // always sizes to the real, visible footprint — never crops, never
-      // leaves a shrink-mode gap either.
-      wrap.style.width = `${Math.ceil(w * scale)}px`;
-      wrap.style.height = `${Math.ceil(h * scale)}px`;
+      wrap.style.width = `${Math.ceil(width * scale)}px`;
+      wrap.style.height = `${Math.ceil(height * scale)}px`;
     };
     const schedule = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(fit);
     };
     fit();
-    const ro = new ResizeObserver(schedule);
-    ro.observe(table);
+    const observer = new ResizeObserver(schedule);
+    observer.observe(table);
     return () => {
-      ro.disconnect();
+      observer.disconnect();
       cancelAnimationFrame(raf);
     };
-  }, [naturalW, nRows, nCols, scaleMode, grid, reservedTop, block.noGrow]);
+  }, [naturalW, naturalH, nRows, nCols, scaleMode, grid, reservedTop, block.noGrow]);
 
   if (!nRows || !nCols) {
     return <div className="np np-empty">No source range data.</div>;
   }
 
+  const beginColDrag = (index: number, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = tableRef.current?.getBoundingClientRect();
+    const effectiveScale = rect && naturalW > 0 ? rect.width / naturalW : scaleValueRef.current;
+    dragRef.current = {
+      kind: 'col',
+      index,
+      startClient: event.clientX,
+      startValue: draftColsRef.current[index] ?? DEFAULT_COL,
+      effectiveScale,
+    };
+  };
+
+  const beginRowDrag = (index: number, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = tableRef.current?.getBoundingClientRect();
+    const effectiveScale = rect && naturalH > 0 ? rect.height / naturalH : scaleValueRef.current;
+    dragRef.current = {
+      kind: 'row',
+      index,
+      startClient: event.clientY,
+      startValue: draftRowsRef.current[index] ?? DEFAULT_ROW,
+      effectiveScale,
+    };
+  };
+
+  const setFont = (delta: number) => {
+    const next = clamp(Number(block.bodyFontPx ?? 12) + delta, 8, 18);
+    onChange?.({ bodyFontPx: next, bodyFontPt: Math.round(next * 0.75 * 100) / 100, pageLayoutManual: true });
+  };
+
+  const fitRows = () => {
+    const rows = autoRowHeights(grid, draftColsRef.current, merges, Number(block.bodyFontPx ?? 12));
+    draftRowsRef.current = rows;
+    setDraftRows(rows);
+    onChange?.({
+      rowHeights: rows,
+      colWidths: [...draftColsRef.current],
+      pageLayoutManual: true,
+    });
+  };
+
+  let x = 0;
+  const colHandles = Array.from({ length: nCols }, (_, c) => {
+    x += colWidths[c] ?? DEFAULT_COL;
+    return { index: c, offset: x };
+  });
+  let y = 0;
+  const rowHandles = Array.from({ length: nRows }, (_, r) => {
+    y += rowHeights[r] ?? DEFAULT_ROW;
+    return { index: r, offset: y };
+  });
+
   return (
-    <div className="np-xr">
+    <div className={`np-xr ${layoutEditing ? 'xr-page-layout-editing' : ''}`}>
       {block.layoutWarnings?.length && !exporting ? (
         <div className="np-xr-warning">
           {block.layoutWarnings.join(' ')}
         </div>
       ) : null}
+
+      {layoutEditing && !exporting ? (
+        <div className="xr-page-layout-toolbar" data-noexport="1">
+          <strong>Page Layout</strong>
+          <span>Drag blue column and row lines directly on the finished sheet.</span>
+          <button type="button" onClick={() => setFont(-1)}>Font −</button>
+          <button type="button" onClick={() => setFont(1)}>Font +</button>
+          <button type="button" onClick={fitRows}>Auto Row Heights</button>
+        </div>
+      ) : null}
+
       <div className="np-xr-fit" ref={fitRef}>
-        <table
-          className="np-xr-table"
-          ref={tableRef}
-          data-block-id={block.id}
-          style={{ width: naturalW }}
+        <div
+          className="xr-page-layout-surface"
+          style={{ width: naturalW, height: naturalH }}
         >
-          <colgroup>
-            {Array.from({ length: nCols }, (_, c) => (
-              <col key={c} style={{ width: colWidths[c] ?? DEFAULT_COL }} />
-            ))}
-          </colgroup>
-          <tbody>
-            {grid.map((row, r) => (
-              <tr key={r} style={{ height: rowHeights[r] ?? DEFAULT_ROW }}>
-                {Array.from({ length: nCols }, (_, c) => {
-                  if (covered.has(`${r}:${c}`)) return null;
-                  const span = spanAt.get(`${r}:${c}`);
-                  const st = styles[`${r}:${c}`];
-                  return (
-                    <td
-                      key={c}
-                      rowSpan={span?.rs}
-                      colSpan={span?.cs}
-                      style={cellCss(st, rowHeights[r] ?? DEFAULT_ROW, block.bodyFontPx, {
-                        nowrap: nowrapCols.has(c),
-                      })}
-                    >
-                      {row[c] ?? ''}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          <table
+            className="np-xr-table"
+            ref={tableRef}
+            data-block-id={block.id}
+            style={{ width: naturalW }}
+          >
+            <colgroup>
+              {Array.from({ length: nCols }, (_, c) => (
+                <col key={c} style={{ width: colWidths[c] ?? DEFAULT_COL }} />
+              ))}
+            </colgroup>
+            <tbody>
+              {grid.map((row, r) => (
+                <tr key={r} style={{ height: rowHeights[r] ?? DEFAULT_ROW }}>
+                  {Array.from({ length: nCols }, (_, c) => {
+                    if (covered.has(`${r}:${c}`)) return null;
+                    const span = spanAt.get(`${r}:${c}`);
+                    const style = styles[`${r}:${c}`];
+                    return (
+                      <td
+                        key={c}
+                        rowSpan={span?.rs}
+                        colSpan={span?.cs}
+                        style={cellCss(style, rowHeights[r] ?? DEFAULT_ROW, block.bodyFontPx, {
+                          nowrap: nowrapCols.has(c),
+                        })}
+                      >
+                        {row[c] ?? ''}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {layoutEditing && !exporting ? (
+            <div className="xr-page-layout-handles" data-noexport="1">
+              {colHandles.map(({ index, offset }) => (
+                <button
+                  key={`c-${index}`}
+                  type="button"
+                  className="xr-layout-col-handle"
+                  style={{ left: offset - 4, height: naturalH }}
+                  title={`Resize output column ${index + 1}`}
+                  onMouseDown={(event: React.MouseEvent) => beginColDrag(index, event)}
+                />
+              ))}
+              {rowHandles.map(({ index, offset }) => (
+                <button
+                  key={`r-${index}`}
+                  type="button"
+                  className="xr-layout-row-handle"
+                  style={{ top: offset - 4, width: naturalW }}
+                  title={`Resize output row ${index + 1}`}
+                  onMouseDown={(event: React.MouseEvent) => beginRowDrag(index, event)}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

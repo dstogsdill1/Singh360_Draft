@@ -10,6 +10,7 @@ type LayoutBlock = PageBlock & {
   minFontPt?: number;
   layoutReflowed?: boolean;
   manualLayout?: boolean;
+  pageLayoutManual?: boolean;
 };
 
 const MANAGED = new Set([
@@ -353,13 +354,26 @@ export function reflowExcelRangeBlock(page: PageModel, input: PageBlock): PageBl
   const grid = block.grid ?? [];
   if (!grid.length) return block;
 
-  const manual = !!block.manualLayout;
-  const widths = manual ? normalizeManualWidths(block.colWidths ?? []) : (isManagedLayoutProfile(profile) ? preferredWidths(grid, profile) : block.colWidths ?? []);
+  const pageManual = !!block.pageLayoutManual;
+  const sourceManual = !!block.manualLayout;
+  const widths = pageManual
+    ? (block.colWidths ?? [])
+    : sourceManual
+      ? normalizeManualWidths(block.colWidths ?? [])
+      : (isManagedLayoutProfile(profile) ? preferredWidths(grid, profile) : block.colWidths ?? []);
   const nCols = Math.max(0, ...grid.map((row) => row.length));
-  const font = manual ? undefined : bodyFontPx(profile, nCols);
+  const font = pageManual
+    ? block.bodyFontPx
+    : sourceManual
+      ? undefined
+      : bodyFontPx(profile, nCols);
   const headerRows = Math.max(Number(block.headerRowCount ?? 1), 1);
-  const heights = rowHeights(grid, widths, block.mergedCells ?? [], profile, headerRows, font ?? 12, manual, block.rowHeights);
-  const floor = manual ? Number(block.minScale ?? 0.5) : (minScale(profile, nCols) ?? Number(block.minScale ?? 0.5));
+  const heights = pageManual
+    ? (block.rowHeights ?? [])
+    : rowHeights(grid, widths, block.mergedCells ?? [], profile, headerRows, font ?? 12, sourceManual, block.rowHeights);
+  const floor = pageManual || sourceManual
+    ? Number(block.minScale ?? 0.5)
+    : (minScale(profile, nCols) ?? Number(block.minScale ?? 0.5));
 
   block = {
     ...block,
@@ -377,6 +391,7 @@ export function reflowExcelRangeBlock(page: PageModel, input: PageBlock): PageBl
   const ext = block as LayoutBlock;
   ext.layoutProfile = profile;
   ext.layoutReflowed = true;
+  ext.pageLayoutManual = pageManual;
   if (font) {
     ext.bodyFontPt = Number((font * 0.75).toFixed(2));
     ext.minFontPt = profile === 'responsibility_matrix' && nCols > 5 ? 7 : ['guideline_table', 'instruction_table'].includes(profile) ? 9 : 8;

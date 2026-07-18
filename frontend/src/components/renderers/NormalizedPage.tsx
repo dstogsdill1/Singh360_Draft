@@ -27,6 +27,7 @@ interface Props {
   onDuplicateBlock: (pageId: string, blockId: string) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
   previewOnly?: boolean;
+  layoutEditing?: boolean;
 }
 
 /**
@@ -53,6 +54,7 @@ export default function NormalizedPage({
   onDuplicateBlock,
   onCanvasChange,
   previewOnly = false,
+  layoutEditing = false,
 }: Props) {
   const blocks = page.blocks ?? [];
   const isImageType = page.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
@@ -90,7 +92,12 @@ export default function NormalizedPage({
       if (xr) {
         return (
           <div className="np">
-            <ExcelRangeRenderer block={xr} reservedTop={bandReserve} />
+            <ExcelRangeRenderer
+              block={xr}
+              reservedTop={bandReserve}
+              layoutEditing={layoutEditing && !previewOnly}
+              onChange={(patch) => onBlockChange(page.id, xr.id, patch)}
+            />
           </div>
         );
       }

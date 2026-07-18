@@ -24,6 +24,7 @@ interface Props {
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
   onApplySourcePreview?: () => void;
+  layoutEditing?: boolean;
 }
 
 export default function PageRenderer({
@@ -46,8 +47,9 @@ export default function PageRenderer({
   onReplacePageSource,
   onExportPageSource,
   onApplySourcePreview,
+  layoutEditing,
 }: Props) {
-  const [sourcePreviewVisible, setSourcePreviewVisible] = useState(true);
+  const [sourcePreviewVisible, setSourcePreviewVisible] = useState(false);
   const sourceWorkspaceClass = useMemo(
     () => `gx-source-workspace ${sourcePreviewVisible ? 'has-preview' : ''}`,
     [sourcePreviewVisible],
@@ -98,6 +100,7 @@ export default function PageRenderer({
       onPatchPage={onPatchPage}
       onDuplicateBlock={onDuplicateBlock}
       onCanvasChange={onCanvasChange}
+      layoutEditing={layoutEditing}
     />
   );
 }

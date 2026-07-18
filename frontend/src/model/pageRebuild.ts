@@ -46,12 +46,24 @@ export function rebuildSinglePageFromSource(page: PageModel, ws: Worksheet): Pag
     const parts = splitExcelRangeBlock(full);
     const partIndex = page.continuationIndex ?? 0;
     const part = parts[partIndex] ?? parts[0];
+    const previousLayout = (page.blocks ?? []).find((block) => block.type === 'excelRange');
+    const outputPart = previousLayout?.pageLayoutManual
+      ? {
+          ...part,
+          colWidths: previousLayout.colWidths,
+          rowHeights: previousLayout.rowHeights,
+          bodyFontPx: previousLayout.bodyFontPx,
+          bodyFontPt: previousLayout.bodyFontPt,
+          minFontPt: previousLayout.minFontPt,
+          pageLayoutManual: true,
+        }
+      : part;
     return {
       ...page,
-      blocks: [part],
+      blocks: [outputPart],
       canvasObjects: page.canvasObjects ?? [],
       layoutProfile: inferLayoutProfile(page),
-      layoutWarnings: part.layoutWarnings ?? [],
+      layoutWarnings: outputPart.layoutWarnings ?? [],
       sourceRevision: (page.sourceRevision ?? 0) + 1,
     };
   }

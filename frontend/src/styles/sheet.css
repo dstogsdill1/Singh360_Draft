@@ -602,3 +602,129 @@
 .np-xr-table td{overflow:hidden;text-overflow:clip}
 @media(max-width:1220px){.gx-source-workspace{grid-template-columns:minmax(0,1fr)}.gx-live-preview{display:none}}
 /* === S360 SOURCE WYSIWYG + TOOLBAR V12 END === */
+
+/* === SINGH360 DIRECT PAGE LAYOUT EDITOR V13 === */
+.vt-page-layout {
+  border-color: #0f6e52;
+  color: #0b513d;
+  background: #edf9f5;
+  font-weight: 800;
+}
+.vt-page-layout.active {
+  background: #0f6e52;
+  color: #fff;
+  border-color: #0a4d39;
+}
+
+.xr-page-layout-editing {
+  position: relative;
+  overflow: visible;
+}
+
+.xr-page-layout-editing .np-xr-fit {
+  overflow: visible;
+}
+
+.xr-page-layout-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 55;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid #0f6e52;
+  border-radius: 5px;
+  background: #edf9f5;
+  color: #173a30;
+  font-size: 11px;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .14);
+}
+
+.xr-page-layout-toolbar strong {
+  font-size: 12px;
+}
+
+.xr-page-layout-toolbar span {
+  margin-right: 8px;
+}
+
+.xr-page-layout-toolbar button {
+  border: 1px solid #7b8b84;
+  border-radius: 3px;
+  padding: 3px 7px;
+  background: #fff;
+  color: #222;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.xr-page-layout-toolbar button:hover {
+  background: #dcefe8;
+  border-color: #0f6e52;
+}
+
+.xr-page-layout-surface {
+  position: relative;
+  display: inline-block;
+}
+
+.xr-page-layout-handles {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.xr-layout-col-handle,
+.xr-layout-row-handle {
+  position: absolute;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: auto;
+  opacity: .75;
+}
+
+.xr-layout-col-handle {
+  top: 0;
+  width: 8px;
+  border-right: 2px solid #087dcc;
+  cursor: col-resize;
+}
+
+.xr-layout-row-handle {
+  left: 0;
+  height: 8px;
+  border-bottom: 2px solid #087dcc;
+  cursor: row-resize;
+}
+
+.xr-layout-col-handle:hover,
+.xr-layout-row-handle:hover {
+  opacity: 1;
+  background: rgba(8, 125, 204, .12);
+}
+
+.xr-page-layout-editing .np-xr-table {
+  outline: 2px solid rgba(15, 110, 82, .5);
+  outline-offset: 2px;
+}
+
+/* Source is data-entry mode. Page sizing now happens directly in Normalized. */
+.gx-toolbar-primary::after {
+  content: 'Page sizing: return to Normalized and click Edit Page Layout';
+  margin-left: auto;
+  color: #5c6670;
+  font-size: 10px;
+  font-weight: 700;
+}
+/* === SINGH360 DIRECT PAGE LAYOUT EDITOR V13 END === */

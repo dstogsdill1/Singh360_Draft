@@ -15,6 +15,7 @@ import PageTabs from './PageTabs';
 import ViewportToolbar from './ViewportToolbar';
 import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
 import type { ViewControls } from './Ribbon';
+import { rebuildSinglePageFromSource } from '../model/pageRebuild';
 
 export type FitMode = 'width' | 'page' | 'actual';
 
@@ -115,6 +116,49 @@ export default function DocumentView({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const scaleRef = useRef<HTMLDivElement | null>(null);
   const [fitScale, setFitScale] = useState(0.5);
+  const [layoutEditing, setLayoutEditing] = useState(false);
+
+  useEffect(() => {
+    setLayoutEditing(false);
+  }, [activePage.id, viewMode]);
+
+  const layoutBlock = (activePage.blocks ?? []).find((block) => block.type === 'excelRange');
+  const canEditPageLayout =
+    viewMode === 'normalized'
+    && activePage.renderMode === 'excel_exact'
+    && !!layoutBlock;
+
+  const resetPageLayout = () => {
+    if (!layoutBlock || !worksheet) return;
+    const cleanPage: PageModel = {
+      ...activePage,
+      blocks: (activePage.blocks ?? []).map((block) =>
+        block.id === layoutBlock.id
+          ? {
+              ...block,
+              pageLayoutManual: false,
+              manualLayout: false,
+              colWidths: [],
+              rowHeights: [],
+              bodyFontPx: undefined,
+              bodyFontPt: undefined,
+            }
+          : block,
+      ),
+    };
+    const standard = rebuildSinglePageFromSource(
+      cleanPage,
+      { ...worksheet, layoutMode: 'auto' },
+    );
+    const standardBlock = (standard.blocks ?? []).find((block) => block.type === 'excelRange');
+    if (!standardBlock) return;
+    onBlockChange(activePage.id, layoutBlock.id, {
+      ...standardBlock,
+      pageLayoutManual: false,
+      manualLayout: false,
+    });
+    setLayoutEditing(false);
+  };
 
   // Recompute fit scale from the actual viewport size (excludes ribbon/tabs/panels).
   useEffect(() => {
@@ -188,6 +232,10 @@ export default function DocumentView({
         canRestorePageRebuild={canRestorePageRebuild}
         onCleanHiddenArtifacts={onCleanHiddenArtifacts}
         canCleanHiddenArtifacts={canCleanHiddenArtifacts}
+        layoutEditing={layoutEditing}
+        canEditPageLayout={canEditPageLayout}
+        onTogglePageLayout={() => setLayoutEditing((value) => !value)}
+        onResetPageLayout={resetPageLayout}
       />
       <div
         className="sheet-viewport"

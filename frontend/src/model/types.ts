@@ -101,6 +101,8 @@ export interface PageBlock {
   noGrow?: boolean;
   /** True when Source column/row sizing was manually adjusted by the user. */
   manualLayout?: boolean;
+  /** True when the printable Normalized table was resized directly on the page. */
+  pageLayoutManual?: boolean;
   /** Named normalized-output profile applied during import/rebuild/export. */
   layoutProfile?: string;
   /** Diagnostics and readable-font floor carried into export QA. */
