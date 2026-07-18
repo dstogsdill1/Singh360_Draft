@@ -40,3 +40,8 @@
   bottom: -4px;
   z-index: 4;
 }
+
+/* The cover artifact is fixed automatically; do not expose a cleanup workaround. */
+.ribbon-btn[title^="Archive old projects/exports"] {
+  display: none;
+}
