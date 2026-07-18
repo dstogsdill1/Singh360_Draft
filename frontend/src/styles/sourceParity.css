@@ -1,0 +1,37 @@
+/* Source is the editable version of the printable page, not a separate cramped grid. */
+.sheet-body-source .gx-wrap {
+  width: 100%;
+  min-width: 100%;
+}
+
+.sheet-body-source .gx-table {
+  margin: 0 auto;
+  table-layout: fixed !important;
+}
+
+/* Remove legacy CSS limits that overrode the actual Excel/source dimensions. */
+.sheet-body-source .gx-cell {
+  min-width: 0;
+  max-width: none;
+}
+
+.sheet-body-source .gx-cell-text {
+  text-overflow: clip;
+}
+
+/* Easier Excel-style resize targets without changing the printed page. */
+.sheet-body-source .gx-col-resize {
+  width: 10px;
+  right: -5px;
+  z-index: 4;
+}
+.sheet-body-source .gx-row-resize {
+  height: 8px;
+  bottom: -4px;
+  z-index: 4;
+}
+
+/* The cover artifact is fixed automatically; do not expose a cleanup workaround. */
+.ribbon-btn[title^="Archive old projects/exports"] {
+  display: none;
+}
