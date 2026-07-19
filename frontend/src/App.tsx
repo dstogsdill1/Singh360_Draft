@@ -1553,7 +1553,7 @@ export default function App() {
           <div className="empty-stage">
             <div className="empty-card">
               <h2>No workbook loaded</h2>
-              <p>Choose a workbook (.xlsx) from the File tab to generate output pages and begin editing your drawing package, or <button className="link-btn" onClick={() => setOpenProjectOpen(true)}>open a saved project</button>.</p>
+              <p>Choose a workbook (.xlsx or .xlsm) from the File tab to generate output pages and begin editing your drawing package, or <button className="link-btn" onClick={() => setOpenProjectOpen(true)}>open a saved project</button>.</p>
             </div>
           </div>
         }
@@ -1824,6 +1824,11 @@ export default function App() {
       <ReimportWorkbookModal
         projectId={project.id}
         file={pendingReimportFile}
+        onStartNew={() => {
+          const nextFile = pendingReimportFile;
+          setPendingReimportFile(null);
+          if (nextFile) setPendingWorkbookFile(nextFile);
+        }}
         onApplied={() => void onReimportedWorkbook()}
         onCancel={() => setPendingReimportFile(null)}
       />

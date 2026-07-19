@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { listProjects, type ProjectListItem } from '../api/client';
+import { deleteProject, listProjects, type ProjectListItem } from '../api/client';
 
 interface Props {
   currentId?: string;
@@ -15,13 +15,14 @@ function fmtDate(s?: string): string {
 }
 
 /**
- * Open Project browser. Lists all projects from /api/projects with the columns
- * the workflow needs (name / package file / ID / last saved / folder / source
- * workbook) plus a Recent Projects strip. No manual folder browsing required.
+ * Open Project browser. Projects can be opened or permanently deleted here.
+ * Deletion requires an explicit browser confirmation and the backend also
+ * requires confirm=true, so an accidental raw DELETE request cannot remove data.
  */
 export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props) {
   const [rows, setRows] = useState<ProjectListItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
 
@@ -51,11 +52,35 @@ export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props)
     );
   }, [sorted, query]);
 
+  const removeProject = async (row: ProjectListItem) => {
+    const name = row.projectName || row.packageFile || row.id;
+    const confirmed = window.confirm(
+      `Permanently delete project "${name}"?\n\n` +
+      'This removes the project folder, source workbook copy, assets, backups, and exports. ' +
+      'This cannot be undone.',
+    );
+    if (!confirmed) return;
+
+    setDeletingId(row.id);
+    setError('');
+    try {
+      await deleteProject(row.id);
+      setRows((prev) => prev.filter((r) => r.id !== row.id));
+      if (row.id === currentId) {
+        window.location.assign('/app');
+      }
+    } catch (e) {
+      setError(`Delete failed: ${String(e)}`);
+    } finally {
+      setDeletingId('');
+    }
+  };
+
   return (
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Open Project</h2>
+          <h2>Open or Delete Project</h2>
           <button className="modal-x" onClick={onCancel} title="Close">×</button>
         </div>
 
@@ -100,7 +125,7 @@ export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props)
                   <th>Source Workbook</th>
                   <th>Last Saved</th>
                   <th>ID</th>
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -108,13 +133,26 @@ export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props)
                   <tr key={r.id} className={r.id === currentId ? 'current' : ''}>
                     <td>
                       {r.projectName}
-                      {r.duplicateFolders ? <span className="op-dup" title={`${r.duplicateFolders} duplicate folder(s) — open Project Properties to archive`}> ⚠</span> : null}
+                      {r.duplicateFolders ? <span className="op-dup" title={`${r.duplicateFolders} duplicate folder(s)`}> ⚠</span> : null}
                     </td>
                     <td>{r.packageFile || '—'}</td>
                     <td>{r.sourceWorkbook || '—'}</td>
                     <td>{fmtDate(r.modified || r.lastSavedAt)}</td>
                     <td className="op-id" title={r.folder || ''}>{r.id}</td>
-                    <td><button className="btn btn-primary op-open" onClick={() => onOpen(r.id)}>Open</button></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6, whiteSpace: 'nowrap' }}>
+                        <button className="btn btn-primary op-open" onClick={() => onOpen(r.id)}>Open</button>
+                        <button
+                          className="btn"
+                          style={{ color: '#b42318', borderColor: '#b42318' }}
+                          disabled={deletingId === r.id}
+                          onClick={() => void removeProject(r)}
+                          title="Permanently delete this project after confirmation"
+                        >
+                          {deletingId === r.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

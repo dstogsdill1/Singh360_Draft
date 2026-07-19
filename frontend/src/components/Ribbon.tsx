@@ -176,9 +176,13 @@ export default function Ribbon({
       Upload Workbook
       <input
         type="file"
-        accept=".xlsx"
+        accept=".xlsx,.xlsm"
         title="Upload Workbook"
-        onChange={(e) => e.target.files?.[0] && onUploadFile(e.target.files[0])}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.currentTarget.value = '';
+          if (file) onUploadFile(file);
+        }}
       />
     </label>
   );

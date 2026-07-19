@@ -1,50 +1,50 @@
-# Start Singh360 local server only (no ngrok).
+# Singh360 Draft local-only startup.
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 $ErrorActionPreference = "Stop"
 
 $Root = $PSScriptRoot
 $Port = 8766
 $LocalApp = "http://127.0.0.1:$Port/app"
+$Python = Join-Path $Root ".venv\Scripts\python.exe"
 
 Set-Location $Root
 
-$venvActivate = Join-Path $Root ".venv\Scripts\Activate.ps1"
-if (-not (Test-Path $venvActivate)) {
-    Write-Error "Python venv not found at $venvActivate — run: python -m venv .venv"
+if (-not (Test-Path $Python)) {
+    Write-Host "ERROR: Python virtual environment was not found:" -ForegroundColor Red
+    Write-Host "  $Python" -ForegroundColor Red
     exit 1
 }
 
-. $venvActivate
-$env:SINGH360_PORT = "$Port"
-
-# Build frontend when dist is missing or package files are newer.
-$distDir = Join-Path $Root "frontend\dist"
-$pkgJson = Join-Path $Root "frontend\package.json"
-$pkgLock = Join-Path $Root "frontend\package-lock.json"
-$needsBuild = -not (Test-Path $distDir)
-if (-not $needsBuild) {
-    $distTime = (Get-Item $distDir).LastWriteTime
-    if ((Test-Path $pkgJson) -and (Get-Item $pkgJson).LastWriteTime -gt $distTime) { $needsBuild = $true }
-    if ((Test-Path $pkgLock) -and (Get-Item $pkgLock).LastWriteTime -gt $distTime) { $needsBuild = $true }
+$connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+if ($connections) {
+    $connections |
+        Select-Object -ExpandProperty OwningProcess -Unique |
+        ForEach-Object {
+            Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
+        }
 }
-if ($needsBuild) {
-    Write-Host "Building frontend (dist missing or package files changed)..." -ForegroundColor Yellow
-    Push-Location (Join-Path $Root "frontend")
+
+$serverCommand = 'cd /d "' + $Root + '" && set "SINGH360_PORT=' + $Port + '" && "' + $Python + '" server.py'
+Start-Process -FilePath "cmd.exe" -ArgumentList @("/k", $serverCommand)
+
+$ready = $false
+for ($i = 0; $i -lt 60; $i++) {
     try {
-        if (Test-Path $pkgLock) { npm ci } else { npm install }
-        npm run build
-        if ($LASTEXITCODE -ne 0) { throw "npm run build failed with exit code $LASTEXITCODE" }
-    } finally {
-        Pop-Location
+        $response = Invoke-WebRequest -Uri $LocalApp -UseBasicParsing -TimeoutSec 3
+        if ($response.StatusCode -eq 200) {
+            $ready = $true
+            break
+        }
     }
-    Write-Host "Frontend build complete." -ForegroundColor Green
+    catch {
+    }
+    Start-Sleep -Seconds 1
 }
 
-Write-Host ""
-Write-Host "=== Singh360 LOCAL ===" -ForegroundColor Cyan
-Write-Host "Local app: $LocalApp" -ForegroundColor Green
-Write-Host ""
-Write-Host "Starting server (Ctrl+C to stop)..." -ForegroundColor Yellow
-Write-Host ""
+if (-not $ready) {
+    Write-Host "ERROR: The local app did not start." -ForegroundColor Red
+    exit 1
+}
 
-python server.py
+Write-Host "Local app: $LocalApp" -ForegroundColor Green
+Start-Process $LocalApp

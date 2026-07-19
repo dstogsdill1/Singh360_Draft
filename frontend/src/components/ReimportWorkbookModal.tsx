@@ -4,18 +4,23 @@ import { applyReimportWorkbook, previewReimportWorkbook, type ReimportPlan, type
 interface Props {
   projectId: string;
   file: File;
+  onStartNew: () => void;
   onApplied: (summary: ReimportSummary) => void;
   onCancel: () => void;
 }
 
 /**
- * PHASE E — safe workbook re-upload into the CURRENT project (same project
- * id). Shown instead of ContinuationPreviewModal whenever a project is
- * already open. Manual layout pages (Overall Layout, wiring diagrams, any
- * page with canvas objects) are preserved by default; the user must
- * explicitly check "Replace this page too" to overwrite one.
+ * A workbook was selected while a project is already open. The user—not the
+ * application—chooses whether to create a separate project or update the
+ * current project.
  */
-export default function ReimportWorkbookModal({ projectId, file, onApplied, onCancel }: Props) {
+export default function ReimportWorkbookModal({
+  projectId,
+  file,
+  onStartNew,
+  onApplied,
+  onCancel,
+}: Props) {
   const [plan, setPlan] = useState<ReimportPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
@@ -64,20 +69,29 @@ export default function ReimportWorkbookModal({ projectId, file, onApplied, onCa
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Re-import Workbook — Update This Project</h2>
+          <h2>Workbook Upload — Choose What to Do</h2>
           <button className="modal-x" onClick={onCancel} title="Close">×</button>
         </div>
 
         <div className="modal-body">
           <p className="cw-note">
-            A project is already open, so <strong>{file.name}</strong> will be merged into it
-            (project id stays the same) instead of creating a new project. Manual layout pages
-            (Overall Layout, wiring diagrams, any page you have drawn on) are <strong>preserved by
-            default</strong> — nothing is deleted; removed sheets are archived, not destroyed.
+            <strong>{file.name}</strong> can become a completely separate project, or it can update
+            the project that is currently open. Nothing is merged unless you click <strong>Update
+            This Project</strong>.
           </p>
 
+          <div className="cp-totals" style={{ marginBottom: 12 }}>
+            <span><strong>Start New Project</strong> — separate project ID and folder</span>
+            <span>·</span>
+            <span><strong>Update This Project</strong> — merge source pages into the open project</span>
+          </div>
+
           {loading && <p className="cp-status">Comparing workbook to the current project…</p>}
-          {error && <p className="cp-error">{error}</p>}
+          {error && (
+            <p className="cp-error">
+              Update preview failed: {error}. You may still use <strong>Start New Project</strong>.
+            </p>
+          )}
 
           {!loading && plan && (
             <>
@@ -131,11 +145,7 @@ export default function ReimportWorkbookModal({ projectId, file, onApplied, onCa
                   <h3 className="rw-section-title">Table / source pages (will rebuild from workbook)</h3>
                   <table className="op-table">
                     <thead>
-                      <tr>
-                        <th>Code</th>
-                        <th>Title</th>
-                        <th>Matched By</th>
-                      </tr>
+                      <tr><th>Code</th><th>Title</th><th>Matched By</th></tr>
                     </thead>
                     <tbody>
                       {plan.toUpdate.map((e) => (
@@ -154,12 +164,7 @@ export default function ReimportWorkbookModal({ projectId, file, onApplied, onCa
                 <>
                   <h3 className="rw-section-title">New pages (no match in the current project)</h3>
                   <table className="op-table">
-                    <thead>
-                      <tr>
-                        <th>Code</th>
-                        <th>Title</th>
-                      </tr>
-                    </thead>
+                    <thead><tr><th>Code</th><th>Title</th></tr></thead>
                     <tbody>
                       {plan.toAdd.map((e) => (
                         <tr key={e.candidatePageId}>
@@ -176,13 +181,7 @@ export default function ReimportWorkbookModal({ projectId, file, onApplied, onCa
                 <>
                   <h3 className="rw-section-title">Removed from workbook (will be archived, not deleted)</h3>
                   <table className="op-table">
-                    <thead>
-                      <tr>
-                        <th>Code</th>
-                        <th>Title</th>
-                        <th>Type</th>
-                      </tr>
-                    </thead>
+                    <thead><tr><th>Code</th><th>Title</th><th>Type</th></tr></thead>
                     <tbody>
                       {plan.toArchive.map((e) => (
                         <tr key={e.existingPageId}>
@@ -205,9 +204,19 @@ export default function ReimportWorkbookModal({ projectId, file, onApplied, onCa
           </button>
           <button
             type="button"
+            className="btn"
+            onClick={onStartNew}
+            disabled={applying}
+            title="Create a separate project. The open project is not changed."
+          >
+            Start New Project
+          </button>
+          <button
+            type="button"
             className="btn btn-primary"
             onClick={() => void apply()}
             disabled={loading || applying || !!error || !plan}
+            title="Merge this workbook into the project currently open"
           >
             {applying ? 'Updating Project…' : 'Update This Project'}
           </button>

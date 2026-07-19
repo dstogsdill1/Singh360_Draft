@@ -361,11 +361,12 @@ def preview_continuation():
         return jsonify(_err("No workbook file uploaded.")), 400
     upload = request.files["file"]
     if not upload.filename:
-        return jsonify(_err("Empty filename — please select an .xlsx file.")), 400
-    if not upload.filename.lower().endswith(".xlsx"):
-        return jsonify(_err("Only .xlsx workbooks are supported.")), 400
+        return jsonify(_err("Empty filename — please select an .xlsx or .xlsm file.")), 400
+    if not upload.filename.lower().endswith((".xlsx", ".xlsm")):
+        return jsonify(_err("Only .xlsx and .xlsm workbooks are supported.")), 400
 
-    temp_path = DOCS_DIR / f"preview_{uuid.uuid4().hex[:16]}.xlsx"
+    upload_suffix = Path(upload.filename).suffix.lower()
+    temp_path = DOCS_DIR / f"preview_{uuid.uuid4().hex[:16]}{upload_suffix}"
     try:
         upload.save(temp_path)
         # No assets_dir/url_prefix → embedded images are skipped (parse-only).
@@ -392,13 +393,14 @@ def new_project():
 
     upload = request.files["file"]
     if not upload.filename:
-        return jsonify(_err("Empty filename — please select an .xlsx file.")), 400
+        return jsonify(_err("Empty filename — please select an .xlsx or .xlsm file.")), 400
 
-    if not upload.filename.lower().endswith(".xlsx"):
-        return jsonify(_err("Only .xlsx workbooks are supported.")), 400
+    if not upload.filename.lower().endswith((".xlsx", ".xlsm")):
+        return jsonify(_err("Only .xlsx and .xlsm workbooks are supported.")), 400
 
     project_id = uuid.uuid4().hex[:16]
-    temp_path = DOCS_DIR / f"temp_{project_id}.xlsx"
+    upload_suffix = Path(upload.filename).suffix.lower()
+    temp_path = DOCS_DIR / f"temp_{project_id}{upload_suffix}"
 
     try:
         upload.save(temp_path)
@@ -789,8 +791,8 @@ def preview_reimport_workbook(project_id: str):
     if "file" not in request.files:
         return jsonify(_err("No workbook file uploaded.")), 400
     upload = request.files["file"]
-    if not (upload.filename or "").lower().endswith(".xlsx"):
-        return jsonify(_err("Only .xlsx workbooks are supported.")), 400
+    if not (upload.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        return jsonify(_err("Only .xlsx and .xlsm workbooks are supported.")), 400
 
     tmp_dir = store.sources_dir(project_id, "tmp")
     tmp_path = tmp_dir / f"reimport_preview_{uuid.uuid4().hex[:8]}_{upload.filename}"
@@ -830,8 +832,8 @@ def do_reimport_workbook(project_id: str):
     if "file" not in request.files:
         return jsonify(_err("No workbook file uploaded.")), 400
     upload = request.files["file"]
-    if not (upload.filename or "").lower().endswith(".xlsx"):
-        return jsonify(_err("Only .xlsx workbooks are supported.")), 400
+    if not (upload.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        return jsonify(_err("Only .xlsx and .xlsm workbooks are supported.")), 400
 
     import json as _json
     raw_ids = request.form.get("replacePageIds", "[]")
@@ -2007,23 +2009,38 @@ def import_vsdx_route():
 
 @app.delete("/api/projects/<project_id>")
 def delete_project(project_id: str):
+    # Permanently delete every active folder for one project ID.
+    # The endpoint requires ?confirm=true in addition to the UI confirmation.
     _safe_id(project_id)
+    confirmed = request.args.get("confirm", "").strip().lower() in {"1", "true", "yes", "delete"}
+    if not confirmed:
+        return jsonify(_err("Permanent project deletion requires confirm=true.")), 400
+
+    removed: list[str] = []
     try:
-        pdir = store.find_dir(project_id)
-        if pdir and pdir.is_dir():
-            import shutil
-            shutil.rmtree(pdir, ignore_errors=True)
+        for pdir in store.find_all_dirs(project_id):
+            if not pdir.is_dir():
+                continue
+            shutil.rmtree(pdir)
+            if pdir.exists():
+                raise OSError(f"Project folder still exists after deletion: {pdir}")
+            removed.append(str(pdir))
+
         legacy = _project_path(project_id)
         if legacy.is_file():
             legacy.unlink()
+            removed.append(str(legacy))
+
         pdf_path = DOCS_DIR / f"{project_id}.pdf"
         if pdf_path.is_file():
             pdf_path.unlink()
+            removed.append(str(pdf_path))
     except OSError as exc:
         app.logger.error("Error deleting project %s: %s", project_id, exc)
         return jsonify(_err("Failed to delete project.", str(exc))), 500
 
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "deleted": removed})
+
 
 
 # --------------------------------------------------------------------------

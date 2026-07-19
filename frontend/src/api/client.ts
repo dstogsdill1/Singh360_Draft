@@ -37,6 +37,12 @@ export async function archiveProject(id: string): Promise<{ archivedTo: string }
   return res.json();
 }
 
+export async function deleteProject(id: string): Promise<{ deleted: string[] }> {
+  const res = await fetch(`/api/projects/${id}?confirm=true`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export interface WorkspaceResetOptions {
   archiveProjects?: boolean;
   archiveExports?: boolean;

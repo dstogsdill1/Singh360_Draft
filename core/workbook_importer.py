@@ -2017,9 +2017,12 @@ def import_workbook(
     asset_url_prefix: str | None = None,
 ) -> dict[str, Any]:
     xlsx = Path(path)
-    wb = load_workbook(filename=xlsx, data_only=False)
+    # Macro-enabled workbooks are parsed without altering the original file.
+    # The untouched .xlsm is copied into the project's source-workbook folder.
+    keep_vba = xlsx.suffix.lower() == ".xlsm"
+    wb = load_workbook(filename=xlsx, data_only=False, keep_vba=keep_vba)
     try:
-        wb_data = load_workbook(filename=xlsx, data_only=True)
+        wb_data = load_workbook(filename=xlsx, data_only=True, keep_vba=keep_vba)
     except Exception:
         wb_data = None
 
