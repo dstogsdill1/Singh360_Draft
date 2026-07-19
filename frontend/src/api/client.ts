@@ -968,6 +968,39 @@ export async function updateLibV2Component(id: string, patch: Partial<LibV2Compo
   return res.json();
 }
 
+export interface LibV2HistoryEntry {
+  name: string;
+  savedAt: string;
+  reason: string;
+  componentCount: number;
+}
+
+export async function batchUpdateLibV2Components(
+  updates: Array<{ id: string; patch: Partial<LibV2Component> }>,
+  reason = 'dashboard-batch-edit',
+): Promise<{ ok: boolean; updated: number; snapshot?: string; history?: LibV2HistoryEntry[] }> {
+  const res = await fetch('/api/lib/components/batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ updates, reason }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function listLibV2History(): Promise<LibV2HistoryEntry[]> {
+  const res = await fetch('/api/lib/history');
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.history || [];
+}
+
+export async function restoreLibV2History(name: string): Promise<{ ok: boolean; restored: string; backupOfCurrent?: string }> {
+  const res = await fetch(`/api/lib/history/${encodeURIComponent(name)}/restore`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function duplicateLibV2Component(id: string): Promise<{ ok: boolean; component: LibV2Component; error?: string }> {
   const res = await fetch(`/api/lib/components/${id}/duplicate`, { method: 'POST' });
   if (!res.ok) throw new Error(await res.text());

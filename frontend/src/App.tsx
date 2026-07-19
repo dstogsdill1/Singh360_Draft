@@ -1610,7 +1610,12 @@ export default function App() {
             <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
           </CollapsibleSection>
           <CollapsibleSection title="Component Library" defaultOpen={false} hint="Reusable EMS/RDM components. Search, then drag onto the active page.">
-            <LibraryPanelV2 onInsert={onInsertComponent} canInsert={canvasEnabled} activePageType={activePage?.pageType} />
+            <LibraryPanelV2
+              onInsert={onInsertComponent}
+              canInsert={canvasEnabled}
+              activePageType={activePage?.pageType}
+              onOpenLegendEditor={() => setSymbolLegendOpen(true)}
+            />
           </CollapsibleSection>
         </>
       }
@@ -1946,8 +1951,8 @@ export default function App() {
           { label: 'Paste', onClick: () => canvasApiRef.current?.pasteCopied() },
           { label: 'Delete', disabled: !selection, onClick: () => canvasApiRef.current?.deleteSelected() },
           { label: 'Normalize Symbol Size', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.normalizeSymbolSize() },
-          { label: 'Group', disabled: !selection, onClick: () => canvasApiRef.current?.group() },
-          { label: 'Ungroup', disabled: !selection, onClick: () => canvasApiRef.current?.ungroup() },
+          { label: 'Group Selected Objects', disabled: !selection, onClick: () => canvasApiRef.current?.group() },
+          { label: selection?.isLegend ? 'Edit Legend / Marker' : 'Edit Group (Ungroup)', disabled: !selection?.isGroup, onClick: () => canvasApiRef.current?.ungroup(), hint: 'Break the grouped marker into editable text, symbols, and lines' },
           { label: 'Bring to Front', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.bringToFront() },
           { label: 'Send to Back', disabled: !selection, onClick: () => canvasApiRef.current?.sendToBack() },
           { label: 'Add Vertex', divider: true, disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.addVertexToSelected() },

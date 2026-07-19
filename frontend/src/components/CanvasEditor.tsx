@@ -28,6 +28,9 @@ function summarize(obj: FabricObject): CanvasSelection {
   const isText = obj.type === 'textbox' || obj.type === 'text' || 'fontSize' in obj;
   const isConnector = obj.type === 'Connector' || 'arrowEnd' in obj;
   const isImage = obj.type === 'image';
+  const isGroup = obj.type === 'group';
+  const objectName = typeof anyObj.objName === 'string' ? anyObj.objName : '';
+  const isLegend = isGroup && /legend|marker/i.test(objectName);
   const dashArr = anyObj.strokeDashArray as number[] | undefined | null;
   const dash = !dashArr || dashArr.length === 0 ? 'solid'
     : dashArr.length === 2 && dashArr[0] <= 3 ? 'dotted'
@@ -36,7 +39,7 @@ function summarize(obj: FabricObject): CanvasSelection {
     : 'dashed';
   return {
     type: (obj.type as string) || 'object',
-    name: typeof anyObj.objName === 'string' ? (anyObj.objName as string) : undefined,
+    name: objectName || undefined,
     fill: typeof anyObj.fill === 'string' ? (anyObj.fill as string) : '',
     stroke: typeof anyObj.stroke === 'string' ? (anyObj.stroke as string) : '',
     strokeWidth: (anyObj.strokeWidth as number) ?? 1,
@@ -52,6 +55,8 @@ function summarize(obj: FabricObject): CanvasSelection {
     pointsCount: Array.isArray(anyObj.pointsData) ? anyObj.pointsData.length : (isConnector ? 2 : undefined),
     label: typeof anyObj.label === 'string' ? (anyObj.label as string) : undefined,
     isImage,
+    isGroup,
+    isLegend,
     pdfSource: typeof anyObj.pdfSource === 'string' ? (anyObj.pdfSource as string) : undefined,
     pdfPage: typeof anyObj.pdfPage === 'number' ? (anyObj.pdfPage as number) : undefined,
     pdfDpi: typeof anyObj.pdfDpi === 'number' ? (anyObj.pdfDpi as number) : undefined,
@@ -1397,14 +1402,40 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         if (!c) return;
         const active = c.getActiveObject();
-        if (active && active.type === 'group') {
-          const grp = active as Group;
-          const items = grp.removeAll();
-          c.remove(grp);
-          items.forEach((o) => c.add(o as FabricObject));
-          c.requestRenderAll();
-          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+        if (!active || active.type !== 'group') {
+          window.alert('Select a grouped marker or legend first.');
+          return;
         }
+
+        const group = active as Group & { toActiveSelection?: () => ActiveSelection };
+        if (typeof group.toActiveSelection === 'function') {
+          const selection = group.toActiveSelection();
+          c.setActiveObject(selection);
+          c.requestRenderAll();
+          onSelRef.current({
+            ...summarize(selection),
+            name: 'Editable legend parts',
+          });
+          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+          return;
+        }
+
+        const items = group.removeAll();
+        const left = group.left ?? 0;
+        const top = group.top ?? 0;
+        c.remove(group);
+        items.forEach((object) => {
+          object.set({
+            left: left + (object.left ?? 0),
+            top: top + (object.top ?? 0),
+          });
+          object.setCoords();
+          c.add(object as FabricObject);
+        });
+        const selection = new ActiveSelection(items as FabricObject[], { canvas: c });
+        c.setActiveObject(selection);
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
       bringForward: () => {
         const c = fabricRef.current;

@@ -161,13 +161,14 @@ class LibraryV2:
         self.manifest_path = self.root / "manifest.json"
         self.aliases_path = self.root / "aliases.json"
         self.connectors_path = self.root / "connector_styles.json"
+        self.history = self.root / "history"
         self.archive = self.docs / "archive"
         self.projects = self.docs / "projects"
         self.exports = self.docs / "exports"
 
     # ---- scaffolding -----------------------------------------------------
     def ensure(self) -> None:
-        for top in (self.projects, self.exports, self.archive, self.components, self.symbols, self.thumbnails):
+        for top in (self.projects, self.exports, self.archive, self.components, self.symbols, self.thumbnails, self.history):
             top.mkdir(parents=True, exist_ok=True)
         for cat in LIBRARY_CATEGORIES:
             (self.components / cat).mkdir(parents=True, exist_ok=True)
@@ -194,6 +195,56 @@ class LibraryV2:
     def _write_manifest(self, data: dict) -> None:
         data["updatedAt"] = _now()
         self._write_json(self.manifest_path, data)
+
+    def _snapshot_manifest(self, reason: str) -> str:
+        self.ensure()
+        if not self.manifest_path.is_file():
+            return ""
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        safe_reason = _slug(reason or "library-change")[:48]
+        name = f"manifest_{stamp}__{safe_reason}.json"
+        target = self.history / name
+        shutil.copy2(self.manifest_path, target)
+        snapshots = sorted(self.history.glob("manifest_*.json"), key=lambda p: p.name)
+        for old in snapshots[:-40]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+        return name
+
+    def list_history(self, limit: int = 30) -> list[dict]:
+        self.ensure()
+        out: list[dict] = []
+        for path in sorted(self.history.glob("manifest_*.json"), key=lambda p: p.name, reverse=True)[: max(1, limit)]:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                stat = path.stat()
+            except Exception:
+                continue
+            reason = path.stem.split("__", 1)[1].replace("-", " ") if "__" in path.stem else "library change"
+            out.append({
+                "name": path.name,
+                "savedAt": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "reason": reason,
+                "componentCount": len(payload.get("components") or []),
+            })
+        return out
+
+    def restore_history(self, snapshot_name: str) -> dict:
+        if not re.fullmatch(r"manifest_[A-Za-z0-9_.-]+\.json", snapshot_name or ""):
+            return {"ok": False, "error": "Invalid history snapshot."}
+        source = self.history / snapshot_name
+        if not source.is_file():
+            return {"ok": False, "error": "History snapshot not found."}
+        before = self._snapshot_manifest("before-history-restore")
+        shutil.copy2(source, self.manifest_path)
+        return {
+            "ok": True,
+            "restored": snapshot_name,
+            "backupOfCurrent": before,
+            "history": self.list_history(),
+        }
 
     @staticmethod
     def _write_json(path: Path, data: dict) -> None:
@@ -513,21 +564,102 @@ class LibraryV2:
         return {"ok": True, "archived": archived, "archiveDir": arch_dir.name, "dryRun": False}
 
     # ---- edits -----------------------------------------------------------
-    def update_component(self, comp_id: str, patch: dict) -> dict:
-        manifest = self._read_manifest()
+    @staticmethod
+    def _apply_component_patch(manifest: dict, comp_id: str, patch: dict) -> dict:
         comp = next((c for c in manifest["components"] if c.get("id") == comp_id), None)
         if comp is None:
-            # Component-builder-export items are not stored in the manifest; create
-            # a sparse OVERRIDE entry keyed by the export id so edits persist and
-            # overlay the export on the next load().
             comp = {"id": comp_id, "origin": "override"}
             manifest["components"].append(comp)
         for key, val in patch.items():
             if key in EDITABLE_FIELDS:
                 comp[key] = val
         comp["updatedAt"] = _now()
+        return comp
+
+    def update_component(self, comp_id: str, patch: dict) -> dict:
+        manifest = self._read_manifest()
+        snapshot = self._snapshot_manifest(f"component-{comp_id}")
+        comp = self._apply_component_patch(manifest, comp_id, patch)
         self._write_manifest(manifest)
-        return {"ok": True, "component": comp}
+        return {"ok": True, "component": comp, "snapshot": snapshot}
+
+    def batch_update_components(self, updates: list[dict], reason: str = "batch-edit") -> dict:
+        if not isinstance(updates, list) or not updates:
+            return {"ok": False, "error": "updates array is required."}
+
+        manifest = self._read_manifest()
+        snapshot = self._snapshot_manifest(reason)
+        changed: list[dict] = []
+        for item in updates:
+            if not isinstance(item, dict):
+                continue
+            comp_id = str(item.get("id") or "").strip()
+            patch = item.get("patch")
+            if not comp_id or not isinstance(patch, dict):
+                continue
+            changed.append(self._apply_component_patch(manifest, comp_id, patch))
+
+        if not changed:
+            return {"ok": False, "error": "No valid component updates were provided."}
+
+        self._write_manifest(manifest)
+        return {
+            "ok": True,
+            "updated": len(changed),
+            "components": changed,
+            "snapshot": snapshot,
+            "history": self.list_history(),
+        }
+
+    def repair_accidental_legend_bulk(self) -> dict:
+        manifest = self._read_manifest()
+        components = [c for c in manifest.get("components", []) if isinstance(c, dict)]
+        legend_overrides = [c for c in components if str(c.get("category") or "").lower() == "legends"]
+        suspicious_min = max(20, int(max(1, len(components)) * 0.60))
+        if len(legend_overrides) < suspicious_min:
+            return {
+                "ok": True,
+                "repaired": False,
+                "reason": f"only {len(legend_overrides)} of {len(components)} manifest entries are Legends",
+            }
+
+        export = self._load_builder_export() or []
+        export_by_id = {str(c.get("id") or ""): c for c in export}
+        snapshot = self._snapshot_manifest("before-accidental-legends-repair")
+        restored = 0
+
+        for comp in legend_overrides:
+            comp_id = str(comp.get("id") or "")
+            original = export_by_id.get(comp_id)
+            if comp.get("origin") == "override" and original:
+                original_category = str(original.get("category") or "custom").lower()
+                if original_category != "legends":
+                    comp.pop("category", None)
+                    comp.pop("categories", None)
+                    comp["updatedAt"] = _now()
+                    restored += 1
+                    continue
+
+            source = str(comp.get("sourceFile") or "").replace(chr(92), "/")
+            parts = [part for part in source.split("/") if part]
+            path_category = ""
+            if len(parts) >= 2 and parts[0].lower() == "components":
+                path_category = parts[1].lower()
+            if path_category in LIBRARY_CATEGORIES and path_category != "legends":
+                comp["category"] = path_category
+                comp["categories"] = [path_category]
+                comp["updatedAt"] = _now()
+                restored += 1
+
+        if restored:
+            self._write_manifest(manifest)
+        return {
+            "ok": True,
+            "repaired": bool(restored),
+            "restored": restored,
+            "snapshot": snapshot,
+            "reason": "restored from builder export and component paths" if restored else "no safe original category source found",
+        }
 
     def rename_file_to_display(self, comp_id: str) -> dict:
         """Explicit action: rename source (+thumb/symbol) to the display name."""

@@ -266,6 +266,8 @@ export interface CanvasSelection {
   pointsCount?: number;
   label?: string;
   isImage?: boolean;
+  isGroup?: boolean;
+  isLegend?: boolean;
   pdfSource?: string;
   pdfPage?: number;
   pdfDpi?: number;

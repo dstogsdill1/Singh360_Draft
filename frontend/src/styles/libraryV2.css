@@ -454,3 +454,24 @@
   .libv2-grid { max-height: 42vh; }
 }
 /* === S360 COMPONENT SIDEBAR FIT V8 END === */
+
+/* Library safety: make staged-but-unsaved bulk edits impossible to miss. */
+.libv2-unsaved-warning {
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid #d7b56d;
+  border-bottom: 1px solid #d7b56d;
+  background: #fff7df;
+  color: #5b4300;
+  font-size: 12px;
+}
+.libv2-unsaved-warning.danger {
+  background: #fff0f0;
+  border-color: #d97a7a;
+  color: #7a1616;
+}
+.libv2-dashboard-actions button:disabled,
+.libv2-bulkbar button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}

@@ -1051,6 +1051,26 @@ def lib2_update_component(comp_id: str):
     return jsonify(result), (200 if result.get("ok") else 404)
 
 
+@app.post("/api/lib/components/batch")
+def lib2_batch_update_components():
+    body = request.get_json(silent=True) or {}
+    updates = body.get("updates") or []
+    reason = str(body.get("reason") or "dashboard-batch-edit")
+    result = lib2.batch_update_components(updates, reason=reason)
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
+@app.get("/api/lib/history")
+def lib2_history():
+    return jsonify({"ok": True, "history": lib2.list_history()})
+
+
+@app.post("/api/lib/history/<snapshot_name>/restore")
+def lib2_restore_history(snapshot_name: str):
+    result = lib2.restore_history(snapshot_name)
+    return jsonify(result), (200 if result.get("ok") else 404)
+
+
 @app.post("/api/lib/components/<comp_id>/duplicate")
 def lib2_duplicate_component(comp_id: str):
     result = lib2.duplicate_component(comp_id)

@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  batchUpdateLibV2Components,
   cleanLibV2PhysicalDuplicates,
   duplicateLibV2Component,
   getLibV2,
   libV2AssetUrl,
+  listLegendTemplates,
+  listLibV2History,
   migrateLegacyLibV2,
   rebuildLibV2Thumbnails,
   refreshLibV2,
   replaceLibV2Asset,
+  restoreLibV2History,
   updateLibV2Component,
+  type LegendTemplateEntry,
   type LibV2Component,
   type LibV2Data,
+  type LibV2HistoryEntry,
 } from '../api/client';
 import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
 import '../styles/libraryV2.css';
@@ -24,6 +30,7 @@ interface Props {
   ) => void;
   canInsert: boolean;
   activePageType?: string;
+  onOpenLegendEditor?: () => void;
 }
 
 type ViewRep = 'source' | 'edge' | 'bw';
@@ -275,7 +282,7 @@ function CardPreview({ c, rep, small = false }: { c: LibV2Component; rep: ViewRe
   );
 }
 
-export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: Props) {
+export default function LibraryPanelV2({ onInsert, canInsert, activePageType, onOpenLegendEditor }: Props) {
   const [data, setData] = useState<LibV2Data | null>(null);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
@@ -300,6 +307,10 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
   const [bulkCollection, setBulkCollection] = useState('');
   const [bulkStatus, setBulkStatus] = useState('');
 
+  const [legendTemplates, setLegendTemplates] = useState<LegendTemplateEntry[]>([]);
+  const [libraryHistory, setLibraryHistory] = useState<LibV2HistoryEntry[]>([]);
+  const [bulkUndo, setBulkUndo] = useState<Record<string, Partial<AnyComp>> | null>(null);
+
   const replaceSourceRef = useRef<HTMLInputElement>(null);
   const replaceEdgeRef = useRef<HTMLInputElement>(null);
   const replaceBwRef = useRef<HTMLInputElement>(null);
@@ -308,8 +319,14 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
   const load = async (includeLegacy = true) => {
     setLoading(true);
     try {
-      const lib = await getLibV2(includeLegacy);
+      const [lib, legends, history] = await Promise.all([
+        getLibV2(includeLegacy),
+        listLegendTemplates(),
+        listLibV2History(),
+      ]);
       setData(lib);
+      setLegendTemplates(legends);
+      setLibraryHistory(history);
       setSelectedId((prev) => prev || lib.components?.[0]?.id || '');
     } finally {
       setLoading(false);
@@ -461,37 +478,94 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
     }
   };
 
+  const reloadFromDisk = async () => {
+    if (dirtyIds.length && !window.confirm(
+      `Discard ${dirtyIds.length} unsaved component edit${dirtyIds.length === 1 ? '' : 's'} and reload the saved library?`,
+    )) return;
+    setEdits({});
+    setBulkUndo(null);
+    setSelectedIds([]);
+    setBulkCategory('');
+    setBulkCollection('');
+    setBulkStatus('');
+    await doRefresh();
+  };
+
+  const discardStagedEdits = () => {
+    if (!dirtyIds.length) return;
+    if (!window.confirm(`Discard all ${dirtyIds.length} unsaved edits? Nothing saved on disk will change.`)) return;
+    setBulkUndo(structuredClone(edits));
+    setEdits({});
+    setBulkCategory('');
+    setBulkCollection('');
+    setBulkStatus('');
+  };
+
+  const undoStagedBulk = () => {
+    if (!bulkUndo) return;
+    setEdits(bulkUndo);
+    setBulkUndo(null);
+  };
+
+  const undoLastSavedLibraryChange = async () => {
+    const latest = libraryHistory[0];
+    if (!latest) {
+      window.alert('No saved library history exists yet.');
+      return;
+    }
+    if (!window.confirm(
+      `Restore the library to the snapshot from ${latest.savedAt}?\n\n${latest.reason}\n\nThe current manifest will be backed up first.`,
+    )) return;
+    setLoading(true);
+    try {
+      await restoreLibV2History(latest.name);
+      setEdits({});
+      setBulkUndo(null);
+      setSelectedIds([]);
+      await load(showLegacyItems);
+      window.alert('The last saved library change was undone.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const saveDirty = async () => {
     const ids = Object.keys(edits).filter((id) => Object.keys(edits[id] || {}).length);
     if (!ids.length) return;
 
+    if (ids.length > 10 && !window.confirm(
+      `Save ${ids.length} component edits to disk?
+
+One automatic undo snapshot will be created first.`,
+    )) return;
+
+    const updates = ids.map((id) => {
+      const patch = { ...edits[id] } as AnyComp;
+      if (Object.prototype.hasOwnProperty.call(patch, 'aliases')) patch.aliases = csvToArray(patch.aliases);
+      if (Object.prototype.hasOwnProperty.call(patch, 'tags')) patch.tags = csvToArray(patch.tags);
+      if (Object.prototype.hasOwnProperty.call(patch, 'categories')) patch.categories = csvToArray(patch.categories);
+      if (patch.status === 'retired' || patch.status === 'duplicate' || patch.status === 'junk') {
+        patch.retired = true;
+      } else if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
+        patch.retired = false;
+      }
+      return { id, patch };
+    });
+
     setLoading(true);
     try {
-      for (const id of ids) {
-        const patch = { ...edits[id] } as AnyComp;
-
-        if (Object.prototype.hasOwnProperty.call(patch, 'aliases')) {
-          patch.aliases = csvToArray(patch.aliases);
-        }
-        if (Object.prototype.hasOwnProperty.call(patch, 'tags')) {
-          patch.tags = csvToArray(patch.tags);
-        }
-        if (Object.prototype.hasOwnProperty.call(patch, 'categories')) {
-          patch.categories = csvToArray(patch.categories);
-        }
-
-        if (patch.status === 'retired' || patch.status === 'duplicate' || patch.status === 'junk') {
-          patch.retired = true;
-        } else if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
-          patch.retired = false;
-        }
-
-        await updateLibV2Component(id, patch as any);
-      }
-
+      const result = await batchUpdateLibV2Components(
+        updates,
+        `dashboard-save-${ids.length}-components`,
+      );
       setEdits({});
-      await doRefresh();
-      window.alert(`Saved ${ids.length} component edits.`);
+      setBulkUndo(null);
+      setSelectedIds([]);
+      await load(showLegacyItems);
+      window.alert(
+        `Saved ${result.updated} component edits.
+Undo snapshot: ${result.snapshot || 'created'}`,
+      );
     } finally {
       setLoading(false);
     }
@@ -513,14 +587,36 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
 
   const applyBulk = () => {
     if (!selectedIds.length) return;
-    const selectedSet = new Set(selectedIds);
+    if (!bulkCategory && !bulkCollection && !bulkStatus) {
+      window.alert('Choose a bulk category, collection, or status first.');
+      return;
+    }
 
+    const changes = [
+      bulkCategory ? `category = ${niceCategoryLabel(bulkCategory)}` : '',
+      bulkCollection ? `collection = ${bulkCollection}` : '',
+      bulkStatus ? `status = ${bulkStatus || 'blank'}` : '',
+    ].filter(Boolean).join(', ');
+
+    if (selectedIds.length > 10 && !window.confirm(
+      `Stage bulk changes for ${selectedIds.length} selected components?
+
+${changes}
+
+This is NOT saved until you click Save All Edits.`,
+    )) return;
+
+    setBulkUndo(structuredClone(edits));
+    const selectedSet = new Set(selectedIds);
     setEdits((prev) => {
       const next = { ...prev };
       for (const c of components) {
         if (!selectedSet.has(c.id)) continue;
         const row = { ...(next[c.id] || {}) } as AnyComp;
-        if (bulkCategory) { row.category = bulkCategory; row.categories = Array.from(new Set([bulkCategory, ...categoriesFor(c)])); }
+        if (bulkCategory) {
+          row.category = bulkCategory;
+          row.categories = Array.from(new Set([bulkCategory, ...categoriesFor(c)]));
+        }
         if (bulkCollection) row.collection = bulkCollection;
         if (bulkStatus) {
           row.status = bulkStatus;
@@ -534,6 +630,10 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
 
   const normalizeSelectedNames = () => {
     if (!selectedIds.length) return;
+    if (selectedIds.length > 10 && !window.confirm(
+      `Stage cleaned display names for ${selectedIds.length} selected components?`,
+    )) return;
+    setBulkUndo(structuredClone(edits));
     const selectedSet = new Set(selectedIds);
 
     setEdits((prev) => {
@@ -714,7 +814,9 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
                 <span className="libv2-dashboard-sub">One-screen rename, categorize, approve, retire, and insert.</span>
               </div>
               <div className="libv2-dashboard-actions">
-                <button onClick={() => void doRefresh()} disabled={loading}>Reload</button>
+                <button onClick={() => { setShowDashboard(false); onOpenLegendEditor?.(); }} disabled={loading} title="Open saved editable legend templates">Legends ({legendTemplates.length})</button>
+                <button onClick={() => void undoLastSavedLibraryChange()} disabled={!libraryHistory.length || loading}>Undo Last Save</button>
+                <button onClick={() => void reloadFromDisk()} disabled={loading}>Reload / Discard</button>
                 <button className="primary" onClick={() => void saveDirty()} disabled={!dirtyIds.length || loading}>Save All Edits ({dirtyIds.length})</button>
                 <button onClick={() => setShowDashboard(false)}>Close</button>
               </div>
@@ -759,9 +861,17 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType }: 
               <span>Active source: <strong>{showLegacyItems ? 'legacy included' : 'normal'}</strong></span>
             </div>
 
+            {dirtyIds.length > 0 && (
+              <div className={`libv2-unsaved-warning ${dirtyIds.length > 20 ? 'danger' : ''}`}>
+                <strong>{dirtyIds.length} unsaved edit{dirtyIds.length === 1 ? '' : 's'}.</strong> Nothing has changed on disk until you click <strong>Save All Edits</strong>.
+              </div>
+            )}
+
             <div className="libv2-bulkbar">
-              <button onClick={selectVisible}>Select Visible</button>
+              <button onClick={selectVisible}>Select Visible ({dashboardRows.length})</button>
               <button onClick={clearSelected}>Clear Selected</button>
+              <button onClick={undoStagedBulk} disabled={!bulkUndo}>Undo Staged Bulk</button>
+              <button onClick={discardStagedEdits} disabled={!dirtyIds.length}>Discard Unsaved</button>
               <select value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} title="Bulk category">
                 <option value="">Bulk category…</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}

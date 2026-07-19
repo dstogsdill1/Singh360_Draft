@@ -20,16 +20,17 @@ import { SYMBOL_SIZE_SMALL } from '../model/symbolSizing';
 interface Props {
   onInsert: (config: SymbolLegendInsertConfig) => void;
   onClose: () => void;
+  initialTemplateId?: string;
 }
 
 function repUrl(c: LibV2Component): string {
   return c.bwUrl || c.edgeUrl || c.thumbnailUrl || c.sourceUrl || (c.bwFile ? libV2AssetUrl(c.bwFile) : '');
 }
 
-export default function SymbolLegendModal({ onInsert, onClose }: Props) {
+export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId }: Props) {
   const [components, setComponents] = useState<LibV2Component[]>([]);
   const [savedTemplates, setSavedTemplates] = useState<LegendTemplateEntry[]>([]);
-  const [templateId, setTemplateId] = useState(BUILTIN_SYMBOL_LEGEND_TEMPLATES[0].id);
+  const [templateId, setTemplateId] = useState(initialTemplateId || BUILTIN_SYMBOL_LEGEND_TEMPLATES[0].id);
   const [title, setTitle] = useState('SYMBOL LEGEND');
   const [rows, setRows] = useState<SymbolLegendRowDraft[]>([]);
   const [search, setSearch] = useState('');
@@ -140,11 +141,17 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
   };
 
   const handleSaveTemplate = async () => {
-    const name = window.prompt('Template name:', title || 'Symbol Legend');
+    const existing = savedTemplates.find((template) => template.id === templateId);
+    const name = window.prompt(
+      existing ? 'Update legend template name:' : 'Template name:',
+      existing?.name || title || 'Symbol Legend',
+    );
     if (!name?.trim()) return;
-    await saveLegendTemplate({
+
+    const savedEntry = await saveLegendTemplate({
+      id: existing?.id,
       name: name.trim(),
-      category: templateId,
+      category: existing?.category || templateId,
       title,
       rows: rows.map((r) => ({
         id: r.id,
@@ -162,7 +169,8 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
     });
     const saved = await listLegendTemplates();
     setSavedTemplates(saved);
-    window.alert('Legend template saved.');
+    if (savedEntry?.id) setTemplateId(savedEntry.id);
+    window.alert(existing ? 'Legend template updated.' : 'Legend template saved.');
   };
 
   const handleDeleteTemplate = async () => {
@@ -204,7 +212,7 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Insert Symbol Legend</h2>
+          <h2>Manage / Insert Symbol Legend</h2>
           <button className="modal-x" onClick={onClose} title="Close">×</button>
         </div>
         <div className="modal-body">
@@ -241,7 +249,9 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
             <button type="button" className="btn btn-sm" onClick={selectAll}>Select All</button>
             <button type="button" className="btn btn-sm" onClick={clearAll}>Clear All</button>
             <button type="button" className="btn btn-sm" onClick={addBlankRow}>Add Row</button>
-            <button type="button" className="btn btn-sm" onClick={() => void handleSaveTemplate()}>Save Current Legend as Template</button>
+            <button type="button" className="btn btn-sm" onClick={() => void handleSaveTemplate()}>
+              {savedTemplates.some((template) => template.id === templateId) ? 'Update Saved Legend' : 'Save Current Legend as Template'}
+            </button>
             <button type="button" className="btn btn-sm" onClick={() => void handleDeleteTemplate()}>Delete Template</button>
           </div>
           <div className="sym-legend-preview">
