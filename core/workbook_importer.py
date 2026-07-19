@@ -82,6 +82,20 @@ def _norm(v: Any) -> str:
     return "" if text.lower() in {"nan", "nat", "<na>", "none"} else text
 
 
+def _display_cell_value(value: Any, number_format: str = "") -> str:
+    """Render Excel values without inventing a trailing .0.
+
+    Integral floats imported under General/integer formats display as whole
+    numbers. Explicit decimal formats such as 0.0 or 0.00 are preserved.
+    """
+    if isinstance(value, float) and value.is_integer():
+        fmt = str(number_format or "").split(";", 1)[0]
+        explicit_decimal = re.search(r"[.][0#?]", fmt) is not None
+        if not explicit_decimal:
+            return str(int(value))
+    return _norm(value)
+
+
 def _normalized_sheet_key(name: str) -> str:
     return (name or "").replace(" ", "").replace("_", "").upper()
 
@@ -285,7 +299,7 @@ def _worksheet_payload(ws, ws_data=None) -> dict[str, Any]:
                 formulas[f"{col_letter}{r}"] = raw_value
                 cached = ws_data.cell(r, c).value if ws_data is not None else None
                 display = cached if cached is not None else ""
-            value = _norm(display)
+            value = _display_cell_value(display, getattr(cell, "number_format", ""))
             row_vals.append(value)
             if isinstance(cell, MergedCell):
                 # Placeholder cell in a merged range — keep grid value, skip style extraction.

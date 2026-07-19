@@ -3,6 +3,11 @@ import type { MergedCell, Worksheet } from '../../model/types';
 import { HIGHLIGHT_SWATCHES } from '../../model/tableStyle';
 import { BODY_W } from '../../model/sheetGeometry';
 import {
+  applySourceNumberAction,
+  formatSourceSelectionLabel,
+  type SourceNumberAction,
+} from '../../model/sourceNumberFormat';
+import {
   colLetter,
   a1,
   wsSetCell,
@@ -245,6 +250,12 @@ export default function RawGridRenderer({
     if (cells.length) commit(wsSetStyle(worksheet, cells, patch));
   };
 
+  const applyNumberAction = (action: SourceNumberAction) => {
+    const cells = selCells();
+    if (!cells.length) return;
+    commit({ grid: applySourceNumberAction(grid, cells, action) });
+  };
+
   const anchorRow = () => (sel ? norm(sel).r0 : 0);
   const anchorCol = () => (sel ? norm(sel).c0 : 0);
 
@@ -389,6 +400,8 @@ export default function RawGridRenderer({
   const colWidth = (c: number) => displayColWidths[c] ?? DEFAULT_SOURCE_COL_W;
   const rowHeight = (r: number) => rowHeightsPx[r] ?? WS_MIN_ROW_H + 4;
 
+  const selectionLabel = formatSourceSelectionLabel(selCells());
+
   return (
     <div className="gx-wrap" tabIndex={0} onKeyDown={onWrapKeyDown}>
       <div className="gx-toolbar">
@@ -430,6 +443,18 @@ export default function RawGridRenderer({
         {tb('Wrap', () => applyStyle({ wrap: true }))}
         {tb('No Wrap', () => applyStyle({ wrap: false }))}
         <span className="gx-tb-sep" />
+        <span className="gx-tb-label">Number:</span>
+        {tb('General', () => applyNumberAction('general'), 'Remove currency, commas, percent styling, and unnecessary trailing zeroes')}
+        {tb('0 Dec', () => applyNumberAction('zero-decimals'), 'Round selected numeric cells to whole numbers; 1.0 becomes 1')}
+        {tb('Dec −', () => applyNumberAction('decrease-decimal'), 'Decrease decimal places by one')}
+        {tb('Dec +', () => applyNumberAction('increase-decimal'), 'Increase decimal places by one')}
+        {tb('Comma', () => applyNumberAction('comma'), 'Apply thousands separators')}
+        {tb('$', () => applyNumberAction('currency'), 'Format selected numeric cells as US currency')}
+        {tb('%', () => applyNumberAction('percent'), 'Format selected numeric cells as percentages')}
+        {tb('×10', () => applyNumberAction('multiply-10'), 'Move the decimal one place right')}
+        {tb('÷10', () => applyNumberAction('divide-10'), 'Move the decimal one place left')}
+        {tb('Trim', () => applyNumberAction('trim'), 'Trim extra spaces in selected cells')}
+        <span className="gx-tb-sep" />
         {tb('Bold', () => applyStyle({ bold: true }))}
         {tb('Italic', () => applyStyle({ italic: true }))}
         <select
@@ -459,6 +484,9 @@ export default function RawGridRenderer({
         {onExportSource ? (
           tb('Export Sheet', onExportSource, 'Export current source worksheet as .xlsx')
         ) : null}
+        <span className="gx-selection-status" title="Current Source selection">
+          {selectionLabel}
+        </span>
       </div>
 
       <table className="grid-table gx-table" style={{ tableLayout: 'fixed', width: sourceTableWidth }}>

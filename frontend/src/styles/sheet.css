@@ -441,6 +441,18 @@
   color: #222;
 }
 .gx-btn:hover { background: #eef1f4; }
+.gx-selection-status {
+  margin-left: auto;
+  padding: 3px 8px;
+  border: 1px solid #b8c6d8;
+  border-radius: 4px;
+  background: #edf4fc;
+  color: #244f7d;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .gx-table { table-layout: auto; }
 .gx-corner, .gx-colhead, .gx-rowhead {
   background: #eceef1;
