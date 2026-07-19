@@ -241,6 +241,7 @@ export interface ProjectModel {
   modified?: string;
   projectFolder?: string;
   projectDisplayName?: string;
+  sourceWorkbookName?: string;
   paginationLocked?: boolean;
   revisionHistory?: Array<{ revision: string; date: string; description?: string; exportedBy?: string }>;
 }

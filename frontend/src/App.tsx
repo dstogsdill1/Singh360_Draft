@@ -1747,7 +1747,7 @@ export default function App() {
             </div>
             <div className="field">
               <label htmlFor="proj-file" title="Original uploaded workbook filename (read-only)">Source Workbook</label>
-              <input id="proj-file" title="Original uploaded workbook filename (read-only)" value={project.metadata.sourceFile || ''} readOnly />
+              <input id="proj-file" title="Original uploaded workbook filename (read-only)" value={project.sourceWorkbookName || project.metadata.sourceFile || ''} readOnly />
             </div>
           </div>
           <PropertiesPanel
