@@ -1173,10 +1173,54 @@ def self_test() -> None:
     print("[OK] Synthetic LCP panel migration self-test")
 
 
+def _already_migrated_report(project: dict[str, Any]) -> dict[str, Any] | None:
+    """Return a verification report when the desired independent pages already exist.
+
+    This makes the one-time BAT safe to run twice. An old broken duplicate group
+    (EMS 16.0 plus EMS 16.0a, both containing the same range) does not pass this
+    check because Controller 602 must live on a separate EMS 16.1+ page and must
+    not still be present on EMS 16.0.
+    """
+    try:
+        report = verify_migration(project)
+    except Exception:
+        return None
+
+    pages = sorted(
+        [
+            page
+            for page in project.get("pages") or []
+            if _norm(page.get("sheetCode")).startswith("ems 16.")
+            and "lcp" in _norm(page.get("sheetTitle"))
+        ],
+        key=lambda page: int(page.get("order") or 0),
+    )
+    codes = [str(page.get("sheetCode") or "") for page in pages]
+    worksheet_ids = [str(page.get("linkedWorksheetId") or "") for page in pages]
+    if "EMS 16.0" not in codes or not any(code.startswith("EMS 16.1") for code in codes):
+        return None
+    if len(set(worksheet_ids)) != len(worksheet_ids):
+        return None
+
+    return {**report, "alreadyMigrated": True}
+
+
 def apply_to_repo(repo: Path, project_id: str) -> dict[str, Any]:
     project_dir = _find_project_dir(repo, project_id)
     project_path = project_dir / "project.json"
     project = json.loads(project_path.read_text(encoding="utf-8"))
+
+    existing = _already_migrated_report(project)
+    if existing is not None:
+        existing.update(
+            {
+                "projectId": project_id,
+                "projectPath": str(project_path),
+                "backupPath": "",
+                "timestamp": _now(),
+            }
+        )
+        return existing
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup_dir = repo / ".docs" / "patch_backups" / f"lcp_panel_split_{project_id}_{stamp}"
@@ -1194,9 +1238,13 @@ def apply_to_repo(repo: Path, project_id: str) -> dict[str, Any]:
             "projectPath": str(project_path),
             "backupPath": str(backup_dir / "project.json"),
             "timestamp": _now(),
+            "alreadyMigrated": False,
         }
     )
-    (backup_dir / "migration_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    (backup_dir / "migration_report.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     return report
 
 
