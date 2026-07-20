@@ -99,6 +99,8 @@ export interface PageBlock {
    *  same factor, which can overflow the page's real safe render area for a
    *  narrow table and silently drop bottom rows in export. */
   noGrow?: boolean;
+  /** Optional per-block scale ceiling. Used to keep sibling schedule pages at one visual scale. */
+  maxScale?: number;
   /** RDM / IDF network table (idfNetworkTable) payload — TABLE STYLE 4F. */
   layoutMode?: 'single' | 'two_up';
   sectionTitle?: string;

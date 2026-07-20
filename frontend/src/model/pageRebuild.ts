@@ -32,7 +32,7 @@ export function rebuildSinglePageFromSource(page: PageModel, ws: Worksheet): Pag
 
   if (page.renderMode === 'excel_exact') {
     const existing = (page.blocks ?? [])[0];
-    if (existing?.type === 'excelRange' && existing.srcRows && !page.generatedContinuation) {
+    if (existing?.type === 'excelRange' && existing.srcRows) {
       return refreshPageFromSource(page, ws);
     }
     const full = buildExcelRangeBlock(ws, `${ws.id}_xr`);

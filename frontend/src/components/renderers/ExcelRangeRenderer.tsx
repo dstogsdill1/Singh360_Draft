@@ -190,7 +190,11 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
       const h = table.scrollHeight || 1;
       const sw = availW / w;
       const sh = availH / h;
-      const growCap = block.noGrow ? 1 : GROW_CAP;
+      const configuredMaxScale = Number(block.maxScale ?? GROW_CAP);
+      const growCap = Math.min(
+        block.noGrow ? 1 : GROW_CAP,
+        Number.isFinite(configuredMaxScale) ? configuredMaxScale : GROW_CAP,
+      );
       const scale =
         scaleMode === 'fit_width'
           ? Math.min(growCap, sw)
@@ -212,7 +216,7 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
       ro.disconnect();
       cancelAnimationFrame(raf);
     };
-  }, [naturalW, nRows, nCols, scaleMode, grid, reservedTop, block.noGrow]);
+  }, [naturalW, nRows, nCols, scaleMode, grid, reservedTop, block.noGrow, block.maxScale]);
 
   if (!nRows || !nCols) {
     return <div className="np np-empty">No source range data.</div>;
