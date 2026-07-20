@@ -122,25 +122,44 @@ export default function RawGridRenderer({
   const colWidthsPx = worksheet?.colWidthsPx ?? [];
   const rowHeightsPx = worksheet?.rowHeightsPx ?? [];
 
+  const hiddenRows = useMemo(() => new Set(worksheet?.hiddenRows ?? []), [worksheet?.hiddenRows]);
+  const hiddenColumns = useMemo(() => new Set(worksheet?.hiddenColumns ?? []), [worksheet?.hiddenColumns]);
+  const hiddenCells = useMemo(() => new Set(worksheet?.hiddenCells ?? []), [worksheet?.hiddenCells]);
+
   const nCols = useMemo(
     () => Math.max(1, ...(grid.length ? grid.map((r) => r.length) : [1])),
     [grid],
   );
 
+  const visibleRows = useMemo(() => {
+    const rows = grid.map((_, row) => row).filter((row) => !hiddenRows.has(row));
+    return rows.length ? rows : (grid.length ? [0] : []);
+  }, [grid, hiddenRows]);
+
+  const visibleCols = useMemo(() => {
+    const cols = Array.from({ length: nCols }, (_, col) => col).filter((col) => !hiddenColumns.has(col));
+    return cols.length ? cols : [0];
+  }, [nCols, hiddenColumns]);
+
+  const visibleGridRows = useMemo(
+    () => visibleRows.map((r) => ({ r, row: grid[r] ?? [] })),
+    [visibleRows, grid],
+  );
+
   const displayColWidths = useMemo(() => {
     const widths = Array.from({ length: nCols }, (_, c) => colWidthsPx[c] ?? DEFAULT_SOURCE_COL_W);
-    const storedWidth = widths.reduce((sum, width) => sum + width, 0);
-    if (widths.length && storedWidth < SOURCE_DATA_WIDTH) {
-      let flexColumn = 0;
-      for (let c = 1; c < widths.length; c += 1) {
-        if (widths[c] > widths[flexColumn]) flexColumn = c;
+    const storedWidth = visibleCols.reduce((sum, col) => sum + widths[col], 0);
+    if (visibleCols.length && storedWidth < SOURCE_DATA_WIDTH) {
+      let flexColumn = visibleCols[0];
+      for (const col of visibleCols.slice(1)) {
+        if (widths[col] > widths[flexColumn]) flexColumn = col;
       }
       widths[flexColumn] += SOURCE_DATA_WIDTH - storedWidth;
     }
     return widths;
-  }, [colWidthsPx, nCols]);
+  }, [colWidthsPx, nCols, visibleCols]);
 
-  const sourceTableWidth = 36 + displayColWidths.reduce((sum, width) => sum + width, 0);
+  const sourceTableWidth = 36 + visibleCols.reduce((sum, col) => sum + displayColWidths[col], 0);
 
   const [sel, setSel] = useState<Rect | null>(null);
   const [toggleCells, setToggleCells] = useState<Set<string>>(new Set());
@@ -402,6 +421,67 @@ export default function RawGridRenderer({
 
   const selectionLabel = formatSourceSelectionLabel(selCells());
 
+  const hideColumns = () => {
+    const rect = selRect();
+    if (!rect || !worksheet) return;
+    const selected = Array.from(
+      { length: rect.c1 - rect.c0 + 1 },
+      (_, index) => rect.c0 + index,
+    );
+    const next = new Set(worksheet.hiddenColumns ?? []);
+    selected.forEach((col) => next.add(col));
+    if (next.size >= nCols) {
+      window.alert('At least one source column must remain visible.');
+      return;
+    }
+    commit({ hiddenColumns: [...next].sort((a, b) => a - b) }, true);
+    setSel(null);
+  };
+
+  const hideRows = () => {
+    const rect = selRect();
+    if (!rect || !worksheet) return;
+    const selected = Array.from(
+      { length: rect.r1 - rect.r0 + 1 },
+      (_, index) => rect.r0 + index,
+    );
+    const next = new Set(worksheet.hiddenRows ?? []);
+    selected.forEach((row) => next.add(row));
+    if (next.size >= grid.length) {
+      window.alert('At least one source row must remain visible.');
+      return;
+    }
+    commit({ hiddenRows: [...next].sort((a, b) => a - b) }, true);
+    setSel(null);
+  };
+
+  const hideSelectedCells = () => {
+    if (!worksheet) return;
+    const cells = selCells();
+    if (!cells.length) return;
+    const next = new Set(worksheet.hiddenCells ?? []);
+    cells.forEach(({ r, c }) => next.add(cellKey(r, c)));
+    commit({ hiddenCells: [...next].sort() }, true);
+    setSel(null);
+    setToggleCells(new Set());
+  };
+
+  const unhideAll = () => {
+    if (!worksheet) return;
+    if (
+      !(worksheet.hiddenRows?.length)
+      && !(worksheet.hiddenColumns?.length)
+      && !(worksheet.hiddenCells?.length)
+    ) return;
+    commit({ hiddenRows: [], hiddenColumns: [], hiddenCells: [] }, true);
+  };
+
+  const hiddenSummary = [
+    worksheet?.hiddenColumns?.length ? `${worksheet.hiddenColumns.length} col` : '',
+    worksheet?.hiddenRows?.length ? `${worksheet.hiddenRows.length} row` : '',
+    worksheet?.hiddenCells?.length ? `${worksheet.hiddenCells.length} cell` : '',
+  ].filter(Boolean).join(' / ');
+
   return (
     <div className="gx-wrap" tabIndex={0} onKeyDown={onWrapKeyDown}>
       <div className="gx-toolbar">
@@ -429,6 +509,14 @@ export default function RawGridRenderer({
         {tb('Del Row', () => commit(wsDeleteRow(worksheet, anchorRow()), true), 'Delete selected row')}
         {tb('Ins Col', () => commit(wsInsertCol(worksheet, anchorCol()), true), 'Insert column left of selection')}
         {tb('Del Col', deleteColumn, 'Delete selected column')}
+        <span className="gx-tb-sep" />
+        {tb('Hide Col', hideColumns, 'Hide selected columns in Singh360 only; the Excel workbook is unchanged')}
+        {tb('Hide Row', hideRows, 'Hide selected rows in Singh360 only; the Excel workbook is unchanged')}
+        {tb('Hide Cells', hideSelectedCells, 'Hide selected cell contents in Singh360 only')}
+        {tb('Unhide All', unhideAll, 'Restore every app-hidden row, column, and cell')}
+        <span className="gx-hidden-summary" title="App-only hidden source content">
+          {hiddenSummary ? `Hidden: ${hiddenSummary}` : 'App-only visibility'}
+        </span>
         <span className="gx-tb-sep" />
         {tb('Fit Cols', autoFitCols, 'Auto-fit selected columns')}
         {tb('Fit Rows', autoFitRows, 'Auto-fit selected rows')}
@@ -492,14 +580,14 @@ export default function RawGridRenderer({
       <table className="grid-table gx-table" style={{ tableLayout: 'fixed', width: sourceTableWidth }}>
         <colgroup>
           <col style={{ width: 36 }} />
-          {displayColWidths.map((width, c) => (
-            <col key={c} style={{ width }} />
+          {visibleCols.map((c) => (
+            <col key={c} style={{ width: displayColWidths[c] }} />
           ))}
         </colgroup>
         <thead>
           <tr>
             <th className="gx-corner" />
-            {Array.from({ length: nCols }, (_, c) => (
+            {visibleCols.map((c) => (
               <th
                 key={c}
                 className="gx-colhead gx-colhead-resize"
@@ -528,7 +616,7 @@ export default function RawGridRenderer({
           </tr>
         </thead>
         <tbody>
-          {grid.map((row, r) => (
+          {visibleGridRows.map(({ row, r }) => (
             <tr key={r} style={{ height: rowHeight(r) }}>
               <th
                 className="gx-rowhead gx-rowhead-resize"
@@ -553,11 +641,12 @@ export default function RawGridRenderer({
                   }}
                 />
               </th>
-              {Array.from({ length: nCols }, (_, c) => {
+              {visibleCols.map((c) => {
                 if (covered.has(cellKey(r, c))) return null;
                 const st = styles[a1(r, c)];
                 const fill = typeof st?.fill === 'string' ? st.fill : undefined;
                 const isEditing = editing?.r === r && editing?.c === c;
+                const isAppHidden = hiddenCells.has(cellKey(r, c));
                 const span = spanAt.get(cellKey(r, c));
                 const wraps = st?.wrap === true;
                 const cellStyle: React.CSSProperties = {
@@ -577,13 +666,14 @@ export default function RawGridRenderer({
                     key={c}
                     rowSpan={span?.rs}
                     colSpan={span?.cs}
-                    className={`gx-cell ${inSel(r, c) ? 'gx-sel' : ''}`}
+                    className={`gx-cell ${inSel(r, c) ? 'gx-sel' : ''} ${isAppHidden ? 'gx-app-hidden-cell' : ''}`}
                     style={cellStyle}
                     onMouseDown={(e) => onCellMouseDown(r, c, e)}
                     onMouseEnter={() => {
                       if (draggingRef.current && sel) setSel({ ...sel, r1: r, c1: c });
                     }}
                     onDoubleClick={() => {
+                      if (isAppHidden) return;
                       setEditing({ r, c });
                       editingCellRef.current = { r, c };
                     }}
@@ -625,7 +715,9 @@ export default function RawGridRenderer({
                         }}
                       />
                     ) : (
-                      <span className={`gx-cell-text ${wraps ? 'gx-wrap' : ''}`}>{grid[r]?.[c] ?? ''}</span>
+                      <span className={`gx-cell-text ${wraps ? 'gx-wrap' : ''}`}>
+                        {isAppHidden ? '' : (grid[r]?.[c] ?? '')}
+                      </span>
                     )}
                   </td>
                 );

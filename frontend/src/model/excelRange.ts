@@ -61,6 +61,78 @@ function parseA1(key: string): { r: number; c: number } | null {
   return { c: colIndex(m[1]), r: Number(m[2]) - 1 };
 }
 
+/** Apply Singh360 app-only row/column/cell visibility before normalized render.
+ * The underlying Worksheet grid remains intact and Excel export stays unchanged.
+ */
+function applySourceVisibility(ws: Worksheet): Worksheet {
+  const sourceGrid = ws.grid ?? [];
+  const nRows = sourceGrid.length;
+  const nCols = Math.max(0, ...sourceGrid.map((row) => row.length));
+  const hiddenRows = new Set(
+    (ws.hiddenRows ?? []).filter((row) => Number.isInteger(row) && row >= 0 && row < nRows),
+  );
+  const hiddenColumns = new Set(
+    (ws.hiddenColumns ?? []).filter((col) => Number.isInteger(col) && col >= 0 && col < nCols),
+  );
+  const hiddenCells = new Set(ws.hiddenCells ?? []);
+
+  let visibleRows = Array.from({ length: nRows }, (_, row) => row).filter((row) => !hiddenRows.has(row));
+  let visibleColumns = Array.from({ length: nCols }, (_, col) => col).filter((col) => !hiddenColumns.has(col));
+
+  if (!visibleRows.length && nRows) visibleRows = [0];
+  if (!visibleColumns.length && nCols) visibleColumns = [0];
+
+  const rowMap = new Map(visibleRows.map((row, index) => [row, index]));
+  const colMap = new Map(visibleColumns.map((col, index) => [col, index]));
+
+  const grid = visibleRows.map((row) =>
+    visibleColumns.map((col) => (
+      hiddenCells.has(`${row}:${col}`) ? '' : cellText(sourceGrid[row]?.[col])
+    )),
+  );
+
+  const styles: Record<string, ExcelCellStyle> = {};
+  for (const [key, value] of Object.entries(ws.styles ?? {})) {
+    const parsed = parseA1(key);
+    if (!parsed) continue;
+    const nextRow = rowMap.get(parsed.r);
+    const nextCol = colMap.get(parsed.c);
+    if (nextRow === undefined || nextCol === undefined) continue;
+    if (hiddenCells.has(`${parsed.r}:${parsed.c}`)) continue;
+    styles[a1(nextRow, nextCol)] = value;
+  }
+
+  const mergedCells: MergedCell[] = [];
+  for (const merge of ws.mergedCells ?? []) {
+    const rows = Array.from(
+      { length: merge.endRow - merge.startRow + 1 },
+      (_, index) => merge.startRow + index,
+    );
+    const columns = Array.from(
+      { length: merge.endCol - merge.startCol + 1 },
+      (_, index) => merge.startCol + index,
+    );
+    if (!rows.every((row) => rowMap.has(row)) || !columns.every((col) => colMap.has(col))) {
+      continue;
+    }
+    mergedCells.push({
+      startRow: rowMap.get(merge.startRow) as number,
+      startCol: colMap.get(merge.startCol) as number,
+      endRow: rowMap.get(merge.endRow) as number,
+      endCol: colMap.get(merge.endCol) as number,
+    });
+  }
+
+  return {
+    ...ws,
+    grid,
+    styles,
+    mergedCells,
+    colWidthsPx: visibleColumns.map((col) => ws.colWidthsPx?.[col] ?? DEFAULT_COL),
+    rowHeightsPx: visibleRows.map((row) => ws.rowHeightsPx?.[row] ?? DEFAULT_ROW),
+  };
+}
+
 function cellText(v: unknown): string {
   return v == null ? '' : String(v);
 }
@@ -138,7 +210,8 @@ function trimTrailingBlankRanges(
 /** Build a full (unsplit) excelRange block from a worksheet. Mirrors
  *  core/workbook_importer.py::_excel_range_block. */
 export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock {
-  const src = ws.grid ?? [];
+  const visibleWs = applySourceVisibility(ws);
+  const src = visibleWs.grid ?? [];
   const nRows0 = src.length;
   const nCols0 = Math.max(0, ...src.map((r) => r.length));
   const grid0 = src.map((r) => {
@@ -148,7 +221,7 @@ export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock 
   });
 
   const stylesRc0: Record<string, ExcelCellStyle> = {};
-  for (const [key, val] of Object.entries(ws.styles ?? {})) {
+  for (const [key, val] of Object.entries(visibleWs.styles ?? {})) {
     const p = parseA1(key);
     if (p && p.r >= 0 && p.r < nRows0 && p.c >= 0 && p.c < nCols0) {
       stylesRc0[`${p.r}:${p.c}`] = val;
@@ -169,22 +242,22 @@ export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock 
   }
   if (headerRows === 0 && nRows0) headerRows = 1;
 
-  const merges0 = (ws.mergedCells ?? []).map((m) => ({ ...m }));
+  const merges0 = (visibleWs.mergedCells ?? []).map((m) => ({ ...m }));
   const trimmed = trimTrailingBlankRanges(grid0, stylesRc0, merges0, headerRows);
   const grid = trimmed.grid;
   const stylesRc = trimmed.styles;
   const nRows = grid.length;
   const nCols = Math.max(0, ...grid.map((r) => r.length));
 
-  const colWidths = Array.from({ length: nCols }, (_, c) => ws.colWidthsPx?.[c] ?? DEFAULT_COL);
-  const rowHeights = Array.from({ length: nRows }, (_, r) => ws.rowHeightsPx?.[r] ?? DEFAULT_ROW);
+  const colWidths = Array.from({ length: nCols }, (_, c) => visibleWs.colWidthsPx?.[c] ?? DEFAULT_COL);
+  const rowHeights = Array.from({ length: nRows }, (_, r) => visibleWs.rowHeightsPx?.[r] ?? DEFAULT_ROW);
 
   return {
     id: blockId,
     type: 'excelRange',
     sourceWorksheetId: ws.id,
-    sourceSheet: ws.sourceSheet || ws.name,
-    sourceRange: ws.sourceRange || '',
+    sourceSheet: visibleWs.sourceSheet || visibleWs.name,
+    sourceRange: visibleWs.sourceRange || '',
     renderMode: 'excel_exact',
     grid,
     styles: stylesRc,
@@ -440,6 +513,7 @@ function refreshCoverBlockFromWorksheet(block: PageBlock, ws: Worksheet): PageBl
 
 /** Rebuild normalized blocks for one page from its linked worksheet source grid. */
 export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel {
+  const visibleWs = applySourceVisibility(ws);
   const blocks = page.blocks ?? [];
   let nextBlocks: PageBlock[];
   if (page.renderMode === 'excel_exact') {
@@ -450,7 +524,7 @@ export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel
       if (coverIdx >= 0) {
         nextBlocks = blocks.map((b) => (b.type === 'cover' ? refreshCoverBlockFromWorksheet(b, ws) : b));
       } else {
-        const lines = (ws.grid ?? []).map((r) => rowLine(r)).filter(Boolean);
+        const lines = (visibleWs.grid ?? []).map((r) => rowLine(r)).filter(Boolean);
         nextBlocks = [
           ...blocks,
           {
@@ -469,7 +543,7 @@ export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel
       if (tableIdx < 0) {
         nextBlocks = blocks;
       } else {
-        const normalized = trimTrailingEmptyColumns(ws.grid ?? []);
+        const normalized = trimTrailingEmptyColumns(visibleWs.grid ?? []);
         const headers = (normalized[0] ?? []).map((x) => x ?? '');
         const rows = normalized.slice(1).map((r) => r.map((x) => x ?? ''));
         nextBlocks = blocks.map((b, i) => (i === tableIdx ? { ...b, headers, rows } : b));

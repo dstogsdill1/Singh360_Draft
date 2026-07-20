@@ -151,6 +151,11 @@ export interface Worksheet {
   columnWidths?: Record<string, number>;
   colWidthsPx?: number[];
   rowHeightsPx?: number[];
+  /** App-only visibility. These never alter the original Excel workbook. */
+  hiddenRows?: number[];
+  hiddenColumns?: number[];
+  /** Hidden cell coordinates use zero-based "row:column" keys. */
+  hiddenCells?: string[];
   sourceSheet?: string;
   sourceRange?: string;
   printArea?: string | null;

@@ -559,9 +559,26 @@ export default function App() {
       const worksheets = prev.worksheets.map((ws) =>
         ws.id === wsId ? { ...ws, ...patch } : ws,
       );
-      // Source edits update worksheet payload only — normalized pages refresh on
-      // explicit Rebuild This Page From Source (or when leaving Source view).
-      return { ...prev, worksheets };
+      const base = { ...prev, worksheets };
+      if (!opts?.structural) {
+        return base;
+      }
+
+      const linked = base.pages.filter((page) => page.linkedWorksheetId === wsId);
+      if (linked.some((page) => page.renderMode === 'excel_exact')) {
+        return { ...base, pages: regenerateExcelGroup(base, wsId) };
+      }
+      if (isCoverWorksheet(base, wsId)) {
+        return applyCoverSourceTruth(base, wsId);
+      }
+      const updatedWorksheet = base.worksheets.find((ws) => ws.id === wsId);
+      if (!updatedWorksheet) return base;
+      return {
+        ...base,
+        pages: base.pages.map((page) =>
+          page.linkedWorksheetId === wsId ? refreshPageFromSource(page, updatedWorksheet) : page,
+        ),
+      };
     });
   }, [setProjectSync]);
 
