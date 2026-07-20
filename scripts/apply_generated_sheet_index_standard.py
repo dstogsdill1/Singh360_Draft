@@ -364,7 +364,7 @@ CSS_BLOCK = r"""
 /* SINGH360 GENERATED INDEX STANDARD END */
 """
 
-APP_IMPORT = "import { normalizePackagePages } from './model/packageIndex';"
+APP_IMPORT = "import { isSheetIndexPage, normalizePackagePages } from './model/packageIndex';"
 
 APP_NUMBERING = """// Canonical package order + live Page X of Y. This also keeps the generated
 // Sheet Index second, moves excluded/internal pages after package pages, and
@@ -384,6 +384,20 @@ APP_SET_PROJECT = """  const setProjectSync = useCallback((updater: ProjectModel
     setProject(next);
     return next;
   }, []);"""
+
+APP_DELETE_GUARD = """  const deletePage = (id: string) => {
+    const target = projectRef.current?.pages.find((page) => page.id === id);
+    if (target && isSheetIndexPage(target)) {
+      window.alert('The Sheet Index / TOC is required and cannot be deleted. Excluded pages are removed from it automatically.');
+      return;
+    }
+    if (!window.confirm('Delete this page? This cannot be undone. (Tip: use Exclude to keep it out of the package instead.)')) return;
+    if (activePageId === id) {
+      const remaining = project?.pages.filter((p) => p.id !== id) ?? [];
+      setActivePageId(remaining[0]?.id ?? null);
+    }
+    mutatePages((pages) => pages.filter((p) => p.id !== id));
+  };"""
 
 
 class PatchError(RuntimeError):
@@ -561,10 +575,22 @@ def _replace_app(app: str) -> str:
         end += len(end_marker)
         app = app[:start] + APP_SET_PROJECT + app[end:]
 
+    if "The Sheet Index / TOC is required and cannot be deleted." not in app:
+        start = app.find("  const deletePage = (id: string) => {")
+        if start < 0:
+            raise PatchError("Could not locate deletePage in App.tsx.")
+        end_marker = "\n  };"
+        end = app.find(end_marker, start)
+        if end < 0:
+            raise PatchError("Could not locate end of deletePage in App.tsx.")
+        end += len(end_marker)
+        app = app[:start] + APP_DELETE_GUARD + app[end:]
+
     for required in (
         APP_IMPORT,
         "return normalizePackagePages(pages);",
         "pages: normalizePackagePages(rawNext.pages ?? [])",
+        "The Sheet Index / TOC is required and cannot be deleted.",
     ):
         if required not in app:
             raise PatchError(f"App.tsx verification failed: {required}")
