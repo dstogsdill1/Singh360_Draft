@@ -69,17 +69,9 @@ export function indexPageTypeLabel(page: PageModel): string {
 /** Remove importer/internal boilerplate while preserving real user-entered notes. */
 export function cleanIndexNote(page: PageModel): string {
   const note = cleanText(page.notes);
-  if (!note || note === '—' || note === '-' || note.toLowerCase() === 'nts') return '';
-  const low = note.toLowerCase();
-  const boilerplate = [
-    'internal build tracker',
-    'not exported unless intentionally included',
-    'insert/crop pdf schematic',
-    'manual plan/device location page',
-    'manual floor-plan/underlay work in app',
-    'manual layout page for singh360 draft',
-  ];
-  if (boilerplate.some((phrase) => low.includes(phrase))) return '';
+  // Published index notes must match the title block. Only truly blank/dash
+  // placeholders are suppressed; NTS and real page notes are preserved.
+  if (!note || note === '—' || note === '-') return '';
   return note;
 }
 

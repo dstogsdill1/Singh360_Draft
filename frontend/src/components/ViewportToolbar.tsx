@@ -38,16 +38,16 @@ export default function ViewportToolbar({
         {activePage.sheetTitle}
       </span>
       <span className="vt-viewmode">
-        <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Normalized</button>
-        <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Source</button>
+        <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Published</button>
+        <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Draft</button>
         {canRebuildFromSource && onRebuildFromSource ? (
           <button
             className="fit-btn"
             type="button"
             onClick={onRebuildFromSource}
-            title="Rebuild this page's normalized output from the linked source worksheet"
+            title="Rebuild this Published page from the linked Draft worksheet"
           >
-            Rebuild This Page From Source
+            Rebuild Published Page From Draft
           </button>
         ) : null}
         {canRestorePageRebuild && onRestorePageRebuild ? (

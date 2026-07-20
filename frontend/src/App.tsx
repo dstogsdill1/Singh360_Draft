@@ -1454,12 +1454,12 @@ export default function App() {
     if (!activePage?.linkedWorksheetId) return '';
     if (viewMode === 'source') {
       if (sourceCanUndo) return 'Undo available';
-      if (sourceEditStatus === 'edited' || sourceDirty) return 'Source edited';
+      if (sourceEditStatus === 'edited' || sourceDirty) return 'Draft edited';
       return '';
     }
-    if (rebuildValidationModal) return 'Rebuild failed validation — current page kept';
-    if (sourceEditStatus === 'updated') return 'Normalized updated';
-    if (sourceDirty) return 'Source edited';
+    if (rebuildValidationModal) return 'Draft rebuild failed validation — current Published page kept';
+    if (sourceEditStatus === 'updated') return 'Published updated';
+    if (sourceDirty) return 'Draft edited';
     return '';
   })();
 

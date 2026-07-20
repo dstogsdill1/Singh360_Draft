@@ -11,8 +11,8 @@ interface Props {
 /**
  * Clean generated Sheet Index / TOC.
  *
- * Normalized/PDF output is built from the CURRENT included pages. The linked
- * workbook worksheet remains untouched and fully visible/editable in Source.
+ * Published/PDF output is built from the CURRENT included pages. The linked
+ * workbook worksheet remains untouched and fully visible/editable in Draft.
  * Internal/excluded pages and internal-only columns never appear here.
  */
 export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) {
@@ -82,7 +82,6 @@ export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) 
           <tr>
             <th className="ni-pg">Page</th>
             <th className="ni-code">Sheet Code</th>
-            <th className="ni-tab">Sheet Tab</th>
             <th className="ni-title">Page Title</th>
             <th className="ni-type">Page Type</th>
             <th className="ni-notes">Notes</th>
@@ -106,7 +105,6 @@ export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) 
               >
                 {page.displaySheetCode || page.sheetCode || '—'}
               </td>
-              <td className="ni-tab">{page.sheetTab || '—'}</td>
               <td
                 className="ni-title"
                 contentEditable

@@ -646,3 +646,19 @@
   line-height: 1.05;
 }
 /* SINGH360 GENERATED INDEX STANDARD END */
+
+/* SINGH360 PUBLISHED INDEX NOTES + DRAFT LABELS START */
+/* Sheet Tab stays in Draft/source data but is intentionally omitted from the
+   Published/PDF Sheet Index. Give that space to the actual title and notes. */
+.np-index-table .ni-title { width: 370px; }
+.np-index-table .ni-type { width: 145px; }
+.np-index-table .ni-notes {
+  width: auto;
+  color: #303941;
+}
+.np-index-table td.ni-notes {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+/* SINGH360 PUBLISHED INDEX NOTES + DRAFT LABELS END */
