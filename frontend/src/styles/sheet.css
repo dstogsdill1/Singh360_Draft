@@ -596,3 +596,53 @@
   color: transparent !important;
   user-select: none;
 }
+/* SINGH360 GENERATED INDEX STANDARD START */
+.np-index {
+  padding: 22px 34px;
+}
+.np-index-table {
+  width: 100%;
+  table-layout: fixed;
+  font-size: 11.5px;
+}
+.np-index-table th {
+  padding: 5px 6px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.np-index-table td {
+  padding: 4px 6px;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-index-table .ni-pg {
+  width: 50px;
+  text-align: center;
+  font-family: inherit;
+  font-weight: 700;
+}
+.np-index-table .ni-code {
+  width: 104px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.np-index-table .ni-tab { width: 190px; }
+.np-index-table .ni-title { width: 280px; }
+.np-index-table .ni-type { width: 140px; }
+.np-index-table .ni-notes { width: auto; color: #4a525b; }
+.np-index-table td[contenteditable="true"]:focus {
+  outline: 2px solid #246fb4;
+  outline-offset: -2px;
+  background: #eef7ff;
+}
+.np-index-table.ni-compact {
+  font-size: 9.5px;
+}
+.np-index-table.ni-compact th,
+.np-index-table.ni-compact td {
+  padding: 2px 4px;
+  line-height: 1.05;
+}
+/* SINGH360 GENERATED INDEX STANDARD END */

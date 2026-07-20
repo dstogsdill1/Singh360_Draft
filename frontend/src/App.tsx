@@ -27,6 +27,7 @@ import { SourceWorksheetHistory } from './model/sourceWorksheetHistory';
 import { PageRebuildHistory } from './model/pageRebuildHistory';
 import { applyRebuiltPage, rebuildSinglePageFromSource } from './model/pageRebuild';
 import { validatePageRebuild } from './model/pageRebuildValidation';
+import { isSheetIndexPage, normalizePackagePages } from './model/packageIndex';
 import RebuildValidationModal from './components/RebuildValidationModal';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
@@ -69,24 +70,11 @@ function screenshotName(): string {
   return `Screenshot ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}.png`;
 }
 
-// Recompute live "Page X of Y" numbering across included, non-continuation pages.
+// Canonical package order + live Page X of Y. This also keeps the generated
+// Sheet Index second, moves excluded/internal pages after package pages, and
+// counts every included physical continuation page.
 function withPageNumbers(pages: PageModel[]): PageModel[] {
-  const included = pages.filter((p) => p.include && !p.continuationOf);
-  const total = included.length;
-  let n = 0;
-  const numberById = new Map<string, number>();
-  for (const p of included) {
-    n += 1;
-    numberById.set(p.id, n);
-  }
-  return pages.map((p) => {
-    if (!p.include) return { ...p, pageNumber: null, pageTotal: total };
-    if (p.continuationOf) {
-      const parentNum = numberById.get(p.continuationOf) ?? null;
-      return { ...p, pageNumber: parentNum, pageTotal: total };
-    }
-    return { ...p, pageNumber: numberById.get(p.id) ?? null, pageTotal: total };
-  });
+  return normalizePackagePages(pages);
 }
 
 export default function App() {
@@ -168,9 +156,12 @@ export default function App() {
   const savingRef = useRef(false);
 
   const setProjectSync = useCallback((updater: ProjectModel | null | ((prev: ProjectModel | null) => ProjectModel | null)) => {
-    const next = typeof updater === 'function'
+    const rawNext = typeof updater === 'function'
       ? (updater as (prev: ProjectModel | null) => ProjectModel | null)(projectRef.current)
       : updater;
+    const next = rawNext
+      ? { ...rawNext, pages: normalizePackagePages(rawNext.pages ?? []) }
+      : rawNext;
     projectRef.current = next;
     setProject(next);
     return next;
@@ -998,6 +989,11 @@ export default function App() {
   };
 
   const deletePage = (id: string) => {
+    const target = projectRef.current?.pages.find((page) => page.id === id);
+    if (target && isSheetIndexPage(target)) {
+      window.alert('The Sheet Index / TOC is required and cannot be deleted. Excluded pages are removed from it automatically.');
+      return;
+    }
     if (!window.confirm('Delete this page? This cannot be undone. (Tip: use Exclude to keep it out of the package instead.)')) return;
     if (activePageId === id) {
       const remaining = project?.pages.filter((p) => p.id !== id) ?? [];

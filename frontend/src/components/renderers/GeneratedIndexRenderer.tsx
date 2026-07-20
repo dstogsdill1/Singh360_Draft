@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { PageModel, ProjectModel } from '../../model/types';
+import { cleanIndexNote, indexPageTypeLabel } from '../../model/packageIndex';
 
 interface Props {
   project: ProjectModel;
@@ -8,16 +9,19 @@ interface Props {
 }
 
 /**
- * Generated Sheet Index / TOC for pages with pageType="index".
+ * Clean generated Sheet Index / TOC.
  *
- * Renders a clean table built from the CURRENT included pages. This is NOT a
- * raw workbook dump — it is always in sync with the actual package state.
- * Never scrolls; the normalized sheet body enforces overflow:hidden, so if
- * the list is too long the workbook importer or compose_pages must split it
- * into continuation sheets (0.1a, 0.1b).
+ * Normalized/PDF output is built from the CURRENT included pages. The linked
+ * workbook worksheet remains untouched and fully visible/editable in Source.
+ * Internal/excluded pages and internal-only columns never appear here.
  */
 export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) {
-  const included = (project.pages ?? []).filter((p) => p.include);
+  const included = useMemo(
+    () => [...(project.pages ?? [])]
+      .filter((page) => page.include !== false)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [project.pages],
+  );
 
   const commitCode = (target: PageModel, value: string) => {
     const next = value.trim();
@@ -28,7 +32,11 @@ export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) 
     onPatchPage(target.id, { sheetTitle: value.trim() || 'Untitled Sheet' });
   };
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLElement>, target: PageModel, field: 'code' | 'title') => {
+  const onKeyDown = (
+    e: React.KeyboardEvent<HTMLElement>,
+    target: PageModel,
+    field: 'code' | 'title',
+  ) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const value = e.currentTarget.textContent ?? '';
@@ -37,7 +45,9 @@ export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) 
       e.currentTarget.blur();
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      e.currentTarget.textContent = field === 'code' ? (target.displaySheetCode || target.sheetCode || '') : target.sheetTitle;
+      e.currentTarget.textContent = field === 'code'
+        ? (target.displaySheetCode || target.sheetCode || '')
+        : target.sheetTitle;
       e.currentTarget.blur();
     }
   };
@@ -48,7 +58,7 @@ export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) 
       if (!el || !el.isContentEditable || !el.closest('.np-index-table')) return;
       const pageId = el.dataset.pageId ?? '';
       const field = el.dataset.field as 'code' | 'title' | undefined;
-      const target = included.find((p) => p.id === pageId);
+      const target = included.find((page) => page.id === pageId);
       if (!target || !field) return;
       const value = el.textContent ?? '';
       if (field === 'code') commitCode(target, value);
@@ -60,54 +70,62 @@ export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) 
   }, [included, onPatchPage]);
 
   if (!included.length) {
-    return <div className="np-index np-empty">No included sheets — add or include pages to generate the index.</div>;
+    return <div className="np-index np-empty">No included sheets.</div>;
   }
+
+  const compact = included.length > 28 ? ' ni-compact' : '';
 
   return (
     <div className="np-index">
-      <table className="np-index-table">
+      <table className={`np-index-table${compact}`}>
         <thead>
           <tr>
-            <th className="ni-code">Sheet Code</th>
-            <th className="ni-title">Sheet Title</th>
             <th className="ni-pg">Page</th>
+            <th className="ni-code">Sheet Code</th>
+            <th className="ni-tab">Sheet Tab</th>
+            <th className="ni-title">Page Title</th>
+            <th className="ni-type">Page Type</th>
+            <th className="ni-notes">Notes</th>
           </tr>
         </thead>
         <tbody>
-          {included.map((p) => {
-            return (
-              <tr key={p.id} className={p.generatedContinuation ? 'ni-cont' : ''}>
-                <td
-                  className="ni-code"
-                  contentEditable
-                  suppressContentEditableWarning
-                  tabIndex={0}
-                  data-page-id={p.id}
-                  data-field="code"
-                  title="Edit this sheet code. Press Enter to commit, Esc to cancel."
-                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                  onBlur={(e) => commitCode(p, e.currentTarget.textContent ?? '')}
-                  onKeyDown={(e) => onKeyDown(e, p, 'code')}
-                >{p.displaySheetCode || p.sheetCode || '—'}</td>
-                <td
-                  className="ni-title"
-                  contentEditable
-                  suppressContentEditableWarning
-                  tabIndex={0}
-                  data-page-id={p.id}
-                  data-field="title"
-                  title="Edit this sheet title. Press Enter to commit, Esc to cancel."
-                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                  onBlur={(e) => commitTitle(p, e.currentTarget.textContent ?? '')}
-                  onKeyDown={(e) => onKeyDown(e, p, 'title')}
-                >
-                  {p.sheetTitle}
-                  {p.generatedContinuation && <span className="ni-cont-mark"> — CONTINUED</span>}
-                </td>
-                <td className="ni-pg">{p.pageNumber ?? '—'}</td>
-              </tr>
-            );
-          })}
+          {included.map((page) => (
+            <tr key={page.id} className={page.generatedContinuation ? 'ni-cont' : ''}>
+              <td className="ni-pg">{page.pageNumber ?? '—'}</td>
+              <td
+                className="ni-code"
+                contentEditable
+                suppressContentEditableWarning
+                tabIndex={0}
+                data-page-id={page.id}
+                data-field="code"
+                title="Edit the actual sheet code. Enter commits; Esc cancels."
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onBlur={(e) => commitCode(page, e.currentTarget.textContent ?? '')}
+                onKeyDown={(e) => onKeyDown(e, page, 'code')}
+              >
+                {page.displaySheetCode || page.sheetCode || '—'}
+              </td>
+              <td className="ni-tab">{page.sheetTab || '—'}</td>
+              <td
+                className="ni-title"
+                contentEditable
+                suppressContentEditableWarning
+                tabIndex={0}
+                data-page-id={page.id}
+                data-field="title"
+                title="Edit the actual page title. Enter commits; Esc cancels."
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onBlur={(e) => commitTitle(page, e.currentTarget.textContent ?? '')}
+                onKeyDown={(e) => onKeyDown(e, page, 'title')}
+              >
+                {page.sheetTitle}
+                {page.generatedContinuation && <span className="ni-cont-mark"> — CONTINUED</span>}
+              </td>
+              <td className="ni-type">{indexPageTypeLabel(page)}</td>
+              <td className="ni-notes">{cleanIndexNote(page)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
