@@ -539,14 +539,24 @@ export function refreshPageFromSource(page: PageModel, ws: Worksheet): PageModel
         ];
       }
     } else {
-      const tableIdx = blocks.findIndex((b) => b.type === 'matrix' || b.type === 'table');
-      if (tableIdx < 0) {
-        nextBlocks = blocks;
+      const companyInfoIdx = blocks.findIndex((b) => b.type === 'companyInfo');
+      if (companyInfoIdx >= 0) {
+        // Company Info is a purpose-built Published renderer, but its values
+        // still come directly from the current Draft worksheet. Keep every
+        // nontrailing source column so Field / Value rows such as Drawing
+        // Standard update immediately when switching back to Published.
+        const rows = trimTrailingEmptyColumns(visibleWs.grid ?? []);
+        nextBlocks = blocks.map((b, i) => (i === companyInfoIdx ? { ...b, rows } : b));
       } else {
-        const normalized = trimTrailingEmptyColumns(visibleWs.grid ?? []);
-        const headers = (normalized[0] ?? []).map((x) => x ?? '');
-        const rows = normalized.slice(1).map((r) => r.map((x) => x ?? ''));
-        nextBlocks = blocks.map((b, i) => (i === tableIdx ? { ...b, headers, rows } : b));
+        const tableIdx = blocks.findIndex((b) => b.type === 'matrix' || b.type === 'table');
+        if (tableIdx < 0) {
+          nextBlocks = blocks;
+        } else {
+          const normalized = trimTrailingEmptyColumns(visibleWs.grid ?? []);
+          const headers = (normalized[0] ?? []).map((x) => x ?? '');
+          const rows = normalized.slice(1).map((r) => r.map((x) => x ?? ''));
+          nextBlocks = blocks.map((b, i) => (i === tableIdx ? { ...b, headers, rows } : b));
+        }
       }
     }
   }
