@@ -350,7 +350,7 @@ export interface CanvasApi {
   setLineStyle: (style: LineStyle) => void;
   startBus: (opts: BusOptions) => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
-  addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; meta?: PdfCropInsertMeta }) => void;
+  addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; opacity?: number; meta?: PdfCropInsertMeta }) => Promise<void> | void;
   addComponent: (
     url: string,
     name: string,

@@ -5,6 +5,7 @@ import App from './App';
 import './styles/app.css';
 import './styles/sheet.css';
 import './styles/sourceParity.css';
+import './styles/symbolMapper.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

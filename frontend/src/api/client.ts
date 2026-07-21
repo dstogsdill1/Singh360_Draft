@@ -1066,3 +1066,148 @@ export async function cleanLibV2PhysicalDuplicates(dryRun: boolean): Promise<{ o
   return res.json();
 }
 
+// S360 SYMBOL MAPPER START
+export type SymbolMapperPattern =
+  | 'solid'
+  | 'outline'
+  | 'double-outline'
+  | 'split-vertical'
+  | 'split-horizontal'
+  | 'diagonal'
+  | 'crosshatch';
+
+export interface SymbolMapperClass {
+  id: string;
+  code: string;
+  label: string;
+  shape: 'auto' | 'circle' | 'square';
+  color: string;
+  color2: string;
+  pattern: SymbolMapperPattern;
+  markerSizePt: number;
+  templateBox?: { x0: number; y0: number; x1: number; y1: number };
+  visualEnabled?: boolean;
+}
+
+export interface SymbolMapperSession {
+  id: string;
+  createdAt: string;
+  sourceName: string;
+  sourceSha256: string;
+  pageCount: 1;
+  page: {
+    widthPt: number;
+    heightPt: number;
+    rotation: number;
+    previewWidth: number;
+    previewHeight: number;
+    previewDpi: number;
+    hasText: boolean;
+    wordCount: number;
+  };
+  previewUrl: string;
+  visualMatchingAvailable: boolean;
+}
+
+export interface SymbolMapperCandidate {
+  id: string;
+  classId: string;
+  code: string;
+  label: string;
+  bbox: [number, number, number, number];
+  markerBox: [number, number, number, number];
+  method: string;
+  evidence: string[];
+  score: number;
+  status: 'accepted' | 'review' | 'rejected';
+  accepted: boolean;
+  shapeRect?: [number, number, number, number] | null;
+  text?: string;
+}
+
+export interface SymbolMapperSummaryRow {
+  classId: string;
+  code: string;
+  label: string;
+  accepted: number;
+  review: number;
+  rejected: number;
+  total: number;
+}
+
+export interface SymbolMapperDetection {
+  sessionId: string;
+  createdAt: string;
+  sourceSha256: string;
+  classes: SymbolMapperClass[];
+  candidates: SymbolMapperCandidate[];
+  summary: SymbolMapperSummaryRow[];
+  warnings: string[];
+  policy: Record<string, string>;
+  reviewPdfUrl: string;
+  reviewPngUrl: string;
+}
+
+export interface SymbolMapperRenderResult {
+  sessionId: string;
+  renderedAt: string;
+  sourceSha256: string;
+  outputSha256: string;
+  acceptedCount: number;
+  reviewCount: number;
+  rejectedCount: number;
+  summary: SymbolMapperSummaryRow[];
+  pdfUrl: string;
+  pngUrl: string;
+  png: { width: number; height: number; dpi: number };
+  sourceName: string;
+}
+
+async function symbolMapperJson<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    let message = await res.text();
+    try {
+      const parsed = JSON.parse(message) as { error?: string; detail?: string };
+      message = [parsed.error, parsed.detail].filter(Boolean).join(' - ') || message;
+    } catch {
+      // Keep the server text response.
+    }
+    throw new Error(message || `Symbol Mapper request failed (${res.status}).`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function createSymbolMapperSession(file: File): Promise<SymbolMapperSession> {
+  const body = new FormData();
+  body.append('file', file);
+  const res = await fetch('/api/symbol-mapper/sessions', { method: 'POST', body });
+  return symbolMapperJson<SymbolMapperSession>(res);
+}
+
+export async function detectSymbolMap(sessionId: string, classes: SymbolMapperClass[]): Promise<SymbolMapperDetection> {
+  const res = await fetch(`/api/symbol-mapper/sessions/${encodeURIComponent(sessionId)}/detect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ classes }),
+  });
+  return symbolMapperJson<SymbolMapperDetection>(res);
+}
+
+export async function renderSymbolMap(
+  sessionId: string,
+  classes: SymbolMapperClass[],
+  candidates: SymbolMapperCandidate[],
+): Promise<SymbolMapperRenderResult> {
+  const res = await fetch(`/api/symbol-mapper/sessions/${encodeURIComponent(sessionId)}/render`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ classes, candidates }),
+  });
+  return symbolMapperJson<SymbolMapperRenderResult>(res);
+}
+
+export async function deleteSymbolMapperSession(sessionId: string): Promise<void> {
+  const res = await fetch(`/api/symbol-mapper/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) throw new Error(await res.text());
+}
+// S360 SYMBOL MAPPER END

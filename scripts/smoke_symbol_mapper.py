@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+from hashlib import sha256
+from pathlib import Path
+import json
+import shutil
+import sys
+import tempfile
+
+import fitz
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from core.symbol_mapper import SymbolMapperStore
+
+
+def _make_fixture(path: Path) -> None:
+    doc = fitz.open()
+    page = doc.new_page(width=792, height=612)
+    # Legend area.
+    page.insert_text((40, 40), "SYMBOLS KEY", fontsize=10)
+    page.draw_circle((55, 70), 9, color=(0, 0, 0), width=0.8)
+    page.insert_textbox(fitz.Rect(46, 61, 64, 79), "TS", fontsize=6.5, align=fitz.TEXT_ALIGN_CENTER)
+    page.insert_text((80, 74), "TEMPERATURE SENSOR", fontsize=7)
+    page.draw_circle((55, 100), 9, color=(0, 0, 0), width=0.8)
+    page.insert_textbox(fitz.Rect(46, 91, 64, 109), "DA", fontsize=6.5, align=fitz.TEXT_ALIGN_CENTER)
+    page.insert_text((80, 104), "DOOR ALARM", fontsize=7)
+    page.draw_rect(fitz.Rect(46, 121, 64, 139), color=(0, 0, 0), width=0.8)
+    page.insert_textbox(fitz.Rect(46, 121, 64, 139), "CC", fontsize=6.5, align=fitz.TEXT_ALIGN_CENTER)
+    page.insert_text((80, 134), "CASE CONTROLLER", fontsize=7)
+
+    # Plan occurrences.
+    for x, y, code, shape in [
+        (250, 180, "TS", "circle"),
+        (350, 260, "TS", "circle"),
+        (500, 210, "DA", "circle"),
+        (620, 330, "CC", "square"),
+    ]:
+        box = fitz.Rect(x - 9, y - 9, x + 9, y + 9)
+        if shape == "circle":
+            page.draw_circle((x, y), 9, color=(0, 0, 0), width=0.8)
+        else:
+            page.draw_rect(box, color=(0, 0, 0), width=0.8)
+        page.insert_textbox(box, code, fontsize=6.5, align=fitz.TEXT_ALIGN_CENTER)
+    # Deliberate text-only note should remain review, not accepted.
+    page.insert_text((250, 400), "VERIFY TS SENSOR LOCATION", fontsize=10)
+    doc.save(path)
+    doc.close()
+
+
+def main() -> int:
+    tmp = Path(tempfile.mkdtemp(prefix="s360_symbol_smoke_"))
+    try:
+        fixture = tmp / "fixture.pdf"
+        _make_fixture(fixture)
+        source_hash = sha256(fixture.read_bytes()).hexdigest()
+        store = SymbolMapperStore(tmp / "sessions")
+        session = store.create_session(fixture.name, fixture.read_bytes())
+        assert session["sourceSha256"] == source_hash
+        assert session["pageCount"] == 1
+
+        classes = [
+            {"id": "ts", "code": "TS", "label": "Temperature Sensor", "shape": "circle", "color": "#ffd400", "pattern": "solid", "markerSizePt": 22, "visualEnabled": False},
+            {"id": "da", "code": "DA", "label": "Door Alarm", "shape": "circle", "color": "#ff6b35", "pattern": "outline", "markerSizePt": 22, "visualEnabled": False},
+            {"id": "cc", "code": "CC", "label": "Case Controller", "shape": "square", "color": "#00a651", "pattern": "split-vertical", "color2": "#12539b", "markerSizePt": 22, "visualEnabled": False},
+        ]
+        detection = store.detect(session["id"], {"classes": classes})
+        accepted = [c for c in detection["candidates"] if c["status"] == "accepted"]
+        review = [c for c in detection["candidates"] if c["status"] == "review"]
+        # Legend + plan occurrences: TS=3 accepted, DA=2 accepted, CC=2 accepted.
+        by_code = {}
+        for item in accepted:
+            by_code[item["code"]] = by_code.get(item["code"], 0) + 1
+        assert by_code == {"CC": 2, "DA": 2, "TS": 3}, by_code
+        # Note has a standalone TS word without an enclosing vector marker.
+        assert any(c["code"] == "TS" and c["method"] == "text-only" for c in review), review
+
+        # Reject the text-only note and render accepted candidates only.
+        reviewed = []
+        for item in detection["candidates"]:
+            copy = dict(item)
+            if copy["method"] == "text-only":
+                copy["status"] = "rejected"
+                copy["accepted"] = False
+            reviewed.append(copy)
+        result = store.render(session["id"], {"classes": classes, "candidates": reviewed})
+        assert result["acceptedCount"] == 7, result
+        assert result["rejectedCount"] >= 1, result
+        assert sha256(fixture.read_bytes()).hexdigest() == source_hash
+
+        source_path = store.asset_path(session["id"], "source.pdf")
+        final_path = store.asset_path(session["id"], "final.pdf")
+        with fitz.open(source_path) as src, fitz.open(final_path) as out:
+            assert src.page_count == out.page_count == 1
+            assert src[0].rect == out[0].rect
+            assert out[0].get_text("text") == src[0].get_text("text")
+
+        report = {
+            "ok": True,
+            "sessionId": session["id"],
+            "accepted": result["acceptedCount"],
+            "review": result["reviewCount"],
+            "rejected": result["rejectedCount"],
+            "outputSha256": result["outputSha256"],
+        }
+        print(json.dumps(report, indent=2))
+        return 0
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

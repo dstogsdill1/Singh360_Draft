@@ -930,10 +930,10 @@ export default function CanvasEditor({
           c.requestRenderAll();
         });
       },
-      addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; meta?: { pdfSource: string; pdfPage: number; pdfDpi: number; pdfCrop?: string } }) => {
+      addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; opacity?: number; meta?: { pdfSource: string; pdfPage: number; pdfDpi: number; pdfCrop?: string } }) => {
         const c = fabricRef.current;
         if (!c) return;
-        void FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
+        return FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
           const iw = img.width || 1;
           const ih = img.height || 1;
           // Fit a crisp crop to ~70% of the sheet body; a locked underlay fills
@@ -955,7 +955,7 @@ export default function CanvasEditor({
           }
           styleForSelection(img);
           if (underlay) {
-            img.set({ opacity: 0.85, lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, selectable: true });
+            img.set({ opacity: opts?.opacity ?? 0.85, lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, selectable: true });
           }
           c.add(img);
           if (underlay) c.sendObjectToBack(img);

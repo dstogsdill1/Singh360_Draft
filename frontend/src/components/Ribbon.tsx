@@ -79,6 +79,7 @@ interface Props {
   onInsertPageTemplate: () => void;
   onManagePageTemplates: () => void;
   onInsertSymbolLegend: () => void;
+  onOpenSymbolMapper: () => void;
   onArchiveCurrentProject: () => void;
   renumberBadge?: boolean;
   theme: 'dark' | 'light';
@@ -89,8 +90,8 @@ interface Props {
   onSetLineStyle: (style: LineStyle) => void;
 }
 
-type RibbonTab = 'File' | 'Home' | 'Insert' | 'Draw' | 'Text' | 'Arrange' | 'View' | 'Export';
-const TABS: RibbonTab[] = ['File', 'Home', 'Insert', 'Draw', 'Text', 'Arrange', 'View', 'Export'];
+type RibbonTab = 'File' | 'Home' | 'Insert' | 'Symbols' | 'Draw' | 'Text' | 'Arrange' | 'View' | 'Export';
+const TABS: RibbonTab[] = ['File', 'Home', 'Insert', 'Symbols', 'Draw', 'Text', 'Arrange', 'View', 'Export'];
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -139,6 +140,7 @@ export default function Ribbon({
   onInsertPageTemplate,
   onManagePageTemplates,
   onInsertSymbolLegend,
+  onOpenSymbolMapper,
   onArchiveCurrentProject,
   renumberBadge,
   theme,
@@ -306,6 +308,21 @@ export default function Ribbon({
             </Group>
             <Group title="Legend">
               <button className="ribbon-btn" disabled={!cx} onClick={onInsertSymbolLegend} title="Insert an editable symbol legend from the component library">Symbol Legend</button>
+            </Group>
+          </>
+        )}
+
+
+        {tab === 'Symbols' && (
+          <>
+            <Group title="Symbol Mapping">
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onOpenSymbolMapper} title="Upload one PDF page, define the legend, review detections, and export or add a titled page">
+                Open Symbol Mapper
+              </button>
+            </Group>
+            <Group title="Workflow">
+              <button className="ribbon-btn" disabled title="Uncertain matches are never silently included">Review before export</button>
+              <button className="ribbon-btn" disabled title="Adds a normal canvas page at the end with sheet code NEW and the standard title block">Add page at end</button>
             </Group>
           </>
         )}

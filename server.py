@@ -34,6 +34,7 @@ from core.component_interop import (
 from core.legend_template_store import LegendTemplateStore
 from core.page_template_store import PageTemplateStore
 from core import pdf_import_v2
+from core.symbol_mapper import SymbolMapperError, SymbolMapperStore
 from core.drawing_generators import (
     generate_callout_schedule,
     generate_component_stack,
@@ -93,6 +94,7 @@ def _ensure_minimal_runtime_workspace(docs: Path) -> None:
 
 
 _ensure_minimal_runtime_workspace(DOCS_DIR)
+symbol_mapper_store = SymbolMapperStore(DOCS_DIR / "symbol_mapper")
 
 PROJECT_ID_RE = re.compile(r"^[a-f0-9]{16}$")
 _DEFAULT_PORT = 8765
@@ -1155,6 +1157,81 @@ def lib2_powerpoint_palette(variant: str):
     out = DOCS_DIR / "exports" / "powerpoint" / f"Singh360_Component_Library_{variant.title()}.pptx"
     build_powerpoint_palette(lib2, out, variant)
     return send_file(out, as_attachment=True, download_name=out.name)
+
+# S360 SYMBOL MAPPER ROUTES START
+@app.post("/api/symbol-mapper/sessions")
+def symbol_mapper_create_session():
+    upload = request.files.get("file")
+    if upload is None or not upload.filename:
+        return jsonify(_err("A single-page PDF is required.")), 400
+    try:
+        session = symbol_mapper_store.create_session(upload.filename, upload.read())
+        return jsonify(session), 201
+    except SymbolMapperError as exc:
+        return jsonify(_err(str(exc))), 400
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Symbol Mapper session creation failed")
+        return jsonify(_err("Symbol Mapper could not read the PDF.", str(exc))), 500
+
+
+@app.post("/api/symbol-mapper/sessions/<session_id>/detect")
+def symbol_mapper_detect(session_id: str):
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        return jsonify(symbol_mapper_store.detect(session_id, body))
+    except SymbolMapperError as exc:
+        return jsonify(_err(str(exc))), 400
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Symbol Mapper detection failed for %s", session_id)
+        return jsonify(_err("Symbol detection failed.", str(exc))), 500
+
+
+@app.post("/api/symbol-mapper/sessions/<session_id>/render")
+def symbol_mapper_render(session_id: str):
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        return jsonify(symbol_mapper_store.render(session_id, body))
+    except SymbolMapperError as exc:
+        return jsonify(_err(str(exc))), 400
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Symbol Mapper render failed for %s", session_id)
+        return jsonify(_err("Reviewed symbol-map rendering failed.", str(exc))), 500
+
+
+@app.get("/api/symbol-mapper/sessions/<session_id>/assets/<name>")
+def symbol_mapper_asset(session_id: str, name: str):
+    try:
+        path = symbol_mapper_store.asset_path(session_id, name)
+        # Read the completed asset and close the filesystem handle before Flask
+        # starts streaming. This prevents Windows from locking final.pdf while
+        # the user closes or deletes the temporary Symbol Mapper session.
+        payload = path.read_bytes()
+    except SymbolMapperError:
+        abort(404)
+    except OSError as exc:
+        app.logger.error("Symbol Mapper asset read failed for %s/%s: %s", session_id, name, exc)
+        abort(404)
+    mime = "application/pdf" if name.lower().endswith(".pdf") else "image/png"
+    return send_file(
+        BytesIO(payload),
+        mimetype=mime,
+        as_attachment=name.lower().endswith(".pdf"),
+        download_name=name,
+        max_age=0,
+    )
+
+
+@app.delete("/api/symbol-mapper/sessions/<session_id>")
+def symbol_mapper_delete_session(session_id: str):
+    try:
+        symbol_mapper_store.delete_session(session_id)
+    except SymbolMapperError as exc:
+        return jsonify(_err(str(exc))), 409
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Symbol Mapper session deletion failed for %s", session_id)
+        return jsonify(_err("Symbol Mapper session could not be removed.", str(exc))), 500
+    return jsonify({"ok": True})
+# S360 SYMBOL MAPPER ROUTES END
 
 # ---- PDF underlay import (Phase 6) ----
 @app.post("/api/lib/pdf/info")

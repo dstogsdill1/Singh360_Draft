@@ -16,6 +16,7 @@ import {
   uploadAssetFile,
   type ExportWarning,
 } from './api/client';
+import type { SymbolMapperRenderResult } from './api/client';
 import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, SymbolLegendInsertConfig, ViewMode, Worksheet } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
 import { normalizeProjectAssetUrls } from './model/assetUrl';
@@ -49,6 +50,7 @@ import SavePageTemplateModal from './components/SavePageTemplateModal';
 import PageTemplateLibraryModal, { type TemplateInsertMode } from './components/PageTemplateLibraryModal';
 import SymbolLegendModal from './components/SymbolLegendModal';
 import PdfCropModal from './components/PdfCropModal';
+import SymbolMapperModal from './components/SymbolMapperModal';
 import BackupRecoveryModal from './components/BackupRecoveryModal';
 import BusModal from './components/BusModal';
 import CollapsibleSection from './components/CollapsibleSection';
@@ -129,6 +131,7 @@ export default function App() {
   const [templateLibManageOnly, setTemplateLibManageOnly] = useState(false);
   const [symbolLegendOpen, setSymbolLegendOpen] = useState(false);
   const [pdfCropOpen, setPdfCropOpen] = useState(false);
+  const [symbolMapperOpen, setSymbolMapperOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [busOpen, setBusOpen] = useState(false);
   const [addSheetPending, setAddSheetPending] = useState<{ refId: string; where: 'before' | 'after' } | null>(null);
@@ -151,6 +154,7 @@ export default function App() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; pageId: string } | null>(null);
   const canvasApiRef = useRef<CanvasApi | null>(null);
+  const pendingSymbolPageRef = useRef<{ pageId: string; url: string; name: string } | null>(null);
 
   // ── Save manager: single source of truth for persistence + status ──
   // lastSavedJson is the JSON we last confirmed on the server. A project whose
@@ -382,8 +386,28 @@ export default function App() {
   lineStyleRef.current = lineStyle;
   const onRegisterApi = useCallback((api: CanvasApi | null) => {
     canvasApiRef.current = api;
-    if (api) api.setLineStyle(lineStyleRef.current);
-  }, []);
+    if (!api) return;
+    api.setLineStyle(lineStyleRef.current);
+
+    // S360 SYMBOL MAPPER: insert the reviewed image only after the newly-created
+    // canvas page has mounted. It is a full-opacity locked underlay, while the
+    // normal Singh360 title block remains outside the Fabric body canvas.
+    const pending = pendingSymbolPageRef.current;
+    if (pending && pending.pageId === activePageId) {
+      pendingSymbolPageRef.current = null;
+      Promise.resolve(api.addPdfCrop(pending.url, pending.name, { underlay: true, opacity: 1 }))
+        .then(() => {
+          window.setTimeout(() => {
+            captureActivePageState();
+            void flushSave();
+          }, 0);
+        })
+        .catch((err) => {
+          console.error('Symbol Mapper page image insertion failed', err);
+          window.alert('The Symbol Mapper page was added, but its reviewed image could not be inserted. The uploaded project asset was preserved.');
+        });
+    }
+  }, [activePageId, captureActivePageState, flushSave]);
   const onSelectionChange = useCallback((sel: CanvasSelection | null) => setSelection(sel), []);
   const onToolConsumed = useCallback(() => setActiveTool('select'), []);
 
@@ -955,6 +979,63 @@ export default function App() {
     const nextProject = { ...cur, pages: next };
     setProjectSync(nextProject);
     void flushSave();
+  };
+
+  // S360 SYMBOL MAPPER: append a reviewed output as a normal, user-manageable
+  // canvas page. The sheet code remains NEW so existing project numbering rules
+  // stay authoritative; the standard title block is supplied by DocumentView.
+  const addSymbolMapPage = async (result: SymbolMapperRenderResult, title: string): Promise<void> => {
+    captureActivePageState();
+    const current = projectRef.current;
+    if (!current) throw new Error('Open a Singh360 project before adding a Symbol Mapper page.');
+
+    const imageResponse = await fetch(result.pngUrl, { cache: 'no-store' });
+    if (!imageResponse.ok) throw new Error(`Could not read the reviewed Symbol Mapper PNG (${imageResponse.status}).`);
+    const imageBlob = await imageResponse.blob();
+    const safeBase = (result.sourceName || 'symbol-map')
+      .replace(/\.pdf$/i, '')
+      .replace(/[^A-Za-z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'symbol-map';
+    const imageFile = new File([imageBlob], `${safeBase}_reviewed.png`, { type: 'image/png' });
+    const asset = await uploadAssetFile(current.id, imageFile);
+
+    const latest = projectRef.current;
+    if (!latest || latest.id !== current.id) throw new Error('The active project changed before the page could be added.');
+    const pageId = newPageId();
+    const page: PageModel = {
+      id: pageId,
+      order: latest.pages.length + 1,
+      include: true,
+      sheetCode: 'NEW',
+      displaySheetCode: 'NEW',
+      sheetTitle: title.trim() || 'SYMBOL HIGHLIGHT PLAN',
+      sheetTab: 'Symbol Map',
+      pageType: 'canvas',
+      pageFamily: 'Image / Layout',
+      layoutProfile: 'symbol_mapper',
+      renderMode: 'canvas',
+      renderProfile: 'symbol_mapper',
+      normalizedHeaderStyle: 'none',
+      template: 'canvas',
+      templateId: '',
+      blocks: [],
+      canvasObjects: [],
+      notes: 'Created by the reviewed Symbol Mapper workflow. Only user-accepted detections were rendered.',
+      pageGroupId: pageId,
+    };
+
+    pendingSymbolPageRef.current = { pageId, url: asset.url, name: asset.name };
+    const pages = withPageNumbers([...latest.pages, page].map((item, index) => ({ ...item, order: index + 1 })));
+    const next: ProjectModel = { ...latest, pages };
+    setProjectSync(next);
+    setActivePageId(pageId);
+    setViewMode('normalized');
+    setOverlayMode(true);
+    setSelection(null);
+    setRenumberBadge(true);
+    writeRecoverySnapshot(next);
+    const saved = await flushSave();
+    if (!saved) throw new Error('The new page was created locally, but the project save was not confirmed. Use Save Now before navigating away.');
   };
 
   const duplicatePage = (id: string) => {
@@ -1647,6 +1728,7 @@ export default function App() {
       onInsertPageTemplate={() => { setTemplateLibManageOnly(false); setTemplateLibOpen(true); }}
       onManagePageTemplates={() => { setTemplateLibManageOnly(true); setTemplateLibOpen(true); }}
       onInsertSymbolLegend={() => setSymbolLegendOpen(true)}
+      onOpenSymbolMapper={() => setSymbolMapperOpen(true)}
       onArchiveCurrentProject={() => void onArchiveCurrentProject()}
       theme={theme}
       onSetTheme={setThemeState}
@@ -1993,6 +2075,12 @@ export default function App() {
           setRebuildValidationModal(null);
           applyPageRebuild(pageId, rebuilt);
         }}
+      />
+    )}
+    {symbolMapperOpen && (
+      <SymbolMapperModal
+        onClose={() => setSymbolMapperOpen(false)}
+        onAddPage={(result, title) => addSymbolMapPage(result, title)}
       />
     )}
     {symbolLegendOpen && (
