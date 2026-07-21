@@ -1,37 +1,55 @@
-# Singh360 Symbol Mapper — Simple Workflow
+# Symbol Mapper — Singh360 Standard
 
-The Symbol Mapper is a separate workspace inside Singh360 Draft.
+Symbol Mapper reads a printed `SYMBOLS KEY` or `SYMBOL LEGEND`, lets the user
+choose which rows to include, and applies ready-made solid or split colors before
+running detection.
 
-## Workflow
+## Saved standard
 
-1. Upload one single-page PDF.
-2. The app finds the printed `SYMBOLS KEY` or `SYMBOL LEGEND` automatically.
-3. The discovered rows appear with their actual icon, code, and description.
-4. Check only the symbols you want.
-5. Click a ready-made color: Red, Green, Yellow, Blue, Orange, Purple,
-   Cyan, Pink, or a two-color split such as Red / Green or Red / Blue.
-6. The selected colors are shown directly over the symbol key.
-7. Click **Run selected symbols**.
-8. Only uncertain matches appear under **Needs a quick check**. Choose Include or
-   Ignore; you do not draw boxes around every occurrence.
-9. Click **Create highlighted page**, then download the original-size PDF or add
-   the page to the end of the open Singh360 project.
+The writable standard is stored under:
 
-## What was deliberately removed
+```text
+.docs/symbol_mapper/templates/standard.json
+```
 
-- No manual icon crop for every legend row.
-- No Primary Color / Secondary Color fields.
-- No marker-size control.
-- No source-outline selector.
-- No visible template-correlation or detector jargon.
-- No fake or disabled ribbon buttons.
+The repository provides the initial company standard at:
 
-## Detection and output
+```text
+defaults/symbol_mapper_standard.json
+```
 
-The app reads the key from the PDF text coordinates and enclosing vector shapes.
-Exact text inside the expected circle or square is accepted automatically.
-Unboxed or ambiguous text is held for the small quick-check list. The uploaded
-PDF is never overwritten; the final output is a reviewed copy with the original
-page dimensions preserved.
+The default is copied only when no local standard exists. Future edits are saved
+through the Symbol Mapper interface and are not committed to GitHub.
 
-Runtime sessions remain under `.docs/symbol_mapper/` and are not committed.
+Matching uses **code plus description**, not code alone. This keeps duplicate
+codes such as `S — LIQUID LINE SOLENOID VALVE 120V` and `S — CLEAN SWITCH`
+independent.
+
+When a later drawing contains the same row, its include setting and color load
+automatically. New rows are marked **New**. Assign a color and click **Update
+standard**; the server merges the rows into the existing standard instead of
+deleting symbols that are absent from the current page.
+
+Every standard update creates a timestamped backup under:
+
+```text
+.docs/symbol_mapper/templates/history/
+```
+
+## Split-color markers
+
+For a vertical split marker, the left fill and left half of the outer border use
+color one. The right fill and right half of the outer border use color two. The
+same visual rule is used in palette buttons, row swatches, legend preview, result
+counts, review PDF, and final PDF.
+
+## Accuracy and export
+
+- Exact symbol-code text with enclosing vector evidence may be accepted.
+- Uncertain matches remain review items.
+- Only accepted matches are included in the final PDF.
+- The uploaded source PDF is never modified in place.
+- Source hash and page geometry are checked before final output is returned.
+
+Runtime sessions and saved standards remain beneath `.docs/` and are never part
+of customer-facing Git history.

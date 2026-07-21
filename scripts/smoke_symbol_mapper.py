@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.symbol_mapper import SymbolMapperStore
+from core.symbol_mapper import SymbolMapperStore, _draw_marker
 
 
 def _make_fixture(path: Path) -> None:
@@ -56,10 +56,52 @@ def main() -> int:
         fixture = tmp / "fixture.pdf"
         _make_fixture(fixture)
         source_hash = sha256(fixture.read_bytes()).hexdigest()
-        store = SymbolMapperStore(tmp / "sessions")
+        store = SymbolMapperStore(tmp / "sessions", default_template_path=ROOT / "defaults" / "symbol_mapper_standard.json")
         session = store.create_session(fixture.name, fixture.read_bytes())
         assert session["sourceSha256"] == source_hash
         assert session["pageCount"] == 1
+        template = session.get("template") or {}
+        assert len(template.get("symbols", [])) == 13, template
+        assert len([item for item in template["symbols"] if item["code"] == "S"]) == 2, template
+
+        saved = store.save_template({"symbols": [
+            {
+                "code": "TS",
+                "label": "TEMPERATURE SENSOR",
+                "enabled": True,
+                "paletteId": "orange",
+                "color": "#ff7a00",
+                "color2": "#ff7a00",
+                "pattern": "solid",
+            },
+            {
+                "code": "ZZ",
+                "label": "FUTURE TEST SYMBOL",
+                "enabled": True,
+                "paletteId": "blue",
+                "color": "#1e73be",
+                "color2": "#1e73be",
+                "pattern": "solid",
+            },
+        ]})
+        assert saved["added"] == 1 and saved["updated"] == 1, saved
+        assert saved["total"] == 14, saved
+        assert len([item for item in saved["template"]["symbols"] if item["code"] == "S"]) == 2, saved
+        assert list((tmp / "sessions" / "templates" / "history").glob("standard-*.json")), saved
+
+        # Split-color outlines must use both colors as actual PDF strokes, not one
+        # color around the entire box with a merely split translucent fill.
+        marker_doc = fitz.open()
+        marker_page = marker_doc.new_page(width=100, height=100)
+        _draw_marker(marker_page, fitz.Rect(20, 20, 60, 60), {
+            "color": "#ffd400",
+            "color2": "#1e73be",
+            "pattern": "split-vertical",
+        })
+        strokes = [drawing.get("color") for drawing in marker_page.get_drawings() if drawing.get("color")]
+        assert any(color and color[0] > 0.9 and color[1] > 0.7 and color[2] < 0.1 for color in strokes), strokes
+        assert any(color and color[2] > 0.5 and color[0] < 0.3 for color in strokes), strokes
+        marker_doc.close()
 
         legend = session.get("legend") or {}
         assert legend.get("found") is True, legend
@@ -124,6 +166,8 @@ def main() -> int:
             "rejected": result["rejectedCount"],
             "outputSha256": result["outputSha256"],
             "legendRows": len(legend["rows"]),
+            "templateSymbols": saved["total"],
+            "splitOutline": True,
         }
         print(json.dumps(report, indent=2))
         return 0

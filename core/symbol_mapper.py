@@ -64,6 +64,17 @@ MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 MAX_CLASSES = 64
 MAX_CANDIDATES = 10000
 MAX_LEGEND_ROWS = 64
+MAX_TEMPLATE_SYMBOLS = 256
+TEMPLATE_VERSION = 1
+TEMPLATE_PATTERNS = {
+    "solid",
+    "outline",
+    "double-outline",
+    "split-vertical",
+    "split-horizontal",
+    "diagonal",
+    "crosshatch",
+}
 LEGEND_HEADER_RE = re.compile(
     r"\bSYMBOLS?\b.*\b(KEY|LEGEND)\b|\b(KEY|LEGEND)\b.*\bSYMBOLS?\b",
     re.IGNORECASE,
@@ -91,6 +102,39 @@ def _safe_filename(name: str) -> str:
     base = Path(name or "drawing.pdf").name
     base = re.sub(r"[^A-Za-z0-9._ -]+", "_", base).strip(" .")
     return base or "drawing.pdf"
+
+
+def _template_text(value: Any) -> str:
+    text = str(value or "").upper()
+    text = re.sub(r"[^A-Z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _template_key(code: Any, label: Any) -> str:
+    return f"{_template_text(code)}|{_template_text(label)}"
+
+
+def _normalize_template_symbol(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    code = str(raw.get("code") or "").strip().upper()[:16]
+    label = str(raw.get("label") or "").strip()[:180]
+    if not code or not label:
+        return None
+    pattern = str(raw.get("pattern") or "solid").strip().lower()
+    if pattern not in TEMPLATE_PATTERNS:
+        pattern = "solid"
+    palette_id = re.sub(r"[^a-z0-9-]+", "-", str(raw.get("paletteId") or "").strip().lower()).strip("-")[:40]
+    return {
+        "key": _template_key(code, label),
+        "code": code,
+        "label": label,
+        "enabled": bool(raw.get("enabled", True)),
+        "paletteId": palette_id,
+        "color": _hex_color(raw.get("color"), "#ffd400"),
+        "color2": _hex_color(raw.get("color2"), _hex_color(raw.get("color"), "#ffd400")),
+        "pattern": pattern,
+    }
 
 
 def _hex_color(value: Any, fallback: str = "#ffcc00") -> str:
@@ -680,14 +724,40 @@ def _draw_marker(page: "fitz.Page", marker_rect: "fitz.Rect", cls: dict[str, Any
             page.draw_rect(inset, color=color2, width=0.9, stroke_opacity=0.9, overlay=True)
     elif pattern == "split-vertical":
         mid = (rect.x0 + rect.x1) / 2
-        page.draw_rect(fitz.Rect(rect.x0, rect.y0, mid, rect.y1), fill=color1, color=None, fill_opacity=opacity, overlay=True)
-        page.draw_rect(fitz.Rect(mid, rect.y0, rect.x1, rect.y1), fill=color2, color=None, fill_opacity=opacity, overlay=True)
-        page.draw_rect(rect, color=outline, width=1.2, stroke_opacity=0.95, overlay=True)
+        left = fitz.Rect(rect.x0, rect.y0, mid, rect.y1)
+        right = fitz.Rect(mid, rect.y0, rect.x1, rect.y1)
+        page.draw_rect(left, fill=color1, color=None, fill_opacity=opacity, overlay=True)
+        page.draw_rect(right, fill=color2, color=None, fill_opacity=opacity, overlay=True)
+        if review:
+            page.draw_rect(rect, color=outline, width=1.4, stroke_opacity=0.95, overlay=True)
+        else:
+            # Match the outline to the split fill: left half uses color 1, right
+            # half uses color 2. This is much easier to distinguish at drawing scale.
+            width = 1.6
+            page.draw_line((rect.x0, rect.y0), (mid, rect.y0), color=color1, width=width, overlay=True)
+            page.draw_line((rect.x0, rect.y1), (mid, rect.y1), color=color1, width=width, overlay=True)
+            page.draw_line((rect.x0, rect.y0), (rect.x0, rect.y1), color=color1, width=width, overlay=True)
+            page.draw_line((mid, rect.y0), (rect.x1, rect.y0), color=color2, width=width, overlay=True)
+            page.draw_line((mid, rect.y1), (rect.x1, rect.y1), color=color2, width=width, overlay=True)
+            page.draw_line((rect.x1, rect.y0), (rect.x1, rect.y1), color=color2, width=width, overlay=True)
+            page.draw_line((mid, rect.y0), (mid, rect.y1), color=(0.25, 0.25, 0.25), width=0.45, stroke_opacity=0.55, overlay=True)
     elif pattern == "split-horizontal":
         mid = (rect.y0 + rect.y1) / 2
-        page.draw_rect(fitz.Rect(rect.x0, rect.y0, rect.x1, mid), fill=color1, color=None, fill_opacity=opacity, overlay=True)
-        page.draw_rect(fitz.Rect(rect.x0, mid, rect.x1, rect.y1), fill=color2, color=None, fill_opacity=opacity, overlay=True)
-        page.draw_rect(rect, color=outline, width=1.2, stroke_opacity=0.95, overlay=True)
+        top = fitz.Rect(rect.x0, rect.y0, rect.x1, mid)
+        bottom = fitz.Rect(rect.x0, mid, rect.x1, rect.y1)
+        page.draw_rect(top, fill=color1, color=None, fill_opacity=opacity, overlay=True)
+        page.draw_rect(bottom, fill=color2, color=None, fill_opacity=opacity, overlay=True)
+        if review:
+            page.draw_rect(rect, color=outline, width=1.4, stroke_opacity=0.95, overlay=True)
+        else:
+            width = 1.6
+            page.draw_line((rect.x0, rect.y0), (rect.x1, rect.y0), color=color1, width=width, overlay=True)
+            page.draw_line((rect.x0, rect.y0), (rect.x0, mid), color=color1, width=width, overlay=True)
+            page.draw_line((rect.x1, rect.y0), (rect.x1, mid), color=color1, width=width, overlay=True)
+            page.draw_line((rect.x0, rect.y1), (rect.x1, rect.y1), color=color2, width=width, overlay=True)
+            page.draw_line((rect.x0, mid), (rect.x0, rect.y1), color=color2, width=width, overlay=True)
+            page.draw_line((rect.x1, mid), (rect.x1, rect.y1), color=color2, width=width, overlay=True)
+            page.draw_line((rect.x0, mid), (rect.x1, mid), color=(0.25, 0.25, 0.25), width=0.45, stroke_opacity=0.55, overlay=True)
     else:
         page.draw_rect(rect, color=outline, fill=color1, width=1.2, fill_opacity=opacity * 0.65, stroke_opacity=0.95, overlay=True)
         _draw_hatch(page, rect, color2, reverse=False)
@@ -772,11 +842,93 @@ def _summary(candidates: Sequence[dict[str, Any]], classes: Sequence[dict[str, A
 class SymbolMapperStore:
     """File-backed symbol-mapper session store."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, default_template_path: Path | None = None):
         if fitz is None:
             raise RuntimeError(f"PyMuPDF is required for Symbol Mapper: {_FITZ_IMPORT_ERROR}")
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
+        self.template_dir = self.root / "templates"
+        self.template_dir.mkdir(parents=True, exist_ok=True)
+        self.template_path = self.template_dir / "standard.json"
+        self.template_history_dir = self.template_dir / "history"
+        self.template_history_dir.mkdir(parents=True, exist_ok=True)
+        default_path = Path(default_template_path) if default_template_path else None
+        if not self.template_path.exists() and default_path and default_path.is_file():
+            shutil.copy2(default_path, self.template_path)
+        if not self.template_path.exists():
+            self._write_template({
+                "version": TEMPLATE_VERSION,
+                "id": "singh360-standard",
+                "name": "Singh360 Standard",
+                "updatedAt": _utcnow(),
+                "symbols": [],
+            })
+
+    def _write_template(self, payload: dict[str, Any]) -> None:
+        temp = self.template_path.with_suffix(".json.tmp")
+        temp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        temp.replace(self.template_path)
+
+    def get_template(self) -> dict[str, Any]:
+        try:
+            raw = json.loads(self.template_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            raw = {}
+        symbols_raw = raw.get("symbols") if isinstance(raw, dict) else None
+        symbols: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        if isinstance(symbols_raw, list):
+            for item in symbols_raw[:MAX_TEMPLATE_SYMBOLS]:
+                normalized = _normalize_template_symbol(item)
+                if not normalized or normalized["key"] in seen:
+                    continue
+                seen.add(normalized["key"])
+                symbols.append(normalized)
+        return {
+            "version": TEMPLATE_VERSION,
+            "id": str(raw.get("id") or "singh360-standard") if isinstance(raw, dict) else "singh360-standard",
+            "name": str(raw.get("name") or "Singh360 Standard") if isinstance(raw, dict) else "Singh360 Standard",
+            "updatedAt": str(raw.get("updatedAt") or "") if isinstance(raw, dict) else "",
+            "symbols": symbols,
+        }
+
+    def save_template(self, payload: dict[str, Any]) -> dict[str, Any]:
+        raw_symbols = payload.get("symbols") if isinstance(payload, dict) else None
+        if not isinstance(raw_symbols, list):
+            raise SymbolMapperError("The standard template must include a symbols list.")
+        if len(raw_symbols) > MAX_TEMPLATE_SYMBOLS:
+            raise SymbolMapperError(f"A maximum of {MAX_TEMPLATE_SYMBOLS} saved symbols is supported.")
+
+        existing = self.get_template()
+        by_key = {item["key"]: item for item in existing["symbols"]}
+        added = 0
+        updated = 0
+        for raw in raw_symbols:
+            item = _normalize_template_symbol(raw)
+            if not item:
+                continue
+            if item["key"] in by_key:
+                updated += 1
+            else:
+                added += 1
+            by_key[item["key"]] = item
+
+        symbols = sorted(by_key.values(), key=lambda item: (item["code"], item["label"]))
+        if self.template_path.is_file():
+            backup = self.template_history_dir / f"standard-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}.json"
+            try:
+                shutil.copy2(self.template_path, backup)
+            except OSError:
+                pass
+        template = {
+            "version": TEMPLATE_VERSION,
+            "id": "singh360-standard",
+            "name": str(payload.get("name") or existing.get("name") or "Singh360 Standard"),
+            "updatedAt": _utcnow(),
+            "symbols": symbols,
+        }
+        self._write_template(template)
+        return {"ok": True, "template": template, "added": added, "updated": updated, "total": len(symbols)}
 
     def _session_dir(self, session_id: str) -> Path:
         if not SESSION_ID_RE.fullmatch(session_id or ""):
@@ -854,6 +1006,7 @@ class SymbolMapperStore:
                 "previewUrl": f"/api/symbol-mapper/sessions/{session_id}/assets/source.png",
                 "visualMatchingAvailable": cv2 is not None and np is not None,
                 "legend": legend,
+                "template": self.get_template(),
             }
             self._write_json(session_id, "session.json", metadata)
             return metadata

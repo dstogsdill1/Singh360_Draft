@@ -1,14 +1,17 @@
-import { useMemo, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { useMemo, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import {
   createSymbolMapperSession,
   detectSymbolMap,
   renderSymbolMap,
+  saveSymbolMapperTemplate,
   type SymbolMapperCandidate,
   type SymbolMapperClass,
   type SymbolMapperDetection,
   type SymbolMapperLegendRow,
   type SymbolMapperRenderResult,
   type SymbolMapperSession,
+  type SymbolMapperTemplate,
+  type SymbolMapperTemplateSymbol,
 } from '../api/client';
 
 interface Props {
@@ -31,6 +34,7 @@ type ConfiguredSymbol = SymbolMapperClass & {
   paletteId: string;
   iconDataUrl: string;
   legendBox: { x0: number; y0: number; x1: number; y1: number };
+  templateMatched: boolean;
 };
 
 const PALETTE: PaletteChoice[] = [
@@ -52,30 +56,96 @@ const PALETTE: PaletteChoice[] = [
   { id: 'blue-green', label: 'Blue / Green', color: '#1e73be', color2: '#00a651', pattern: 'split-vertical' },
 ];
 
-function paletteBackground(choice: Pick<PaletteChoice, 'color' | 'color2' | 'pattern'>): string {
-  return choice.pattern === 'split-vertical'
-    ? `linear-gradient(90deg, ${choice.color} 0 50%, ${choice.color2} 50% 100%)`
-    : choice.color;
+function rgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return `rgba(255, 212, 0, ${alpha})`;
+  const value = Number.parseInt(clean, 16);
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
 }
 
-function classFromLegend(row: SymbolMapperLegendRow, index: number): ConfiguredSymbol {
-  const choice = PALETTE[index % PALETTE.length];
+function markerVisualStyle(
+  choice: Pick<PaletteChoice, 'color' | 'color2' | 'pattern'>,
+  fillAlpha = 1,
+  borderWidth = 2,
+): CSSProperties {
+  if (choice.pattern === 'split-vertical') {
+    const fill = `linear-gradient(90deg, ${rgba(choice.color, fillAlpha)} 0 50%, ${rgba(choice.color2, fillAlpha)} 50% 100%)`;
+    const outline = `linear-gradient(90deg, ${choice.color} 0 50%, ${choice.color2} 50% 100%)`;
+    return {
+      border: `${borderWidth}px solid transparent`,
+      background: `${fill} padding-box, ${outline} border-box`,
+      backgroundOrigin: 'border-box',
+      backgroundClip: 'padding-box, border-box',
+      boxSizing: 'border-box',
+    };
+  }
   return {
-    id: row.id,
-    code: row.code,
-    label: row.label,
-    shape: row.shape,
-    color: choice.color,
-    color2: choice.color2,
-    pattern: choice.pattern,
-    markerSizePt: row.markerSizePt,
-    templateBox: row.templateBox,
-    visualEnabled: false,
-    enabled: true,
-    paletteId: choice.id,
-    iconDataUrl: row.iconDataUrl,
-    legendBox: row.legendBox,
+    border: `${borderWidth}px solid ${choice.color}`,
+    background: rgba(choice.color, fillAlpha),
+    boxSizing: 'border-box',
   };
+}
+
+function normalizeTemplateText(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function templateKey(code: string, label: string): string {
+  return `${normalizeTemplateText(code)}|${normalizeTemplateText(label)}`;
+}
+
+function choiceForTemplate(item: SymbolMapperTemplateSymbol | undefined, index: number): PaletteChoice {
+  const direct = item?.paletteId ? PALETTE.find((choice) => choice.id === item.paletteId) : undefined;
+  if (direct) return direct;
+  const inferred = item ? PALETTE.find((choice) => (
+    choice.pattern === item.pattern
+    && choice.color.toLowerCase() === item.color.toLowerCase()
+    && choice.color2.toLowerCase() === item.color2.toLowerCase()
+  )) : undefined;
+  return inferred ?? PALETTE[index % PALETTE.length];
+}
+
+function buildSymbols(rows: SymbolMapperLegendRow[], template: SymbolMapperTemplate): ConfiguredSymbol[] {
+  const exact = new Map(template.symbols.map((item) => [templateKey(item.code, item.label), item]));
+  const templateByCode = new Map<string, SymbolMapperTemplateSymbol[]>();
+  for (const item of template.symbols) {
+    const code = normalizeTemplateText(item.code);
+    templateByCode.set(code, [...(templateByCode.get(code) ?? []), item]);
+  }
+  const rowCodeCounts = new Map<string, number>();
+  for (const row of rows) {
+    const code = normalizeTemplateText(row.code);
+    rowCodeCounts.set(code, (rowCodeCounts.get(code) ?? 0) + 1);
+  }
+
+  return rows.map((row, index) => {
+    const code = normalizeTemplateText(row.code);
+    let saved = exact.get(templateKey(row.code, row.label));
+    // Code-only fallback is allowed only when both the page and the saved standard
+    // have one unambiguous row for that code. Duplicate codes such as S remain
+    // separated by their descriptions.
+    if (!saved && rowCodeCounts.get(code) === 1 && (templateByCode.get(code)?.length ?? 0) === 1) {
+      saved = templateByCode.get(code)?.[0];
+    }
+    const choice = choiceForTemplate(saved, index);
+    return {
+      id: row.id,
+      code: row.code,
+      label: row.label,
+      shape: row.shape,
+      color: saved?.color ?? choice.color,
+      color2: saved?.color2 ?? choice.color2,
+      pattern: saved?.pattern ?? choice.pattern,
+      markerSizePt: row.markerSizePt,
+      templateBox: row.templateBox,
+      visualEnabled: false,
+      enabled: saved?.enabled ?? true,
+      paletteId: saved?.paletteId || choice.id,
+      iconDataUrl: row.iconDataUrl,
+      legendBox: row.legendBox,
+      templateMatched: Boolean(saved),
+    };
+  });
 }
 
 function statusOf(candidate: SymbolMapperCandidate): 'accepted' | 'review' | 'rejected' {
@@ -92,6 +162,8 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
   const [rendered, setRendered] = useState<SymbolMapperRenderResult | null>(null);
   const [pageTitle, setPageTitle] = useState('SYMBOL HIGHLIGHT PLAN');
   const [loading, setLoading] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateStatus, setTemplateStatus] = useState('');
   const [error, setError] = useState('');
 
   const active = symbols.find((item) => item.id === activeId) ?? symbols[0];
@@ -120,8 +192,11 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
         setError(created.legend?.message || 'No SYMBOL KEY was found on this page.');
         return;
       }
-      const next = created.legend.rows.map(classFromLegend);
+      const next = buildSymbols(created.legend.rows, created.template);
       setSymbols(next);
+      setTemplateStatus(created.template.symbols.length
+        ? `${created.template.name} loaded · ${created.template.symbols.length} saved symbols`
+        : 'No saved standard yet. Choose colors and click Save standard.');
       setActiveId(next[0]?.id ?? '');
       setStep('choose');
     } catch (err) {
@@ -152,6 +227,32 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     setSymbols((current) => current.map((item) => ({ ...item, enabled: value })));
   };
 
+  const saveStandard = async () => {
+    if (!symbols.length) return;
+    setSavingTemplate(true);
+    setError('');
+    try {
+      const payload: SymbolMapperTemplateSymbol[] = symbols.map((item) => ({
+        key: templateKey(item.code, item.label),
+        code: item.code,
+        label: item.label,
+        enabled: item.enabled,
+        paletteId: item.paletteId,
+        color: item.color,
+        color2: item.color2,
+        pattern: item.pattern,
+      }));
+      const result = await saveSymbolMapperTemplate(payload);
+      setSession((current) => current ? { ...current, template: result.template } : current);
+      setSymbols((current) => current.map((item) => ({ ...item, templateMatched: true })));
+      setTemplateStatus(`Standard updated · ${result.added} added · ${result.updated} updated · ${result.total} total`);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
   const runSelected = async () => {
     if (!session || !enabled.length) {
       setError('Choose at least one symbol.');
@@ -160,7 +261,7 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     setLoading(true);
     setError('');
     try {
-      const classes = enabled.map(({ enabled: _enabled, paletteId: _paletteId, iconDataUrl: _iconDataUrl, legendBox: _legendBox, ...item }) => item);
+      const classes = enabled.map(({ enabled: _enabled, paletteId: _paletteId, iconDataUrl: _iconDataUrl, legendBox: _legendBox, templateMatched: _templateMatched, ...item }) => item);
       const result = await detectSymbolMap(session.id, classes);
       setDetection(result);
       setStep('results');
@@ -198,7 +299,7 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     setLoading(true);
     setError('');
     try {
-      const classes = enabled.map(({ enabled: _enabled, paletteId: _paletteId, iconDataUrl: _iconDataUrl, legendBox: _legendBox, ...item }) => item);
+      const classes = enabled.map(({ enabled: _enabled, paletteId: _paletteId, iconDataUrl: _iconDataUrl, legendBox: _legendBox, templateMatched: _templateMatched, ...item }) => item);
       const result = await renderSymbolMap(session.id, classes, detection.candidates);
       setRendered(result);
       setStep('output');
@@ -283,10 +384,14 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
                   <div>
                     <h3>Which symbols do you want?</h3>
                     <p>{session.legend?.found ? session.legend.message : 'No symbol key found.'}</p>
+                    <p className="sm-template-status">{templateStatus}</p>
                   </div>
                   <div className="sm-list-actions">
                     <button onClick={() => selectAll(true)}>All</button>
                     <button onClick={() => selectAll(false)}>None</button>
+                    <button className="sm-save-standard" disabled={savingTemplate || !symbols.length} onClick={() => void saveStandard()}>
+                      {savingTemplate ? 'Saving…' : session.template.symbols.length ? 'Update standard' : 'Save standard'}
+                    </button>
                   </div>
                 </div>
 
@@ -309,13 +414,14 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
                         </label>
                         <span className="sm-icon-thumb">
                           {item.iconDataUrl && <img src={item.iconDataUrl} alt="" />}
-                          <i style={{ background: paletteBackground(selectedPalette) }} />
+                          <i style={markerVisualStyle(selectedPalette, 0.24, 2)} />
                         </span>
                         <span className="sm-symbol-copy">
                           <strong>{item.code || 'SYMBOL'}</strong>
                           <small>{item.label}</small>
+                          {!item.templateMatched && <em className="sm-new-symbol">New</em>}
                         </span>
-                        <span className="sm-current-color" style={{ background: paletteBackground(selectedPalette) }} title={selectedPalette.label} />
+                        <span className="sm-current-color" style={markerVisualStyle(selectedPalette, 0.72, 2)} title={selectedPalette.label} />
                       </div>
                     );
                   })}
@@ -343,7 +449,7 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
                         onClick={() => applyPalette(choice.id)}
                         title={choice.label}
                       >
-                        <span style={{ background: paletteBackground(choice) }} />
+                        <span style={markerVisualStyle(choice, 1, 2)} />
                         <small>{choice.label}</small>
                       </button>
                     ))}
@@ -373,7 +479,7 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
                                 top: `${item.legendBox.y0 * 100}%`,
                                 width: `${(item.legendBox.x1 - item.legendBox.x0) * 100}%`,
                                 height: `${(item.legendBox.y1 - item.legendBox.y0) * 100}%`,
-                                background: paletteBackground(selectedPalette),
+                                ...markerVisualStyle(selectedPalette, 0.28, 2),
                               }}
                             />
                           );
@@ -409,7 +515,7 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
                     const selectedPalette = PALETTE.find((choice) => choice.id === item.paletteId) ?? PALETTE[0];
                     return (
                       <div key={item.id} className="sm-count-row">
-                        <span style={{ background: paletteBackground(selectedPalette) }} />
+                        <span style={markerVisualStyle(selectedPalette, 0.72, 2)} />
                         <div><strong>{item.code || 'SYMBOL'}</strong><small>{item.label}</small></div>
                         <b>{accepted}</b>
                         {review > 0 && <em>+{review} check</em>}

@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "id": "singh360-standard",
+  "name": "Singh360 Standard",
+  "updatedAt": "2026-07-21T22:52:21Z",
+  "symbols": [
+    {
+      "key": "TS|TEMPERATURE SENSOR",
+      "code": "TS",
+      "label": "TEMPERATURE SENSOR",
+      "enabled": true,
+      "paletteId": "blue",
+      "color": "#1e73be",
+      "color2": "#1e73be",
+      "pattern": "solid"
+    },
+    {
+      "key": "DA|DOOR ALARM",
+      "code": "DA",
+      "label": "DOOR ALARM",
+      "enabled": true,
+      "paletteId": "green",
+      "color": "#00a651",
+      "color2": "#00a651",
+      "pattern": "solid"
+    },
+    {
+      "key": "LS|REFRIGERANT LEAK DETECTION SENSOR",
+      "code": "LS",
+      "label": "REFRIGERANT LEAK DETECTION SENSOR",
+      "enabled": true,
+      "paletteId": "yellow",
+      "color": "#ffd400",
+      "color2": "#ffd400",
+      "pattern": "solid"
+    },
+    {
+      "key": "LI|REFRIGERANT LEAK INDICATOR AUDIO VISUAL ALARM",
+      "code": "LI",
+      "label": "REFRIGERANT LEAK INDICATOR AUDIO/VISUAL ALARM",
+      "enabled": true,
+      "paletteId": "red-yellow",
+      "color": "#e53935",
+      "color2": "#ffd400",
+      "pattern": "split-vertical"
+    },
+    {
+      "key": "CC|RDM CASE CONTROLLER",
+      "code": "CC",
+      "label": "RDM CASE CONTROLLER",
+      "enabled": true,
+      "paletteId": "pink",
+      "color": "#e84393",
+      "color2": "#e84393",
+      "pattern": "solid"
+    },
+    {
+      "key": "DTS|DUAL TEMPERATURE SWITCH",
+      "code": "DTS",
+      "label": "DUAL TEMPERATURE SWITCH",
+      "enabled": true,
+      "paletteId": "cyan",
+      "color": "#00a8cc",
+      "color2": "#00a8cc",
+      "pattern": "solid"
+    },
+    {
+      "key": "HT|HIGH TEMPERATURE ALARM STROBE AMBER",
+      "code": "HT",
+      "label": "HIGH TEMPERATURE ALARM STROBE (AMBER)",
+      "enabled": true,
+      "paletteId": "pink",
+      "color": "#e84393",
+      "color2": "#e84393",
+      "pattern": "solid"
+    },
+    {
+      "key": "ES|WALK IN FREEZER ENTRAPMENT SWITCH",
+      "code": "ES",
+      "label": "WALK-IN FREEZER ENTRAPMENT SWITCH",
+      "enabled": true,
+      "paletteId": "yellow-blue",
+      "color": "#ffd400",
+      "color2": "#1e73be",
+      "pattern": "split-vertical"
+    },
+    {
+      "key": "AS|ALARM STROBE RED",
+      "code": "AS",
+      "label": "ALARM STROBE (RED)",
+      "enabled": true,
+      "paletteId": "red",
+      "color": "#e53935",
+      "color2": "#e53935",
+      "pattern": "solid"
+    },
+    {
+      "key": "EA|ENTRAPMENT ALARM",
+      "code": "EA",
+      "label": "ENTRAPMENT ALARM",
+      "enabled": true,
+      "paletteId": "red-green",
+      "color": "#e53935",
+      "color2": "#00a651",
+      "pattern": "split-vertical"
+    },
+    {
+      "key": "S|LIQUID LINE SOLENOID VALVE 120V",
+      "code": "S",
+      "label": "LIQUID LINE SOLENOID VALVE 120V",
+      "enabled": true,
+      "paletteId": "purple",
+      "color": "#8e44ad",
+      "color2": "#8e44ad",
+      "pattern": "solid"
+    },
+    {
+      "key": "DT|DEFROST TERMINATION SENSOR",
+      "code": "DT",
+      "label": "DEFROST TERMINATION SENSOR",
+      "enabled": true,
+      "paletteId": "yellow-green",
+      "color": "#ffd400",
+      "color2": "#00a651",
+      "pattern": "split-vertical"
+    },
+    {
+      "key": "S|CLEAN SWITCH",
+      "code": "S",
+      "label": "CLEAN SWITCH",
+      "enabled": true,
+      "paletteId": "blue-green",
+      "color": "#1e73be",
+      "color2": "#00a651",
+      "pattern": "split-vertical"
+    }
+  ]
+}

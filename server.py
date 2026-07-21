@@ -94,7 +94,10 @@ def _ensure_minimal_runtime_workspace(docs: Path) -> None:
 
 
 _ensure_minimal_runtime_workspace(DOCS_DIR)
-symbol_mapper_store = SymbolMapperStore(DOCS_DIR / "symbol_mapper")
+symbol_mapper_store = SymbolMapperStore(
+    DOCS_DIR / "symbol_mapper",
+    default_template_path=HERE / "defaults" / "symbol_mapper_standard.json",
+)
 
 PROJECT_ID_RE = re.compile(r"^[a-f0-9]{16}$")
 _DEFAULT_PORT = 8765
@@ -1159,6 +1162,29 @@ def lib2_powerpoint_palette(variant: str):
     return send_file(out, as_attachment=True, download_name=out.name)
 
 # S360 SYMBOL MAPPER ROUTES START
+@app.get("/api/symbol-mapper/template")
+def symbol_mapper_get_template():
+    try:
+        return jsonify({"ok": True, "template": symbol_mapper_store.get_template()})
+    except SymbolMapperError as exc:
+        return jsonify(_err(str(exc))), 400
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Symbol Mapper template read failed")
+        return jsonify(_err("The Symbol Mapper standard could not be read.", str(exc))), 500
+
+
+@app.put("/api/symbol-mapper/template")
+def symbol_mapper_save_template():
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        return jsonify(symbol_mapper_store.save_template(body))
+    except SymbolMapperError as exc:
+        return jsonify(_err(str(exc))), 400
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Symbol Mapper template save failed")
+        return jsonify(_err("The Symbol Mapper standard could not be saved.", str(exc))), 500
+
+
 @app.post("/api/symbol-mapper/sessions")
 def symbol_mapper_create_session():
     upload = request.files.get("file")

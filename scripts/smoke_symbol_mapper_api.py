@@ -53,8 +53,23 @@ def main() -> int:
     temp = Path(tempfile.mkdtemp(prefix="s360_symbol_api_"))
     original_store = server.symbol_mapper_store
     try:
-        server.symbol_mapper_store = SymbolMapperStore(temp / "sessions")
+        server.symbol_mapper_store = SymbolMapperStore(temp / "sessions", default_template_path=ROOT / "defaults" / "symbol_mapper_standard.json")
         client = server.app.test_client()
+        standard = client.get("/api/symbol-mapper/template")
+        assert standard.status_code == 200, standard.get_data(as_text=True)
+        assert len(standard.get_json()["template"]["symbols"]) == 13
+        updated_standard = client.put("/api/symbol-mapper/template", json={"symbols": [{
+            "code": "ZZ",
+            "label": "FUTURE TEST SYMBOL",
+            "enabled": True,
+            "paletteId": "blue",
+            "color": "#1e73be",
+            "color2": "#1e73be",
+            "pattern": "solid",
+        }]})
+        assert updated_standard.status_code == 200, updated_standard.get_data(as_text=True)
+        assert updated_standard.get_json()["total"] == 14
+
         created = client.post(
             "/api/symbol-mapper/sessions",
             data={"file": (BytesIO(fixture_pdf()), "fixture.pdf")},
@@ -63,6 +78,7 @@ def main() -> int:
         assert created.status_code == 201, created.get_data(as_text=True)
         session = created.get_json()
         sid = session["id"]
+        assert len(session["template"]["symbols"]) == 14
         legend = session.get("legend") or {}
         assert legend.get("found") is True, legend
         assert [row["code"] for row in legend.get("rows", [])] == ["TS", "CC"], legend
@@ -109,7 +125,13 @@ def main() -> int:
 
         deleted = client.delete(f"/api/symbol-mapper/sessions/{sid}")
         assert deleted.status_code == 200
-        print(json.dumps({"ok": True, "sessionId": sid, "accepted": result["acceptedCount"], "legendRows": len(legend["rows"])}, indent=2))
+        print(json.dumps({
+            "ok": True,
+            "sessionId": sid,
+            "accepted": result["acceptedCount"],
+            "legendRows": len(legend["rows"]),
+            "templateSymbols": len(session["template"]["symbols"]),
+        }, indent=2))
         return 0
     finally:
         server.symbol_mapper_store = original_store

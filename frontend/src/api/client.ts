@@ -1109,6 +1109,33 @@ export interface SymbolMapperLegend {
   rows: SymbolMapperLegendRow[];
 }
 
+export interface SymbolMapperTemplateSymbol {
+  key: string;
+  code: string;
+  label: string;
+  enabled: boolean;
+  paletteId: string;
+  color: string;
+  color2: string;
+  pattern: SymbolMapperPattern;
+}
+
+export interface SymbolMapperTemplate {
+  version: number;
+  id: string;
+  name: string;
+  updatedAt: string;
+  symbols: SymbolMapperTemplateSymbol[];
+}
+
+export interface SymbolMapperTemplateSaveResult {
+  ok: boolean;
+  template: SymbolMapperTemplate;
+  added: number;
+  updated: number;
+  total: number;
+}
+
 export interface SymbolMapperSession {
   id: string;
   createdAt: string;
@@ -1128,6 +1155,7 @@ export interface SymbolMapperSession {
   previewUrl: string;
   visualMatchingAvailable: boolean;
   legend: SymbolMapperLegend;
+  template: SymbolMapperTemplate;
 }
 
 export interface SymbolMapperCandidate {
@@ -1196,6 +1224,23 @@ async function symbolMapperJson<T>(res: Response): Promise<T> {
     throw new Error(message || `Symbol Mapper request failed (${res.status}).`);
   }
   return res.json() as Promise<T>;
+}
+
+export async function getSymbolMapperTemplate(): Promise<SymbolMapperTemplate> {
+  const res = await fetch('/api/symbol-mapper/template');
+  const data = await symbolMapperJson<{ ok: boolean; template: SymbolMapperTemplate }>(res);
+  return data.template;
+}
+
+export async function saveSymbolMapperTemplate(
+  symbols: SymbolMapperTemplateSymbol[],
+): Promise<SymbolMapperTemplateSaveResult> {
+  const res = await fetch('/api/symbol-mapper/template', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Singh360 Standard', symbols }),
+  });
+  return symbolMapperJson<SymbolMapperTemplateSaveResult>(res);
 }
 
 export async function createSymbolMapperSession(file: File): Promise<SymbolMapperSession> {
