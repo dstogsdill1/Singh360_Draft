@@ -1,60 +1,37 @@
-# Singh360 Symbol Mapper - Local Integration
+# Singh360 Symbol Mapper — Simple Workflow
 
-Symbol Mapper is an independent, reviewed workflow inside Singh360 Draft. It accepts one PDF page, lets the user define symbol classes and legend-icon crops, detects candidates, requires review for uncertain results, exports an original-size marked PDF, and can add the reviewed result as a new Singh360 drawing page.
+The Symbol Mapper is a separate workspace inside Singh360 Draft.
 
-## Safety boundaries
+## Workflow
 
-- The uploaded source PDF is copied into `.docs/symbol_mapper/<session>/source.pdf` and never modified in place.
-- Exact text plus an enclosing vector marker may be pre-accepted.
-- Text-only and visual-template-only candidates remain in **Review** until the user accepts or rejects them.
-- Final output contains accepted candidates only.
-- Adding a page is explicit. The page is appended with sheet code `NEW`, includes the standard title block, and activates the existing renumber reminder.
-- No customer PDF, workbook, screenshot, `.docs` content, export, token, or credential is committed by the installer.
-- The local installer has no Google Cloud, SSH, Docker deployment, or `start-live.ps1` command.
+1. Upload one single-page PDF.
+2. The app finds the printed `SYMBOLS KEY` or `SYMBOL LEGEND` automatically.
+3. The discovered rows appear with their actual icon, code, and description.
+4. Check only the symbols you want.
+5. Click a ready-made color: Red, Green, Yellow, Blue, Orange, Purple,
+   Cyan, Pink, or a two-color split such as Red / Green or Red / Blue.
+6. The selected colors are shown directly over the symbol key.
+7. Click **Run selected symbols**.
+8. Only uncertain matches appear under **Needs a quick check**. Choose Include or
+   Ignore; you do not draw boxes around every occurrence.
+9. Click **Create highlighted page**, then download the original-size PDF or add
+   the page to the end of the open Singh360 project.
 
-## Local use
+## What was deliberately removed
 
-1. Start Singh360 Draft locally on port 8766.
-2. Open a project.
-3. Select the **Symbols** ribbon tab.
-4. Click **Open Symbol Mapper**.
-5. Upload a one-page PDF.
-6. Add one row per symbol, enter its printed code, choose the color/pattern, and optionally drag a tight box around the legend icon.
-7. Run detection.
-8. Review every orange/gray candidate. Accept or reject it. Use **Add missing marker** to drag a box around any symbol the detector missed.
-9. Render accepted highlights.
-10. Download the original-size PDF or click **Add reviewed page at end**.
+- No manual icon crop for every legend row.
+- No Primary Color / Secondary Color fields.
+- No marker-size control.
+- No source-outline selector.
+- No visible template-correlation or detector jargon.
+- No fake or disabled ribbon buttons.
 
-The added page is a normal canvas page. It can be moved, copied, excluded, renamed, renumbered, or deleted with the existing page controls.
+## Detection and output
 
-## Test commands
+The app reads the key from the PDF text coordinates and enclosing vector shapes.
+Exact text inside the expected circle or square is accepted automatically.
+Unboxed or ambiguous text is held for the small quick-check list. The uploaded
+PDF is never overwritten; the final output is a reviewed copy with the original
+page dimensions preserved.
 
-```powershell
-.\.venv\Scripts\python.exe -m py_compile server.py core\symbol_mapper.py
-.\.venv\Scripts\python.exe scripts\smoke_symbol_mapper.py
-.\.venv\Scripts\python.exe scripts\smoke_symbol_mapper_api.py
-Push-Location frontend
-npm run build
-Pop-Location
-git diff --check
-```
-
-## Storage
-
-Session data is local runtime data:
-
-```text
-.docs/
-  symbol_mapper/
-    <24-character session id>/
-      source.pdf
-      source.png
-      session.json
-      detection.json
-      review.pdf
-      review.png
-      final.pdf
-      final.png
-```
-
-Delete a session through the API or remove it only after confirming its output is no longer needed. Project pages use a copied project asset, so deleting an old session does not remove a page already added to a Singh360 project.
+Runtime sessions remain under `.docs/symbol_mapper/` and are not committed.

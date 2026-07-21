@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
+from base64 import b64encode
 import json
 import math
 from pathlib import Path
@@ -62,6 +63,13 @@ DEFAULT_VISUAL_DPI = 144
 MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 MAX_CLASSES = 64
 MAX_CANDIDATES = 10000
+MAX_LEGEND_ROWS = 64
+LEGEND_HEADER_RE = re.compile(
+    r"\bSYMBOLS?\b.*\b(KEY|LEGEND)\b|\b(KEY|LEGEND)\b.*\bSYMBOLS?\b",
+    re.IGNORECASE,
+)
+LEGEND_CODE_RE = re.compile(r"^[A-Z0-9][A-Z0-9./+\-]{0,7}$")
+SECTION_STOP_RE = re.compile(r"\b(NOTES?|SCHEDULE|DETAILS?|ABBREVIATIONS?)\b", re.IGNORECASE)
 
 
 class SymbolMapperError(RuntimeError):
@@ -157,7 +165,7 @@ def _normalize_class(raw: Any, index: int, page_rect: "fitz.Rect") -> dict[str, 
         return None
     class_id = re.sub(r"[^A-Za-z0-9_-]+", "_", str(raw.get("id") or f"class_{index + 1}"))[:80]
     expected = str(raw.get("shape") or "auto").lower()
-    if expected not in {"auto", "circle", "square"}:
+    if expected not in {"auto", "circle", "square", "none"}:
         expected = "auto"
     pattern = str(raw.get("pattern") or "solid").lower()
     if pattern not in {
@@ -231,24 +239,204 @@ def _shape_evidence(
     markers: Sequence[dict[str, Any]],
     expected: str,
 ) -> _ShapeEvidence:
+    if expected == "none":
+        return _ShapeEvidence(False, "", None)
     cx, cy = _center(hit)
-    best: tuple[float, dict[str, Any]] | None = None
+    eligible: list[dict[str, Any]] = []
     for marker in markers:
         rect = marker["rect"]
         if not (rect.x0 - 1.5 <= cx <= rect.x1 + 1.5 and rect.y0 - 1.5 <= cy <= rect.y1 + 1.5):
             continue
-        if rect.width < max(3.5, hit.width * 0.65) or rect.height < max(3.5, hit.height * 0.65):
+        if rect.width < 3.5 or rect.height < 3.5:
             continue
-        shape = marker["shape"]
+        shape = str(marker.get("shape") or "square")
         if expected != "auto" and shape != expected:
             continue
-        score = _distance(hit, rect) + abs(rect.width - rect.height) * 0.05
-        if best is None or score < best[0]:
-            best = (score, marker)
-    if best is None:
+        eligible.append(marker)
+    if not eligible:
         return _ShapeEvidence(False, "", None)
-    marker = best[1]
+
+    # PDF text glyphs are often reported as tiny rectangular vector paths. Prefer
+    # the real circular enclosure when one exists; otherwise choose the largest
+    # enclosing marker. This correctly distinguishes circled symbols from CC and
+    # other square/plain symbols without asking the user to crop every icon.
+    circles = [item for item in eligible if item.get("shape") == "circle"]
+    pool = circles if circles else eligible
+    marker = max(pool, key=lambda item: item["rect"].get_area())
     return _ShapeEvidence(True, str(marker["shape"]), _rect_tuple(marker["rect"]))
+
+
+
+def _text_lines(page: "fitz.Page") -> list[dict[str, Any]]:
+    grouped: dict[tuple[int, int], list[Any]] = {}
+    for word in page.get_text("words") or []:
+        if len(word) < 8:
+            continue
+        grouped.setdefault((int(word[5]), int(word[6])), []).append(word)
+    lines: list[dict[str, Any]] = []
+    for key, words in grouped.items():
+        ordered = sorted(words, key=lambda item: float(item[0]))
+        rect = fitz.Rect(
+            min(float(item[0]) for item in ordered),
+            min(float(item[1]) for item in ordered),
+            max(float(item[2]) for item in ordered),
+            max(float(item[3]) for item in ordered),
+        )
+        value = " ".join(str(item[4]) for item in ordered).strip()
+        lines.append({"key": key, "words": ordered, "rect": rect, "text": value, "upper": value.upper()})
+    lines.sort(key=lambda item: (item["rect"].y0, item["rect"].x0))
+    return lines
+
+
+def _png_data_url(page: "fitz.Page", rect: "fitz.Rect", dpi: int = 216) -> str:
+    clip = fitz.Rect(rect) & page.rect
+    if clip.is_empty:
+        return ""
+    pix = page.get_pixmap(matrix=fitz.Matrix(dpi / 72.0, dpi / 72.0), clip=clip, alpha=False)
+    return "data:image/png;base64," + b64encode(pix.tobytes("png")).decode("ascii")
+
+
+def _normalized_box(rect: "fitz.Rect", reference: "fitz.Rect") -> dict[str, float]:
+    width = max(reference.width, 1.0)
+    height = max(reference.height, 1.0)
+    return {
+        "x0": round((rect.x0 - reference.x0) / width, 6),
+        "y0": round((rect.y0 - reference.y0) / height, 6),
+        "x1": round((rect.x1 - reference.x0) / width, 6),
+        "y1": round((rect.y1 - reference.y0) / height, 6),
+    }
+
+
+def _legend_marker_for_hit(hit: "fitz.Rect", markers: Sequence[dict[str, Any]]) -> tuple["fitz.Rect", str]:
+    evidence = _shape_evidence(hit, markers, "auto")
+    if evidence.found and evidence.rect:
+        return fitz.Rect(evidence.rect), evidence.shape
+    # Plain text symbols such as CLEAN SWITCH may intentionally have no circle.
+    # Keep a small icon crop so the row still appears in the automatic picker.
+    return fitz.Rect(hit.x0 - 3.0, hit.y0 - 3.0, hit.x1 + 3.0, hit.y1 + 3.0), "none"
+
+
+def _discover_symbol_legend(page: "fitz.Page") -> dict[str, Any]:
+    """Find a printed SYMBOL KEY and return ready-to-use rows and thumbnails.
+
+    The discovery is deterministic and coordinate based. It does not use OCR or a
+    model: it pairs short code lines near the key's left edge with description
+    lines on the same baseline, then captures the enclosing vector icon.
+    """
+    lines = _text_lines(page)
+    headers = [line for line in lines if LEGEND_HEADER_RE.search(line["text"])]
+    if not headers:
+        return {"found": False, "message": "No SYMBOL KEY or SYMBOL LEGEND heading was found.", "rows": []}
+
+    markers = _small_vector_markers(page)
+    choices: list[tuple[int, dict[str, Any], list[dict[str, Any]], fitz.Rect]] = []
+    for header in headers:
+        header_rect = header["rect"]
+        rough_bottom = min(page.rect.y1, header_rect.y1 + max(220.0, page.rect.height * 0.22))
+        stops = [
+            line for line in lines
+            if header_rect.y1 + 8.0 < line["rect"].y0 < rough_bottom
+            and abs(line["rect"].x0 - header_rect.x0) < max(120.0, page.rect.width * 0.05)
+            and SECTION_STOP_RE.search(line["text"])
+            and line["rect"].height >= header_rect.height * 0.8
+        ]
+        bottom = min((line["rect"].y0 for line in stops), default=rough_bottom) - 2.0
+
+        code_lines: list[dict[str, Any]] = []
+        for line in lines:
+            rect = line["rect"]
+            if rect.y0 <= header_rect.y1 + 2.0 or rect.y0 >= bottom:
+                continue
+            if rect.x0 < header_rect.x0 - 80.0 or rect.x0 > header_rect.x0 + 80.0:
+                continue
+            compact = re.sub(r"\\s+", "", line["text"])
+            if compact.endswith("."):
+                continue
+            if LEGEND_CODE_RE.fullmatch(compact) and compact.upper() == compact:
+                code_lines.append({**line, "code": compact})
+
+        description_lines = [
+            line for line in lines
+            if header_rect.y1 + 2.0 < line["rect"].y0 < bottom
+            and header_rect.x0 + 8.0 < line["rect"].x0 < header_rect.x0 + page.rect.width * 0.18
+            and len(line["text"].strip()) >= 4
+            and re.search(r"[A-Za-z]", line["text"])
+            and not LEGEND_HEADER_RE.search(line["text"])
+            and not SECTION_STOP_RE.search(line["text"])
+        ]
+
+        rows: list[dict[str, Any]] = []
+        for description in description_lines:
+            center_y = (description["rect"].y0 + description["rect"].y1) / 2.0
+            nearby = [
+                code for code in code_lines
+                if abs(((code["rect"].y0 + code["rect"].y1) / 2.0) - center_y)
+                <= max(8.0, description["rect"].height * 1.3)
+            ]
+            if not nearby:
+                continue
+            code = min(nearby, key=lambda item: abs(((item["rect"].y0 + item["rect"].y1) / 2.0) - center_y))
+            icon_rect, shape = _legend_marker_for_hit(code["rect"], markers)
+            rows.append(
+                {
+                    "code": code["code"],
+                    "label": description["text"].strip(),
+                    "shape": shape,
+                    "iconRect": icon_rect,
+                    "descriptionRect": description["rect"],
+                }
+            )
+
+        unique: list[dict[str, Any]] = []
+        for row in sorted(rows, key=lambda item: item["iconRect"].y0):
+            if any(abs(row["iconRect"].y0 - existing["iconRect"].y0) < 2.0 for existing in unique):
+                continue
+            unique.append(row)
+        if len(unique) < 2:
+            continue
+
+        legend_rect = fitz.Rect(header_rect)
+        for row in unique:
+            legend_rect |= row["iconRect"]
+            legend_rect |= row["descriptionRect"]
+        legend_rect = fitz.Rect(
+            legend_rect.x0 - 8.0,
+            legend_rect.y0 - 6.0,
+            legend_rect.x1 + 8.0,
+            legend_rect.y1 + 8.0,
+        ) & page.rect
+        choices.append((len(unique), header, unique[:MAX_LEGEND_ROWS], legend_rect))
+
+    if not choices:
+        return {"found": False, "message": "A symbol-key heading was found, but its rows could not be read automatically.", "rows": []}
+
+    _, header, rows, legend_rect = max(choices, key=lambda item: item[0])
+    public_rows: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        icon_rect = fitz.Rect(row["iconRect"])
+        page_box = _normalized_box(icon_rect, page.rect)
+        legend_box = _normalized_box(icon_rect, legend_rect)
+        public_rows.append(
+            {
+                "id": f"legend_{index + 1}_{re.sub(r'[^A-Za-z0-9]+', '_', row['code']).strip('_').lower() or 'icon'}",
+                "code": row["code"],
+                "label": row["label"],
+                "shape": row["shape"],
+                "templateBox": page_box,
+                "legendBox": legend_box,
+                "iconDataUrl": _png_data_url(page, fitz.Rect(icon_rect.x0 - 3, icon_rect.y0 - 3, icon_rect.x1 + 3, icon_rect.y1 + 3), dpi=288),
+                "markerSizePt": round(max(16.0, min(34.0, max(icon_rect.width, icon_rect.height) + 7.0)), 2),
+            }
+        )
+
+    return {
+        "found": True,
+        "title": header["text"],
+        "message": f"Found {len(public_rows)} symbol rows automatically.",
+        "box": _normalized_box(legend_rect, page.rect),
+        "previewDataUrl": _png_data_url(page, legend_rect, dpi=180),
+        "rows": public_rows,
+    }
 
 
 def _candidate_id(class_id: str, method: str, rect: "fitz.Rect") -> str:
@@ -279,11 +467,25 @@ def _text_candidates(
         if not matching:
             continue
         hit = fitz.Rect(float(word[0]), float(word[1]), float(word[2]), float(word[3]))
+        auto_evidence = _shape_evidence(hit, markers, "auto")
+
+        # Duplicate printed codes are possible (for example circled S and plain S).
+        # Select the class whose discovered source outline matches this occurrence
+        # rather than producing duplicate highlights for the same text word.
+        if len(matching) > 1:
+            chosen: dict[str, Any] | None = None
+            if auto_evidence.found:
+                chosen = next((item for item in matching if item.get("shape") == auto_evidence.shape), None)
+                chosen = chosen or next((item for item in matching if item.get("shape") == "auto"), None)
+            else:
+                chosen = next((item for item in matching if item.get("shape") == "none"), None)
+                chosen = chosen or next((item for item in matching if item.get("shape") == "auto"), None)
+            matching = [chosen or matching[0]]
+
         for cls in matching:
-            evidence = _shape_evidence(hit, markers, cls["shape"])
-            accepted = evidence.found
-            # Single-character codes and unboxed exact words always remain review
-            # items unless the enclosing vector marker is present.
+            expected = str(cls.get("shape") or "auto")
+            evidence = _shape_evidence(hit, markers, expected)
+            accepted = evidence.found and expected != "none"
             status = "accepted" if accepted else "review"
             score = 1.0 if accepted else (0.72 if len(text) > 1 else 0.55)
             candidates.append(
@@ -632,6 +834,7 @@ class SymbolMapperStore:
             pix = page.get_pixmap(matrix=fitz.Matrix(DEFAULT_PREVIEW_DPI / 72.0, DEFAULT_PREVIEW_DPI / 72.0), alpha=False)
             pix.save(source_png)
             text = page.get_text("text") or ""
+            legend = _discover_symbol_legend(page)
             metadata = {
                 "id": session_id,
                 "createdAt": _utcnow(),
@@ -650,6 +853,7 @@ class SymbolMapperStore:
                 },
                 "previewUrl": f"/api/symbol-mapper/sessions/{session_id}/assets/source.png",
                 "visualMatchingAvailable": cv2 is not None and np is not None,
+                "legend": legend,
             }
             self._write_json(session_id, "session.json", metadata)
             return metadata

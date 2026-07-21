@@ -61,11 +61,30 @@ def main() -> int:
         assert session["sourceSha256"] == source_hash
         assert session["pageCount"] == 1
 
-        classes = [
-            {"id": "ts", "code": "TS", "label": "Temperature Sensor", "shape": "circle", "color": "#ffd400", "pattern": "solid", "markerSizePt": 22, "visualEnabled": False},
-            {"id": "da", "code": "DA", "label": "Door Alarm", "shape": "circle", "color": "#ff6b35", "pattern": "outline", "markerSizePt": 22, "visualEnabled": False},
-            {"id": "cc", "code": "CC", "label": "Case Controller", "shape": "square", "color": "#00a651", "pattern": "split-vertical", "color2": "#12539b", "markerSizePt": 22, "visualEnabled": False},
+        legend = session.get("legend") or {}
+        assert legend.get("found") is True, legend
+        assert [row["code"] for row in legend.get("rows", [])] == ["TS", "DA", "CC"], legend
+        assert legend.get("previewDataUrl", "").startswith("data:image/png;base64,"), legend
+
+        choices = [
+            ("#ffd400", "#ffd400", "solid"),
+            ("#e53935", "#e53935", "solid"),
+            ("#00a651", "#1e73be", "split-vertical"),
         ]
+        classes = []
+        for row, (color, color2, pattern) in zip(legend["rows"], choices):
+            classes.append({
+                "id": row["id"],
+                "code": row["code"],
+                "label": row["label"],
+                "shape": row["shape"],
+                "color": color,
+                "color2": color2,
+                "pattern": pattern,
+                "markerSizePt": row["markerSizePt"],
+                "templateBox": row["templateBox"],
+                "visualEnabled": False,
+            })
         detection = store.detect(session["id"], {"classes": classes})
         accepted = [c for c in detection["candidates"] if c["status"] == "accepted"]
         review = [c for c in detection["candidates"] if c["status"] == "review"]
@@ -104,6 +123,7 @@ def main() -> int:
             "review": result["reviewCount"],
             "rejected": result["rejectedCount"],
             "outputSha256": result["outputSha256"],
+            "legendRows": len(legend["rows"]),
         }
         print(json.dumps(report, indent=2))
         return 0

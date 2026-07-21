@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useMemo, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import {
   createSymbolMapperSession,
   detectSymbolMap,
@@ -6,6 +6,7 @@ import {
   type SymbolMapperCandidate,
   type SymbolMapperClass,
   type SymbolMapperDetection,
+  type SymbolMapperLegendRow,
   type SymbolMapperRenderResult,
   type SymbolMapperSession,
 } from '../api/client';
@@ -15,39 +16,65 @@ interface Props {
   onAddPage?: (result: SymbolMapperRenderResult, title: string) => Promise<void>;
 }
 
-type Step = 'upload' | 'configure' | 'review' | 'final';
-type NormalizedBox = { x0: number; y0: number; x1: number; y1: number };
+type Step = 'upload' | 'choose' | 'results' | 'output';
 
-const COLORS = [
-  '#ffd400', '#ff6b35', '#00a651', '#12539b', '#d71920', '#8e44ad',
-  '#00a8cc', '#7f8c8d', '#e67e22', '#2c3e50', '#c0392b', '#16a085',
+type PaletteChoice = {
+  id: string;
+  label: string;
+  color: string;
+  color2: string;
+  pattern: SymbolMapperClass['pattern'];
+};
+
+type ConfiguredSymbol = SymbolMapperClass & {
+  enabled: boolean;
+  paletteId: string;
+  iconDataUrl: string;
+  legendBox: { x0: number; y0: number; x1: number; y1: number };
+};
+
+const PALETTE: PaletteChoice[] = [
+  { id: 'red', label: 'Red', color: '#e53935', color2: '#e53935', pattern: 'solid' },
+  { id: 'green', label: 'Green', color: '#00a651', color2: '#00a651', pattern: 'solid' },
+  { id: 'yellow', label: 'Yellow', color: '#ffd400', color2: '#ffd400', pattern: 'solid' },
+  { id: 'blue', label: 'Blue', color: '#1e73be', color2: '#1e73be', pattern: 'solid' },
+  { id: 'orange', label: 'Orange', color: '#ff7a00', color2: '#ff7a00', pattern: 'solid' },
+  { id: 'purple', label: 'Purple', color: '#8e44ad', color2: '#8e44ad', pattern: 'solid' },
+  { id: 'cyan', label: 'Cyan', color: '#00a8cc', color2: '#00a8cc', pattern: 'solid' },
+  { id: 'pink', label: 'Pink', color: '#e84393', color2: '#e84393', pattern: 'solid' },
+  { id: 'red-green', label: 'Red / Green', color: '#e53935', color2: '#00a651', pattern: 'split-vertical' },
+  { id: 'red-blue', label: 'Red / Blue', color: '#e53935', color2: '#1e73be', pattern: 'split-vertical' },
+  { id: 'yellow-blue', label: 'Yellow / Blue', color: '#ffd400', color2: '#1e73be', pattern: 'split-vertical' },
+  { id: 'yellow-green', label: 'Yellow / Green', color: '#ffd400', color2: '#00a651', pattern: 'split-vertical' },
+  { id: 'orange-blue', label: 'Orange / Blue', color: '#ff7a00', color2: '#1e73be', pattern: 'split-vertical' },
+  { id: 'purple-green', label: 'Purple / Green', color: '#8e44ad', color2: '#00a651', pattern: 'split-vertical' },
+  { id: 'red-yellow', label: 'Red / Yellow', color: '#e53935', color2: '#ffd400', pattern: 'split-vertical' },
+  { id: 'blue-green', label: 'Blue / Green', color: '#1e73be', color2: '#00a651', pattern: 'split-vertical' },
 ];
 
-const PATTERNS: Array<{ value: SymbolMapperClass['pattern']; label: string }> = [
-  { value: 'solid', label: 'Solid fill' },
-  { value: 'outline', label: 'Outline only' },
-  { value: 'double-outline', label: 'Double outline' },
-  { value: 'split-vertical', label: 'Split vertical' },
-  { value: 'split-horizontal', label: 'Split horizontal' },
-  { value: 'diagonal', label: 'Diagonal stripe' },
-  { value: 'crosshatch', label: 'Crosshatch' },
-];
-
-function nextId() {
-  return `symbol_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+function paletteBackground(choice: Pick<PaletteChoice, 'color' | 'color2' | 'pattern'>): string {
+  return choice.pattern === 'split-vertical'
+    ? `linear-gradient(90deg, ${choice.color} 0 50%, ${choice.color2} 50% 100%)`
+    : choice.color;
 }
 
-function makeClass(index: number): SymbolMapperClass {
+function classFromLegend(row: SymbolMapperLegendRow, index: number): ConfiguredSymbol {
+  const choice = PALETTE[index % PALETTE.length];
   return {
-    id: nextId(),
-    code: '',
-    label: '',
-    shape: 'auto',
-    color: COLORS[index % COLORS.length],
-    color2: COLORS[(index + 3) % COLORS.length],
-    pattern: PATTERNS[Math.floor(index / COLORS.length) % PATTERNS.length].value,
-    markerSizePt: 18,
-    visualEnabled: true,
+    id: row.id,
+    code: row.code,
+    label: row.label,
+    shape: row.shape,
+    color: choice.color,
+    color2: choice.color2,
+    pattern: choice.pattern,
+    markerSizePt: row.markerSizePt,
+    templateBox: row.templateBox,
+    visualEnabled: false,
+    enabled: true,
+    paletteId: choice.id,
+    iconDataUrl: row.iconDataUrl,
+    legendBox: row.legendBox,
   };
 }
 
@@ -56,63 +83,47 @@ function statusOf(candidate: SymbolMapperCandidate): 'accepted' | 'review' | 're
   return candidate.accepted ? 'accepted' : 'review';
 }
 
-function displayScore(value: number) {
-  return Number.isFinite(value) ? `${Math.round(value * 100)}%` : '—';
-}
-
 export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
   const [step, setStep] = useState<Step>('upload');
   const [session, setSession] = useState<SymbolMapperSession | null>(null);
-  const [classes, setClasses] = useState<SymbolMapperClass[]>([makeClass(0)]);
-  const [activeClassId, setActiveClassId] = useState<string>('');
+  const [symbols, setSymbols] = useState<ConfiguredSymbol[]>([]);
+  const [activeId, setActiveId] = useState('');
   const [detection, setDetection] = useState<SymbolMapperDetection | null>(null);
   const [rendered, setRendered] = useState<SymbolMapperRenderResult | null>(null);
   const [pageTitle, setPageTitle] = useState('SYMBOL HIGHLIGHT PLAN');
-  const [filterClass, setFilterClass] = useState('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'accepted' | 'review' | 'rejected'>('all');
-  const [focusCandidateId, setFocusCandidateId] = useState('');
-  const [zoom, setZoom] = useState(1);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
-  const [dragBox, setDragBox] = useState<NormalizedBox | null>(null);
-  const [manualMode, setManualMode] = useState(false);
-  const [manualClassId, setManualClassId] = useState('');
-  const [manualStart, setManualStart] = useState<{ x: number; y: number } | null>(null);
-  const [manualBox, setManualBox] = useState<NormalizedBox | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const configureImgRef = useRef<HTMLImageElement | null>(null);
-  const reviewImgRef = useRef<HTMLImageElement | null>(null);
-  const reviewFocusRef = useRef<HTMLDivElement | null>(null);
 
-  const activeClass = classes.find((item) => item.id === activeClassId) ?? classes[0];
-
-  const updateClass = (id: string, patch: Partial<SymbolMapperClass>) => {
-    setClasses((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-  };
-
-  const addClass = () => {
-    const next = makeClass(classes.length);
-    setClasses((current) => [...current, next]);
-    setActiveClassId(next.id);
-  };
-
-  const removeClass = (id: string) => {
-    if (classes.length <= 1) return;
-    const remaining = classes.filter((item) => item.id !== id);
-    setClasses(remaining);
-    if (activeClassId === id) setActiveClassId(remaining[0]?.id ?? '');
-  };
+  const active = symbols.find((item) => item.id === activeId) ?? symbols[0];
+  const enabled = symbols.filter((item) => item.enabled);
+  const reviewItems = useMemo(
+    () => (detection?.candidates ?? []).filter((candidate) => statusOf(candidate) === 'review'),
+    [detection],
+  );
+  const summary = useMemo(() => symbols.map((item) => {
+    const row = detection?.summary.find((entry) => entry.classId === item.id);
+    return { item, accepted: row?.accepted ?? 0, review: row?.review ?? 0, total: row?.total ?? 0 };
+  }).filter((entry) => entry.item.enabled), [symbols, detection]);
 
   const pickFile = async (file: File) => {
-    setError('');
     setLoading(true);
+    setError('');
     try {
       const created = await createSymbolMapperSession(file);
       setSession(created);
-      setStep('configure');
-      setActiveClassId(classes[0]?.id ?? '');
       setDetection(null);
       setRendered(null);
+      if (!created.legend?.found || !created.legend.rows.length) {
+        setSymbols([]);
+        setActiveId('');
+        setStep('choose');
+        setError(created.legend?.message || 'No SYMBOL KEY was found on this page.');
+        return;
+      }
+      const next = created.legend.rows.map(classFromLegend);
+      setSymbols(next);
+      setActiveId(next[0]?.id ?? '');
+      setStep('choose');
     } catch (err) {
       setError(String(err));
     } finally {
@@ -120,71 +131,39 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     }
   };
 
-  const pointInImage = (event: PointerEvent<HTMLDivElement>) => {
-    const img = configureImgRef.current;
-    if (!img) return null;
-    const bounds = img.getBoundingClientRect();
-    if (bounds.width <= 0 || bounds.height <= 0) return null;
-    const x = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-    const y = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
-    return { x, y };
+  const applyPalette = (paletteId: string) => {
+    if (!active) return;
+    const choice = PALETTE.find((item) => item.id === paletteId);
+    if (!choice) return;
+    setSymbols((current) => current.map((item) => item.id === active.id ? {
+      ...item,
+      paletteId: choice.id,
+      color: choice.color,
+      color2: choice.color2,
+      pattern: choice.pattern,
+    } : item));
   };
 
-  const beginCrop = (event: PointerEvent<HTMLDivElement>) => {
-    if (!activeClass) return;
-    const point = pointInImage(event);
-    if (!point) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDragStart(point);
-    setDragBox({ x0: point.x, y0: point.y, x1: point.x, y1: point.y });
+  const toggleSymbol = (id: string) => {
+    setSymbols((current) => current.map((item) => item.id === id ? { ...item, enabled: !item.enabled } : item));
   };
 
-  const moveCrop = (event: PointerEvent<HTMLDivElement>) => {
-    if (!dragStart) return;
-    const point = pointInImage(event);
-    if (!point) return;
-    setDragBox({
-      x0: Math.min(dragStart.x, point.x),
-      y0: Math.min(dragStart.y, point.y),
-      x1: Math.max(dragStart.x, point.x),
-      y1: Math.max(dragStart.y, point.y),
-    });
+  const selectAll = (value: boolean) => {
+    setSymbols((current) => current.map((item) => ({ ...item, enabled: value })));
   };
 
-  const finishCrop = (event: PointerEvent<HTMLDivElement>) => {
-    if (!dragStart || !dragBox || !activeClass) {
-      setDragStart(null);
-      setDragBox(null);
+  const runSelected = async () => {
+    if (!session || !enabled.length) {
+      setError('Choose at least one symbol.');
       return;
     }
-    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
-    const width = dragBox.x1 - dragBox.x0;
-    const height = dragBox.y1 - dragBox.y0;
-    if (width >= 0.002 && height >= 0.002) {
-      updateClass(activeClass.id, { templateBox: dragBox, visualEnabled: true });
-    }
-    setDragStart(null);
-    setDragBox(null);
-  };
-
-  const runDetection = async () => {
-    if (!session) return;
-    const valid = classes.filter((item) => item.code.trim() || item.templateBox);
-    if (!valid.length) {
-      setError('Enter a printed symbol code or draw a tight legend crop for at least one row.');
-      return;
-    }
-    setError('');
     setLoading(true);
+    setError('');
     try {
-      const result = await detectSymbolMap(session.id, valid);
-      setClasses(valid);
+      const classes = enabled.map(({ enabled: _enabled, paletteId: _paletteId, iconDataUrl: _iconDataUrl, legendBox: _legendBox, ...item }) => item);
+      const result = await detectSymbolMap(session.id, classes);
       setDetection(result);
-      setManualClassId(valid[0]?.id ?? '');
-      setManualMode(false);
-      setStep('review');
-      const firstReview = result.candidates.find((candidate) => statusOf(candidate) === 'review');
-      setFocusCandidateId(firstReview?.id ?? result.candidates[0]?.id ?? '');
+      setStep('results');
     } catch (err) {
       setError(String(err));
     } finally {
@@ -192,118 +171,37 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     }
   };
 
-  const setCandidateStatus = (id: string, status: 'accepted' | 'review' | 'rejected') => {
+  const decideCandidate = (id: string, include: boolean) => {
     setDetection((current) => current ? {
       ...current,
-      candidates: current.candidates.map((candidate) => candidate.id === id
-        ? { ...candidate, status, accepted: status === 'accepted' }
-        : candidate),
+      candidates: current.candidates.map((candidate) => candidate.id === id ? {
+        ...candidate,
+        status: include ? 'accepted' : 'rejected',
+        accepted: include,
+      } : candidate),
     } : current);
   };
 
-  const pointInReview = (event: PointerEvent<HTMLDivElement>) => {
-    const img = reviewImgRef.current;
-    if (!img) return null;
-    const bounds = img.getBoundingClientRect();
-    if (bounds.width <= 0 || bounds.height <= 0) return null;
-    const x = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-    const y = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
-    return { x, y };
+  const decideAllReview = (include: boolean) => {
+    setDetection((current) => current ? {
+      ...current,
+      candidates: current.candidates.map((candidate) => statusOf(candidate) === 'review' ? {
+        ...candidate,
+        status: include ? 'accepted' : 'rejected',
+        accepted: include,
+      } : candidate),
+    } : current);
   };
 
-  const beginManualMarker = (event: PointerEvent<HTMLDivElement>) => {
-    if (!manualMode || !manualClassId) return;
-    const point = pointInReview(event);
-    if (!point) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setManualStart(point);
-    setManualBox({ x0: point.x, y0: point.y, x1: point.x, y1: point.y });
-  };
-
-  const moveManualMarker = (event: PointerEvent<HTMLDivElement>) => {
-    if (!manualMode || !manualStart) return;
-    const point = pointInReview(event);
-    if (!point) return;
-    setManualBox({
-      x0: Math.min(manualStart.x, point.x),
-      y0: Math.min(manualStart.y, point.y),
-      x1: Math.max(manualStart.x, point.x),
-      y1: Math.max(manualStart.y, point.y),
-    });
-  };
-
-  const finishManualMarker = (event: PointerEvent<HTMLDivElement>) => {
-    if (!manualMode || !manualStart || !manualBox) {
-      setManualStart(null);
-      setManualBox(null);
-      return;
-    }
-    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
-    const symbolClass = classes.find((item) => item.id === manualClassId);
-    if (symbolClass) {
-      const x0 = manualBox.x0 * pageW;
-      const y0 = manualBox.y0 * pageH;
-      const x1 = manualBox.x1 * pageW;
-      const y1 = manualBox.y1 * pageH;
-      const width = Math.max(0.5, x1 - x0);
-      const height = Math.max(0.5, y1 - y0);
-      const cx = (x0 + x1) / 2;
-      const cy = (y0 + y1) / 2;
-      const side = Math.max(symbolClass.markerSizePt || 18, width + 5, height + 5);
-      const candidate: SymbolMapperCandidate = {
-        id: `manual_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        classId: symbolClass.id,
-        code: symbolClass.code,
-        label: symbolClass.label,
-        bbox: [x0, y0, x1, y1],
-        markerBox: [cx - side / 2, cy - side / 2, cx + side / 2, cy + side / 2],
-        method: 'manual',
-        evidence: ['user-placed'],
-        score: 1,
-        status: 'accepted',
-        accepted: true,
-        shapeRect: null,
-        text: '',
-      };
-      setDetection((current) => current ? { ...current, candidates: [...current.candidates, candidate] } : current);
-      setFocusCandidateId(candidate.id);
-    }
-    setManualStart(null);
-    setManualBox(null);
-    setManualMode(false);
-  };
-
-  const visibleCandidates = useMemo(() => {
-    const candidates = detection?.candidates ?? [];
-    return candidates.filter((candidate) => {
-      const classOk = filterClass === 'all' || candidate.classId === filterClass;
-      const statusOk = filterStatus === 'all' || statusOf(candidate) === filterStatus;
-      return classOk && statusOk;
-    });
-  }, [detection, filterClass, filterStatus]);
-
-  const liveSummary = useMemo(() => classes.map((symbolClass) => {
-    const items = (detection?.candidates ?? []).filter((candidate) => candidate.classId === symbolClass.id);
-    return {
-      classId: symbolClass.id,
-      code: symbolClass.code,
-      label: symbolClass.label,
-      accepted: items.filter((candidate) => statusOf(candidate) === 'accepted').length,
-      review: items.filter((candidate) => statusOf(candidate) === 'review').length,
-      rejected: items.filter((candidate) => statusOf(candidate) === 'rejected').length,
-      total: items.length,
-    };
-  }), [classes, detection]);
-
-  const renderReviewed = async () => {
+  const createResult = async () => {
     if (!session || !detection) return;
-    setError('');
     setLoading(true);
+    setError('');
     try {
+      const classes = enabled.map(({ enabled: _enabled, paletteId: _paletteId, iconDataUrl: _iconDataUrl, legendBox: _legendBox, ...item }) => item);
       const result = await renderSymbolMap(session.id, classes, detection.candidates);
       setRendered(result);
-      setStep('final');
+      setStep('output');
     } catch (err) {
       setError(String(err));
     } finally {
@@ -311,13 +209,12 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     }
   };
 
-  const addResultPage = async () => {
+  const addPage = async () => {
     if (!rendered || !onAddPage) return;
-    const title = pageTitle.trim() || 'SYMBOL HIGHLIGHT PLAN';
-    setError('');
     setLoading(true);
+    setError('');
     try {
-      await onAddPage(rendered, title);
+      await onAddPage(rendered, pageTitle.trim() || 'SYMBOL HIGHLIGHT PLAN');
       onClose();
     } catch (err) {
       setError(String(err));
@@ -326,180 +223,164 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     }
   };
 
-  const focusCandidate = (candidate: SymbolMapperCandidate) => {
-    setFocusCandidateId(candidate.id);
-    window.setTimeout(() => reviewFocusRef.current?.scrollIntoView({ block: 'center', inline: 'center' }), 0);
-  };
-
-  const focused = detection?.candidates.find((candidate) => candidate.id === focusCandidateId);
-  const pageW = session?.page.widthPt || 1;
-  const pageH = session?.page.heightPt || 1;
-
   return (
-    <div className="symbol-mapper-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="symbol-mapper-shell" role="dialog" aria-modal="true" aria-label="Symbol Mapper">
+    <div className="symbol-mapper-backdrop">
+      <section className="symbol-mapper-shell symbol-mapper-kiss" role="dialog" aria-modal="true" aria-label="Symbol Mapper">
         <header className="symbol-mapper-head">
           <div>
             <h2>Symbol Mapper</h2>
-            <p>Upload one drawing page, define the symbol key, review every match, then export or add a titled Singh360 page.</p>
+            <p>Pick the symbols. Pick the colors. Run it.</p>
           </div>
-          <button className="symbol-mapper-close" onClick={onClose} title="Close Symbol Mapper">×</button>
+          <button className="symbol-mapper-close" onClick={onClose} title="Close">×</button>
         </header>
 
-        <nav className="symbol-mapper-steps" aria-label="Symbol Mapper steps">
-          {(['upload', 'configure', 'review', 'final'] as Step[]).map((item, index) => (
+        <nav className="symbol-mapper-steps" aria-label="Steps">
+          {([
+            ['upload', '1. Upload'],
+            ['choose', '2. Choose symbols'],
+            ['results', '3. Check results'],
+            ['output', '4. Save'],
+          ] as Array<[Step, string]>).map(([value, label]) => (
             <button
-              key={item}
-              className={`${step === item ? 'active' : ''} ${(['upload', 'configure', 'review', 'final'] as Step[]).indexOf(step) > index ? 'done' : ''}`}
-              disabled={(item === 'configure' && !session) || (item === 'review' && !detection) || (item === 'final' && !rendered)}
-              onClick={() => setStep(item)}
+              key={value}
+              className={step === value ? 'active' : ''}
+              disabled={(value === 'choose' && !session) || (value === 'results' && !detection) || (value === 'output' && !rendered)}
+              onClick={() => setStep(value)}
             >
-              {index + 1}. {item === 'upload' ? 'Upload' : item === 'configure' ? 'Key & Colors' : item === 'review' ? 'Review' : 'Output'}
+              {label}
             </button>
           ))}
         </nav>
 
         <main className="symbol-mapper-body">
           {step === 'upload' && (
-            <div className="symbol-mapper-upload">
-              <div className="symbol-mapper-upload-card">
-                <div className="symbol-mapper-upload-icon">PDF</div>
-                <h3>Choose one PDF page</h3>
-                <p>The upload remains immutable. Symbol Mapper creates reviewed copies and never writes over the source file.</p>
+            <div className="sm-simple-upload">
+              <div className="sm-simple-upload-card">
+                <div className="sm-pdf-badge">PDF</div>
+                <h3>Upload one drawing page</h3>
+                <p>Symbol Mapper will find the printed symbol key automatically. You do not draw boxes around individual symbols.</p>
                 <label className="symbol-mapper-primary file-ribbon-btn">
-                  {loading ? 'Reading PDF…' : 'Select single-page PDF'}
+                  {loading ? 'Reading symbol key…' : 'Choose PDF'}
                   <input
                     type="file"
                     accept="application/pdf,.pdf"
                     disabled={loading}
-                    onChange={(event) => {
+                    onChange={(event: ChangeEvent<HTMLInputElement>) => {
                       const file = event.target.files?.[0];
                       event.currentTarget.value = '';
                       if (file) void pickFile(file);
                     }}
                   />
                 </label>
-                <div className="symbol-mapper-policy">
-                  <strong>Acceptance rule:</strong> exact text plus an enclosing vector marker can be pre-accepted. Text-only and image-template-only candidates always require review.
-                </div>
               </div>
             </div>
           )}
 
-          {step === 'configure' && session && (
-            <div className="symbol-mapper-configure">
-              <aside className="symbol-mapper-class-panel">
-                <div className="symbol-mapper-panel-title">
+          {step === 'choose' && session && (
+            <div className="sm-choose-layout">
+              <aside className="sm-symbol-list-panel">
+                <div className="sm-panel-heading">
                   <div>
-                    <h3>Symbol classes</h3>
-                    <p>Enter the printed code. Select a row, then drag tightly around its legend icon in the drawing preview.</p>
+                    <h3>Which symbols do you want?</h3>
+                    <p>{session.legend?.found ? session.legend.message : 'No symbol key found.'}</p>
                   </div>
-                  <button className="symbol-mapper-secondary" onClick={addClass}>+ Add symbol</button>
-                </div>
-
-                <div className="symbol-mapper-class-list">
-                  {classes.map((item, index) => (
-                    <article
-                      key={item.id}
-                      className={`symbol-mapper-class-card ${activeClass?.id === item.id ? 'active' : ''}`}
-                      onClick={() => setActiveClassId(item.id)}
-                    >
-                      <div className="symbol-mapper-class-card-head">
-                        <span className="symbol-mapper-swatch" style={{ background: item.color }} />
-                        <strong>{item.code || `Symbol ${index + 1}`}</strong>
-                        <span className={`symbol-mapper-crop-state ${item.templateBox ? 'ready' : ''}`}>{item.templateBox ? 'Icon crop set' : 'No icon crop'}</span>
-                        <button className="symbol-mapper-icon-button" disabled={classes.length <= 1} onClick={(event) => { event.stopPropagation(); removeClass(item.id); }} title="Remove symbol">×</button>
-                      </div>
-
-                      <div className="symbol-mapper-fields">
-                        <label>
-                          Printed code
-                          <input value={item.code} onChange={(event) => updateClass(item.id, { code: event.target.value.trimStart() })} placeholder="CC" />
-                        </label>
-                        <label>
-                          Description
-                          <input value={item.label} onChange={(event) => updateClass(item.id, { label: event.target.value })} placeholder="RDM case controller" />
-                        </label>
-                        <label>
-                          Expected source outline
-                          <select value={item.shape} onChange={(event) => updateClass(item.id, { shape: event.target.value as SymbolMapperClass['shape'] })}>
-                            <option value="auto">Auto</option>
-                            <option value="circle">Circle</option>
-                            <option value="square">Square</option>
-                          </select>
-                        </label>
-                        <label>
-                          Marker style
-                          <select value={item.pattern} onChange={(event) => updateClass(item.id, { pattern: event.target.value as SymbolMapperClass['pattern'] })}>
-                            {PATTERNS.map((pattern) => <option key={pattern.value} value={pattern.value}>{pattern.label}</option>)}
-                          </select>
-                        </label>
-                        <label>
-                          Primary color
-                          <input type="color" value={item.color} onChange={(event) => updateClass(item.id, { color: event.target.value })} />
-                        </label>
-                        <label>
-                          Secondary color
-                          <input type="color" value={item.color2} onChange={(event) => updateClass(item.id, { color2: event.target.value })} />
-                        </label>
-                        <label>
-                          Square marker size
-                          <input type="number" min={8} max={72} step={1} value={item.markerSizePt} onChange={(event) => updateClass(item.id, { markerSizePt: Number(event.target.value) || 18 })} />
-                        </label>
-                        <label className="symbol-mapper-checkbox">
-                          <input type="checkbox" checked={item.visualEnabled !== false} onChange={(event) => updateClass(item.id, { visualEnabled: event.target.checked })} />
-                          Use icon crop for review candidates
-                        </label>
-                      </div>
-                      {item.templateBox && (
-                        <button className="symbol-mapper-link" onClick={(event) => { event.stopPropagation(); updateClass(item.id, { templateBox: undefined }); }}>Clear icon crop</button>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              </aside>
-
-              <section className="symbol-mapper-preview-panel">
-                <div className="symbol-mapper-preview-toolbar">
-                  <div>
-                    <strong>{session.sourceName}</strong>
-                    <span>{Math.round(session.page.widthPt)} × {Math.round(session.page.heightPt)} pt · {session.page.hasText ? `${session.page.wordCount} text words` : 'flattened / no text layer'}</span>
+                  <div className="sm-list-actions">
+                    <button onClick={() => selectAll(true)}>All</button>
+                    <button onClick={() => selectAll(false)}>None</button>
                   </div>
-                  <span className="symbol-mapper-instruction">Selected: <strong>{activeClass?.code || activeClass?.label || 'unnamed symbol'}</strong>. Drag a tight rectangle around only its icon.</span>
                 </div>
-                <div className="symbol-mapper-preview-scroll">
-                  <div
-                    className="symbol-mapper-crop-stage"
-                    onPointerDown={beginCrop}
-                    onPointerMove={moveCrop}
-                    onPointerUp={finishCrop}
-                    onPointerCancel={finishCrop}
-                  >
-                    <img ref={configureImgRef} src={session.previewUrl} alt="Uploaded PDF page" draggable={false} />
-                    {classes.map((item) => item.templateBox && (
+
+                <div className="sm-symbol-list">
+                  {symbols.map((item) => {
+                    const selectedPalette = PALETTE.find((choice) => choice.id === item.paletteId) ?? PALETTE[0];
+                    return (
                       <div
                         key={item.id}
-                        className={`symbol-mapper-template-box ${activeClass?.id === item.id ? 'active' : ''}`}
-                        style={{
-                          left: `${item.templateBox.x0 * 100}%`,
-                          top: `${item.templateBox.y0 * 100}%`,
-                          width: `${(item.templateBox.x1 - item.templateBox.x0) * 100}%`,
-                          height: `${(item.templateBox.y1 - item.templateBox.y0) * 100}%`,
-                          borderColor: item.color,
+                        className={`sm-symbol-row ${active?.id === item.id ? 'active' : ''} ${item.enabled ? '' : 'disabled'}`}
+                        onClick={() => setActiveId(item.id)}
+                        onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                          if (event.key === 'Enter' || event.key === ' ') setActiveId(item.id);
                         }}
+                        role="button"
+                        tabIndex={0}
                       >
-                        <span style={{ background: item.color }}>{item.code || 'ICON'}</span>
+                        <label className="sm-check" onClick={(event: MouseEvent<HTMLLabelElement>) => event.stopPropagation()}>
+                          <input type="checkbox" checked={item.enabled} onChange={() => toggleSymbol(item.id)} />
+                        </label>
+                        <span className="sm-icon-thumb">
+                          {item.iconDataUrl && <img src={item.iconDataUrl} alt="" />}
+                          <i style={{ background: paletteBackground(selectedPalette) }} />
+                        </span>
+                        <span className="sm-symbol-copy">
+                          <strong>{item.code || 'SYMBOL'}</strong>
+                          <small>{item.label}</small>
+                        </span>
+                        <span className="sm-current-color" style={{ background: paletteBackground(selectedPalette) }} title={selectedPalette.label} />
                       </div>
+                    );
+                  })}
+                  {!symbols.length && (
+                    <div className="sm-no-legend">
+                      <strong>No symbol key was read.</strong>
+                      <span>This page needs a printed heading such as SYMBOLS KEY or SYMBOL LEGEND.</span>
+                    </div>
+                  )}
+                </div>
+              </aside>
+
+              <section className="sm-color-and-legend">
+                <div className="sm-color-picker">
+                  <div>
+                    <h3>Color for {active?.code || 'selected symbol'}</h3>
+                    <p>Click one. That is it.</p>
+                  </div>
+                  <div className="sm-palette-grid">
+                    {PALETTE.map((choice) => (
+                      <button
+                        key={choice.id}
+                        className={active?.paletteId === choice.id ? 'active' : ''}
+                        disabled={!active}
+                        onClick={() => applyPalette(choice.id)}
+                        title={choice.label}
+                      >
+                        <span style={{ background: paletteBackground(choice) }} />
+                        <small>{choice.label}</small>
+                      </button>
                     ))}
-                    {dragBox && (
-                      <div
-                        className="symbol-mapper-template-box drawing"
-                        style={{
-                          left: `${dragBox.x0 * 100}%`, top: `${dragBox.y0 * 100}%`,
-                          width: `${(dragBox.x1 - dragBox.x0) * 100}%`,
-                          height: `${(dragBox.y1 - dragBox.y0) * 100}%`,
-                        }}
-                      />
+                  </div>
+                </div>
+
+                <div className="sm-legend-preview-panel">
+                  <div className="sm-preview-title">
+                    <div>
+                      <h3>Symbol key preview</h3>
+                      <p>The chosen colors are shown directly over the key.</p>
+                    </div>
+                    <strong>{enabled.length} selected</strong>
+                  </div>
+                  <div className="sm-legend-stage">
+                    {session.legend?.previewDataUrl ? (
+                      <div className="sm-legend-image-wrap">
+                        <img src={session.legend.previewDataUrl} alt="Detected symbol key" />
+                        {symbols.filter((item) => item.enabled).map((item) => {
+                          const selectedPalette = PALETTE.find((choice) => choice.id === item.paletteId) ?? PALETTE[0];
+                          return (
+                            <span
+                              key={item.id}
+                              className="sm-legend-color-box"
+                              style={{
+                                left: `${item.legendBox.x0 * 100}%`,
+                                top: `${item.legendBox.y0 * 100}%`,
+                                width: `${(item.legendBox.x1 - item.legendBox.x0) * 100}%`,
+                                height: `${(item.legendBox.y1 - item.legendBox.y0) * 100}%`,
+                                background: paletteBackground(selectedPalette),
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="sm-no-legend">No legend preview is available.</div>
                     )}
                   </div>
                 </div>
@@ -507,144 +388,84 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
             </div>
           )}
 
-          {step === 'review' && session && detection && (
-            <div className="symbol-mapper-review">
-              <section className="symbol-mapper-review-preview">
-                <div className="symbol-mapper-preview-toolbar">
+          {step === 'results' && session && detection && (
+            <div className="sm-results-layout">
+              <section className="sm-results-preview">
+                <div className="sm-preview-title">
                   <div>
-                    <strong>Detection review</strong>
-                    <span>Colored = accepted. Gray corner marker = review required. Rejected items are omitted.</span>
+                    <h3>Highlighted drawing</h3>
+                    <p>Colored boxes are ready. Gray boxes need one quick decision.</p>
                   </div>
-                  <label className="symbol-mapper-zoom">Zoom <input type="range" min="0.5" max="3" step="0.1" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /> {Math.round(zoom * 100)}%</label>
+                  <strong>{detection.candidates.filter((item) => statusOf(item) === 'accepted').length} ready</strong>
                 </div>
-                <div className="symbol-mapper-review-scroll">
-                  <div
-                    className={`symbol-mapper-review-stage ${manualMode ? 'manual-mode' : ''}`}
-                    style={{ width: `${zoom * 100}%` }}
-                    onPointerDown={beginManualMarker}
-                    onPointerMove={moveManualMarker}
-                    onPointerUp={finishManualMarker}
-                    onPointerCancel={finishManualMarker}
-                  >
-                    <img ref={reviewImgRef} src={detection.reviewPngUrl} alt="Detection review" draggable={false} />
-                    {manualBox && (
-                      <div
-                        className="symbol-mapper-manual-box"
-                        style={{
-                          left: `${manualBox.x0 * 100}%`,
-                          top: `${manualBox.y0 * 100}%`,
-                          width: `${(manualBox.x1 - manualBox.x0) * 100}%`,
-                          height: `${(manualBox.y1 - manualBox.y0) * 100}%`,
-                        }}
-                      />
-                    )}
-                    {focused && (
-                      <div
-                        ref={reviewFocusRef}
-                        className="symbol-mapper-focus-box"
-                        style={{
-                          left: `${(focused.markerBox[0] / pageW) * 100}%`,
-                          top: `${(focused.markerBox[1] / pageH) * 100}%`,
-                          width: `${((focused.markerBox[2] - focused.markerBox[0]) / pageW) * 100}%`,
-                          height: `${((focused.markerBox[3] - focused.markerBox[1]) / pageH) * 100}%`,
-                        }}
-                      />
-                    )}
-                  </div>
+                <div className="sm-results-image-scroll">
+                  <img src={detection.reviewPngUrl} alt="Highlighted symbol review" />
                 </div>
               </section>
 
-              <aside className="symbol-mapper-review-panel">
-                <div className="symbol-mapper-summary-grid">
-                  {liveSummary.map((row) => (
-                    <button key={row.classId} className={filterClass === row.classId ? 'active' : ''} onClick={() => setFilterClass(filterClass === row.classId ? 'all' : row.classId)}>
-                      <strong>{row.code || 'ICON'}</strong>
-                      <span>{row.accepted} accepted · {row.review} review · {row.rejected} rejected</span>
-                    </button>
-                  ))}
-                </div>
-
-                {detection.warnings.map((warning) => <div className="symbol-mapper-warning" key={warning}>{warning}</div>)}
-
-                <div className="symbol-mapper-manual-tools">
-                  <select value={manualClassId} onChange={(event) => setManualClassId(event.target.value)}>
-                    {classes.map((item) => <option key={item.id} value={item.id}>{item.code || item.label || 'Icon'}</option>)}
-                  </select>
-                  <button
-                    className={`symbol-mapper-secondary ${manualMode ? 'active' : ''}`}
-                    disabled={!manualClassId}
-                    onClick={() => { setManualMode((value) => !value); setManualStart(null); setManualBox(null); }}
-                  >
-                    {manualMode ? 'Cancel manual marker' : 'Add missing marker'}
-                  </button>
-                  <span>{manualMode ? 'Drag tightly around the missed symbol on the drawing. The marker will be accepted and included.' : 'Use this for a symbol the detector missed.'}</span>
-                </div>
-
-                <div className="symbol-mapper-review-filters">
-                  <select value={filterClass} onChange={(event) => setFilterClass(event.target.value)}>
-                    <option value="all">All symbols</option>
-                    {classes.map((item) => <option key={item.id} value={item.id}>{item.code || item.label || 'Icon'}</option>)}
-                  </select>
-                  <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value as typeof filterStatus)}>
-                    <option value="all">All states</option>
-                    <option value="accepted">Accepted</option>
-                    <option value="review">Needs review</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                  <button className="symbol-mapper-secondary" onClick={() => visibleCandidates.forEach((candidate) => setCandidateStatus(candidate.id, 'accepted'))}>Accept visible</button>
-                  <button className="symbol-mapper-secondary" onClick={() => visibleCandidates.forEach((candidate) => setCandidateStatus(candidate.id, 'rejected'))}>Reject visible</button>
-                </div>
-
-                <div className="symbol-mapper-candidate-list">
-                  {visibleCandidates.map((candidate) => {
-                    const status = statusOf(candidate);
+              <aside className="sm-results-side">
+                <div className="sm-count-list">
+                  {summary.map(({ item, accepted, review, total }) => {
+                    const selectedPalette = PALETTE.find((choice) => choice.id === item.paletteId) ?? PALETTE[0];
                     return (
-                      <article key={candidate.id} className={`symbol-mapper-candidate ${status} ${focusCandidateId === candidate.id ? 'focused' : ''}`} onClick={() => focusCandidate(candidate)}>
-                        <div>
-                          <strong>{candidate.code || candidate.label || 'Icon'}</strong>
-                          <span>{candidate.method} · {displayScore(candidate.score)}</span>
-                          <small>{candidate.evidence.join(' + ')}</small>
-                        </div>
-                        <div className="symbol-mapper-status-actions" onClick={(event) => event.stopPropagation()}>
-                          <button className={status === 'accepted' ? 'active' : ''} onClick={() => setCandidateStatus(candidate.id, 'accepted')} title="Accept">✓</button>
-                          <button className={status === 'review' ? 'active' : ''} onClick={() => setCandidateStatus(candidate.id, 'review')} title="Leave for review">?</button>
-                          <button className={status === 'rejected' ? 'active' : ''} onClick={() => setCandidateStatus(candidate.id, 'rejected')} title="Reject">×</button>
-                        </div>
-                      </article>
+                      <div key={item.id} className="sm-count-row">
+                        <span style={{ background: paletteBackground(selectedPalette) }} />
+                        <div><strong>{item.code || 'SYMBOL'}</strong><small>{item.label}</small></div>
+                        <b>{accepted}</b>
+                        {review > 0 && <em>+{review} check</em>}
+                        {total === 0 && <em>none found</em>}
+                      </div>
                     );
                   })}
-                  {!visibleCandidates.length && <p className="symbol-mapper-empty">No candidates match these filters.</p>}
+                </div>
+
+                <div className="sm-quick-check">
+                  <div className="sm-quick-check-head">
+                    <div>
+                      <h3>Needs a quick check</h3>
+                      <p>Only uncertain matches are listed here.</p>
+                    </div>
+                    <strong>{reviewItems.length}</strong>
+                  </div>
+                  {reviewItems.length > 0 && (
+                    <div className="sm-review-all-actions">
+                      <button onClick={() => decideAllReview(true)}>Include all</button>
+                      <button onClick={() => decideAllReview(false)}>Ignore all</button>
+                    </div>
+                  )}
+                  <div className="sm-review-items">
+                    {reviewItems.map((candidate) => (
+                      <div className="sm-review-item" key={candidate.id}>
+                        <div><strong>{candidate.code || 'SYMBOL'}</strong><small>{candidate.label}</small></div>
+                        <button className="keep" onClick={() => decideCandidate(candidate.id, true)}>Include</button>
+                        <button onClick={() => decideCandidate(candidate.id, false)}>Ignore</button>
+                      </div>
+                    ))}
+                    {!reviewItems.length && <div className="sm-all-clear">Nothing else needs a decision.</div>}
+                  </div>
                 </div>
               </aside>
             </div>
           )}
 
-          {step === 'final' && rendered && (
-            <div className="symbol-mapper-final">
-              <section className="symbol-mapper-final-preview">
-                <img src={rendered.pngUrl} alt="Reviewed symbol map" />
+          {step === 'output' && rendered && (
+            <div className="sm-output-layout">
+              <section className="sm-output-preview">
+                <img src={rendered.pngUrl} alt="Final highlighted drawing" />
               </section>
-              <aside className="symbol-mapper-final-panel">
-                <h3>Reviewed output ready</h3>
-                <dl>
-                  <div><dt>Accepted highlights</dt><dd>{rendered.acceptedCount}</dd></div>
-                  <div><dt>Still unreviewed</dt><dd>{rendered.reviewCount}</dd></div>
-                  <div><dt>Rejected</dt><dd>{rendered.rejectedCount}</dd></div>
-                  <div><dt>Source integrity</dt><dd>Verified</dd></div>
-                </dl>
-                <p>Only accepted detections are in the output. The direct download keeps the uploaded PDF page size and underlying drawing content.</p>
-                <a className="symbol-mapper-primary" href={rendered.pdfUrl} download>Download original-size PDF</a>
-                <a className="symbol-mapper-secondary symbol-mapper-download" href={rendered.pngUrl} download>Download rendered PNG</a>
+              <aside className="sm-output-actions">
+                <h3>Done</h3>
+                <p>{rendered.acceptedCount} highlights are in the final drawing.</p>
+                <a className="symbol-mapper-primary sm-download" href={rendered.pdfUrl}>Download highlighted PDF</a>
                 {onAddPage && (
-                  <div className="symbol-mapper-add-page">
+                  <div className="sm-add-page-box">
                     <label>
-                      Singh360 page title
-                      <input value={pageTitle} onChange={(event) => setPageTitle(event.target.value)} />
+                      Page title
+                      <input value={pageTitle} onChange={(event: ChangeEvent<HTMLInputElement>) => setPageTitle(event.target.value)} />
                     </label>
-                    <button className="symbol-mapper-primary" disabled={loading} onClick={() => void addResultPage()}>
-                      {loading ? 'Adding page…' : 'Add reviewed page at end'}
+                    <button className="symbol-mapper-primary" disabled={loading} onClick={() => void addPage()}>
+                      Add page to Singh360
                     </button>
-                    <small>The new page is included, uses sheet code NEW, receives the standard title block, and triggers the existing renumber reminder. You can move, copy, exclude, or delete it later.</small>
                   </div>
                 )}
               </aside>
@@ -655,14 +476,12 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
         {error && <div className="symbol-mapper-error">{error}</div>}
 
         <footer className="symbol-mapper-foot">
-          <div>
-            {session && <span>Session {session.id.slice(0, 8)} · source SHA-256 {session.sourceSha256.slice(0, 12)}…</span>}
-          </div>
-          <div className="symbol-mapper-foot-actions">
-            {step !== 'upload' && <button className="symbol-mapper-secondary" disabled={loading} onClick={() => setStep(step === 'final' ? 'review' : step === 'review' ? 'configure' : 'upload')}>Back</button>}
-            {step === 'configure' && <button className="symbol-mapper-primary" disabled={loading} onClick={() => void runDetection()}>{loading ? 'Detecting…' : 'Detect symbols'}</button>}
-            {step === 'review' && <button className="symbol-mapper-primary" disabled={loading} onClick={() => void renderReviewed()}>{loading ? 'Rendering…' : 'Render accepted highlights'}</button>}
-            <button className="symbol-mapper-secondary" onClick={onClose}>Close</button>
+          <div className="sm-session-label">{session ? session.sourceName : 'No PDF loaded'}</div>
+          <div className="sm-foot-actions">
+            {step !== 'upload' && <button onClick={() => setStep(step === 'choose' ? 'upload' : step === 'results' ? 'choose' : 'results')}>Back</button>}
+            {step === 'choose' && <button className="symbol-mapper-primary" disabled={loading || !enabled.length} onClick={() => void runSelected()}>{loading ? 'Finding symbols…' : 'Run selected symbols'}</button>}
+            {step === 'results' && <button className="symbol-mapper-primary" disabled={loading} onClick={() => void createResult()}>{loading ? 'Creating page…' : 'Create highlighted page'}</button>}
+            <button onClick={onClose}>Close</button>
           </div>
         </footer>
       </section>

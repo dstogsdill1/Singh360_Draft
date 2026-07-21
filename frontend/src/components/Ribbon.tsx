@@ -316,13 +316,14 @@ export default function Ribbon({
         {tab === 'Symbols' && (
           <>
             <Group title="Symbol Mapping">
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onOpenSymbolMapper} title="Upload one PDF page, define the legend, review detections, and export or add a titled page">
+              <button
+                className="ribbon-btn"
+                disabled={!hasProject}
+                onClick={onOpenSymbolMapper}
+                title="Upload one PDF, choose symbols and ready-made colors, then run the automatic mapper"
+              >
                 Open Symbol Mapper
               </button>
-            </Group>
-            <Group title="Workflow">
-              <button className="ribbon-btn" disabled title="Uncertain matches are never silently included">Review before export</button>
-              <button className="ribbon-btn" disabled title="Adds a normal canvas page at the end with sheet code NEW and the standard title block">Add page at end</button>
             </Group>
           </>
         )}

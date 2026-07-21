@@ -1080,13 +1080,33 @@ export interface SymbolMapperClass {
   id: string;
   code: string;
   label: string;
-  shape: 'auto' | 'circle' | 'square';
+  shape: 'auto' | 'circle' | 'square' | 'none';
   color: string;
   color2: string;
   pattern: SymbolMapperPattern;
   markerSizePt: number;
   templateBox?: { x0: number; y0: number; x1: number; y1: number };
   visualEnabled?: boolean;
+}
+
+export interface SymbolMapperLegendRow {
+  id: string;
+  code: string;
+  label: string;
+  shape: SymbolMapperClass['shape'];
+  templateBox: { x0: number; y0: number; x1: number; y1: number };
+  legendBox: { x0: number; y0: number; x1: number; y1: number };
+  iconDataUrl: string;
+  markerSizePt: number;
+}
+
+export interface SymbolMapperLegend {
+  found: boolean;
+  title?: string;
+  message: string;
+  box?: { x0: number; y0: number; x1: number; y1: number };
+  previewDataUrl?: string;
+  rows: SymbolMapperLegendRow[];
 }
 
 export interface SymbolMapperSession {
@@ -1107,6 +1127,7 @@ export interface SymbolMapperSession {
   };
   previewUrl: string;
   visualMatchingAvailable: boolean;
+  legend: SymbolMapperLegend;
 }
 
 export interface SymbolMapperCandidate {
