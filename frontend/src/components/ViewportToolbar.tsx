@@ -5,9 +5,12 @@ interface Props {
   activePage: PageModel;
   view: ViewControls;
   viewMode: ViewMode;
+  sourceWorksheetName?: string;
+  sourceOnly?: boolean;
   sourceDirty?: boolean;
   sourceStatusLabel?: string;
   onViewModeChange: (mode: ViewMode) => void;
+  onPublishSource?: () => void;
   onRebuildFromSource?: () => void;
   canRebuildFromSource?: boolean;
   onRestorePageRebuild?: () => void;
@@ -18,51 +21,46 @@ export default function ViewportToolbar({
   activePage,
   view,
   viewMode,
+  sourceWorksheetName,
+  sourceOnly,
   sourceDirty,
   sourceStatusLabel,
   onViewModeChange,
+  onPublishSource,
   onRebuildFromSource,
   canRebuildFromSource,
   onRestorePageRebuild,
   canRestorePageRebuild,
 }: Props) {
-  const pageLabel =
-    activePage.pageNumber != null
+  const pageLabel = sourceOnly && viewMode === 'source'
+    ? 'Source-only worksheet'
+    : activePage.pageNumber != null
       ? `Page ${activePage.pageNumber} of ${activePage.pageTotal ?? '—'}`
       : 'Not included';
+  const displayCode = viewMode === 'source' && sourceOnly ? 'DRAFT' : activePage.sheetCode;
+  const displayTitle = viewMode === 'source' && sourceWorksheetName ? sourceWorksheetName : activePage.sheetTitle;
 
   return (
     <div className="viewport-toolbar">
       <span className="vt-label">
-        <span className="vt-code">{activePage.sheetCode}</span>
-        {activePage.sheetTitle}
+        <span className="vt-code">{displayCode}</span>
+        {displayTitle}
+        {sourceOnly && viewMode === 'source' ? <em className="vt-source-only">Source only</em> : null}
       </span>
       <span className="vt-viewmode">
-        <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Published</button>
+        {sourceOnly && viewMode === 'source' ? (
+          <button className="fit-btn publish-source" onClick={onPublishSource} disabled={!onPublishSource}>Publish Worksheet</button>
+        ) : (
+          <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Published</button>
+        )}
         <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Draft</button>
         {canRebuildFromSource && onRebuildFromSource ? (
-          <button
-            className="fit-btn"
-            type="button"
-            onClick={onRebuildFromSource}
-            title="Rebuild this Published page from the linked Draft worksheet"
-          >
-            Rebuild Published Page From Draft
-          </button>
+          <button className="fit-btn" type="button" onClick={onRebuildFromSource} title="Rebuild this Published page from the linked Draft worksheet">Rebuild Published Page From Draft</button>
         ) : null}
         {canRestorePageRebuild && onRestorePageRebuild ? (
-          <button
-            className="fit-btn"
-            type="button"
-            onClick={onRestorePageRebuild}
-            title="Restore the page from before the last rebuild (Ctrl+Z)"
-          >
-            Restore Last Page Rebuild
-          </button>
+          <button className="fit-btn" type="button" onClick={onRestorePageRebuild} title="Restore the page from before the last rebuild (Ctrl+Z)">Restore Last Page Rebuild</button>
         ) : null}
-        {sourceStatusLabel ? (
-          <span className="vt-source-status sb-item">{sourceStatusLabel}</span>
-        ) : null}
+        {sourceStatusLabel ? <span className="vt-source-status sb-item">{sourceStatusLabel}</span> : null}
       </span>
       <span className="vt-spacer" />
       <span className="sb-item">{pageLabel}</span>

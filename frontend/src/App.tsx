@@ -70,6 +70,12 @@ function screenshotName(): string {
   return `Screenshot ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}.png`;
 }
 
+// S360 WORKSPACE UX V10: preserve a real sheet code embedded in a worksheet name.
+function suggestedSheetCode(name: string): string {
+  const match = (name || '').trim().match(/^([A-Za-z]{2,8})\s*[-_ ]?\s*(\d{1,3}(?:\.\d{1,3})[A-Za-z]?)/);
+  return match ? `${match[1].toUpperCase()} ${match[2]}` : 'NEW';
+}
+
 // Canonical package order + live Page X of Y. This also keeps the generated
 // Sheet Index second, moves excluded/internal pages after package pages, and
 // counts every included physical continuation page.
@@ -261,7 +267,9 @@ export default function App() {
     if (id === activePageRef.current?.id) return;
     const ok = await ensureSavedBeforeNavigation();
     if (!ok) return;
+    const target = projectRef.current?.pages.find((page) => page.id === id);
     setActivePageId(id);
+    if (target?.linkedWorksheetId) setSelectedWorksheetId(target.linkedWorksheetId);
     setSelection(null);
   }, [ensureSavedBeforeNavigation]);
 
@@ -315,8 +323,9 @@ export default function App() {
       lastSavedJsonRef.current = JSON.stringify(normalized);
       resetSourceEditState();
       setProjectSync(normalized);
-      setActivePageId(p.pages?.[0]?.id ?? null);
-      setSelectedWorksheetId(p.worksheets?.[0]?.id);
+      const firstPage = normalized.pages?.[0];
+      setActivePageId(firstPage?.id ?? null);
+      setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? normalized.worksheets?.[0]?.id);
     });
   }, [initialProjectId, setProjectSync, resetSourceEditState]);
 
@@ -387,11 +396,13 @@ export default function App() {
   const activePageRef = useRef(activePage);
   const viewModeRef = useRef(viewMode);
   const selectionRef = useRef(selection);
+  const selectedWorksheetIdRef = useRef(selectedWorksheetId);
   activePageRef.current = activePage;
   viewModeRef.current = viewMode;
   selectionRef.current = selection;
+  selectedWorksheetIdRef.current = selectedWorksheetId;
 
-  const activeWorksheetId = activePage?.linkedWorksheetId ?? null;
+  const activeWorksheetId = (viewMode === 'source' ? selectedWorksheetId : activePage?.linkedWorksheetId) ?? null;
   void sourceHistoryTick;
   void pageRebuildTick;
   const sourceCanUndo = sourceHistoryRef.current.canUndo(activeWorksheetId);
@@ -481,11 +492,12 @@ export default function App() {
   const exportCurrentSourceSheet = useCallback(async () => {
     const p = projectRef.current;
     const page = activePageRef.current;
-    if (!p || !page?.linkedWorksheetId) return;
+    const worksheetId = viewModeRef.current === 'source' ? selectedWorksheetIdRef.current : page?.linkedWorksheetId;
+    if (!p || !worksheetId) return;
     try {
-      const blob = await exportWorksheetXlsx(p.id, { worksheetId: page.linkedWorksheetId });
-      const ws = p.worksheets.find((w) => w.id === page.linkedWorksheetId);
-      const base = (ws?.name || ws?.sourceSheet || page.sheetTitle || 'source').replace(/[^\w.\- ]+/g, '_').trim() || 'source';
+      const blob = await exportWorksheetXlsx(p.id, { worksheetId });
+      const ws = p.worksheets.find((w) => w.id === worksheetId);
+      const base = (ws?.name || ws?.sourceSheet || page?.sheetTitle || 'source').replace(/[^\w.\- ]+/g, '_').trim() || 'source';
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -575,7 +587,7 @@ export default function App() {
 
   const sourceUndo = useCallback(() => {
     document.dispatchEvent(new CustomEvent('singh360:discard-active-editors'));
-    const wsId = activePageRef.current?.linkedWorksheetId;
+    const wsId = (viewModeRef.current === 'source' ? selectedWorksheetIdRef.current : activePageRef.current?.linkedWorksheetId);
     const p = projectRef.current;
     if (!wsId || !p) return false;
     const next = sourceHistoryRef.current.undo(p, wsId);
@@ -591,7 +603,7 @@ export default function App() {
 
   const sourceRedo = useCallback(() => {
     document.dispatchEvent(new CustomEvent('singh360:discard-active-editors'));
-    const wsId = activePageRef.current?.linkedWorksheetId;
+    const wsId = (viewModeRef.current === 'source' ? selectedWorksheetIdRef.current : activePageRef.current?.linkedWorksheetId);
     const p = projectRef.current;
     if (!wsId || !p) return false;
     const next = sourceHistoryRef.current.redo(p, wsId);
@@ -610,7 +622,14 @@ export default function App() {
   pageRebuildUndoRef.current = pageRebuildUndo;
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
-    if (viewModeRef.current === 'source' && mode === 'normalized') {
+    if (mode === 'source' && activePageRef.current?.linkedWorksheetId) {
+      setSelectedWorksheetId(activePageRef.current.linkedWorksheetId);
+    }
+    if (
+      viewModeRef.current === 'source'
+      && mode === 'normalized'
+      && selectedWorksheetIdRef.current === activePageRef.current?.linkedWorksheetId
+    ) {
       rebuildCurrentPageFromSource();
     }
     setViewMode(mode);
@@ -1005,6 +1024,84 @@ export default function App() {
   const toggleInclude = (id: string) =>
     mutatePages((pages) => pages.map((p) => (p.id === id ? { ...p, include: !p.include } : p)));
 
+  const openWorksheetDraft = useCallback(async (worksheetId: string) => {
+    const ok = await ensureSavedBeforeNavigation();
+    if (!ok) return;
+    const current = projectRef.current;
+    if (!current) return;
+    const linked = current.pages.find((page) => page.linkedWorksheetId === worksheetId && !page.continuationOf)
+      || current.pages.find((page) => page.linkedWorksheetId === worksheetId);
+    if (linked) setActivePageId(linked.id);
+    setSelectedWorksheetId(worksheetId);
+    setViewMode('source');
+    setSelection(null);
+  }, [ensureSavedBeforeNavigation]);
+
+  const publishWorksheet = useCallback(async (worksheetId: string) => {
+    const ok = await ensureSavedBeforeNavigation();
+    if (!ok) return;
+    const current = projectRef.current;
+    if (!current) return;
+    const worksheet = current.worksheets.find((item) => item.id === worksheetId);
+    if (!worksheet) return;
+
+    const existing = current.pages.find((page) => page.linkedWorksheetId === worksheetId && !page.continuationOf)
+      || current.pages.find((page) => page.linkedWorksheetId === worksheetId);
+    if (existing) {
+      const pages = withPageNumbers(current.pages.map((page) => page.id === existing.id ? { ...page, include: true } : page));
+      const next = { ...current, pages };
+      setProjectSync(next);
+      setActivePageId(existing.id);
+      setSelectedWorksheetId(worksheetId);
+      setViewMode('normalized');
+      setRenumberBadge(true);
+      await flushSave();
+      return;
+    }
+
+    const suggestedCode = suggestedSheetCode(worksheet.name);
+    const codeInput = window.prompt('Sheet code for the published page:', suggestedCode);
+    if (codeInput === null) return;
+    const titleInput = window.prompt('Published page title:', worksheet.name);
+    if (titleInput === null) return;
+    const id = newPageId();
+    const base: PageModel = {
+      id,
+      order: current.pages.length + 1,
+      include: true,
+      sheetCode: codeInput.trim() || suggestedCode,
+      displaySheetCode: codeInput.trim() || suggestedCode,
+      sheetTitle: titleInput.trim() || worksheet.name,
+      sheetTab: worksheet.name,
+      pageType: 'data-grid',
+      template: 'Text / Instructions',
+      templateId: '',
+      linkedWorksheetId: worksheet.id,
+      sourceSheet: worksheet.name,
+      sourceRange: worksheet.sourceRange,
+      printArea: worksheet.printArea,
+      renderMode: 'excel_exact',
+      splitMode: 'auto',
+      allowContinuation: true,
+      minScale: 0.55,
+      scaleMode: 'fit_body',
+      blocks: [],
+      canvasObjects: [],
+      notes: '',
+      pageGroupId: id,
+    };
+    const published = rebuildSinglePageFromSource(base, worksheet);
+    const pages = withPageNumbers([...current.pages, published]);
+    const next = { ...current, pages };
+    setProjectSync(next);
+    setActivePageId(published.id);
+    setSelectedWorksheetId(worksheetId);
+    setViewMode('normalized');
+    setRenumberBadge(true);
+    writeRecoverySnapshot(next);
+    await flushSave();
+  }, [ensureSavedBeforeNavigation, flushSave, setProjectSync]);
+
   const movePage = (id: string, dir: -1 | 1) =>
     mutatePages((pages) => {
       const idx = pages.findIndex((p) => p.id === id);
@@ -1170,8 +1267,9 @@ export default function App() {
     resetSourceEditState();
     setProjectSync(p);
     setSaveStatus('idle');
-    setActivePageId(p.pages?.[0]?.id ?? null);
-    setSelectedWorksheetId(p.worksheets?.[0]?.id);
+    const firstPage = p.pages?.[0];
+    setActivePageId(firstPage?.id ?? null);
+    setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? p.worksheets?.[0]?.id);
     setSelection(null);
     window.history.replaceState({}, '', `?project=${id}`);
   };
@@ -1185,8 +1283,9 @@ export default function App() {
       resetSourceEditState();
       setProjectSync(p);
       setSaveStatus('idle');
-      setActivePageId(p.pages?.[0]?.id ?? null);
-      setSelectedWorksheetId(p.worksheets?.[0]?.id);
+      const firstPage = p.pages?.[0];
+    setActivePageId(firstPage?.id ?? null);
+    setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? p.worksheets?.[0]?.id);
       setSelection(null);
       window.history.replaceState({}, '', `?project=${id}`);
     } catch (err) {
@@ -1225,7 +1324,9 @@ export default function App() {
     lastSavedJsonRef.current = JSON.stringify(p);
     resetSourceEditState();
     setProjectSync(p);
-    setActivePageId(p.pages?.[0]?.id ?? activePageId);
+    const firstPage = p.pages?.[0];
+    setActivePageId(firstPage?.id ?? activePageId);
+    setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? p.worksheets?.[0]?.id);
     setSelection(null);
     setSaveStatus('idle');
     setBackupOpen(false);
@@ -1616,13 +1717,19 @@ export default function App() {
       ribbon={ribbon}
       left={
         <>
-          <CollapsibleSection title="Output Pages" hint="The pages that make up your drawing package. Drag to reorder; right-click for actions.">
+          <CollapsibleSection title="Published Package" hint="Included drawing pages. Drag to reorder; right-click for page actions.">
             <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void switchPageSafely(id); }} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
           </CollapsibleSection>
-          <CollapsibleSection title="Source Tabs" defaultOpen={false} hint="The original workbook worksheets, for reference.">
-            <WorkbookView worksheets={project.worksheets} selectedWorksheetId={selectedWorksheetId} onSelectWorksheet={setSelectedWorksheetId} />
+          <CollapsibleSection title="Workbook Drafts" defaultOpen={false} hint="Original workbook tabs. Open a Draft or publish an excluded worksheet.">
+            <WorkbookView
+              worksheets={project.worksheets}
+              pages={project.pages}
+              selectedWorksheetId={selectedWorksheetId}
+              onOpenDraft={(worksheetId) => { void openWorksheetDraft(worksheetId); }}
+              onPublishWorksheet={(worksheetId) => { void publishWorksheet(worksheetId); }}
+            />
           </CollapsibleSection>
-          <CollapsibleSection title="Component Library" defaultOpen={false} hint="Reusable EMS/RDM components. Search, then drag onto the active page.">
+          <CollapsibleSection title="Components" defaultOpen={false} hint="Search reusable devices and drag them onto a Published drawing page.">
             <LibraryPanelV2
               onInsert={onInsertComponent}
               canInsert={canvasEnabled}
@@ -1638,6 +1745,7 @@ export default function App() {
           pages={project.pages}
           activePage={activePage}
           worksheets={project.worksheets}
+          selectedWorksheetId={selectedWorksheetId}
           view={view}
           actualZoom={actualZoom}
           viewMode={viewMode}
@@ -1671,6 +1779,7 @@ export default function App() {
           onWorksheetChange={(wsId, patch, opts) => {
             applyWorksheetPatch(wsId, patch, opts);
           }}
+          onPublishSource={selectedWorksheetId ? () => { void publishWorksheet(selectedWorksheetId); } : undefined}
           onCanvasChange={(pageId, objects) => {
             // CRITICAL: functional update — always merges into the CURRENT state,
             // never into a potentially-stale closure capture of `project`.
@@ -1991,3 +2100,5 @@ export default function App() {
     </>
   );
 }
+
+// S360 WORKSPACE UX V14

@@ -31,6 +31,7 @@ interface Props {
   pages: PageModel[];
   activePage: PageModel;
   worksheets: Worksheet[];
+  selectedWorksheetId?: string;
   view: ViewControls;
   actualZoom: number;
   viewMode: ViewMode;
@@ -66,6 +67,7 @@ interface Props {
   onScaleChange: (scale: number) => void;
   onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
+  onPublishSource?: () => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
 }
@@ -75,6 +77,7 @@ export default function DocumentView({
   pages,
   activePage,
   worksheets,
+  selectedWorksheetId,
   view,
   actualZoom,
   viewMode,
@@ -103,10 +106,17 @@ export default function DocumentView({
   onScaleChange,
   onWorksheetChange,
   onCanvasChange,
+  onPublishSource,
   onReplacePageSource,
   onExportPageSource,
 }: Props) {
-  const worksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
+  const linkedWorksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
+  const selectedWorksheet = selectedWorksheetId ? worksheets.find((w) => w.id === selectedWorksheetId) : undefined;
+  const worksheet = viewMode === 'source' ? (selectedWorksheet || linkedWorksheet) : linkedWorksheet;
+  const sourceOnly = viewMode === 'source' && !!worksheet && worksheet.id !== activePage.linkedWorksheetId;
+  const framePage = sourceOnly && worksheet
+    ? { ...activePage, sheetCode: 'DRAFT', displaySheetCode: 'DRAFT', sheetTitle: worksheet.name, include: false, pageNumber: null }
+    : activePage;
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const scaleRef = useRef<HTMLDivElement | null>(null);
@@ -170,16 +180,18 @@ export default function DocumentView({
 
   return (
     <>
-      <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} onReorder={onReorderPages} onRenameTitle={onRenamePageTitle} onContextMenu={onPageContextMenu} />
       <ViewportToolbar
         activePage={activePage}
         view={view}
         viewMode={viewMode}
+        sourceWorksheetName={viewMode === 'source' ? worksheet?.name : undefined}
+        sourceOnly={sourceOnly}
         sourceDirty={sourceDirty}
         sourceStatusLabel={sourceStatusLabel}
         onViewModeChange={onViewModeChange}
         onRebuildFromSource={onRebuildFromSource}
-        canRebuildFromSource={canRebuildFromSource}
+        canRebuildFromSource={sourceOnly ? false : canRebuildFromSource}
+        onPublishSource={onPublishSource}
         onRestorePageRebuild={onRestorePageRebuild}
         canRestorePageRebuild={canRestorePageRebuild}
       />
@@ -227,9 +239,9 @@ export default function DocumentView({
             className={`sheet-scale ${view.showGrid ? 'show-grid' : ''}`}
             ref={scaleRef}
           >
-            <SheetFrame titleBlock={<TitleBlock project={project} page={activePage} />} sourceView={viewMode === 'source'}>
+            <SheetFrame titleBlock={<TitleBlock project={project} page={framePage} />} sourceView={viewMode === 'source'}>
               <PageRenderer
-                key={`${activePage.id}-${activePage.sourceRevision ?? 0}-${viewMode}`}
+                key={`${activePage.id}-${worksheet?.id ?? 'none'}-${activePage.sourceRevision ?? 0}-${viewMode}`}
                 page={activePage}
                 worksheet={worksheet}
                 project={project}
@@ -252,6 +264,9 @@ export default function DocumentView({
           </div>
         </div>
       </div>
+      <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} onReorder={onReorderPages} onRenameTitle={onRenamePageTitle} onContextMenu={onPageContextMenu} />
     </>
   );
 }
+
+// S360 WORKSPACE UX V10

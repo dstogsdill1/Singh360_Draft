@@ -48,8 +48,8 @@ export default function PageRenderer({
       <RawGridRenderer
         worksheet={worksheet}
         onWorksheetChange={(patch, opts) => {
-          if (!page.linkedWorksheetId) return;
-          onWorksheetChange(page.linkedWorksheetId, patch, opts);
+          if (!worksheet?.id) return;
+          onWorksheetChange(worksheet.id, patch, opts);
         }}
         onReplaceSource={onReplacePageSource}
         onExportSource={onExportPageSource}
@@ -76,3 +76,5 @@ export default function PageRenderer({
     />
   );
 }
+
+// S360 WORKSPACE UX V10

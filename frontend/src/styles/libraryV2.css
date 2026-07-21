@@ -475,3 +475,7 @@
   opacity: 0.48;
   cursor: not-allowed;
 }
+
+/* S360 WORKSPACE UX V10 component preview fallback */
+.libv2-preview-fallback-name { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.libv2-preview-fallback-reason { display:block; }

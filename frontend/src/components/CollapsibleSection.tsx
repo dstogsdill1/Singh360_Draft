@@ -11,10 +11,13 @@ export default function CollapsibleSection({ title, children, defaultOpen = true
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className={`nav-section ${open ? 'expanded' : 'collapsed'}`}>
-      <div className="nav-section-head" onClick={() => setOpen((o) => !o)} title={hint || title}>
+      <button type="button" className="nav-section-head" onClick={() => setOpen((o) => !o)} title={hint || title} aria-expanded={open}>
         <span className="chev">{open ? '▾' : '▸'}</span>
-        {title}
-      </div>
+        <span className="nav-section-title-block">
+          <span className="nav-section-title">{title}</span>
+          {open && hint ? <span className="nav-section-caption">{hint}</span> : null}
+        </span>
+      </button>
       {open && <div className="nav-section-body">{children}</div>}
     </div>
   );

@@ -263,7 +263,8 @@ function CardPreview({ c, rep, small = false }: { c: LibV2Component; rep: ViewRe
   if (!url || broken) {
     return (
       <div className={small ? 'libv2-mini-preview empty' : 'libv2-preview empty'}>
-        {url ? 'Image unavailable' : 'No image'}
+        <span className="libv2-preview-fallback-name">{displayNameFor(c)}</span>
+        <span className="libv2-preview-fallback-reason">{url ? 'Preview failed to load' : 'No preview file'}</span>
       </div>
     );
   }
@@ -285,6 +286,7 @@ function CardPreview({ c, rep, small = false }: { c: LibV2Component; rep: ViewRe
 export default function LibraryPanelV2({ onInsert, canInsert, activePageType, onOpenLegendEditor }: Props) {
   const [data, setData] = useState<LibV2Data | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [rep, setRep] = useState<ViewRep>('source');
@@ -318,6 +320,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
 
   const load = async (includeLegacy = true) => {
     setLoading(true);
+    setLoadError('');
     try {
       const [lib, legends, history] = await Promise.all([
         getLibV2(includeLegacy),
@@ -328,6 +331,8 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
       setLegendTemplates(legends);
       setLibraryHistory(history);
       setSelectedId((prev) => prev || lib.components?.[0]?.id || '');
+    } catch (error) {
+      setLoadError(String(error));
     } finally {
       setLoading(false);
     }
@@ -337,6 +342,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
   useEffect(() => { setRep(defaultRepForPage(activePageType, data)); }, [activePageType, data]);
 
   const components = data?.components ?? [];
+  const previewReady = useMemo(() => components.filter((component) => !!previewUrl(component, rep)).length, [components, rep]);
 
   const selected = useMemo(() => {
     return components.find((c) => c.id === selectedId) || components.find((c) => selectedIds.includes(c.id)) || null;
@@ -473,6 +479,19 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
     try {
       await refreshLibV2();
       await load(showLegacyItems);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const rebuildPreviews = async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      await rebuildLibV2Thumbnails();
+      await load(showLegacyItems);
+    } catch (error) {
+      setLoadError(String(error));
     } finally {
       setLoading(false);
     }
@@ -772,16 +791,21 @@ This is NOT saved until you click Save All Edits.`,
           ))}
         </div>
         <div className="libv2-row">
-          <button onClick={() => setShowDashboard(true)}>Open Component Builder</button>
-          <button onClick={() => void doRefresh()} disabled={loading}>Refresh Library</button>
+          <button onClick={() => setShowDashboard(true)}>Manage Components</button>
+          <button onClick={() => void doRefresh()} disabled={loading}>Refresh</button>
+          <button onClick={() => void rebuildPreviews()} disabled={loading}>Rebuild Previews</button>
         </div>
+      </div>
+
+      <div className={`libv2-health ${loadError ? 'error' : ''}`}>
+        {loadError ? `Library error: ${loadError}` : loading ? 'Loading component library…' : `${visibleCards.length} shown · ${components.length} total · ${previewReady} previews ready`}
       </div>
 
       <div className="libv2-grid">
         {visibleCards.map((c) => {
           const canCurrent = !!(variantUrl(c, rep) || previewUrl(c, rep));
           return (
-            <div key={c.id} className="libv2-card" title={displayNameFor(c)} draggable={canInsert && canCurrent} onDragStart={(e) => onDragStart(e, c)}>
+            <div key={c.id} className={`libv2-card ${previewUrl(c, rep) ? '' : 'preview-missing'}`} title={displayNameFor(c)} draggable={canInsert && canCurrent} onDragStart={(e) => onDragStart(e, c)}>
               <CardPreview c={c} rep={rep} />
               <div className="libv2-meta">
                 <div className="libv2-name">{displayNameFor(c)}</div>
@@ -1087,3 +1111,5 @@ function downloadText(filename: string, text: string) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+// S360 WORKSPACE UX V10
