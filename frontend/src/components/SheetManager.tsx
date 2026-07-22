@@ -1,17 +1,21 @@
-import { useState } from 'react';
+import { useState, type DragEvent } from 'react';
 import type { PageModel } from '../model/types';
 import { PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
+import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
 
 interface Props {
   pages: PageModel[];
   activePageId: string | null;
   onSelect: (id: string) => void;
   onUpdate: (next: PageModel[]) => void;
+  onToggleInclude: (id: string) => void;
   onContextMenu: (id: string, x: number, y: number) => void;
 }
 
-export default function SheetManager({ pages, activePageId, onSelect, onUpdate, onContextMenu }: Props) {
+export default function SheetManager({ pages, activePageId, onSelect, onUpdate, onToggleInclude, onContextMenu }: Props) {
   const [edit, setEdit] = useState<{ id: string; field: 'code' | 'title'; value: string } | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const patch = (idx: number, p: Partial<PageModel>) => {
     const clone = [...pages];
@@ -26,6 +30,38 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
     [clone[idx], clone[t]] = [clone[t], clone[idx]];
     clone.forEach((p, i) => (p.order = i + 1));
     onUpdate(clone);
+  };
+
+
+  const reorderByDrop = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    const dragged = pages.find((page) => page.id === draggedId);
+    const target = pages.find((page) => page.id === targetId);
+    if (!dragged || !target) return;
+    if (isCoverPage(dragged) || isSheetIndexPage(dragged) || isCoverPage(target) || isSheetIndexPage(target)) return;
+
+    const draggedRoot = dragged.continuationOf || dragged.id;
+    const targetRoot = target.continuationOf || target.id;
+    if (draggedRoot === targetRoot) return;
+
+    const movingIds = new Set(
+      pages
+        .filter((page) => page.id === draggedRoot || page.continuationOf === draggedRoot)
+        .map((page) => page.id),
+    );
+    const moving = pages.filter((page) => movingIds.has(page.id));
+    const remaining = pages.filter((page) => !movingIds.has(page.id));
+    const insertAt = remaining.findIndex((page) => (page.continuationOf || page.id) === targetRoot);
+    if (insertAt < 0) return;
+    const next = [...remaining];
+    next.splice(insertAt, 0, ...moving);
+    onUpdate(next.map((page, index) => ({ ...page, order: index + 1 })));
+  };
+
+  const finishDrop = (targetId: string) => {
+    if (dragId) reorderByDrop(dragId, targetId);
+    setDragId(null);
+    setDragOverId(null);
   };
 
   const commit = (idx: number) => {
@@ -43,14 +79,51 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
         return (
           <div
             key={p.id}
-            className={`sheet-item ${p.id === activePageId ? 'active' : ''} ${isCont ? 'cont' : ''}`}
+            className={`sheet-item ${p.id === activePageId ? 'active' : ''} ${isCont ? 'cont' : ''} ${dragOverId === p.id ? 'drag-over' : ''}`}
             onClick={() => onSelect(p.id)}
+            onDragOver={(event) => {
+              if (!dragId || isCoverPage(p) || isSheetIndexPage(p)) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              setDragOverId(p.id);
+            }}
+            onDragLeave={() => {
+              if (dragOverId === p.id) setDragOverId(null);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              finishDrop(p.id);
+            }}
             onContextMenu={(e) => {
               e.preventDefault();
               onContextMenu(p.id, e.clientX, e.clientY);
             }}
           >
             <div className="sheet-item-head">
+              <button
+                type="button"
+                className={`sheet-drag-handle ${isCoverPage(p) || isSheetIndexPage(p) ? 'locked' : ''}`}
+                draggable={!isCoverPage(p) && !isSheetIndexPage(p)}
+                disabled={isCoverPage(p) || isSheetIndexPage(p)}
+                title={isCoverPage(p) || isSheetIndexPage(p) ? 'Cover and Sheet Index stay first' : 'Drag this page to a new package position'}
+                aria-label={`Drag ${p.sheetTitle}`}
+                onClick={(event) => event.stopPropagation()}
+                onDragStart={(event: DragEvent<HTMLButtonElement>) => {
+                  if (isCoverPage(p) || isSheetIndexPage(p)) return;
+                  event.stopPropagation();
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', p.id);
+                  setDragId(p.id);
+                  setDragOverId(null);
+                }}
+                onDragEnd={() => {
+                  setDragId(null);
+                  setDragOverId(null);
+                }}
+              >
+                {isCoverPage(p) || isSheetIndexPage(p) ? 'LOCK' : '⋮⋮'}
+              </button>
               {edit && edit.id === p.id && edit.field === 'code' ? (
                 <input
                   className="sheet-inline-input code"
@@ -132,7 +205,7 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
                 <input
                   type="checkbox"
                   checked={p.include}
-                  onChange={(e) => patch(idx, { include: e.target.checked })}
+                  onChange={() => onToggleInclude(p.id)}
                 />
                 include
               </label>

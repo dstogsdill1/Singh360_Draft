@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PageModel } from '../model/types';
 import PageNavigator from './PageNavigator';
+import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
 
 interface Props {
   pages: PageModel[];
@@ -13,6 +14,7 @@ interface Props {
 
 export default function PageTabs({ pages, activePageId, onSelect, onReorder, onRenameTitle, onContextMenu }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const activeRef = useRef<HTMLDivElement | null>(null);
@@ -25,15 +27,26 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
 
   const reorder = (draggedId: string, targetId: string) => {
     if (draggedId === targetId) return;
-    const next = [...pages];
-    const from = next.findIndex((p) => p.id === draggedId);
-    const to = next.findIndex((p) => p.id === targetId);
-    if (from < 0 || to < 0) return;
-    const [moved] = next.splice(from, 1);
-    const insertAt = next.findIndex((p) => p.id === targetId);
-    next.splice(insertAt, 0, moved);
-    next.forEach((p, i) => (p.order = i + 1));
-    onReorder(next);
+    const dragged = pages.find((page) => page.id === draggedId);
+    const target = pages.find((page) => page.id === targetId);
+    if (!dragged || !target) return;
+    if (isCoverPage(dragged) || isSheetIndexPage(dragged) || isCoverPage(target) || isSheetIndexPage(target)) return;
+
+    const draggedRoot = dragged.continuationOf || dragged.id;
+    const targetRoot = target.continuationOf || target.id;
+    if (draggedRoot === targetRoot) return;
+    const movingIds = new Set(
+      pages
+        .filter((page) => page.id === draggedRoot || page.continuationOf === draggedRoot)
+        .map((page) => page.id),
+    );
+    const moving = pages.filter((page) => movingIds.has(page.id));
+    const remaining = pages.filter((page) => !movingIds.has(page.id));
+    const insertAt = remaining.findIndex((page) => (page.continuationOf || page.id) === targetRoot);
+    if (insertAt < 0) return;
+    const next = [...remaining];
+    next.splice(insertAt, 0, ...moving);
+    onReorder(next.map((page, index) => ({ ...page, order: index + 1 })));
   };
 
   const startEdit = (p: PageModel) => {
@@ -67,7 +80,7 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
             role="button"
             tabIndex={0}
             ref={p.id === activePageId ? activeRef : null}
-            className={`page-tab ${p.id === activePageId ? 'active' : ''} ${p.generatedContinuation ? 'cont' : ''}`}
+            className={`page-tab ${p.id === activePageId ? 'active' : ''} ${p.generatedContinuation ? 'cont' : ''} ${dragOverId === p.id ? 'drag-over' : ''}`}
             onClick={() => onSelect(p.id)}
             onDoubleClick={() => startEdit(p)}
             onContextMenu={(e) => {
@@ -80,14 +93,36 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
               else if (e.key === 'F2') startEdit(p);
             }}
             title={`Page ${p.pageNumber ?? '—'} · ${p.displaySheetCode || p.sheetCode} ${p.sheetTitle} — double-click to rename`}
-            draggable={editId !== p.id}
-            onDragStart={() => setDragId(p.id)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => {
+            draggable={!isCoverPage(p) && !isSheetIndexPage(p) && editId !== p.id}
+
+            onDragStart={(event) => {
+              if (isCoverPage(p) || isSheetIndexPage(p)) return;
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', p.id);
+              setDragId(p.id);
+              setDragOverId(null);
+            }}
+            onDragOver={(event) => {
+              if (!dragId || isCoverPage(p) || isSheetIndexPage(p)) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              setDragOverId(p.id);
+            }}
+            onDragLeave={() => {
+              if (dragOverId === p.id) setDragOverId(null);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
               if (dragId) reorder(dragId, p.id);
               setDragId(null);
+              setDragOverId(null);
+            }}
+            onDragEnd={() => {
+              setDragId(null);
+              setDragOverId(null);
             }}
           >
+            <span className={`pt-drag ${isCoverPage(p) || isSheetIndexPage(p) ? 'locked' : ''}`} aria-hidden="true">{isCoverPage(p) || isSheetIndexPage(p) ? 'LOCK' : '⋮⋮'}</span>
             {p.generatedContinuation && <span className="pt-cont">↳</span>}
             <span className="pt-page">{p.pageNumber ?? '—'}</span>
             <span className="pt-code">{p.displaySheetCode || p.sheetCode}</span>

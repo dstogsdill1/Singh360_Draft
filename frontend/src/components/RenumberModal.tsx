@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type DragEvent } from 'react';
 import type { PageModel } from '../model/types';
 import { classifyPageFamily, generateEmsCodes } from '../model/emsNumbering';
+import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
 
 interface Props {
   pages: PageModel[];
@@ -24,13 +25,16 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
   // classification/sequential guess unless the user explicitly picks one.
   const [scheme, setScheme] = useState<Scheme>('keep');
   const [prefix, setPrefix] = useState('EMS');
+  const [orderedPages, setOrderedPages] = useState<PageModel[]>(() => pages.map((page) => ({ ...page })));
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  const included = useMemo(() => pages.filter((p) => p.include), [pages]);
+  const included = useMemo(() => orderedPages.filter((p) => p.include), [orderedPages]);
 
   // Compute proposed codes keyed by page id.
   const proposed = useMemo(() => {
     if (scheme === 'ems') {
-      return generateEmsCodes(pages, (prefix || 'EMS').trim());
+      return generateEmsCodes(orderedPages, (prefix || 'EMS').trim());
     }
     const map = new Map<string, string>();
     // Base pages (non-continuation) get the running number; continuations inherit.
@@ -62,10 +66,35 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
       }
     }
     return map;
-  }, [pages, included, scheme, prefix]);
+  }, [orderedPages, included, scheme, prefix]);
+
+
+  const reorderByDrop = (draggedId: string, targetId: string) => {
+    const dragged = orderedPages.find((page) => page.id === draggedId);
+    const target = orderedPages.find((page) => page.id === targetId);
+    if (!dragged || !target || isCoverPage(dragged) || isSheetIndexPage(dragged) || isCoverPage(target) || isSheetIndexPage(target)) return;
+
+    const draggedRoot = dragged.continuationOf || dragged.id;
+    const targetRoot = target.continuationOf || target.id;
+    if (draggedRoot === targetRoot) return;
+
+    const movingIds = new Set(
+      orderedPages
+        .filter((page) => page.id === draggedRoot || page.continuationOf === draggedRoot)
+        .map((page) => page.id),
+    );
+    const moving = orderedPages.filter((page) => movingIds.has(page.id));
+    const remaining = orderedPages.filter((page) => !movingIds.has(page.id));
+    const targetIndex = remaining.findIndex((page) => (page.continuationOf || page.id) === targetRoot);
+    if (targetIndex < 0) return;
+
+    const next = [...remaining];
+    next.splice(targetIndex, 0, ...moving);
+    setOrderedPages(next.map((page, index) => ({ ...page, order: index + 1 })));
+  };
 
   const apply = () => {
-    const updated = pages.map((p) => {
+    const updated = orderedPages.map((p) => {
       const code = proposed.get(p.id);
       if (code === undefined) return p;
       return { ...p, sheetCode: code, displaySheetCode: code };
@@ -75,7 +104,7 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-wide renumber-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>Renumber Sheet Codes</h2>
           <button className="modal-x" onClick={onCancel} title="Close">×</button>
@@ -117,13 +146,14 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
               />
             </label>
             <p className="renumber-note">
-              EMS numbering puts cover/index/directory/guidelines/scope/responsibility/BOM on a 0-series, then classifies technical sheets into families (2.x network, 3.x refrigeration, 5.x lighting, 8.x schematics…). Continuation pages inherit the base code (0.4a, 3.1a). “Page X of Y” is separate and follows the tab order.
+              EMS numbering puts cover/index/directory/guidelines/scope/responsibility/BOM on a 0-series, then classifies technical sheets into families (2.x network, 3.x refrigeration, 5.x lighting, 8.x schematics…). Continuation pages inherit the base code (0.4a, 3.1a). “Page X of Y” is separate and follows the tab order. Drag any unlocked row below to fix the package order before applying.
             </p>
           </div>
 
-          <table className="renumber-preview">
+          <table className="renumber-preview renumber-drag-table">
             <thead>
               <tr>
+                <th className="renumber-order-col">Order</th>
                 <th>Old Code</th>
                 <th>New Code</th>
                 <th>Sheet Title</th>
@@ -132,12 +162,48 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
               </tr>
             </thead>
             <tbody>
-              {pages.map((p) => {
+              {orderedPages.map((p, index) => {
                 const next = proposed.get(p.id) ?? p.sheetCode;
                 const changed = p.include && next !== (p.sheetCode || '');
                 const fam = classifyPageFamily(p);
+                const locked = isCoverPage(p) || isSheetIndexPage(p);
                 return (
-                  <tr key={p.id} className={changed ? 'changed' : ''}>
+                  <tr
+                    key={p.id}
+                    className={`${changed ? 'changed' : ''} ${dragOverId === p.id ? 'drag-over' : ''}`}
+                    draggable={!locked}
+                    onDragStart={(event: DragEvent<HTMLTableRowElement>) => {
+                      if (locked) return;
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('text/plain', p.id);
+                      setDragId(p.id);
+                      setDragOverId(null);
+                    }}
+                    onDragOver={(event) => {
+                      if (!dragId || locked) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                      setDragOverId(p.id);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverId === p.id) setDragOverId(null);
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (dragId) reorderByDrop(dragId, p.id);
+                      setDragId(null);
+                      setDragOverId(null);
+                    }}
+                    onDragEnd={() => {
+                      setDragId(null);
+                      setDragOverId(null);
+                    }}
+                  >
+                    <td className="renumber-order-cell">
+                      <span className={locked ? 'renumber-lock' : 'renumber-drag-handle'} title={locked ? 'Cover and Sheet Index stay first' : 'Drag to reorder'}>
+                        {locked ? 'LOCK' : '⋮⋮'} {index + 1}
+                      </span>
+                    </td>
                     <td>{p.displaySheetCode || p.sheetCode || '—'}</td>
                     <td className="new-code">{p.include ? (next || '—') : '—'}</td>
                     <td>{p.sheetTitle}{p.continuationOf ? ' — CONTINUED' : ''}</td>
@@ -152,7 +218,7 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
 
         <div className="modal-foot">
           <button className="btn" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-primary" onClick={apply}>Apply</button>
+          <button className="btn btn-primary" onClick={apply}>Apply order &amp; codes</button>
         </div>
       </div>
     </div>

@@ -951,3 +951,41 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
   .app-body.left-collapsed.right-collapsed { grid-template-columns: 34px minmax(0, 1fr) 34px; }
 }
 /* === S360 WORKSPACE UX V10 END === */
+
+/* S360 PAGE ORDER UX START */
+.sheet-item.drag-over {
+  box-shadow: inset 0 3px 0 var(--accent);
+  background: #e7f0fb;
+}
+.sheet-drag-handle {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--panel-line);
+  border-radius: 3px;
+  background: #fff;
+  color: #66717c;
+  cursor: grab;
+  font-weight: 800;
+  letter-spacing: -2px;
+}
+.sheet-drag-handle:active { cursor: grabbing; }
+.sheet-drag-handle.locked { cursor: not-allowed; font-size: 7px; letter-spacing: 0; opacity: 0.55; }
+.page-tab.drag-over { box-shadow: inset 4px 0 0 #ffd24a; }
+.pt-drag { color: #84909c; cursor: grab; font-weight: 800; letter-spacing: -2px; }
+.page-tab.active .pt-drag { color: #fff; }
+.pt-drag.locked { cursor: default; font-size: 8px; letter-spacing: 0; opacity: 0.6; }
+.renumber-modal { width: min(1060px, 96vw); }
+.renumber-drag-table thead th { position: sticky; top: 0; z-index: 2; }
+.renumber-drag-table tbody tr:not([draggable='false']) { cursor: grab; }
+.renumber-drag-table tbody tr:active { cursor: grabbing; }
+.renumber-drag-table tr.drag-over td {
+  border-top: 3px solid var(--accent);
+  background: #eaf3ff;
+}
+.renumber-order-col { width: 74px; }
+.renumber-order-cell { white-space: nowrap; text-align: center !important; }
+.renumber-drag-handle { color: var(--accent); font-weight: 800; letter-spacing: -2px; }
+.renumber-lock { color: #7b858f; font-size: 10px; }
+/* S360 PAGE ORDER UX END */

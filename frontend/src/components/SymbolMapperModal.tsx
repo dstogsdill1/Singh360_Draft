@@ -16,7 +16,7 @@ import {
 
 interface Props {
   onClose: () => void;
-  onAddPage?: (result: SymbolMapperRenderResult, title: string) => Promise<void>;
+  onAddPage?: (result: SymbolMapperRenderResult, title: string, sheetCode: string) => Promise<void>;
 }
 
 type Step = 'upload' | 'choose' | 'results' | 'output';
@@ -94,6 +94,19 @@ function templateKey(code: string, label: string): string {
   return `${normalizeTemplateText(code)}|${normalizeTemplateText(label)}`;
 }
 
+function inferOutputFields(sourceName: string): { sheetCode: string; pageTitle: string } {
+  const base = sourceName.replace(/\.pdf$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const withoutStore = base.replace(/^\d{2,6}\s+/, '').trim();
+  const match = withoutStore.match(/\b([A-Z]{1,5})\s*[- ]\s*(\d+(?:\.\d+)?[A-Z]?)\b/i)
+    ?? withoutStore.match(/\b([A-Z]{1,5})\s*(\d+\.\d+[A-Z]?)\b/i);
+  if (!match) {
+    return { sheetCode: 'NEW', pageTitle: withoutStore || 'SYMBOL HIGHLIGHT PLAN' };
+  }
+  const sheetCode = `${match[1].toUpperCase()}-${match[2]}`;
+  const title = withoutStore.replace(match[0], sheetCode).trim();
+  return { sheetCode, pageTitle: title || sheetCode };
+}
+
 function choiceForTemplate(item: SymbolMapperTemplateSymbol | undefined, index: number): PaletteChoice {
   const direct = item?.paletteId ? PALETTE.find((choice) => choice.id === item.paletteId) : undefined;
   if (direct) return direct;
@@ -161,6 +174,7 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
   const [detection, setDetection] = useState<SymbolMapperDetection | null>(null);
   const [rendered, setRendered] = useState<SymbolMapperRenderResult | null>(null);
   const [pageTitle, setPageTitle] = useState('SYMBOL HIGHLIGHT PLAN');
+  const [sheetCode, setSheetCode] = useState('NEW');
   const [loading, setLoading] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateStatus, setTemplateStatus] = useState('');
@@ -192,6 +206,9 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
         setError(created.legend?.message || 'No SYMBOL KEY was found on this page.');
         return;
       }
+      const outputFields = inferOutputFields(created.sourceName);
+      setPageTitle(outputFields.pageTitle);
+      setSheetCode(outputFields.sheetCode);
       const next = buildSymbols(created.legend.rows, created.template);
       setSymbols(next);
       setTemplateStatus(created.template.symbols.length
@@ -315,7 +332,7 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     setLoading(true);
     setError('');
     try {
-      await onAddPage(rendered, pageTitle.trim() || 'SYMBOL HIGHLIGHT PLAN');
+      await onAddPage(rendered, pageTitle.trim() || 'SYMBOL HIGHLIGHT PLAN', sheetCode.trim() || 'NEW');
       onClose();
     } catch (err) {
       setError(String(err));
@@ -565,12 +582,19 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
                 <a className="symbol-mapper-primary sm-download" href={rendered.pdfUrl}>Download highlighted PDF</a>
                 {onAddPage && (
                   <div className="sm-add-page-box">
-                    <label>
-                      Page title
-                      <input value={pageTitle} onChange={(event: ChangeEvent<HTMLInputElement>) => setPageTitle(event.target.value)} />
-                    </label>
+                    <div className="sm-output-field-row">
+                      <label>
+                        Sheet code
+                        <input value={sheetCode} onChange={(event: ChangeEvent<HTMLInputElement>) => setSheetCode(event.target.value)} />
+                      </label>
+                      <label>
+                        Page title
+                        <input value={pageTitle} onChange={(event: ChangeEvent<HTMLInputElement>) => setPageTitle(event.target.value)} />
+                      </label>
+                    </div>
+                    <p className="sm-output-hint">These are read from the PDF filename when available. You can change either one before adding the page.</p>
                     <button className="symbol-mapper-primary" disabled={loading} onClick={() => void addPage()}>
-                      Add page to Singh360
+                      {loading ? 'Adding and saving…' : 'Add page to Singh360'}
                     </button>
                   </div>
                 )}

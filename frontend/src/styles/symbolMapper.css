@@ -328,3 +328,8 @@
   .sm-palette-grid { grid-template-columns: repeat(4, minmax(82px, 1fr)); }
   .sm-results-layout { grid-template-columns: minmax(0, 1fr) 360px; }
 }
+
+
+.sm-output-field-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; }
+.sm-output-field-row label { min-width: 0; }
+.sm-output-hint { margin: 8px 0 0; color: #65707a; font-size: 11px; line-height: 1.35; }

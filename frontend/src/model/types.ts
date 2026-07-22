@@ -164,6 +164,8 @@ export interface Worksheet {
 export interface PageModel {
   id: string;
   order: number;
+  /** Original package slot retained while a page is excluded. */
+  restorePackageIndex?: number;
   include: boolean;
   sheetCode: string;
   displaySheetCode?: string;

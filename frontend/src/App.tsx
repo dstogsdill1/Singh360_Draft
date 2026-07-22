@@ -154,7 +154,7 @@ export default function App() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; pageId: string } | null>(null);
   const canvasApiRef = useRef<CanvasApi | null>(null);
-  const pendingSymbolPageRef = useRef<{ pageId: string; url: string; name: string } | null>(null);
+  const pendingSymbolPageRef = useRef<{ pageId: string; url: string; name: string; resolve: () => void; reject: (reason: unknown) => void } | null>(null);
 
   // ── Save manager: single source of truth for persistence + status ──
   // lastSavedJson is the JSON we last confirmed on the server. A project whose
@@ -213,6 +213,27 @@ export default function App() {
       return false;
     }
   }, [printMode]);
+
+
+  // Wait through any in-flight autosave and keep retrying until the exact latest
+  // project snapshot is confirmed by the server. This prevents a successfully
+  // created Symbol Mapper page from being reported as a false save failure while
+  // its reviewed image is still mounting on the Fabric canvas.
+  const confirmLatestProjectSaved = useCallback(async (timeoutMs = 10000): Promise<boolean> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const current = projectRef.current;
+      if (!current) return false;
+      if (JSON.stringify(current) === lastSavedJsonRef.current) return true;
+      if (!savingRef.current) {
+        const ok = await flushSave();
+        if (ok) return true;
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 150));
+    }
+    const current = projectRef.current;
+    return !!current && JSON.stringify(current) === lastSavedJsonRef.current;
+  }, [flushSave]);
 
   // ── captureActivePageState ─────────────────────────────────────────────────
   // THE CRITICAL FIX: synchronously read the live Fabric canvas and write the
@@ -389,25 +410,24 @@ export default function App() {
     if (!api) return;
     api.setLineStyle(lineStyleRef.current);
 
-    // S360 SYMBOL MAPPER: insert the reviewed image only after the newly-created
-    // canvas page has mounted. It is a full-opacity locked underlay, while the
-    // normal Singh360 title block remains outside the Fabric body canvas.
+    // S360 SYMBOL MAPPER: wait for the actual Fabric image load, capture that
+    // canvas state synchronously, then resolve the add-page operation.
     const pending = pendingSymbolPageRef.current;
     if (pending && pending.pageId === activePageId) {
       pendingSymbolPageRef.current = null;
       Promise.resolve(api.addPdfCrop(pending.url, pending.name, { underlay: true, opacity: 1 }))
         .then(() => {
-          window.setTimeout(() => {
+          window.requestAnimationFrame(() => {
             captureActivePageState();
-            void flushSave();
-          }, 0);
+            pending.resolve();
+          });
         })
         .catch((err) => {
           console.error('Symbol Mapper page image insertion failed', err);
-          window.alert('The Symbol Mapper page was added, but its reviewed image could not be inserted. The uploaded project asset was preserved.');
+          pending.reject(err);
         });
     }
-  }, [activePageId, captureActivePageState, flushSave]);
+  }, [activePageId, captureActivePageState]);
   const onSelectionChange = useCallback((sel: CanvasSelection | null) => setSelection(sel), []);
   const onToolConsumed = useCallback(() => setActiveTool('select'), []);
 
@@ -982,9 +1002,14 @@ export default function App() {
   };
 
   // S360 SYMBOL MAPPER: append a reviewed output as a normal, user-manageable
-  // canvas page. The sheet code remains NEW so existing project numbering rules
-  // stay authoritative; the standard title block is supplied by DocumentView.
-  const addSymbolMapPage = async (result: SymbolMapperRenderResult, title: string): Promise<void> => {
+  // canvas page. The source filename supplies the initial sheet code/title when
+  // available, and the operation resolves only after the image and project save
+  // have both been confirmed.
+  const addSymbolMapPage = async (
+    result: SymbolMapperRenderResult,
+    title: string,
+    sheetCode: string,
+  ): Promise<void> => {
     captureActivePageState();
     const current = projectRef.current;
     if (!current) throw new Error('Open a Singh360 project before adding a Symbol Mapper page.');
@@ -1002,14 +1027,16 @@ export default function App() {
     const latest = projectRef.current;
     if (!latest || latest.id !== current.id) throw new Error('The active project changed before the page could be added.');
     const pageId = newPageId();
+    const cleanTitle = title.trim() || 'SYMBOL HIGHLIGHT PLAN';
+    const cleanCode = sheetCode.trim() || 'NEW';
     const page: PageModel = {
       id: pageId,
       order: latest.pages.length + 1,
       include: true,
-      sheetCode: 'NEW',
-      displaySheetCode: 'NEW',
-      sheetTitle: title.trim() || 'SYMBOL HIGHLIGHT PLAN',
-      sheetTab: 'Symbol Map',
+      sheetCode: cleanCode,
+      displaySheetCode: cleanCode,
+      sheetTitle: cleanTitle,
+      sheetTab: cleanTitle,
       pageType: 'canvas',
       pageFamily: 'Image / Layout',
       layoutProfile: 'symbol_mapper',
@@ -1020,11 +1047,30 @@ export default function App() {
       templateId: '',
       blocks: [],
       canvasObjects: [],
-      notes: 'Created by the reviewed Symbol Mapper workflow. Only user-accepted detections were rendered.',
+      notes: `Created from ${result.sourceName || 'a reviewed Symbol Mapper PDF'}. Only user-accepted detections were rendered.`,
       pageGroupId: pageId,
     };
 
-    pendingSymbolPageRef.current = { pageId, url: asset.url, name: asset.name };
+    const imageReady = new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        if (pendingSymbolPageRef.current?.pageId === pageId) pendingSymbolPageRef.current = null;
+        reject(new Error('The highlighted image did not finish loading onto the new page.'));
+      }, 20000);
+      pendingSymbolPageRef.current = {
+        pageId,
+        url: asset.url,
+        name: asset.name,
+        resolve: () => {
+          window.clearTimeout(timer);
+          resolve();
+        },
+        reject: (reason: unknown) => {
+          window.clearTimeout(timer);
+          reject(reason);
+        },
+      };
+    });
+
     const pages = withPageNumbers([...latest.pages, page].map((item, index) => ({ ...item, order: index + 1 })));
     const next: ProjectModel = { ...latest, pages };
     setProjectSync(next);
@@ -1034,8 +1080,15 @@ export default function App() {
     setSelection(null);
     setRenumberBadge(true);
     writeRecoverySnapshot(next);
-    const saved = await flushSave();
-    if (!saved) throw new Error('The new page was created locally, but the project save was not confirmed. Use Save Now before navigating away.');
+
+    await imageReady;
+    captureActivePageState();
+    const completed = projectRef.current;
+    if (completed) writeRecoverySnapshot(completed);
+    const saved = await confirmLatestProjectSaved();
+    if (!saved) {
+      throw new Error('The page and image were created, but the project save could not be confirmed. Use Save Now before navigating away.');
+    }
   };
 
   const duplicatePage = (id: string) => {
@@ -1102,8 +1155,40 @@ export default function App() {
     mutatePages((pages) => pages.filter((p) => p.id !== id));
   };
 
+  const setPageIncludedAtStoredPosition = (
+    pages: PageModel[],
+    pageId: string,
+    include: boolean,
+  ): PageModel[] => {
+    const index = pages.findIndex((page) => page.id === pageId);
+    if (index < 0) return pages;
+    const target = pages[index];
+    if (target.include === include) return pages;
+
+    if (!include) {
+      return pages.map((page, pageIndex) => (
+        page.id === pageId
+          ? { ...page, include: false, restorePackageIndex: pageIndex }
+          : page
+      ));
+    }
+
+    const remaining = pages.filter((page) => page.id !== pageId);
+    const rawIndex = Number.isFinite(target.restorePackageIndex)
+      ? Number(target.restorePackageIndex)
+      : remaining.length;
+    const insertAt = Math.max(0, Math.min(remaining.length, rawIndex));
+    const restored = { ...target, include: true, restorePackageIndex: undefined };
+    const next = [...remaining];
+    next.splice(insertAt, 0, restored);
+    return next;
+  };
+
   const toggleInclude = (id: string) =>
-    mutatePages((pages) => pages.map((p) => (p.id === id ? { ...p, include: !p.include } : p)));
+    mutatePages((pages) => {
+      const target = pages.find((page) => page.id === id);
+      return target ? setPageIncludedAtStoredPosition(pages, id, !target.include) : pages;
+    });
 
   const openWorksheetDraft = useCallback(async (worksheetId: string) => {
     const ok = await ensureSavedBeforeNavigation();
@@ -1129,7 +1214,7 @@ export default function App() {
     const existing = current.pages.find((page) => page.linkedWorksheetId === worksheetId && !page.continuationOf)
       || current.pages.find((page) => page.linkedWorksheetId === worksheetId);
     if (existing) {
-      const pages = withPageNumbers(current.pages.map((page) => page.id === existing.id ? { ...page, include: true } : page));
+      const pages = withPageNumbers(setPageIncludedAtStoredPosition(current.pages, existing.id, true));
       const next = { ...current, pages };
       setProjectSync(next);
       setActivePageId(existing.id);
@@ -1800,7 +1885,7 @@ export default function App() {
       left={
         <>
           <CollapsibleSection title="Published Package" hint="Included drawing pages. Drag to reorder; right-click for page actions.">
-            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void switchPageSafely(id); }} onUpdate={(p) => void updatePages(p)} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
+            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void switchPageSafely(id); }} onUpdate={(p) => void updatePages(p)} onToggleInclude={toggleInclude} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
           </CollapsibleSection>
           <CollapsibleSection title="Workbook Drafts" defaultOpen={false} hint="Original workbook tabs. Open a Draft or publish an excluded worksheet.">
             <WorkbookView
@@ -2080,7 +2165,7 @@ export default function App() {
     {symbolMapperOpen && (
       <SymbolMapperModal
         onClose={() => setSymbolMapperOpen(false)}
-        onAddPage={(result, title) => addSymbolMapPage(result, title)}
+        onAddPage={(result, title, sheetCode) => addSymbolMapPage(result, title, sheetCode)}
       />
     )}
     {symbolLegendOpen && (

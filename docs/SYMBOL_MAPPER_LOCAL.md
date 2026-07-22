@@ -53,3 +53,19 @@ counts, review PDF, and final PDF.
 
 Runtime sessions and saved standards remain beneath `.docs/` and are never part
 of customer-facing Git history.
+
+
+## Add-page confirmation and package ordering
+
+When **Add page to Singh360** is used, the editor now waits for the reviewed PNG
+to finish loading on the Fabric canvas and confirms the exact latest project JSON
+on the server before reporting success.
+
+The output form prefills a sheet code and page title from the source PDF filename
+when that filename contains an explicit drawing code, such as `R-3.2`. Both fields
+remain editable.
+
+Published Package rows and Renumber Sheet Codes rows support drag-and-drop.
+Continuation pages move with their base page. Cover and Sheet Index remain in the
+required first and second published positions. Excluding a page records its prior
+package slot, and including it restores that slot.
