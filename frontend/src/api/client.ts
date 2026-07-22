@@ -112,6 +112,10 @@ export interface WorksheetPreview {
   rowEstimate: number;
   colEstimate: number;
   detectedPageType: string;
+  sheetCode?: string;
+  pageTitle?: string;
+  listedInIndex?: boolean;
+  printArea?: string;
 }
 
 export async function previewImportWorksheets(
@@ -129,7 +133,7 @@ export async function importWorksheets(
   projectId: string,
   file: File,
   sheetNames: string[],
-  opts: { insertAfterPageId?: string; templateOverride?: string; replacePageId?: string } = {},
+  opts: { insertAfterPageId?: string; templateOverride?: string; replacePageId?: string; preserveExact?: boolean } = {},
 ): Promise<{ pagesAdded: number; pageIds: string[]; renumberSuggested: boolean; replacedPageId?: string }> {
   const fd = new FormData();
   fd.append('file', file);
@@ -137,6 +141,7 @@ export async function importWorksheets(
   if (opts.insertAfterPageId) fd.append('insertAfterPageId', opts.insertAfterPageId);
   if (opts.templateOverride) fd.append('templateOverride', opts.templateOverride);
   if (opts.replacePageId) fd.append('replacePageId', opts.replacePageId);
+  fd.append('preserveExact', opts.preserveExact === false ? '0' : '1'); // S360 SINGLE FORMATTED SHEET IMPORT V1
   const res = await fetch(`/api/projects/${projectId}/import/workbook-sheet`, { method: 'POST', body: fd });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

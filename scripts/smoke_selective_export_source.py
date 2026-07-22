@@ -42,6 +42,7 @@ def main() -> int:
     canvas = (ROOT / "frontend" / "src" / "components" / "CanvasEditor.tsx").read_text(encoding="utf-8")
     sheet_css = (ROOT / "frontend" / "src" / "styles" / "sheet.css").read_text(encoding="utf-8")
     pdf_modal = (ROOT / "frontend" / "src" / "components" / "PdfCropModal.tsx").read_text(encoding="utf-8")
+    print_view = (ROOT / "frontend" / "src" / "components" / "PrintView.tsx").read_text(encoding="utf-8")
 
     checks = {
         "allSelectedByDefault": "new Set(includedPages.map((page) => page.id))" in modal,
@@ -53,6 +54,8 @@ def main() -> int:
         "pdfStartsNearFullBody": "const maxW = CANVAS_W * 0.98;" in canvas and "const maxH = CANVAS_H * 0.98;" in canvas,
         "transparentPrintCanvas": "S360 VECTOR PDF EXPORT START" in sheet_css,
         "cropUsesDisplayedImageBounds": "S360 PDF CROP IMAGE BOUNDS FIX" in pdf_modal and "page.widthPt / imageBox.width" in pdf_modal,
+        "physicalPageIdentityMarker": "S360PID_${pageId}" in print_view,
+        "livePdfPreviewOpaque": "S360 LIVE PDF OBJECT REPAIR V1" in canvas and "obj.opacity = 1" in canvas,
     }
     assert all(checks.values()), checks
 

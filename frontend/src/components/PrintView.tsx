@@ -40,7 +40,11 @@ function PrintPageShell({ pageId, wPx, hPx, scale, children }: { pageId: string;
   }, [wPx, hPx, scale]);
   return (
     <div className="print-page" key={pageId} ref={pageRef}>
-      <div className="print-sheet-fit" ref={fitRef}>{children}</div>
+      <div className="print-sheet-fit" ref={fitRef}>
+        {/* S360 EXPORT PAGE IDENTITY V1 - invisible text retained in the PDF so post-processing maps vectors to the correct physical page. */}
+        <span className="s360-export-page-id" aria-hidden="true">{`S360PID_${pageId}`}</span>
+        {children}
+      </div>
     </div>
   );
 }

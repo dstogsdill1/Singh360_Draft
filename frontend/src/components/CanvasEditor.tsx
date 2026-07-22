@@ -342,11 +342,29 @@ export default function CanvasEditor({
       !!o && (o as unknown as Record<string, unknown>).excludeFromExport === true;
 
     if (serialized.length) {
-      void canvas.loadFromJSON({ version: '6', objects: normalizeCanvasObjects(serialized) }).then(() => {
+      // S360 LIVE PDF OBJECT REPAIR V1
+      // Export-only clones intentionally hide their raster PDF preview. A prior
+      // interrupted save or copied object must never leave the live editor faded
+      // or invisible. Restore direct PDF objects to an opaque visible preview.
+      let repairedPdfObjects = false;
+      const liveObjects = normalizeCanvasObjects(serialized).map((raw) => {
+        const obj: Record<string, unknown> = { ...raw };
+        if (typeof obj.pdfSource === 'string' && obj.pdfSource.trim()) {
+          if (obj.visible === false || Number(obj.opacity ?? 1) !== 1 || obj.excludeFromExport === true) repairedPdfObjects = true;
+          obj.visible = true;
+          obj.opacity = 1;
+          delete obj.excludeFromExport;
+        }
+        return obj;
+      });
+      void canvas.loadFromJSON({ version: '6', objects: liveObjects }).then(() => {
         canvas.getObjects().forEach((o) => styleForSelection(o));
         canvas.renderAll();
         historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
         histIdxRef.current = 0;
+        if (repairedPdfObjects) {
+          onSerRef.current(normalizeCanvasObjects((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+        }
       });
     } else {
       historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
@@ -955,7 +973,7 @@ export default function CanvasEditor({
           }
           styleForSelection(img);
           if (underlay) {
-            img.set({ opacity: opts?.opacity ?? 0.85, lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, selectable: true });
+            img.set({ opacity: opts?.opacity ?? 1, lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, selectable: true });
           }
           c.add(img);
           if (underlay) c.sendObjectToBack(img);

@@ -20,6 +20,7 @@ import fitz  # PyMuPDF
 
 SHEET_W = 1632.0
 SHEET_H = 1056.0
+PAGE_ID_MARKER_PREFIX = "S360PID_"
 # CSS geometry: 2px shell border + 8px .sheet-inner inset + 1px inner border
 # + 8px .sheet-body inset = 19 logical pixels from the sheet origin.
 BODY_ORIGIN_X = 19.0
@@ -88,7 +89,9 @@ def _eligible_direct_pdf_object(obj: dict[str, Any]) -> bool:
     # silently change a user's intended appearance.
     if abs(angle) > 0.001 or bool(obj.get("flipX")) or bool(obj.get("flipY")):
         return False
-    if opacity < 0.999:
+    # Legacy PDF underlays were stored at 0.85 opacity. Treat those as direct
+    # PDF previews and restore the original source at full clarity during export.
+    if opacity < 0.80:
         return False
     try:
         width = float(obj.get("width") or 0)
@@ -158,6 +161,65 @@ def _placement_from_object(
     )
 
 
+
+def export_page_id_marker(page_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", str(page_id or "")).strip("_")[:96]
+    return f"{PAGE_ID_MARKER_PREFIX}{safe}"
+
+
+def _object_bounds(obj: dict[str, Any]) -> fitz.Rect | None:
+    try:
+        width = float(obj.get("width") or 0) * float(obj.get("scaleX") if obj.get("scaleX") is not None else 1)
+        height = float(obj.get("height") or 0) * float(obj.get("scaleY") if obj.get("scaleY") is not None else 1)
+        left = _origin_adjust(float(obj.get("left") or 0), width, str(obj.get("originX") or "left"))
+        top = _origin_adjust(float(obj.get("top") or 0), height, str(obj.get("originY") or "top"))
+    except (TypeError, ValueError):
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    return fitz.Rect(left, top, left + width, top + height)
+
+
+def _overlap_ratio(a: fitz.Rect, b: fitz.Rect) -> float:
+    inter = a & b
+    if inter.is_empty:
+        return 0.0
+    smaller = min(a.get_area(), b.get_area())
+    return inter.get_area() / smaller if smaller > 0 else 0.0
+
+
+def _drawing_page(page: dict[str, Any]) -> bool:
+    page_type = str(page.get("pageType") or "").strip().lower()
+    if page_type in {"cover", "index", "sheet index", "toc", "data-grid", "table", "matrix"}:
+        return False
+    if page_type in {"canvas", "hybrid", "image", "layout", "image / layout", "underlay"}:
+        return True
+    family = str(page.get("pageFamily") or page.get("family") or "").lower()
+    if any(token in family for token in ("image", "layout", "floor plan", "device location")):
+        return True
+    blocks = page.get("blocks") if isinstance(page.get("blocks"), list) else []
+    return any(
+        isinstance(block, dict)
+        and str(block.get("type") or "").lower() in {"canvas", "imageplaceholder", "underlayplaceholder"}
+        for block in blocks
+    )
+
+
+def _hide_export_object(obj: dict[str, Any]) -> None:
+    obj["visible"] = False
+    obj["excludeFromExport"] = True
+
+
+def _physical_page_map(output: fitz.Document) -> dict[str, int]:
+    mapping: dict[str, int] = {}
+    pattern = re.compile(rf"{re.escape(PAGE_ID_MARKER_PREFIX)}([A-Za-z0-9_-]{{1,96}})")
+    for index, page in enumerate(output):
+        text = page.get_text("text") or ""
+        for match in pattern.finditer(text):
+            mapping.setdefault(match.group(1), index)
+    return mapping
+
+
 def selected_page_ids_from_request(values: Iterable[str] | None) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
@@ -180,8 +242,21 @@ def build_selected_export_document(
     Index is rebuilt only when its base page is selected, and Page X of Y is
     recalculated for the selected export set.
     """
-    from core.project_model import recalc_page_numbers
-    from core.sheet_index_sync import sync_project_sheet_index
+    def _recalc_page_numbers_local(doc: dict[str, Any]) -> None:
+        pages_local = doc.get("pages") if isinstance(doc.get("pages"), list) else []
+        included_local = [page for page in pages_local if isinstance(page, dict) and page.get("include", True)]
+        total = len(included_local)
+        number = 0
+        for page in pages_local:
+            if not isinstance(page, dict):
+                continue
+            if page.get("include", True):
+                number += 1
+                page["pageNumber"] = number
+                page["pageTotal"] = total
+            else:
+                page["pageNumber"] = None
+                page["pageTotal"] = total
 
     clone = copy.deepcopy(project)
     selected = selected_page_ids_from_request(selected_page_ids)
@@ -191,14 +266,47 @@ def build_selected_export_document(
         for page in pages
         if isinstance(page, dict) and page.get("include", True)
     }
-    allowed = set(selected) if selected else originally_included
+    if not selected:
+        from core.sheet_index_sync import sync_project_sheet_index
+        clone = sync_project_sheet_index(clone)
+        _recalc_page_numbers_local(clone)
+        return clone
+
+    # Explicit selection means exactly those published pages.  Do not silently
+    # add Cover or Sheet Index.  If the base Sheet Index itself is selected, it
+    # is rebuilt from the selected set and any required TOC continuation pages
+    # are retained automatically.
+    allowed = set(selected) & originally_included
+    selected_base_index = any(
+        str(page.get("id")) in allowed
+        and str(page.get("pageType") or "").lower() == "index"
+        and not page.get("generatedContinuation")
+        for page in pages if isinstance(page, dict)
+    )
+    for page in pages:
+        if isinstance(page, dict):
+            page["include"] = str(page.get("id")) in allowed
+
+    if selected_base_index:
+        from core.sheet_index_sync import sync_project_sheet_index
+        clone = sync_project_sheet_index(clone)
+        pages = clone.get("pages") if isinstance(clone.get("pages"), list) else []
+        generated_index_ids = {
+            str(page.get("id"))
+            for page in pages
+            if isinstance(page, dict)
+            and str(page.get("pageType") or "").lower() == "index"
+            and page.get("generatedContinuation")
+            and page.get("include", True)
+        }
+        allowed |= generated_index_ids
+
     for page in pages:
         if not isinstance(page, dict):
             continue
-        page["include"] = str(page.get("id")) in allowed and str(page.get("id")) in originally_included
-
-    clone = sync_project_sheet_index(clone)
-    recalc_page_numbers(clone)
+        page_id = str(page.get("id"))
+        page["include"] = page_id in allowed
+    _recalc_page_numbers_local(clone)
     return clone
 
 
@@ -207,11 +315,14 @@ def prepare_vector_export_clone(
     *,
     source_pdf_dir: Path | None = None,
 ) -> tuple[dict[str, Any], list[VectorPlacement]]:
-    """Hide eligible direct PDF preview images and return vector placements.
+    """Hide verified PDF previews in an export clone and collect vector placements.
 
-    When a source directory is supplied, a preview is hidden only after the
-    original PDF and referenced page have been verified.  A missing/bad source
-    therefore stays raster rather than becoming a blank export.
+    The operation is deliberately page-aware:
+    * PDF objects on Cover / Sheet Index / table pages are hidden and never
+      vectorized, preventing a stale overlay from bleeding through a protected page.
+    * A raster image underneath the same PDF at the same bounds is treated as a
+      comparison/preview duplicate and is hidden in the export clone only.
+    * duplicate PDF previews with identical geometry are inserted once.
     """
     clone = copy.deepcopy(project)
     pages = sorted(
@@ -219,12 +330,23 @@ def prepare_vector_export_clone(
         key=lambda page: int(page.get("order") or 0),
     )
     placements: list[VectorPlacement] = []
+    placement_keys: set[tuple[Any, ...]] = set()
     verified_sources: dict[Path, int] = {}
+
     for export_index, page in enumerate(pages):
         objects = page.get("canvasObjects") if isinstance(page.get("canvasObjects"), list) else []
+        drawing_page = _drawing_page(page)
+
+        # Protected pages never receive source-PDF vector content.  Hide any stale
+        # direct PDF object in the export clone so it cannot show through the
+        # transparent print background used by the vector workflow.
+        if not drawing_page:
+            for obj in objects:
+                if isinstance(obj, dict) and str(obj.get("pdfSource") or "").strip():
+                    _hide_export_object(obj)
+            continue
+
         for obj in objects:
-            # Grouped objects require transform composition and deliberately stay
-            # raster.  Direct images cover the normal PDF-page import workflow.
             if not isinstance(obj, dict):
                 continue
             placement = _placement_from_object(
@@ -241,19 +363,52 @@ def prepare_vector_export_clone(
                 page_count = verified_sources.get(source_path)
                 if page_count is None:
                     try:
-                        source_doc = fitz.open(source_path)
-                        page_count = source_doc.page_count
-                        source_doc.close()
+                        with fitz.open(source_path) as source_doc:
+                            page_count = source_doc.page_count
                     except Exception:
                         continue
                     verified_sources[source_path] = page_count
                 if placement.source_page_index < 0 or placement.source_page_index >= page_count:
                     continue
-            placements.append(placement)
-            obj["visible"] = False
-            obj["excludeFromExport"] = True
-    return clone, placements
 
+            key = (
+                placement.project_page_id,
+                placement.source_pdf.lower(),
+                placement.source_page_index,
+                *(round(value, 3) for value in placement.clip),
+                round(placement.left, 2),
+                round(placement.top, 2),
+                round(placement.width, 2),
+                round(placement.height, 2),
+            )
+            if key not in placement_keys:
+                placement_keys.add(key)
+                placements.append(placement)
+            _hide_export_object(obj)
+
+            # If the user stacked the PDF over a screenshot/image of the same
+            # drawing for comparison, the opaque raster would otherwise cover the
+            # vector content inserted behind the canvas.  Hide only near-identical
+            # full-bound image duplicates in the export clone; live project data is
+            # untouched.
+            pdf_bounds = _object_bounds(obj)
+            if pdf_bounds is None:
+                continue
+            for other in objects:
+                if other is obj or not isinstance(other, dict):
+                    continue
+                if str(other.get("pdfSource") or "").strip():
+                    continue
+                if str(other.get("type") or "").lower() not in {"image", "fabricimage"}:
+                    continue
+                other_bounds = _object_bounds(other)
+                if other_bounds is None:
+                    continue
+                body_fraction = min(pdf_bounds.get_area(), other_bounds.get_area()) / max(1.0, SHEET_W * SHEET_H)
+                if body_fraction >= 0.30 and _overlap_ratio(pdf_bounds, other_bounds) >= 0.90:
+                    _hide_export_object(other)
+
+    return clone, placements
 
 def _resolve_source_pdf(source_pdf_dir: Path, name: str) -> Path | None:
     if not _SAFE_PDF_NAME.fullmatch(name):
@@ -302,9 +457,19 @@ def apply_vector_pdf_underlays(
     source_docs: dict[Path, fitz.Document] = {}
     inserted = 0
     skipped: list[dict[str, Any]] = []
+    physical_page_map = _physical_page_map(output)
     try:
         for placement in placement_list:
-            if placement.export_page_index < 0 or placement.export_page_index >= output.page_count:
+            mapped_index = physical_page_map.get(placement.project_page_id)
+            if mapped_index is None:
+                # Marker-aware exports must never guess.  The ordinal fallback is
+                # retained only for older one-off tests/PDFs that contain no page
+                # identity markers at all.
+                if physical_page_map:
+                    skipped.append({**placement.to_dict(), "reason": "project page marker is missing from export"})
+                    continue
+                mapped_index = placement.export_page_index
+            if mapped_index < 0 or mapped_index >= output.page_count:
                 skipped.append({**placement.to_dict(), "reason": "export page is missing"})
                 continue
             source_path = _resolve_source_pdf(source_pdf_dir, placement.source_pdf)
@@ -329,11 +494,11 @@ def apply_vector_pdf_underlays(
                 skipped.append({**placement.to_dict(), "reason": "source crop is empty"})
                 continue
 
-            destination = _destination_rect(output[placement.export_page_index], placement)
+            destination = _destination_rect(output[mapped_index], placement)
             if destination.is_empty or destination.width <= 0 or destination.height <= 0:
                 skipped.append({**placement.to_dict(), "reason": "destination is empty"})
                 continue
-            output[placement.export_page_index].show_pdf_page(
+            output[mapped_index].show_pdf_page(
                 destination,
                 source,
                 placement.source_page_index,
@@ -364,5 +529,6 @@ def apply_vector_pdf_underlays(
         "skippedDetails": skipped,
         "pageCount": page_count,
         "pageSizes": page_sizes,
+        "pageIdMap": physical_page_map,
         "placements": [placement.to_dict() for placement in placement_list],
     }

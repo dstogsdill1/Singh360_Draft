@@ -1215,7 +1215,29 @@ export default function App() {
     const existing = current.pages.find((page) => page.linkedWorksheetId === worksheetId && !page.continuationOf)
       || current.pages.find((page) => page.linkedWorksheetId === worksheetId);
     if (existing) {
-      const pages = withPageNumbers(setPageIncludedAtStoredPosition(current.pages, existing.id, true));
+      // S360 EXISTING WORKSHEET ONE PAGE V1
+      // Rebuild the already-loaded worksheet as one exact formatted page and
+      // remove stale generated continuations before including it.
+      const groupId = existing.pageGroupId || existing.id;
+      const rebuilt = rebuildSinglePageFromSource({
+        ...existing,
+        renderMode: 'excel_exact',
+        layoutProfile: 'single_sheet_excel_exact',
+        splitMode: 'none',
+        allowContinuation: false,
+        minScale: 0.35,
+        scaleMode: 'fit_body',
+        trimBlankRows: false,
+        trimBlankColumns: false,
+      }, worksheet);
+      const withoutContinuations = current.pages
+        .filter((page) => !(
+          page.id !== existing.id
+          && page.generatedContinuation
+          && (page.continuationOf === groupId || page.pageGroupId === groupId)
+        ))
+        .map((page) => page.id === existing.id ? rebuilt : page);
+      const pages = withPageNumbers(setPageIncludedAtStoredPosition(withoutContinuations, existing.id, true));
       const next = { ...current, pages };
       setProjectSync(next);
       setActivePageId(existing.id);
@@ -1248,10 +1270,13 @@ export default function App() {
       sourceRange: worksheet.sourceRange,
       printArea: worksheet.printArea,
       renderMode: 'excel_exact',
-      splitMode: 'auto',
-      allowContinuation: true,
-      minScale: 0.55,
+      layoutProfile: 'single_sheet_excel_exact',
+      splitMode: 'none',
+      allowContinuation: false,
+      minScale: 0.35,
       scaleMode: 'fit_body',
+      trimBlankRows: false,
+      trimBlankColumns: false,
       blocks: [],
       canvasObjects: [],
       notes: '',

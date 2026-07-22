@@ -682,3 +682,23 @@
   html, body, #root { background: transparent !important; }
 }
 /* S360 VECTOR PDF EXPORT END */
+
+/* S360 EXPORT PAGE IDENTITY START */
+.print-sheet-fit { position: relative; }
+/* White 1px text is visually absent on the white sheet margin but remains in
+   Chromium's PDF text layer. PyMuPDF uses it to map each project page ID to its
+   physical exported page, eliminating vector content on the Sheet Index. */
+.s360-export-page-id {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  z-index: 9999;
+  color: #ffffff;
+  background: transparent;
+  font: 1px/1 Arial, sans-serif;
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+/* S360 EXPORT PAGE IDENTITY END */
