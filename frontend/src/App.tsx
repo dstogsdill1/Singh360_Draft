@@ -1004,7 +1004,7 @@ export default function App() {
   };
 
   // S360 SYMBOL MAPPER: append a reviewed output as a normal, user-manageable
-  // canvas page. Option A also creates a separate exact-table count-summary page.
+  // canvas page. Option A also creates a separate compact count-legend page.
   const addSymbolMapPage = async (
     result: SymbolMapperRenderResult,
     title: string,
@@ -1079,7 +1079,7 @@ export default function App() {
     const pages = withPageNumbers([...latest.pages, ...pagesToAdd].map((item, index) => ({ ...item, order: index + 1 })));
     const next: ProjectModel = {
       ...latest,
-      worksheets: countArtifacts ? [...latest.worksheets, countArtifacts.worksheet] : latest.worksheets,
+      worksheets: latest.worksheets,
       pages,
     };
     setProjectSync(next);

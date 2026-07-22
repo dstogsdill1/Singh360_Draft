@@ -30,6 +30,8 @@ import time
 import uuid
 from typing import Any, Iterable, Sequence
 
+from core.symbol_count_package import build_symbol_mapper_package
+
 try:
     import fitz  # type: ignore
 except Exception as exc:  # pragma: no cover - handled at runtime
@@ -55,6 +57,9 @@ ALLOWED_ASSETS = {
     "review.png",
     "final.pdf",
     "final.png",
+    "package.pdf",
+    "count_legend.png",
+    "count_legend.svg",
     "session.json",
     "detection.json",
 }
@@ -1193,6 +1198,17 @@ class SymbolMapperStore:
             "sourceName": session["sourceName"],
         }
         return result
+
+    def build_output_package(self, session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        self._read_json(session_id)
+        result = build_symbol_mapper_package(self._session_dir(session_id), payload)
+        base = f"/api/symbol-mapper/sessions/{session_id}/assets"
+        return {
+            **result,
+            "pdfUrl": f"{base}/package.pdf",
+            "legendPngUrl": f"{base}/count_legend.png",
+            "legendSvgUrl": f"{base}/count_legend.svg",
+        }
 
     def asset_path(self, session_id: str, name: str) -> Path:
         safe_name = Path(name or "").name

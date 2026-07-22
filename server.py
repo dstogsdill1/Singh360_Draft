@@ -1247,6 +1247,18 @@ def symbol_mapper_render(session_id: str):
         return jsonify(_err("Reviewed symbol-map rendering failed.", str(exc))), 500
 
 
+@app.post("/api/symbol-mapper/sessions/<session_id>/package")
+def symbol_mapper_package(session_id: str):
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        return jsonify(symbol_mapper_store.build_output_package(session_id, body))
+    except SymbolMapperError as exc:
+        return jsonify(_err(str(exc))), 400
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Symbol Mapper package build failed for %s", session_id)
+        return jsonify(_err("The highlighted drawing and count page could not be combined.", str(exc))), 500
+
+
 @app.get("/api/symbol-mapper/sessions/<session_id>/assets/<name>")
 def symbol_mapper_asset(session_id: str, name: str):
     try:
@@ -1260,7 +1272,13 @@ def symbol_mapper_asset(session_id: str, name: str):
     except OSError as exc:
         app.logger.error("Symbol Mapper asset read failed for %s/%s: %s", session_id, name, exc)
         abort(404)
-    mime = "application/pdf" if name.lower().endswith(".pdf") else "image/png"
+    lower_name = name.lower()
+    if lower_name.endswith(".pdf"):
+        mime = "application/pdf"
+    elif lower_name.endswith(".svg"):
+        mime = "image/svg+xml"
+    else:
+        mime = "image/png"
     return send_file(
         BytesIO(payload),
         mimetype=mime,

@@ -1208,6 +1208,27 @@ export interface SymbolMapperDetection {
   reviewPngUrl: string;
 }
 
+export interface SymbolMapperCountPackageRow {
+  code: string;
+  glyph?: string;
+  label: string;
+  color: string;
+  color2: string;
+  pattern: SymbolMapperPattern;
+  shape?: SymbolMapperClass['shape'];
+  included: number;
+}
+
+export interface SymbolMapperCountPackageResult {
+  ok: boolean;
+  pdfUrl: string;
+  legendPngUrl: string;
+  legendSvgUrl: string;
+  pageCount: 2;
+  listedRows: number;
+  totalIncluded: number;
+}
+
 export interface SymbolMapperRenderResult {
   sessionId: string;
   renderedAt: string;
@@ -1281,6 +1302,23 @@ export async function renderSymbolMap(
     body: JSON.stringify({ classes, candidates }),
   });
   return symbolMapperJson<SymbolMapperRenderResult>(res);
+}
+
+export async function createSymbolMapperCountPackage(
+  sessionId: string,
+  payload: {
+    title: string;
+    drawingCode?: string;
+    sourceName: string;
+    rows: SymbolMapperCountPackageRow[];
+  },
+): Promise<SymbolMapperCountPackageResult> {
+  const res = await fetch(`/api/symbol-mapper/sessions/${encodeURIComponent(sessionId)}/package`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return symbolMapperJson<SymbolMapperCountPackageResult>(res);
 }
 
 export async function deleteSymbolMapperSession(sessionId: string): Promise<void> {

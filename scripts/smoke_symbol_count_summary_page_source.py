@@ -6,28 +6,36 @@ from pathlib import Path
 
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    app = (root / 'frontend' / 'src' / 'App.tsx').read_text(encoding='utf-8')
-    modal = (root / 'frontend' / 'src' / 'components' / 'SymbolMapperModal.tsx').read_text(encoding='utf-8')
-    model = (root / 'frontend' / 'src' / 'model' / 'symbolCountSummary.ts').read_text(encoding='utf-8')
+    modal = (root / "frontend" / "src" / "components" / "SymbolMapperModal.tsx").read_text(encoding="utf-8")
+    app = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    model = (root / "frontend" / "src" / "model" / "symbolCountSummary.ts").read_text(encoding="utf-8")
+    client = (root / "frontend" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
+    server = (root / "server.py").read_text(encoding="utf-8")
+    core = (root / "core" / "symbol_count_package.py").read_text(encoding="utf-8")
+
     checks = {
-        'optionADefaultOn': 'const [addCountPage, setAddCountPage] = useState(true)' in modal,
-        'includedOnlyRows': '.filter(({ accepted }) => accepted > 0)' in modal,
-        'separateSummaryChoice': 'Add a separate Symbol Count Summary page' in modal,
-        'callbackCarriesCountPage': 'countPage: SymbolMapperCountPageRequest' in modal,
-        'twoPageButton': 'Add highlighted + count pages' in modal,
-        'appBuildsArtifacts': 'buildSymbolCountSummaryArtifacts' in app,
-        'summaryPageAfterDrawing': 'pagesToAdd' in app and 'countArtifacts.page' in app,
-        'separateWorksheet': 'countArtifacts.worksheet' in app,
-        'noContinuation': "allowContinuation: false" in model and "splitMode: 'none'" in model,
-        'includedCountColumn': "'COUNT'" in model and 'String(row.included)' in model,
-        'zeroAndIgnoredOmitted': 'zero-count and ignored symbols are omitted' in model,
-        'standardTitleBlockPage': "pageType: 'data-grid'" in model and "renderMode: 'excel_exact'" in model,
+        "optionADefaultOn": "useState(true)" in modal and "Add a separate Symbol Count Summary page" in modal,
+        "includedOnlyRows": ".filter(({ accepted }) => accepted > 0)" in modal,
+        "twoPageDownloadButton": "Download highlighted + count PDF" in modal,
+        "twoPagePackageApi": "createSymbolMapperCountPackage" in modal and "/package" in client,
+        "legendPngAndSvgDownloads": "Download count legend PNG" in modal and "Download count legend SVG" in modal,
+        "exactEmblemPreview": "symbolCountLegendDataUrl" in modal,
+        "callbackCarriesCountPage": "countPage: SymbolMapperCountPageRequest" in modal,
+        "appBuildsArtifacts": "buildSymbolCountSummaryArtifacts" in app,
+        "summaryPageAfterDrawing": "pagesToAdd = countArtifacts ? [page, countArtifacts.page] : [page]" in app,
+        "compactImageLegendPage": "type: 'imagePlaceholder'" in model and "symbol-count-legend.svg" in model,
+        "noExtraWorksheetTab": "worksheets: latest.worksheets" in app and "linkedWorksheetId" not in model,
+        "splitColorOutlines": "split-vertical" in model and "stroke=\"${c2}\"" in model,
+        "zeroAndIgnoredOmitted": "zero-count, ignored, and unresolved symbols are omitted" in model,
+        "packageRoute": "symbol_mapper_package" in server and "build_output_package" in server,
+        "serverTwoPagePdf": "output.insert_pdf(highlighted)" in core and "output.new_page" in core,
+        "exactColors": "row[\"color\"]" in core and "row[\"color2\"]" in core,
     }
     if not all(checks.values()):
         raise AssertionError(checks)
-    print(json.dumps({'ok': True, **checks}, indent=2))
+    print(json.dumps({"ok": True, **checks}, indent=2))
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())
