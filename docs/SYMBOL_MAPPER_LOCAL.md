@@ -69,3 +69,11 @@ Published Package rows and Renumber Sheet Codes rows support drag-and-drop.
 Continuation pages move with their base page. Cover and Sheet Index remain in the
 required first and second published positions. Excluding a page records its prior
 package slot, and including it restores that slot.
+
+
+## PDF page import and Sheet Index continuation (v2.7)
+
+- Prefer **Insert > PDF Page / Crop** over screenshots for floor plans and engineering sheets.
+- The server renders the source PDF directly at 300, 400, 500, or 600 DPI.
+- Once inserted, PDF pages use the same Crop / Fit, Fit Page, Fill Page, and Reset Crop commands as other images.
+- The published Sheet Index is rebuilt on every save/export and automatically continues as EMS 2.0a, EMS 2.0b, etc. when needed.

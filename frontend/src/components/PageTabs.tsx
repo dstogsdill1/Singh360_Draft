@@ -148,6 +148,11 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
           </div>
         ))}
       </div>
+      <div className="page-tabs-controls page-tabs-controls-right">
+        <button type="button" title="Scroll tabs left" onClick={() => scroll(-1)}>‹</button>
+        <button type="button" title="Scroll tabs right" onClick={() => scroll(1)}>›</button>
+        <PageNavigator pages={pages} activePageId={activePageId} onSelect={onSelect} />
+      </div>
     </div>
   );
 }

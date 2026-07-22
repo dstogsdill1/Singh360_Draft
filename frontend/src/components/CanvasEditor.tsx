@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, filters, type FabricObject } from 'fabric';
-import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, SymbolLegendInsertConfig } from '../model/types';
+import type { BusOptions, CanvasApi, CanvasSelection, ImageCropPlacement, ImageCropRect, ImageCropState, LineStyle, SymbolLegendInsertConfig } from '../model/types';
 import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
 import { BODY_W, BODY_H } from '../model/sheetGeometry';
@@ -963,6 +963,144 @@ export default function CanvasEditor({
           c.requestRenderAll();
         });
       },
+      // S360 IMAGE CROP API START
+      getSelectedImageCrop: (): ImageCropState | null => {
+        const c = fabricRef.current;
+        const active = c?.getActiveObject();
+        if (!c || !active || active.type !== 'image') return null;
+        const img = active as FabricImage;
+        const element = img.getElement() as HTMLImageElement;
+        const naturalWidth = Number(element?.naturalWidth || element?.width || img.width || 1);
+        const naturalHeight = Number(element?.naturalHeight || element?.height || img.height || 1);
+        const cropX = Number(img.cropX || 0);
+        const cropY = Number(img.cropY || 0);
+        const cropWidth = Number(img.width || naturalWidth);
+        const cropHeight = Number(img.height || naturalHeight);
+        const rec = img as unknown as Record<string, unknown>;
+        return {
+          sourceUrl: img.getSrc(),
+          name: String(rec.objName || 'Selected image'),
+          naturalWidth,
+          naturalHeight,
+          crop: {
+            x: Math.max(0, Math.min(1, cropX / naturalWidth)),
+            y: Math.max(0, Math.min(1, cropY / naturalHeight)),
+            width: Math.max(0.01, Math.min(1, cropWidth / naturalWidth)),
+            height: Math.max(0.01, Math.min(1, cropHeight / naturalHeight)),
+          },
+          locked: Boolean(img.lockMovementX || img.lockScalingX || img.lockRotation),
+        };
+      },
+      applySelectedImageCrop: (crop: ImageCropRect, placement: ImageCropPlacement = 'keep') => {
+        const c = fabricRef.current;
+        const active = c?.getActiveObject();
+        if (!c || !active || active.type !== 'image') return;
+        const img = active as FabricImage;
+        const element = img.getElement() as HTMLImageElement;
+        const naturalWidth = Number(element?.naturalWidth || element?.width || img.width || 1);
+        const naturalHeight = Number(element?.naturalHeight || element?.height || img.height || 1);
+        const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+        let x = clamp(Number(crop.x || 0), 0, 0.99) * naturalWidth;
+        let y = clamp(Number(crop.y || 0), 0, 0.99) * naturalHeight;
+        let width = clamp(Number(crop.width || 1), 0.01, 1) * naturalWidth;
+        let height = clamp(Number(crop.height || 1), 0.01, 1) * naturalHeight;
+        width = Math.min(width, naturalWidth - x);
+        height = Math.min(height, naturalHeight - y);
+
+        if (placement === 'fill') {
+          const targetRatio = CANVAS_W / CANVAS_H;
+          const ratio = width / height;
+          if (ratio > targetRatio) {
+            const nextWidth = height * targetRatio;
+            x += (width - nextWidth) / 2;
+            width = nextWidth;
+          } else if (ratio < targetRatio) {
+            const nextHeight = width / targetRatio;
+            y += (height - nextHeight) / 2;
+            height = nextHeight;
+          }
+        }
+
+        const oldScaleX = img.scaleX ?? 1;
+        const oldScaleY = img.scaleY ?? 1;
+        const oldWidth = Number(img.width || naturalWidth);
+        const oldHeight = Number(img.height || naturalHeight);
+        const renderedWidth = oldWidth * oldScaleX;
+        const renderedHeight = oldHeight * oldScaleY;
+        const oldCenter = img.getCenterPoint();
+        // "Apply crop" keeps the same on-page footprint. Fit/fill below can then
+        // deliberately resize the cropped result to the drawing body.
+        let scaleX = renderedWidth / width;
+        let scaleY = renderedHeight / height;
+        let left = oldCenter.x - renderedWidth / 2;
+        let top = oldCenter.y - renderedHeight / 2;
+        if (placement === 'fit') {
+          const scale = Math.min((CANVAS_W * 0.98) / width, (CANVAS_H * 0.98) / height);
+          scaleX = scale;
+          scaleY = scale;
+          left = (CANVAS_W - width * scale) / 2;
+          top = (CANVAS_H - height * scale) / 2;
+        } else if (placement === 'fill') {
+          scaleX = CANVAS_W / width;
+          scaleY = CANVAS_H / height;
+          left = 0;
+          top = 0;
+        }
+
+        img.set({
+          cropX: x,
+          cropY: y,
+          width,
+          height,
+          scaleX,
+          scaleY,
+          left,
+          top,
+          originX: 'left',
+          originY: 'top',
+        });
+        img.setCoords();
+        c.requestRenderAll();
+        const objects = normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]);
+        onSerRef.current(objects);
+        const snapshot = JSON.stringify(c.toObject(SER_PROPS));
+        const history = historyRef.current.slice(0, histIdxRef.current + 1);
+        history.push(snapshot);
+        historyRef.current = history;
+        histIdxRef.current = history.length - 1;
+        onSelRef.current(summarize(img));
+      },
+      resetSelectedImageCrop: () => {
+        const c = fabricRef.current;
+        const active = c?.getActiveObject();
+        if (!c || !active || active.type !== 'image') return;
+        const img = active as FabricImage;
+        const element = img.getElement() as HTMLImageElement;
+        const naturalWidth = Number(element?.naturalWidth || element?.width || img.width || 1);
+        const naturalHeight = Number(element?.naturalHeight || element?.height || img.height || 1);
+        const center = img.getCenterPoint();
+        const renderedWidth = Number(img.width || naturalWidth) * (img.scaleX ?? 1);
+        const renderedHeight = Number(img.height || naturalHeight) * (img.scaleY ?? 1);
+        const scaleX = renderedWidth / naturalWidth;
+        const scaleY = renderedHeight / naturalHeight;
+        img.set({
+          cropX: 0,
+          cropY: 0,
+          width: naturalWidth,
+          height: naturalHeight,
+          scaleX,
+          scaleY,
+          left: center.x - renderedWidth / 2,
+          top: center.y - renderedHeight / 2,
+          originX: 'left',
+          originY: 'top',
+        });
+        img.setCoords();
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+        onSelRef.current(summarize(img));
+      },
+      // S360 IMAGE CROP API END
       addComponent: (
         url: string,
         name: string,
@@ -1142,129 +1280,121 @@ export default function CanvasEditor({
       addSymbolLegend: (config: SymbolLegendInsertConfig) => {
         const c = fabricRef.current;
         if (!c) return;
-        const rows = config.rows.filter((r) => r.label.trim());
+        const rows = config.rows.filter((row) => row.label.trim());
         if (!rows.length) return;
 
-        const LEGEND_W = 260;
-        const ROW_H = 24;
-        const PAD = 10;
-        const TITLE_H = 26;
-        const ICON_SIZE = SYMBOL_SIZE_SMALL;
-        const LABEL_FONT = 8.5;
-        const ICON_COL = PAD;
-        const LABEL_LEFT = PAD + ICON_SIZE + 8;
-        const LABEL_W = LEGEND_W - LABEL_LEFT - PAD;
-        const title = (config.title || 'SYMBOL LEGEND').trim().toUpperCase();
-        const boxH = TITLE_H + PAD + rows.length * ROW_H + PAD;
+        const columns = config.columns === 2 ? 2 : 1;
+        const markerSize = Math.max(18, Math.min(42, config.markerSize ?? SYMBOL_SIZE_SMALL));
+        const rowH = Math.max(30, markerSize + 7);
+        const pad = 12;
+        const titleH = 30;
+        const colW = 360;
+        const rowsPerColumn = Math.ceil(rows.length / columns);
+        const boxW = colW * columns;
+        const boxH = titleH + pad + rowsPerColumn * rowH + pad;
+        const parts: FabricObject[] = [];
+        const title = (config.title || 'SYMBOLS KEY:').trim().toUpperCase();
 
-        const loadIcon = (url?: string) => {
-          if (!url) return Promise.resolve<FabricImage | null>(null);
-          return FabricImage.fromURL(normalizeAssetUrl(url), { crossOrigin: 'anonymous' }).catch(() => null);
+        if (config.frame) {
+          parts.push(new Rect({ left: 0, top: 0, width: boxW, height: boxH, fill: '#fff', stroke: '#111', strokeWidth: 1 }));
+        }
+        parts.push(new Textbox(title, {
+          left: pad,
+          top: 4,
+          width: boxW - pad * 2,
+          fontSize: 13,
+          fontWeight: 'bold',
+          fontFamily: 'Arial',
+          fill: '#111',
+          editable: true,
+        }));
+
+        const addHighlight = (row: typeof rows[number], x: number, y: number) => {
+          const highlighted = row.highlighted ?? config.highlighted ?? true;
+          if (!highlighted) return;
+          const color1 = row.color || '#ffd400';
+          const color2 = row.color2 || color1;
+          const pattern = row.pattern || 'solid';
+          if (pattern === 'split-vertical') {
+            parts.push(new Rect({ left: x, top: y, width: markerSize / 2, height: markerSize, fill: color1, opacity: 0.22, strokeWidth: 0 }));
+            parts.push(new Rect({ left: x + markerSize / 2, top: y, width: markerSize / 2, height: markerSize, fill: color2, opacity: 0.22, strokeWidth: 0 }));
+            parts.push(new Line([x, y, x, y + markerSize], { stroke: color1, strokeWidth: 2 }));
+            parts.push(new Line([x, y, x + markerSize / 2, y], { stroke: color1, strokeWidth: 2 }));
+            parts.push(new Line([x, y + markerSize, x + markerSize / 2, y + markerSize], { stroke: color1, strokeWidth: 2 }));
+            parts.push(new Line([x + markerSize, y, x + markerSize, y + markerSize], { stroke: color2, strokeWidth: 2 }));
+            parts.push(new Line([x + markerSize / 2, y, x + markerSize, y], { stroke: color2, strokeWidth: 2 }));
+            parts.push(new Line([x + markerSize / 2, y + markerSize, x + markerSize, y + markerSize], { stroke: color2, strokeWidth: 2 }));
+            parts.push(new Line([x + markerSize / 2, y + 1, x + markerSize / 2, y + markerSize - 1], { stroke: '#333', strokeWidth: 0.6, opacity: 0.65 }));
+          } else {
+            parts.push(new Rect({
+              left: x,
+              top: y,
+              width: markerSize,
+              height: markerSize,
+              fill: color1,
+              opacity: 0.22,
+              stroke: color1,
+              strokeWidth: 2,
+            }));
+          }
         };
 
-        void Promise.all(rows.map((r) => loadIcon(r.symbolUrl))).then((images) => {
-          const parts: FabricObject[] = [];
+        rows.forEach((row, index) => {
+          const column = Math.floor(index / rowsPerColumn);
+          const rowIndex = index % rowsPerColumn;
+          const baseX = column * colW;
+          const rowTop = titleH + pad + rowIndex * rowH;
+          const markerX = baseX + pad;
+          const markerY = rowTop + (rowH - markerSize) / 2;
+          addHighlight(row, markerX, markerY);
 
-          parts.push(new Rect({
-            left: 0,
-            top: 0,
-            width: LEGEND_W,
-            height: boxH,
-            fill: '#ffffff',
-            stroke: '#000000',
-            strokeWidth: 1,
-            rx: 2,
-            ry: 2,
-            originX: 'left',
-            originY: 'top',
-          }));
-
-          parts.push(new Textbox(title, {
-            left: PAD,
-            top: 6,
-            width: LEGEND_W - PAD * 2,
-            fontSize: 9,
-            fontWeight: 'bold',
-            fontFamily: 'Arial',
-            fill: '#111111',
-            textAlign: 'left',
-            originX: 'left',
-            originY: 'top',
-            editable: true,
-          }));
-          (parts[1] as unknown as Record<string, unknown>).objName = 'Legend Title';
-
-          rows.forEach((row, i) => {
-            const rowTop = TITLE_H + PAD + i * ROW_H;
-            if (i > 0) {
-              parts.push(new Line([PAD, rowTop, LEGEND_W - PAD, rowTop], {
-                stroke: '#dddddd',
-                strokeWidth: 0.5,
-                originX: 'left',
-                originY: 'top',
-              }));
-            }
-
-            const iconTarget = row.iconSize ?? ICON_SIZE;
-            const img = images[i];
-            if (img) {
-              const iw = img.width || 1;
-              const ih = img.height || 1;
-              const scale = scaleImageToSize(iw, ih, iconTarget, iconTarget);
-              img.set({
-                left: ICON_COL,
-                top: rowTop + (ROW_H - ih * scale) / 2,
-                scaleX: scale,
-                scaleY: scale,
-                originX: 'left',
-                originY: 'top',
-              });
-              (img as unknown as Record<string, unknown>).objName = `Symbol: ${row.acronym || row.name || row.label}`;
-              parts.push(img);
-            } else {
-              parts.push(new Rect({
-                left: ICON_COL,
-                top: rowTop + (ROW_H - iconTarget) / 2,
-                width: iconTarget,
-                height: iconTarget,
-                fill: '#f4f4f4',
-                stroke: '#bbbbbb',
-                strokeWidth: 0.5,
-                originX: 'left',
-                originY: 'top',
-              }));
-            }
-
-            const lbl = new Textbox(row.label, {
-              left: LABEL_LEFT,
-              top: rowTop + 5,
-              width: LABEL_W,
-              fontSize: LABEL_FONT,
+          const shape = row.shape || (String(row.code || row.acronym || '').toUpperCase() === 'CC' ? 'square' : 'circle');
+          const symbolSize = markerSize * 0.72;
+          const symbolX = markerX + (markerSize - symbolSize) / 2;
+          const symbolY = markerY + (markerSize - symbolSize) / 2;
+          if (shape === 'circle') {
+            parts.push(new Circle({ left: symbolX, top: symbolY, radius: symbolSize / 2, fill: 'transparent', stroke: '#111', strokeWidth: 1 }));
+          } else if (shape === 'square') {
+            parts.push(new Rect({ left: symbolX, top: symbolY, width: symbolSize, height: symbolSize, fill: 'transparent', stroke: '#111', strokeWidth: 1 }));
+          }
+          const glyph = String(row.glyph || row.code || row.acronym || '').trim();
+          if (glyph) {
+            parts.push(new Textbox(glyph, {
+              left: markerX,
+              top: markerY + markerSize * 0.29,
+              width: markerSize,
+              fontSize: glyph.length > 2 ? markerSize * 0.28 : markerSize * 0.36,
+              fontWeight: 'bold',
               fontFamily: 'Arial',
-              fill: '#111111',
-              textAlign: 'left',
-              originX: 'left',
-              originY: 'top',
+              fill: '#111',
+              textAlign: 'center',
               editable: true,
-              splitByGrapheme: false,
-            });
-            (lbl as unknown as Record<string, unknown>).objName = `Legend Label: ${row.label}`;
-            parts.push(lbl);
-          });
-
-          const grp = new Group(parts, {
-            left: CANVAS_W * 0.58,
-            top: CANVAS_H * 0.1,
-            originX: 'left',
-            originY: 'top',
-            subTargetCheck: true,
-          });
-          (grp as unknown as Record<string, unknown>).objName = 'Symbol Legend';
-          styleForSelection(grp);
-          c.add(grp);
-          c.setActiveObject(grp);
-          c.requestRenderAll();
+            }));
+          }
+          parts.push(new Textbox(row.label, {
+            left: markerX + markerSize + 10,
+            top: rowTop + (rowH - 14) / 2,
+            width: colW - markerSize - pad * 2 - 12,
+            fontSize: 11.5,
+            fontFamily: 'Arial',
+            fill: '#111',
+            editable: true,
+            splitByGrapheme: false,
+          }));
         });
+
+        const group = new Group(parts, {
+          left: CANVAS_W * 0.56,
+          top: CANVAS_H * 0.08,
+          originX: 'left',
+          originY: 'top',
+          subTargetCheck: true,
+        });
+        (group as unknown as Record<string, unknown>).objName = 'Singh360 Symbol Legend';
+        styleForSelection(group);
+        c.add(group);
+        c.setActiveObject(group);
+        c.requestRenderAll();
       },
       normalizeSymbolSize: () => {
         const c = fabricRef.current;

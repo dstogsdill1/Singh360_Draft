@@ -318,7 +318,33 @@ export interface PdfCropInsertMeta {
   pdfCrop?: string; // "x0,y0,x1,y1" in PDF points
 }
 
+export interface ImageCropRect {
+  /** Normalized 0-1 source-image crop rectangle. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type ImageCropPlacement = 'keep' | 'fit' | 'fill';
+
+export interface ImageCropState {
+  sourceUrl: string;
+  name: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  crop: ImageCropRect;
+  locked: boolean;
+}
+
 export interface SymbolLegendInsertRow {
+  code?: string;
+  glyph?: string;
+  shape?: 'circle' | 'square' | 'none';
+  color?: string;
+  color2?: string;
+  pattern?: 'solid' | 'outline' | 'double-outline' | 'split-vertical' | 'split-horizontal' | 'diagonal' | 'crosshatch';
+  highlighted?: boolean;
   label: string;
   symbolUrl?: string;
   name?: string;
@@ -330,6 +356,10 @@ export interface SymbolLegendInsertRow {
 }
 
 export interface SymbolLegendInsertConfig {
+  highlighted?: boolean;
+  columns?: 1 | 2;
+  markerSize?: number;
+  frame?: boolean;
   title: string;
   rows: SymbolLegendInsertRow[];
 }
@@ -353,6 +383,9 @@ export interface CanvasApi {
   startBus: (opts: BusOptions) => void;
   addImage: (url: string, name?: string, at?: { clientX: number; clientY: number }) => void;
   addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; opacity?: number; meta?: PdfCropInsertMeta }) => Promise<void> | void;
+  getSelectedImageCrop: () => ImageCropState | null;
+  applySelectedImageCrop: (crop: ImageCropRect, placement?: ImageCropPlacement) => void;
+  resetSelectedImageCrop: () => void;
   addComponent: (
     url: string,
     name: string,

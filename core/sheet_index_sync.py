@@ -13,6 +13,7 @@ import re
 from typing import Any
 
 from core.page_composer import continuation_code
+from core.sheet_index_pagination import prepare_sheet_index_pages, split_sheet_index_pages
 from core.project_model import recalc_page_numbers
 from core.workbook_importer import (
     _INDEX_ALIASES,
@@ -227,7 +228,11 @@ def rebuild_normalized_index_block(project: dict[str, Any]) -> None:
 
 def sync_project_sheet_index(project: dict[str, Any]) -> dict[str, Any]:
     """Repair page sheet codes + normalized index from the source index worksheet."""
+    # Rebuild deterministic TOC continuation pages before generating rows.
+    prepare_sheet_index_pages(project)
     sync_sheet_codes_from_index(project)
     rebuild_normalized_index_block(project)
+    # Split the complete TOC across EMS 2.0, EMS 2.0a, and later pages.
+    split_sheet_index_pages(project)
     recalc_page_numbers(project)
     return project

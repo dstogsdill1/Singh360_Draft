@@ -1,3 +1,4 @@
+// S360 HIGH RES PDF IMPORT UX
 import { useRef, useState, type MouseEvent } from 'react';
 import {
   renderPdfCrop,
@@ -18,7 +19,7 @@ interface Props {
 
 interface Rect { x: number; y: number; w: number; h: number }
 
-// Insert PDF Crop — render a crisp region straight from the PDF at high DPI.
+// Import PDF Page / Crop — render a crisp region straight from the PDF at high DPI.
 // The crop rectangle is drawn on a preview image and mapped back to PDF point
 // coordinates so the output is vector-sharp, never a scaled screenshot.
 export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
@@ -146,7 +147,7 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal pdfcrop-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Insert PDF Crop</h2>
+          <h2>Import PDF Page / Crop</h2>
           <button className="modal-x" onClick={onCancel} title="Close">×</button>
         </div>
 
@@ -165,7 +166,7 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
                 />
               </label>
               <p className="renumber-note pdf-insert-hint">
-                <strong>Best quality:</strong> use PDF Crop instead of screenshots.
+                <strong>Best quality:</strong> use PDF Page / Crop instead of screenshots.
                 Regions are rendered straight from the PDF at 300–600 DPI so they
                 stay sharp at 11×17 export.
               </p>
@@ -252,7 +253,7 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
                 {rendering ? 'Rendering…' : 'Render Preview'}
               </button>
               <button className="btn btn-primary" disabled={rendering} onClick={() => void doInsert()}>
-                {rendering ? 'Rendering…' : 'Insert Crop'}
+                {rendering ? 'Rendering…' : 'Import PDF Crop'}
               </button>
             </>
           )}

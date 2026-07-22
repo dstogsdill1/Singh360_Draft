@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
+import { useMemo, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import {
   createSymbolMapperSession,
   detectSymbolMap,
@@ -13,6 +13,14 @@ import {
   type SymbolMapperTemplate,
   type SymbolMapperTemplateSymbol,
 } from '../api/client';
+import {
+  SYMBOL_PALETTE as PALETTE,
+  normalizeSymbolTemplateText as normalizeTemplateText,
+  paletteChoiceById,
+  symbolMarkerStyle as markerVisualStyle,
+  symbolTemplateKey as templateKey,
+  type SymbolPaletteChoice as PaletteChoice,
+} from '../model/symbolPalette';
 
 interface Props {
   onClose: () => void;
@@ -21,13 +29,6 @@ interface Props {
 
 type Step = 'upload' | 'choose' | 'results' | 'output';
 
-type PaletteChoice = {
-  id: string;
-  label: string;
-  color: string;
-  color2: string;
-  pattern: SymbolMapperClass['pattern'];
-};
 
 type ConfiguredSymbol = SymbolMapperClass & {
   enabled: boolean;
@@ -36,63 +37,6 @@ type ConfiguredSymbol = SymbolMapperClass & {
   legendBox: { x0: number; y0: number; x1: number; y1: number };
   templateMatched: boolean;
 };
-
-const PALETTE: PaletteChoice[] = [
-  { id: 'red', label: 'Red', color: '#e53935', color2: '#e53935', pattern: 'solid' },
-  { id: 'green', label: 'Green', color: '#00a651', color2: '#00a651', pattern: 'solid' },
-  { id: 'yellow', label: 'Yellow', color: '#ffd400', color2: '#ffd400', pattern: 'solid' },
-  { id: 'blue', label: 'Blue', color: '#1e73be', color2: '#1e73be', pattern: 'solid' },
-  { id: 'orange', label: 'Orange', color: '#ff7a00', color2: '#ff7a00', pattern: 'solid' },
-  { id: 'purple', label: 'Purple', color: '#8e44ad', color2: '#8e44ad', pattern: 'solid' },
-  { id: 'cyan', label: 'Cyan', color: '#00a8cc', color2: '#00a8cc', pattern: 'solid' },
-  { id: 'pink', label: 'Pink', color: '#e84393', color2: '#e84393', pattern: 'solid' },
-  { id: 'red-green', label: 'Red / Green', color: '#e53935', color2: '#00a651', pattern: 'split-vertical' },
-  { id: 'red-blue', label: 'Red / Blue', color: '#e53935', color2: '#1e73be', pattern: 'split-vertical' },
-  { id: 'yellow-blue', label: 'Yellow / Blue', color: '#ffd400', color2: '#1e73be', pattern: 'split-vertical' },
-  { id: 'yellow-green', label: 'Yellow / Green', color: '#ffd400', color2: '#00a651', pattern: 'split-vertical' },
-  { id: 'orange-blue', label: 'Orange / Blue', color: '#ff7a00', color2: '#1e73be', pattern: 'split-vertical' },
-  { id: 'purple-green', label: 'Purple / Green', color: '#8e44ad', color2: '#00a651', pattern: 'split-vertical' },
-  { id: 'red-yellow', label: 'Red / Yellow', color: '#e53935', color2: '#ffd400', pattern: 'split-vertical' },
-  { id: 'blue-green', label: 'Blue / Green', color: '#1e73be', color2: '#00a651', pattern: 'split-vertical' },
-];
-
-function rgba(hex: string, alpha: number): string {
-  const clean = hex.replace('#', '');
-  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return `rgba(255, 212, 0, ${alpha})`;
-  const value = Number.parseInt(clean, 16);
-  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
-}
-
-function markerVisualStyle(
-  choice: Pick<PaletteChoice, 'color' | 'color2' | 'pattern'>,
-  fillAlpha = 1,
-  borderWidth = 2,
-): CSSProperties {
-  if (choice.pattern === 'split-vertical') {
-    const fill = `linear-gradient(90deg, ${rgba(choice.color, fillAlpha)} 0 50%, ${rgba(choice.color2, fillAlpha)} 50% 100%)`;
-    const outline = `linear-gradient(90deg, ${choice.color} 0 50%, ${choice.color2} 50% 100%)`;
-    return {
-      border: `${borderWidth}px solid transparent`,
-      background: `${fill} padding-box, ${outline} border-box`,
-      backgroundOrigin: 'border-box',
-      backgroundClip: 'padding-box, border-box',
-      boxSizing: 'border-box',
-    };
-  }
-  return {
-    border: `${borderWidth}px solid ${choice.color}`,
-    background: rgba(choice.color, fillAlpha),
-    boxSizing: 'border-box',
-  };
-}
-
-function normalizeTemplateText(value: string): string {
-  return value.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function templateKey(code: string, label: string): string {
-  return `${normalizeTemplateText(code)}|${normalizeTemplateText(label)}`;
-}
 
 function inferOutputFields(sourceName: string): { sheetCode: string; pageTitle: string } {
   const base = sourceName.replace(/\.pdf$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -115,7 +59,7 @@ function choiceForTemplate(item: SymbolMapperTemplateSymbol | undefined, index: 
     && choice.color.toLowerCase() === item.color.toLowerCase()
     && choice.color2.toLowerCase() === item.color2.toLowerCase()
   )) : undefined;
-  return inferred ?? PALETTE[index % PALETTE.length];
+  return inferred ?? paletteChoiceById(undefined, index);
 }
 
 function buildSymbols(rows: SymbolMapperLegendRow[], template: SymbolMapperTemplate): ConfiguredSymbol[] {
@@ -145,7 +89,7 @@ function buildSymbols(rows: SymbolMapperLegendRow[], template: SymbolMapperTempl
       id: row.id,
       code: row.code,
       label: row.label,
-      shape: row.shape,
+      shape: saved?.shape ?? row.shape,
       color: saved?.color ?? choice.color,
       color2: saved?.color2 ?? choice.color2,
       pattern: saved?.pattern ?? choice.pattern,
@@ -252,7 +196,9 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
       const payload: SymbolMapperTemplateSymbol[] = symbols.map((item) => ({
         key: templateKey(item.code, item.label),
         code: item.code,
+        glyph: /\bCLEAN\s+SWITCH\b/i.test(item.label) ? '$' : item.code,
         label: item.label,
+        shape: item.shape === 'auto' ? 'circle' : item.shape,
         enabled: item.enabled,
         paletteId: item.paletteId,
         color: item.color,

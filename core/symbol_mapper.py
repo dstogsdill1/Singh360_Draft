@@ -125,15 +125,28 @@ def _normalize_template_symbol(raw: Any) -> dict[str, Any] | None:
     if pattern not in TEMPLATE_PATTERNS:
         pattern = "solid"
     palette_id = re.sub(r"[^a-z0-9-]+", "-", str(raw.get("paletteId") or "").strip().lower()).strip("-")[:40]
+    shape = str(raw.get("shape") or "").strip().lower()
+    if shape not in {"circle", "square", "none"}:
+        if re.search(r"\bCLEAN\s+SWITCH\b", label, re.IGNORECASE):
+            shape = "none"
+        elif code == "CC":
+            shape = "square"
+        else:
+            shape = "circle"
+    glyph = str(raw.get("glyph") or "").strip()[:16]
+    if not glyph:
+        glyph = "$" if re.search(r"\bCLEAN\s+SWITCH\b", label, re.IGNORECASE) else code
     return {
         "key": _template_key(code, label),
         "code": code,
+        "glyph": glyph,
         "label": label,
         "enabled": bool(raw.get("enabled", True)),
         "paletteId": palette_id,
         "color": _hex_color(raw.get("color"), "#ffd400"),
         "color2": _hex_color(raw.get("color2"), _hex_color(raw.get("color"), "#ffd400")),
         "pattern": pattern,
+        "shape": shape,
     }
 
 

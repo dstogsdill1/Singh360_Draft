@@ -479,7 +479,7 @@ def save_project(project_id: str):
         app.logger.error("Could not write project %s: %s", project_id, exc)
         return jsonify(_err("Failed to save project.", str(exc))), 500
 
-    return jsonify({"ok": True, "id": project_id, "modified": data["modified"], "projectFolder": data.get("projectFolder", "")})
+    return jsonify(data)
 
 
 @app.post("/api/projects/<project_id>/pages")
@@ -494,6 +494,7 @@ def upsert_pages(project_id: str):
     try:
         doc["pages"] = pages
         doc = ensure_project_shape(doc)
+        doc = sync_project_sheet_index(doc)
         problems = validate_project(doc)
         if problems:
             return jsonify(_err("Page update failed validation.", " | ".join(problems[:20]))), 400
@@ -2178,6 +2179,8 @@ def export_warnings_preview(project_id: str):
     from core.export_qa import compute_export_warnings
 
     doc = ensure_project_shape(doc)
+    doc = sync_project_sheet_index(doc)
+    store.save(project_id, doc)
     return jsonify({"ok": True, "warnings": compute_export_warnings(doc)})
 
 
@@ -2189,6 +2192,8 @@ def export_pdf(project_id: str):
         abort(404)
 
     doc = ensure_project_shape(doc)
+    doc = sync_project_sheet_index(doc)
+    store.save(project_id, doc)
     pages = [p for p in doc.get("pages", []) if p.get("include", True)]
     if not pages:
         return jsonify(_err("No included pages to export.")), 400
@@ -2362,6 +2367,10 @@ def export_package(project_id: str):
     doc = _load_doc(project_id)
     if doc is None:
         abort(404)
+    # Keep the generated Sheet Index current for package export even when
+    # the revision value itself was not changed.
+    doc = sync_project_sheet_index(ensure_project_shape(doc))
+    store.save(project_id, doc)
     pdir = store.dir_for(project_id, doc)
     store.ensure_folders(pdir)
 

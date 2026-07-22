@@ -12,7 +12,9 @@
       "paletteId": "blue",
       "color": "#1e73be",
       "color2": "#1e73be",
-      "pattern": "solid"
+      "pattern": "solid",
+      "shape": "circle",
+      "glyph": "TS"
     },
     {
       "key": "DA|DOOR ALARM",
@@ -22,7 +24,9 @@
       "paletteId": "green",
       "color": "#00a651",
       "color2": "#00a651",
-      "pattern": "solid"
+      "pattern": "solid",
+      "shape": "circle",
+      "glyph": "DA"
     },
     {
       "key": "LS|REFRIGERANT LEAK DETECTION SENSOR",
@@ -32,7 +36,9 @@
       "paletteId": "yellow",
       "color": "#ffd400",
       "color2": "#ffd400",
-      "pattern": "solid"
+      "pattern": "solid",
+      "shape": "circle",
+      "glyph": "LS"
     },
     {
       "key": "LI|REFRIGERANT LEAK INDICATOR AUDIO VISUAL ALARM",
@@ -42,7 +48,9 @@
       "paletteId": "red-yellow",
       "color": "#e53935",
       "color2": "#ffd400",
-      "pattern": "split-vertical"
+      "pattern": "split-vertical",
+      "shape": "circle",
+      "glyph": "LI"
     },
     {
       "key": "CC|RDM CASE CONTROLLER",
@@ -52,7 +60,9 @@
       "paletteId": "pink",
       "color": "#e84393",
       "color2": "#e84393",
-      "pattern": "solid"
+      "pattern": "solid",
+      "shape": "square",
+      "glyph": "CC"
     },
     {
       "key": "DTS|DUAL TEMPERATURE SWITCH",
@@ -62,7 +72,9 @@
       "paletteId": "cyan",
       "color": "#00a8cc",
       "color2": "#00a8cc",
-      "pattern": "solid"
+      "pattern": "solid",
+      "shape": "circle",
+      "glyph": "DTS"
     },
     {
       "key": "HT|HIGH TEMPERATURE ALARM STROBE AMBER",
@@ -72,7 +84,9 @@
       "paletteId": "pink",
       "color": "#e84393",
       "color2": "#e84393",
-      "pattern": "solid"
+      "pattern": "solid",
+      "shape": "circle",
+      "glyph": "HT"
     },
     {
       "key": "ES|WALK IN FREEZER ENTRAPMENT SWITCH",
@@ -82,7 +96,9 @@
       "paletteId": "yellow-blue",
       "color": "#ffd400",
       "color2": "#1e73be",
-      "pattern": "split-vertical"
+      "pattern": "split-vertical",
+      "shape": "circle",
+      "glyph": "ES"
     },
     {
       "key": "AS|ALARM STROBE RED",
@@ -92,7 +108,9 @@
       "paletteId": "red",
       "color": "#e53935",
       "color2": "#e53935",
-      "pattern": "solid"
+      "pattern": "solid",
+      "shape": "circle",
+      "glyph": "AS"
     },
     {
       "key": "EA|ENTRAPMENT ALARM",
@@ -102,7 +120,9 @@
       "paletteId": "red-green",
       "color": "#e53935",
       "color2": "#00a651",
-      "pattern": "split-vertical"
+      "pattern": "split-vertical",
+      "shape": "circle",
+      "glyph": "EA"
     },
     {
       "key": "S|LIQUID LINE SOLENOID VALVE 120V",
@@ -112,7 +132,9 @@
       "paletteId": "purple",
       "color": "#8e44ad",
       "color2": "#8e44ad",
-      "pattern": "solid"
+      "pattern": "solid",
+      "shape": "circle",
+      "glyph": "S"
     },
     {
       "key": "DT|DEFROST TERMINATION SENSOR",
@@ -122,7 +144,9 @@
       "paletteId": "yellow-green",
       "color": "#ffd400",
       "color2": "#00a651",
-      "pattern": "split-vertical"
+      "pattern": "split-vertical",
+      "shape": "circle",
+      "glyph": "DT"
     },
     {
       "key": "S|CLEAN SWITCH",
@@ -132,7 +156,9 @@
       "paletteId": "blue-green",
       "color": "#1e73be",
       "color2": "#00a651",
-      "pattern": "split-vertical"
+      "pattern": "split-vertical",
+      "shape": "none",
+      "glyph": "$"
     }
   ]
 }

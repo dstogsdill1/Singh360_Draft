@@ -1,21 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type MouseEvent } from 'react';
 import {
-  deleteLegendTemplate,
-  getLibV2,
-  libV2AssetUrl,
-  saveLegendTemplate,
-  listLegendTemplates,
-  type LibV2Component,
-  type LegendTemplateEntry,
+  getSymbolMapperTemplate,
+  saveSymbolMapperTemplate,
+  type SymbolMapperTemplateSymbol,
 } from '../api/client';
+import type { SymbolLegendInsertConfig } from '../model/types';
 import {
-  BUILTIN_SYMBOL_LEGEND_TEMPLATES,
-  hydrateTemplateRows,
-  rowsFromTemplatePayload,
-  type SymbolLegendInsertConfig,
-  type SymbolLegendRowDraft,
-} from '../model/symbolLegendPresets';
-import { SYMBOL_SIZE_SMALL } from '../model/symbolSizing';
+  SYMBOL_PALETTE,
+  paletteChoiceById,
+  symbolMarkerStyle,
+  symbolTemplateKey,
+  type SymbolPaletteChoice,
+  type SymbolPalettePattern,
+} from '../model/symbolPalette';
 
 interface Props {
   onInsert: (config: SymbolLegendInsertConfig) => void;
@@ -23,186 +20,212 @@ interface Props {
   initialTemplateId?: string;
 }
 
-function repUrl(c: LibV2Component): string {
-  return c.bwUrl || c.edgeUrl || c.thumbnailUrl || c.sourceUrl || (c.bwFile ? libV2AssetUrl(c.bwFile) : '');
+type LegendShape = 'circle' | 'square' | 'none';
+
+type BuilderRow = {
+  id: string;
+  key: string;
+  code: string;
+  glyph: string;
+  label: string;
+  enabled: boolean;
+  highlighted: boolean;
+  shape: LegendShape;
+  paletteId: string;
+  color: string;
+  color2: string;
+  pattern: SymbolPalettePattern;
+};
+
+function inferredShape(code: string, saved?: string): LegendShape {
+  if (saved === 'square' || saved === 'circle' || saved === 'none') return saved;
+  return code.trim().toUpperCase() === 'CC' ? 'square' : 'circle';
 }
 
-export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId }: Props) {
-  const [components, setComponents] = useState<LibV2Component[]>([]);
-  const [savedTemplates, setSavedTemplates] = useState<LegendTemplateEntry[]>([]);
-  const [templateId, setTemplateId] = useState(initialTemplateId || BUILTIN_SYMBOL_LEGEND_TEMPLATES[0].id);
-  const [title, setTitle] = useState('SYMBOL LEGEND');
-  const [rows, setRows] = useState<SymbolLegendRowDraft[]>([]);
-  const [search, setSearch] = useState('');
+function rowFromTemplate(item: SymbolMapperTemplateSymbol, index: number): BuilderRow {
+  const choice = paletteChoiceById(item.paletteId, index);
+  return {
+    id: `legend_${index}_${item.key || symbolTemplateKey(item.code, item.label)}`,
+    key: item.key || symbolTemplateKey(item.code, item.label),
+    code: item.code,
+    glyph: item.glyph || (item.shape === 'none' ? '$' : item.code),
+    label: item.label,
+    enabled: item.enabled !== false,
+    highlighted: true,
+    shape: inferredShape(item.code, item.shape),
+    paletteId: item.paletteId || choice.id,
+    color: item.color || choice.color,
+    color2: item.color2 || choice.color2,
+    pattern: (item.pattern || choice.pattern) as SymbolPalettePattern,
+  };
+}
+
+function Marker({ row, size = 34 }: { row: BuilderRow; size?: number }) {
+  const visual = row.highlighted
+    ? symbolMarkerStyle(row, 0.24, size >= 38 ? 3 : 2)
+    : { border: `${size >= 38 ? 3 : 2}px solid transparent`, background: '#fff', boxSizing: 'border-box' as const };
+  return (
+    <span
+      className="symbol-legend-built-marker"
+      style={{ ...visual, width: size, height: size }}
+      aria-hidden="true"
+    >
+      <i className={`symbol-legend-source-outline ${row.shape}`}>
+        {row.glyph || row.code || '?'}
+      </i>
+    </span>
+  );
+}
+
+export default function SymbolLegendModal({ onInsert, onClose }: Props) {
+  const [title, setTitle] = useState('SYMBOLS KEY:');
+  const [rows, setRows] = useState<BuilderRow[]>([]);
+  const [activeId, setActiveId] = useState('');
+  const [dragId, setDragId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState('Loading Singh360 Standard…');
+  const [error, setError] = useState('');
+  const [columns, setColumns] = useState<1 | 2>(1);
+  const [markerSize, setMarkerSize] = useState(34);
+  const [frame, setFrame] = useState(false);
 
   useEffect(() => {
+    let alive = true;
     void (async () => {
       setLoading(true);
+      setError('');
       try {
-        const [lib, saved] = await Promise.all([getLibV2(false), listLegendTemplates()]);
-        setComponents(lib.components || []);
-        setSavedTemplates(saved);
+        const template = await getSymbolMapperTemplate();
+        if (!alive) return;
+        const next = template.symbols.map(rowFromTemplate);
+        setRows(next);
+        setActiveId(next[0]?.id ?? '');
+        setStatus(`${template.name || 'Singh360 Standard'} loaded · ${next.length} symbols`);
+      } catch (err) {
+        if (!alive) return;
+        setRows([]);
+        setStatus('The Singh360 symbol standard could not be loaded.');
+        setError(String(err));
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
+    return () => { alive = false; };
   }, []);
 
-  const templateOptions = useMemo(
-    () => [
-      ...BUILTIN_SYMBOL_LEGEND_TEMPLATES.map((t) => ({ id: t.id, name: t.name, builtin: true })),
-      ...savedTemplates.map((t) => ({ id: t.id, name: `${t.name} (saved)`, builtin: false })),
-    ],
-    [savedTemplates],
-  );
+  const active = rows.find((row) => row.id === activeId) ?? rows[0];
+  const included = useMemo(() => rows.filter((row) => row.enabled && row.code.trim() && row.label.trim()), [rows]);
 
-  const applyTemplate = async (id: string) => {
-    setTemplateId(id);
-    const builtin = BUILTIN_SYMBOL_LEGEND_TEMPLATES.find((t) => t.id === id);
-    if (builtin) {
-      setTitle(builtin.title);
-      setRows(hydrateTemplateRows(builtin, components));
-      return;
-    }
-    const saved = savedTemplates.find((t) => t.id === id);
-    if (!saved) return;
-    const res = await fetch(`/api/lib/legend-templates/${id}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const hydrated = rowsFromTemplatePayload(data.template || {}, components);
-    setTitle(hydrated.title);
-    setRows(hydrated.rows);
+  const updateRow = (id: string, patch: Partial<BuilderRow>) => {
+    setRows((current) => current.map((row) => row.id === id ? {
+      ...row,
+      ...patch,
+      key: patch.code !== undefined || patch.label !== undefined
+        ? symbolTemplateKey(patch.code ?? row.code, patch.label ?? row.label)
+        : row.key,
+    } : row));
   };
 
-  useEffect(() => {
-    if (!loading && components.length) void applyTemplate(templateId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, components.length]);
-
-  const searchHits = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [];
-    return components
-      .filter((c) => {
-        const hay = [c.displayName, c.defaultLabel, c.partNumber, c.id, ...(c.aliases || [])].join(' ').toLowerCase();
-        return hay.includes(q);
-      })
-      .slice(0, 12);
-  }, [components, search]);
-
-  const activeRows = useMemo(() => rows.filter((r) => r.enabled && r.label.trim()), [rows]);
-
-  const toggleRow = (id: string) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
-  };
-
-  const updateLabel = (id: string, label: string) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, label } : r)));
-  };
-
-  const selectAll = () => setRows((prev) => prev.map((r) => ({ ...r, enabled: true })));
-  const clearAll = () => setRows((prev) => prev.map((r) => ({ ...r, enabled: false })));
-
-  const moveRow = (id: string, dir: -1 | 1) => {
-    setRows((prev) => {
-      const idx = prev.findIndex((r) => r.id === id);
-      if (idx < 0) return prev;
-      const next = idx + dir;
-      if (next < 0 || next >= prev.length) return prev;
-      const copy = [...prev];
-      const [item] = copy.splice(idx, 1);
-      copy.splice(next, 0, item);
-      return copy;
+  const applyPalette = (choice: SymbolPaletteChoice) => {
+    if (!active) return;
+    updateRow(active.id, {
+      paletteId: choice.id,
+      color: choice.color,
+      color2: choice.color2,
+      pattern: choice.pattern,
     });
   };
 
-  const addBlankRow = () => {
-    const id = `custom_${Date.now()}`;
-    setRows((prev) => [...prev, { id, enabled: true, label: 'New symbol row' }]);
+  const addRow = () => {
+    const index = rows.length;
+    const choice = paletteChoiceById(undefined, index);
+    const id = `legend_custom_${Date.now()}`;
+    const row: BuilderRow = {
+      id,
+      key: symbolTemplateKey('NEW', 'NEW SYMBOL'),
+      code: 'NEW',
+      glyph: 'NEW',
+      label: 'NEW SYMBOL',
+      enabled: true,
+      highlighted: true,
+      shape: 'circle',
+      paletteId: choice.id,
+      color: choice.color,
+      color2: choice.color2,
+      pattern: choice.pattern,
+    };
+    setRows((current) => [...current, row]);
+    setActiveId(id);
   };
 
-  const addComponentRow = (c: LibV2Component) => {
-    const id = `comp_${c.id}_${Date.now()}`;
-    setRows((prev) => [
-      ...prev,
-      {
-        id,
-        enabled: true,
-        label: c.displayName,
-        componentId: c.id,
-        symbolUrl: repUrl(c),
-        category: c.category,
-        defaultWidth: c.defaultWidth,
-        defaultHeight: c.defaultHeight,
-      },
-    ]);
-    setSearch('');
-  };
-
-  const handleSaveTemplate = async () => {
-    const existing = savedTemplates.find((template) => template.id === templateId);
-    const name = window.prompt(
-      existing ? 'Update legend template name:' : 'Template name:',
-      existing?.name || title || 'Symbol Legend',
-    );
-    if (!name?.trim()) return;
-
-    const savedEntry = await saveLegendTemplate({
-      id: existing?.id,
-      name: name.trim(),
-      category: existing?.category || templateId,
-      title,
-      rows: rows.map((r) => ({
-        id: r.id,
-        enabled: r.enabled,
-        label: r.label,
-        acronym: r.acronym,
-        componentId: r.componentId,
-        symbolUrl: r.symbolUrl,
-        searchTerms: r.searchTerms,
-        preferredRep: r.preferredRep || 'bw',
-        category: r.category,
-        defaultWidth: r.defaultWidth,
-        defaultHeight: r.defaultHeight,
-      })),
+  const reorder = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    setRows((current) => {
+      const from = current.findIndex((row) => row.id === draggedId);
+      const to = current.findIndex((row) => row.id === targetId);
+      if (from < 0 || to < 0) return current;
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
     });
-    const saved = await listLegendTemplates();
-    setSavedTemplates(saved);
-    if (savedEntry?.id) setTemplateId(savedEntry.id);
-    window.alert(existing ? 'Legend template updated.' : 'Legend template saved.');
   };
 
-  const handleDeleteTemplate = async () => {
-    const builtin = BUILTIN_SYMBOL_LEGEND_TEMPLATES.some((t) => t.id === templateId);
-    if (builtin) {
-      window.alert('Built-in templates cannot be deleted.');
-      return;
+  const saveStandard = async () => {
+    if (!rows.length) return;
+    setSaving(true);
+    setError('');
+    try {
+      const payload: SymbolMapperTemplateSymbol[] = rows
+        .filter((row) => row.code.trim() && row.label.trim())
+        .map((row) => ({
+          key: symbolTemplateKey(row.code, row.label),
+          code: row.code.trim().toUpperCase(),
+          glyph: row.glyph.trim() || row.code.trim().toUpperCase(),
+          label: row.label.trim(),
+          enabled: row.enabled,
+          paletteId: row.paletteId,
+          color: row.color,
+          color2: row.color2,
+          pattern: row.pattern,
+          shape: row.shape,
+        }));
+      const saved = await saveSymbolMapperTemplate(payload);
+      setStatus(`Singh360 Standard updated · ${saved.total} symbols · ${saved.added} added`);
+      setRows((current) => current.map((row, index) => {
+        const match = saved.template.symbols.find((item) => item.key === symbolTemplateKey(row.code, row.label));
+        return match ? rowFromTemplate(match, index) : row;
+      }));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSaving(false);
     }
-    if (!window.confirm('Delete this saved legend template?')) return;
-    await deleteLegendTemplate(templateId);
-    const saved = await listLegendTemplates();
-    setSavedTemplates(saved);
-    setTemplateId(BUILTIN_SYMBOL_LEGEND_TEMPLATES[0].id);
-    void applyTemplate(BUILTIN_SYMBOL_LEGEND_TEMPLATES[0].id);
   };
 
-  const handleInsert = () => {
-    if (!activeRows.length) {
-      window.alert('Select at least one legend row (Use checkbox).');
+  const insert = () => {
+    if (!included.length) {
+      setError('Select at least one complete symbol row.');
       return;
     }
     onInsert({
-      title: title.trim() || 'SYMBOL LEGEND',
-      rows: activeRows.map((r) => ({
-        label: r.label.trim(),
-        symbolUrl: r.symbolUrl,
-        name: r.componentId || r.label,
-        acronym: r.acronym,
-        iconSize: SYMBOL_SIZE_SMALL,
-        category: r.category,
-        defaultWidth: r.defaultWidth,
-        defaultHeight: r.defaultHeight,
+      title: title.trim() || 'SYMBOLS KEY:',
+      columns,
+      markerSize,
+      frame,
+      highlighted: true,
+      rows: included.map((row) => ({
+        code: row.code.trim().toUpperCase(),
+        glyph: row.glyph.trim() || row.code.trim().toUpperCase(),
+        label: row.label.trim(),
+        name: row.key,
+        acronym: row.code.trim().toUpperCase(),
+        shape: row.shape,
+        color: row.color,
+        color2: row.color2,
+        pattern: row.pattern,
+        highlighted: row.highlighted,
       })),
     });
     onClose();
@@ -210,107 +233,168 @@ export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
+      <div className="modal symbol-legend-builder-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
-          <h2>Manage / Insert Symbol Legend</h2>
+          <div>
+            <h2>Build / Insert Symbol Legend</h2>
+            <p className="symbol-legend-builder-sub">Uses the same Singh360 Standard, colors, and split markers as Symbol Mapper.</p>
+          </div>
           <button className="modal-x" onClick={onClose} title="Close">×</button>
         </div>
-        <div className="modal-body">
-          <div className="field">
-            <label>Legend template</label>
-            <select value={templateId} onChange={(e) => void applyTemplate(e.target.value)}>
-              {templateOptions.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
+
+        <div className="symbol-legend-builder-toolbar">
+          <label>
+            Legend title
+            <input value={title} onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)} />
+          </label>
+          <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, enabled: true })))}>Select all</button>
+          <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, enabled: false })))}>Select none</button>
+          <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, highlighted: true })))}>Highlight all</button>
+          <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, highlighted: false })))}>No highlights</button>
+          <div className="symbol-legend-builder-layout-options">
+            <label>
+              Columns
+              <select value={columns} onChange={(event) => setColumns(Number(event.target.value) === 2 ? 2 : 1)}>
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+              </select>
+            </label>
+            <label>
+              Marker size
+              <select value={markerSize} onChange={(event) => setMarkerSize(Number(event.target.value))}>
+                <option value={26}>Small</option>
+                <option value={34}>Standard</option>
+                <option value={42}>Large</option>
+              </select>
+            </label>
+            <label><input type="checkbox" checked={frame} onChange={(event) => setFrame(event.target.checked)} /> Frame</label>
           </div>
-          <div className="field">
-            <label>Legend title</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Search component library</label>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search symbols / devices…"
-            />
-          </div>
-          {searchHits.length > 0 && (
-            <div className="sym-legend-search-hits">
-              {searchHits.map((c) => (
-                <button key={c.id} type="button" className="btn btn-sm" onClick={() => addComponentRow(c)}>
-                  + {c.displayName}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="sym-legend-toolbar">
-            <button type="button" className="btn btn-sm" onClick={selectAll}>Select All</button>
-            <button type="button" className="btn btn-sm" onClick={clearAll}>Clear All</button>
-            <button type="button" className="btn btn-sm" onClick={addBlankRow}>Add Row</button>
-            <button type="button" className="btn btn-sm" onClick={() => void handleSaveTemplate()}>
-              {savedTemplates.some((template) => template.id === templateId) ? 'Update Saved Legend' : 'Save Current Legend as Template'}
-            </button>
-            <button type="button" className="btn btn-sm" onClick={() => void handleDeleteTemplate()}>Delete Template</button>
-          </div>
-          <div className="sym-legend-preview">
-            <div className="sym-legend-preview-title">{title || 'SYMBOL LEGEND'}</div>
-            {activeRows.length ? activeRows.map((r) => (
-              <div key={r.id} className="sym-legend-preview-row">
-                {r.symbolUrl ? (
-                  <img src={r.symbolUrl} alt="" className="sym-legend-preview-icon" />
-                ) : (
-                  <span className="sym-legend-preview-icon sym-legend-missing">□</span>
-                )}
-                <span>{r.label}</span>
-              </div>
-            )) : (
-              <p className="cw-note">No rows selected — check Use for symbols to include.</p>
-            )}
-          </div>
-          <table className="op-table sym-legend-table">
-            <thead>
-              <tr>
-                <th style={{ width: 40 }}>Use</th>
-                <th style={{ width: 52 }}>Icon</th>
-                <th>Label</th>
-                <th style={{ width: 90 }}>Order</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className={r.enabled ? '' : 'sym-legend-row-off'}>
-                  <td>
-                    <input type="checkbox" checked={r.enabled} onChange={() => toggleRow(r.id)} title="Include in legend" />
-                  </td>
-                  <td>
-                    {r.symbolUrl ? (
-                      <img src={r.symbolUrl} alt="" className="sym-legend-icon" />
-                    ) : (
-                      <span className="sym-legend-missing">—</span>
-                    )}
-                  </td>
-                  <td>
-                    <input
-                      className="sym-legend-label-input"
-                      value={r.label}
-                      onChange={(e) => updateLabel(r.id, e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <button type="button" className="btn btn-sm" onClick={() => moveRow(r.id, -1)}>↑</button>
-                    <button type="button" className="btn btn-sm" onClick={() => moveRow(r.id, 1)}>↓</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {loading && <p className="cw-note">Loading component library…</p>}
+          <button className="btn" onClick={addRow}>+ Add symbol</button>
+          <button className="btn" disabled={saving || loading} onClick={() => void saveStandard()}>{saving ? 'Saving…' : 'Save / update standard'}</button>
         </div>
+
+        <div className="symbol-legend-builder-status">{status}</div>
+        {error && <div className="symbol-mapper-error">{error}</div>}
+
+        <div className="symbol-legend-builder-body">
+          <section className="symbol-legend-builder-list">
+            <div className="symbol-legend-builder-list-head">
+              <strong>Symbols</strong>
+              <span>Drag rows to reorder.</span>
+            </div>
+            <div className="symbol-legend-builder-scroll">
+              {rows.map((row) => (
+                <div
+                  key={row.id}
+                  className={`symbol-legend-builder-row ${row.id === active?.id ? 'active' : ''} ${row.enabled ? '' : 'disabled'}`}
+                  draggable
+                  onDragStart={(event: DragEvent<HTMLDivElement>) => {
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', row.id);
+                    setDragId(row.id);
+                  }}
+                  onDragOver={(event) => {
+                    if (dragId) event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (dragId) reorder(dragId, row.id);
+                    setDragId(null);
+                  }}
+                  onDragEnd={() => setDragId(null)}
+                  onClick={() => setActiveId(row.id)}
+                >
+                  <span className="symbol-legend-drag">⋮⋮</span>
+                  <label className="symbol-legend-use" onClick={(event: MouseEvent<HTMLLabelElement>) => event.stopPropagation()}>
+                    <input type="checkbox" checked={row.enabled} onChange={() => updateRow(row.id, { enabled: !row.enabled })} />
+                  </label>
+                  <Marker row={row} size={34} />
+                  <div className="symbol-legend-row-fields" onClick={(event) => event.stopPropagation()}>
+                    <input
+                      className="symbol-legend-code-input"
+                      value={row.code}
+                      aria-label="Symbol code"
+                      onFocus={() => setActiveId(row.id)}
+                      onChange={(event) => {
+                        const code = event.target.value.toUpperCase().slice(0, 16);
+                        updateRow(row.id, { code, glyph: !row.glyph || row.glyph === row.code ? code : row.glyph });
+                      }}
+                    />
+                    <input
+                      value={row.label}
+                      aria-label="Symbol description"
+                      onFocus={() => setActiveId(row.id)}
+                      onChange={(event) => updateRow(row.id, { label: event.target.value })}
+                    />
+                  </div>
+                  <label className="symbol-legend-highlight" onClick={(event: MouseEvent<HTMLLabelElement>) => event.stopPropagation()}>
+                    <input type="checkbox" checked={row.highlighted} onChange={() => updateRow(row.id, { highlighted: !row.highlighted })} />
+                    color
+                  </label>
+                  <button
+                    className="symbol-legend-remove"
+                    title="Remove this row from this legend"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setRows((current) => current.filter((item) => item.id !== row.id));
+                    }}
+                  >×</button>
+                </div>
+              ))}
+              {!rows.length && <div className="symbol-legend-empty">No standard symbols are available. Add a symbol to begin.</div>}
+            </div>
+          </section>
+
+          <section className="symbol-legend-builder-editor">
+            <div className="symbol-legend-color-panel">
+              <div>
+                <h3>Color for {active?.code || 'selected symbol'}</h3>
+                <p>These are the same colors used by Symbol Mapper.</p>
+              </div>
+              <div className="sm-palette-grid symbol-legend-palette-grid">
+                {SYMBOL_PALETTE.map((choice) => (
+                  <button
+                    key={choice.id}
+                    className={active?.paletteId === choice.id ? 'active' : ''}
+                    disabled={!active}
+                    onClick={() => applyPalette(choice)}
+                    title={choice.label}
+                  >
+                    <span style={symbolMarkerStyle(choice, 1, 1)} />
+                    <small>{choice.label}</small>
+                  </button>
+                ))}
+              </div>
+              {active && (
+                <div className="symbol-legend-shape-row">
+                  <strong>Marker shape</strong>
+                  <button className={active.shape === 'circle' ? 'active' : ''} onClick={() => updateRow(active.id, { shape: 'circle' })}>Circle</button>
+                  <button className={active.shape === 'square' ? 'active' : ''} onClick={() => updateRow(active.id, { shape: 'square' })}>Square</button>
+                  <button className={active.shape === 'none' ? 'active' : ''} onClick={() => updateRow(active.id, { shape: 'none' })}>No source outline</button>
+                  <label><input type="checkbox" checked={active.highlighted} onChange={() => updateRow(active.id, { highlighted: !active.highlighted })} /> Highlight this row</label>
+                </div>
+              )}
+            </div>
+
+            <div className="symbol-legend-live-preview">
+              <div className={`symbol-legend-preview-card ${columns === 2 ? 'two-columns' : ''}`} style={{ border: frame ? '1px solid #111' : 'none' }}>
+                <div className="symbol-legend-preview-heading">{title || 'SYMBOLS KEY:'}</div>
+                {included.map((row) => (
+                  <div className="symbol-legend-preview-built-row" key={row.id}>
+                    <Marker row={row} size={markerSize} />
+                    <span>{row.label}</span>
+                  </div>
+                ))}
+                {!included.length && <div className="symbol-legend-empty">Select symbols to preview the legend.</div>}
+              </div>
+            </div>
+          </section>
+        </div>
+
         <div className="modal-foot">
+          <span className="symbol-legend-builder-count">{included.length} symbol{included.length === 1 ? '' : 's'} selected</span>
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleInsert}>Insert Legend</button>
+          <button className="btn btn-primary" onClick={insert}>Insert legend</button>
         </div>
       </div>
     </div>

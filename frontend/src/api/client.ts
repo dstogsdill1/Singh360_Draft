@@ -212,13 +212,14 @@ export async function getProject(id: string): Promise<ProjectModel> {
   return res.json();
 }
 
-export async function saveProject(project: ProjectModel): Promise<void> {
+export async function saveProject(project: ProjectModel): Promise<ProjectModel> {
   const res = await fetch(`/api/projects/${project.id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(project),
   });
   if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<ProjectModel>;
 }
 
 export async function savePages(projectId: string, pages: PageModel[]): Promise<void> {
@@ -1112,12 +1113,14 @@ export interface SymbolMapperLegend {
 export interface SymbolMapperTemplateSymbol {
   key: string;
   code: string;
+  glyph?: string;
   label: string;
   enabled: boolean;
   paletteId: string;
   color: string;
   color2: string;
   pattern: SymbolMapperPattern;
+  shape?: 'circle' | 'square' | 'none';
 }
 
 export interface SymbolMapperTemplate {

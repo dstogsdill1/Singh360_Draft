@@ -17,7 +17,7 @@ import {
   type ExportWarning,
 } from './api/client';
 import type { SymbolMapperRenderResult } from './api/client';
-import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, SymbolLegendInsertConfig, ViewMode, Worksheet } from './model/types';
+import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, SymbolLegendInsertConfig, ViewMode, Worksheet, ImageCropPlacement, ImageCropRect, ImageCropState } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
 import { normalizeProjectAssetUrls } from './model/assetUrl';
 import ContinuationPreviewModal from './components/ContinuationPreviewModal';
@@ -50,6 +50,7 @@ import SavePageTemplateModal from './components/SavePageTemplateModal';
 import PageTemplateLibraryModal, { type TemplateInsertMode } from './components/PageTemplateLibraryModal';
 import SymbolLegendModal from './components/SymbolLegendModal';
 import PdfCropModal from './components/PdfCropModal';
+import ImageCropModal from './components/ImageCropModal';
 import SymbolMapperModal from './components/SymbolMapperModal';
 import BackupRecoveryModal from './components/BackupRecoveryModal';
 import BusModal from './components/BusModal';
@@ -131,6 +132,7 @@ export default function App() {
   const [templateLibManageOnly, setTemplateLibManageOnly] = useState(false);
   const [symbolLegendOpen, setSymbolLegendOpen] = useState(false);
   const [pdfCropOpen, setPdfCropOpen] = useState(false);
+  const [imageCropState, setImageCropState] = useState<ImageCropState | null>(null);
   const [symbolMapperOpen, setSymbolMapperOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [busOpen, setBusOpen] = useState(false);
@@ -195,15 +197,16 @@ export default function App() {
     savingRef.current = true;
     setSaveStatus('saving');
     try {
-      await saveProject(p);
-      lastSavedJsonRef.current = json;
+      const savedFromServer = normalizeProjectAssetUrls(await saveProject(p));
       savingRef.current = false;
-      // If the user edited again while the save was in flight, stay dirty and
-      // let the change effect reschedule — never falsely report "Saved".
       if (JSON.stringify(projectRef.current) !== json) {
+        // A newer local edit exists. Do not overwrite it with this older response;
+        // the next autosave will synchronize the latest Sheet Index.
         setSaveStatus('unsaved');
         return false;
       }
+      const applied = setProjectSync(savedFromServer);
+      lastSavedJsonRef.current = JSON.stringify(applied ?? savedFromServer);
       markSaved();
       return true;
     } catch {
@@ -317,13 +320,14 @@ export default function App() {
     savingRef.current = true;
     setSaveStatus('saving');
     try {
-      await saveProject(p);
-      lastSavedJsonRef.current = json;
+      const savedFromServer = normalizeProjectAssetUrls(await saveProject(p));
       savingRef.current = false;
       if (JSON.stringify(projectRef.current) !== json) {
         setSaveStatus('unsaved');
         return false;
       }
+      const applied = setProjectSync(savedFromServer);
+      lastSavedJsonRef.current = JSON.stringify(applied ?? savedFromServer);
       markSaved();
       return true;
     } catch {
@@ -332,7 +336,7 @@ export default function App() {
       writeRecoverySnapshot(p);
       return false;
     }
-  }, [printMode, captureActivePageState]);
+  }, [printMode, captureActivePageState, setProjectSync]);
 
   const resetSourceEditState = useCallback(() => {
     sourceHistoryRef.current.clear();
@@ -409,9 +413,6 @@ export default function App() {
     canvasApiRef.current = api;
     if (!api) return;
     api.setLineStyle(lineStyleRef.current);
-
-    // S360 SYMBOL MAPPER: wait for the actual Fabric image load, capture that
-    // canvas state synchronously, then resolve the add-page operation.
     const pending = pendingSymbolPageRef.current;
     if (pending && pending.pageId === activePageId) {
       pendingSymbolPageRef.current = null;
@@ -1714,6 +1715,32 @@ export default function App() {
     return blocks.map((b, i) => (i === tableIdx ? { ...b, headers, rows } : b));
   };
 
+
+  const openSelectedImageCrop = useCallback(() => {
+    const cropState = canvasApiRef.current?.getSelectedImageCrop();
+    if (!cropState) {
+      window.alert('Select one image first.');
+      return;
+    }
+    setImageCropState(cropState);
+  }, []);
+
+  const applyImageCrop = useCallback((crop: ImageCropRect, placement: ImageCropPlacement) => {
+    canvasApiRef.current?.applySelectedImageCrop(crop, placement);
+    setImageCropState(null);
+    window.setTimeout(() => captureActivePageState(), 0);
+  }, [captureActivePageState]);
+
+  const placeSelectedImageOnPage = useCallback((placement: 'fit' | 'fill') => {
+    const cropState = canvasApiRef.current?.getSelectedImageCrop();
+    if (!cropState) {
+      window.alert('Select one image first.');
+      return;
+    }
+    canvasApiRef.current?.applySelectedImageCrop(cropState.crop, placement);
+    window.setTimeout(() => captureActivePageState(), 0);
+  }, [captureActivePageState]);
+
   const canvasEnabled =
     !!activePage && viewMode === 'normalized';
 
@@ -1790,6 +1817,9 @@ export default function App() {
         addLegend: (ids) => { setOverlayMode(true); canvasApiRef.current?.addLegend(ids); },
         addSymbolLegend: (config: SymbolLegendInsertConfig) => { setOverlayMode(true); canvasApiRef.current?.addSymbolLegend(config); },
         normalizeSymbolSize: () => canvasApiRef.current?.normalizeSymbolSize(),
+        cropImage: openSelectedImageCrop,
+        fitImageToPage: () => placeSelectedImageOnPage('fit'),
+        fillImageToPage: () => placeSelectedImageOnPage('fill'),
         addBus: () => setBusOpen(true),
       }}
       onUploadFile={(f) => void onUploadWorkbook(f)}
@@ -2191,6 +2221,13 @@ export default function App() {
         onClose={() => setTemplateLibOpen(false)}
       />
     )}
+    {imageCropState && (
+      <ImageCropModal
+        state={imageCropState}
+        onApply={applyImageCrop}
+        onCancel={() => setImageCropState(null)}
+      />
+    )}
     {pdfCropOpen && (
       <PdfCropModal
         projectId={project.id}
@@ -2246,6 +2283,9 @@ export default function App() {
           { label: 'Paste', onClick: () => canvasApiRef.current?.pasteCopied() },
           { label: 'Delete', disabled: !selection, onClick: () => canvasApiRef.current?.deleteSelected() },
           { label: 'Normalize Symbol Size', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.normalizeSymbolSize() },
+          { label: 'Crop / Fit Selected Image', divider: true, disabled: !selection?.isImage, onClick: openSelectedImageCrop, hint: 'Choose the visible crop and optionally fit/fill the drawing area' },
+          { label: 'Fit Selected Image to Page', disabled: !selection?.isImage, onClick: () => placeSelectedImageOnPage('fit') },
+          { label: 'Fill Page with Selected Image', disabled: !selection?.isImage, onClick: () => placeSelectedImageOnPage('fill') },
           { label: 'Group Selected Objects', disabled: !selection, onClick: () => canvasApiRef.current?.group() },
           { label: selection?.isLegend ? 'Edit Legend / Marker' : 'Edit Group (Ungroup)', disabled: !selection?.isGroup, onClick: () => canvasApiRef.current?.ungroup(), hint: 'Break the grouped marker into editable text, symbols, and lines' },
           { label: 'Bring to Front', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.bringToFront() },

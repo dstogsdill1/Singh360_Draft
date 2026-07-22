@@ -61,6 +61,9 @@ interface Props {
     addLegend: (presetIds?: string[]) => void;
     addSymbolLegend: (config: SymbolLegendInsertConfig) => void;
     normalizeSymbolSize: () => void;
+    cropImage: () => void;
+    fitImageToPage: () => void;
+    fillImageToPage: () => void;
     addBus: () => void;
   };
   onUploadFile: (file: File) => void;
@@ -298,7 +301,7 @@ export default function Ribbon({
                   onChange={(e) => { if (e.target.files?.[0]) { onInsertImage(e.target.files[0]); e.currentTarget.value = ''; } }}
                 />
               </label>
-              <button className="ribbon-btn" disabled={!cx} onClick={onInsertPdfPage} title="Best quality: open PDF Crop, select a region, and render at 300/400/600 DPI">PDF Crop</button>
+              <button className="ribbon-btn" disabled={!cx} onClick={onInsertPdfPage} title="Best quality: open PDF Crop, select a region, and render at 300/400/600 DPI">PDF Page / Crop</button>
               <PlaceholderBtn label="Callout" />
             </Group>
             <Group title="Headings">
@@ -389,6 +392,11 @@ export default function Ribbon({
               <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.matchObjectSize('height')} title="Match height to the first selected object">= Height</button>
               <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.matchObjectSize('both')} title="Match both width and height to the first selected object">= Both</button>
               <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.normalizeSymbolSize} title="Resize selected symbols to standard marker size">Normalize Symbol Size</button>
+            </Group>
+            <Group title="Image">
+              <button className="ribbon-btn" disabled={!selection?.isImage} onClick={canvas.cropImage} title="Crop the selected image and optionally fit or fill the drawing area">Crop / Fit</button>
+              <button className="ribbon-btn" disabled={!selection?.isImage} onClick={canvas.fitImageToPage} title="Fit the selected image crop inside the drawing area">Fit Page</button>
+              <button className="ribbon-btn" disabled={!selection?.isImage} onClick={canvas.fillImageToPage} title="Fill the drawing area with the selected image crop">Fill Page</button>
             </Group>
           </>
         )}

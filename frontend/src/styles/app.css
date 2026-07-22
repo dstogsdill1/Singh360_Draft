@@ -976,6 +976,37 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 .pt-drag { color: #84909c; cursor: grab; font-weight: 800; letter-spacing: -2px; }
 .page-tab.active .pt-drag { color: #fff; }
 .pt-drag.locked { cursor: default; font-size: 8px; letter-spacing: 0; opacity: 0.6; }
+.page-tabs-shell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  background: var(--charcoal-2);
+  border-bottom: 1px solid #000;
+}
+.page-tabs-shell .page-tabs { min-width: 0; flex: 1 1 auto; border-bottom: 0; }
+.page-tabs-controls {
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 3;
+  background: var(--charcoal-2);
+  border-right: 1px solid #000;
+}
+.page-tabs-controls-right { border-right: 0; border-left: 1px solid #000; }
+.page-tabs-controls > button {
+  width: 30px;
+  min-width: 30px;
+  border: 0;
+  border-right: 1px solid #000;
+  background: #272d34;
+  color: #d8dee5;
+  font-size: 18px;
+  cursor: pointer;
+}
+.page-tabs-controls > button:hover { background: var(--accent); color: #fff; }
+.page-tabs-controls-right .page-nav-popover { left: auto; right: 0; }
 .renumber-modal { width: min(1060px, 96vw); }
 .renumber-drag-table thead th { position: sticky; top: 0; z-index: 2; }
 .renumber-drag-table tbody tr:not([draggable='false']) { cursor: grab; }
@@ -989,3 +1020,26 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 .renumber-drag-handle { color: var(--accent); font-weight: 800; letter-spacing: -2px; }
 .renumber-lock { color: #7b858f; font-size: 10px; }
 /* S360 PAGE ORDER UX END */
+
+/* S360 IMAGE CROP UX START */
+.image-crop-modal { width: min(1280px, 96vw); max-height: 94vh; }
+.image-crop-modal .modal-head > div { min-width: 0; }
+.image-crop-modal .modal-head h2 { margin: 0; }
+.image-crop-sub { margin: 3px 0 0; color: #65707a; font-size: 12px; }
+.image-crop-body { display: grid; grid-template-rows: auto 1fr auto; gap: 10px; min-height: 520px; }
+.image-crop-info { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; font-size: 12px; }
+.image-crop-info em { color: #9a6500; font-style: normal; }
+.image-crop-stage-scroll { min-height: 0; overflow: auto; display: grid; place-items: center; padding: 14px; background: #2c3238; border: 1px solid #15191d; }
+.image-crop-stage { position: relative; width: min(100%, 1080px); max-height: 68vh; overflow: hidden; background: #fff; touch-action: none; cursor: crosshair; user-select: none; }
+.image-crop-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; user-select: none; }
+.image-crop-stage::before { content: ''; position: absolute; inset: 0; z-index: 1; background: rgba(0,0,0,.38); pointer-events: none; }
+.image-crop-selection { position: absolute; z-index: 2; border: 2px solid #fff; box-shadow: 0 0 0 1px #12539b, 0 0 0 9999px rgba(0,0,0,.42); background: rgba(18,83,155,.08); pointer-events: none; }
+.crop-handle { position: absolute; width: 10px; height: 10px; border: 1px solid #12539b; background: #fff; }
+.crop-handle.nw { left: -6px; top: -6px; }
+.crop-handle.ne { right: -6px; top: -6px; }
+.crop-handle.sw { left: -6px; bottom: -6px; }
+.crop-handle.se { right: -6px; bottom: -6px; }
+.image-crop-readout { font-size: 12px; color: #4f5963; }
+.image-crop-foot { align-items: center; flex-wrap: wrap; }
+.image-crop-spacer { flex: 1; }
+/* S360 IMAGE CROP UX END */
