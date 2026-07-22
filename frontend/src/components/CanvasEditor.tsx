@@ -939,8 +939,8 @@ export default function CanvasEditor({
           // Fit a crisp crop to ~70% of the sheet body; a locked underlay fills
           // the whole body faintly and sits behind everything.
           const underlay = !!opts?.underlay;
-          const maxW = CANVAS_W * (underlay ? 0.98 : 0.7);
-          const maxH = CANVAS_H * (underlay ? 0.98 : 0.7);
+          const maxW = CANVAS_W * 0.98;
+          const maxH = CANVAS_H * 0.98;
           const scale = Math.min(1, maxW / iw, maxH / ih);
           const left = (CANVAS_W - iw * scale) / 2;
           const top = (CANVAS_H - ih * scale) / 2;

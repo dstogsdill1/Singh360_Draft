@@ -130,10 +130,15 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     () => (detection?.candidates ?? []).filter((candidate) => statusOf(candidate) === 'review'),
     [detection],
   );
-  const summary = useMemo(() => symbols.map((item) => {
-    const row = detection?.summary.find((entry) => entry.classId === item.id);
-    return { item, accepted: row?.accepted ?? 0, review: row?.review ?? 0, total: row?.total ?? 0 };
-  }).filter((entry) => entry.item.enabled), [symbols, detection]);
+  // Count directly from the live reviewed candidate list. The backend summary is
+  // the detection-time snapshot; these values stay accurate after Include/Ignore.
+  const summary = useMemo(() => symbols.filter((item) => item.enabled).map((item) => {
+    const matches = (detection?.candidates ?? []).filter((candidate) => candidate.classId === item.id);
+    const accepted = matches.filter((candidate) => statusOf(candidate) === 'accepted').length;
+    const review = matches.filter((candidate) => statusOf(candidate) === 'review').length;
+    const rejected = matches.filter((candidate) => statusOf(candidate) === 'rejected').length;
+    return { item, accepted, review, rejected, total: matches.length };
+  }), [symbols, detection]);
 
   const pickFile = async (file: File) => {
     setLoading(true);
@@ -474,15 +479,18 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
 
               <aside className="sm-results-side">
                 <div className="sm-count-list">
-                  {summary.map(({ item, accepted, review, total }) => {
+                  {summary.map(({ item, accepted, review, rejected, total }) => {
                     const selectedPalette = PALETTE.find((choice) => choice.id === item.paletteId) ?? PALETTE[0];
                     return (
                       <div key={item.id} className="sm-count-row">
                         <span style={markerVisualStyle(selectedPalette, 0.72, 2)} />
-                        <div><strong>{item.code || 'SYMBOL'}</strong><small>{item.label}</small></div>
-                        <b>{accepted}</b>
-                        {review > 0 && <em>+{review} check</em>}
-                        {total === 0 && <em>none found</em>}
+                        <div className="sm-count-copy"><strong>{item.code || 'SYMBOL'}</strong><small>{item.label}</small></div>
+                        <div className="sm-count-metrics" aria-label={`${item.label} counts`}>
+                          <span><b>{total}</b><small>found</small></span>
+                          <span className="included"><b>{accepted}</b><small>included</small></span>
+                          <span className={review ? 'check' : ''}><b>{review}</b><small>check</small></span>
+                          <span><b>{rejected}</b><small>ignored</small></span>
+                        </div>
                       </div>
                     );
                   })}

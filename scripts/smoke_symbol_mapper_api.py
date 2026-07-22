@@ -105,8 +105,17 @@ def main() -> int:
         detected = client.post(f"/api/symbol-mapper/sessions/{sid}/detect", json={"classes": classes})
         assert detected.status_code == 200, detected.get_data(as_text=True)
         detection = detected.get_json()
-        assert len(detection["candidates"]) == 5, detection
+        # The printed TS and CC samples inside SYMBOLS KEY are reference examples,
+        # not field devices.  The detector must exclude those two legend samples
+        # and return only the three actual plan occurrences below the legend.
+        assert len(detection["candidates"]) == 3, detection
         assert all(candidate["status"] == "accepted" for candidate in detection["candidates"]), detection
+        summary_by_code = {row["code"]: row for row in detection["summary"]}
+        assert summary_by_code["TS"]["accepted"] == 2, summary_by_code
+        assert summary_by_code["TS"]["total"] == 2, summary_by_code
+        assert summary_by_code["CC"]["accepted"] == 1, summary_by_code
+        assert summary_by_code["CC"]["total"] == 1, summary_by_code
+        assert detection["policy"]["counts"].startswith("field occurrences only"), detection["policy"]
 
         rendered = client.post(
             f"/api/symbol-mapper/sessions/{sid}/render",
@@ -114,7 +123,7 @@ def main() -> int:
         )
         assert rendered.status_code == 200, rendered.get_data(as_text=True)
         result = rendered.get_json()
-        assert result["acceptedCount"] == 5, result
+        assert result["acceptedCount"] == 3, result
 
         asset = client.get(result["pdfUrl"])
         assert asset.status_code == 200

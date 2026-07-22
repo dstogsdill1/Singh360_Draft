@@ -1043,3 +1043,57 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 .image-crop-foot { align-items: center; flex-wrap: wrap; }
 .image-crop-spacer { flex: 1; }
 /* S360 IMAGE CROP UX END */
+
+/* S360 SELECTIVE EXPORT START */
+.export-pages-modal { width: min(1180px, 96vw); }
+.export-pages-body {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 18px;
+  min-height: 520px;
+}
+.export-options-column { min-width: 0; }
+.export-page-picker {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #cbd2d9;
+  background: #f7f9fb;
+}
+.export-page-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #cbd2d9;
+  background: #eef2f6;
+}
+.export-page-picker-head > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.export-page-picker-head strong { font-size: 13px; }
+.export-page-picker-head span { font-size: 11px; color: #59636d; }
+.export-page-picker-actions { display: flex; gap: 6px; }
+.export-page-list { overflow: auto; max-height: 470px; padding: 6px; }
+.export-page-row {
+  display: grid;
+  grid-template-columns: 24px 46px 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 6px;
+  border-bottom: 1px solid #e0e5ea;
+  background: #fff;
+  cursor: pointer;
+}
+.export-page-row:hover { background: #eef5ff; }
+.export-page-row.selected { background: #e7f0fb; }
+.export-page-row input { margin: 0; }
+.export-page-number { text-align: center; font-weight: 700; color: #4b5660; }
+.export-page-code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; font-weight: 700; }
+.export-page-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.export-selection-note { margin-right: auto; color: #4e5963; font-size: 12px; }
+@media (max-width: 860px) {
+  .export-pages-body { grid-template-columns: 1fr; }
+  .export-page-list { max-height: 300px; }
+}
+/* S360 SELECTIVE EXPORT END */

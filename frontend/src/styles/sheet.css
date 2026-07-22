@@ -662,3 +662,23 @@
   text-overflow: clip;
 }
 /* SINGH360 PUBLISHED INDEX NOTES + DRAFT LABELS END */
+
+/* S360 VECTOR PDF EXPORT START */
+/* The export-only project hides raster PDF previews.  These backgrounds must be
+   transparent so PyMuPDF can place the original vector PDF behind the remaining
+   title block and manual overlay content.  The physical PDF page itself is white. */
+.print-root,
+.print-root .print-page,
+.print-root .sheet-shell,
+.print-root .sheet-inner,
+.print-root .sheet-body,
+.print-root .np-overlay-layer,
+.print-root .canvas-wrap,
+.print-root canvas {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+@media print {
+  html, body, #root { background: transparent !important; }
+}
+/* S360 VECTOR PDF EXPORT END */

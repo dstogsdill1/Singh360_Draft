@@ -36,7 +36,11 @@ def main() -> int:
     )
     modal_text = (ROOT / "frontend" / "src" / "components" / "PdfCropModal.tsx").read_text(encoding="utf-8")
     assert "S360 HIGH RES PDF IMPORT UX" in modal_text
-    print(json.dumps({"ok": True, "pdfImport": "direct high-resolution render", "cropAfterInsert": True}, indent=2))
+    assert "S360 PDF CROP IMAGE BOUNDS FIX" in modal_text
+    assert "previewImgRef" in modal_text
+    assert "page.widthPt / imageBox.width" in modal_text
+    assert "page.heightPt / imageBox.height" in modal_text
+    print(json.dumps({"ok": True, "pdfImport": "direct high-resolution preview plus vector final export", "cropCoordinatesUseActualImageBounds": True, "cropAfterInsert": True}, indent=2))
     return 0
 
 

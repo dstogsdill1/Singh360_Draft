@@ -55,6 +55,12 @@ from core.project_model import ensure_project_shape, recalc_page_numbers
 from core.sheet_index_sync import sync_project_sheet_index
 from core.project_store import ProjectStore, slugify
 from core.validation import validate_project
+from core.vector_pdf_export import (
+    apply_vector_pdf_underlays,
+    build_selected_export_document,
+    prepare_vector_export_clone,
+    selected_page_ids_from_request,
+)
 from core.vsdx_importer import import_vsdx
 from core.workbook_importer import import_workbook
 
@@ -2178,10 +2184,34 @@ def export_warnings_preview(project_id: str):
         abort(404)
     from core.export_qa import compute_export_warnings
 
-    doc = ensure_project_shape(doc)
-    doc = sync_project_sheet_index(doc)
+    # The live package stays current, while QA itself runs against an export-only
+    # selected-page clone so deselected sheets do not create irrelevant warnings.
+    doc = sync_project_sheet_index(ensure_project_shape(doc))
     store.save(project_id, doc)
-    return jsonify({"ok": True, "warnings": compute_export_warnings(doc)})
+    selected_ids = selected_page_ids_from_request(request.args.getlist("pageId"))
+    export_doc = build_selected_export_document(doc, selected_ids)
+    selected_count = sum(1 for page in export_doc.get("pages", []) if page.get("include", True))
+    return jsonify({
+        "ok": True,
+        "warnings": compute_export_warnings(export_doc),
+        "selectedPageCount": selected_count,
+    })
+
+
+def _write_export_only_project(export_doc: dict, temp_id: str):
+    """Write a short-lived project clone without touching the live project."""
+    temp_doc = ensure_project_shape(export_doc)
+    temp_doc["id"] = temp_id
+    temp_doc["projectDisplayName"] = f"{temp_doc.get('projectDisplayName') or temp_id} export"
+    temp_dir = store.dir_for(temp_id, temp_doc)
+    store.ensure_folders(temp_dir)
+    temp_doc["projectFolder"] = str(temp_dir)
+    temp_doc["projectSlug"] = temp_dir.name.split("__", 1)[0]
+    (temp_dir / "project.json").write_text(
+        json.dumps(temp_doc, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return temp_dir
 
 
 @app.post("/api/export/pdf/<project_id>")
@@ -2191,29 +2221,63 @@ def export_pdf(project_id: str):
     if doc is None:
         abort(404)
 
-    doc = ensure_project_shape(doc)
-    doc = sync_project_sheet_index(doc)
+    # Sync and save the live package first.  Export selection and vector-preview
+    # hiding happen only in a temporary clone and cannot overwrite manual work.
+    doc = sync_project_sheet_index(ensure_project_shape(doc))
     store.save(project_id, doc)
-    pages = [p for p in doc.get("pages", []) if p.get("include", True)]
-    if not pages:
-        return jsonify(_err("No included pages to export.")), 400
-
     body = request.get_json(silent=True) or {}
+    raw_page_ids = body.get("pageIds")
+    selected_ids = selected_page_ids_from_request(raw_page_ids if isinstance(raw_page_ids, list) else [])
+    selected_doc = build_selected_export_document(doc, selected_ids)
+    pages = [page for page in selected_doc.get("pages", []) if page.get("include", True)]
+    if not pages:
+        return jsonify(_err("No pages were selected for export.")), 400
+
     try:
         width_in = float(body.get("width", 17.0))
         height_in = float(body.get("height", 11.0))
     except (TypeError, ValueError):
         width_in, height_in = 17.0, 11.0
-    # Clamp to sane paper bounds (inches).
     width_in = max(3.0, min(60.0, width_in))
     height_in = max(3.0, min(60.0, height_in))
 
+    source_pdf_dir = store.dir_for(project_id, doc) / "sources" / "pdf"
+    export_doc, vector_placements = prepare_vector_export_clone(
+        selected_doc,
+        source_pdf_dir=source_pdf_dir,
+    )
+    temp_id = uuid.uuid4().hex[:16]
+    temp_dir = None
     pdf_path = store.exports_pdf_dir(project_id, doc) / f"{project_id}.pdf"
-    url = f"http://127.0.0.1:{_SERVER_PORT}/app?project={project_id}&print=1&pw={width_in}&ph={height_in}"
-    ok, detail = export_pdf_via_playwright(url, pdf_path, width_in=width_in, height_in=height_in)
-    if not ok:
-        app.logger.error("Playwright export failed for %s: %s", project_id, detail)
-        return jsonify(_err("PDF export failed.", detail)), 500
+    try:
+        temp_dir = _write_export_only_project(export_doc, temp_id)
+        url = f"http://127.0.0.1:{_SERVER_PORT}/app?project={temp_id}&print=1&pw={width_in}&ph={height_in}"
+        ok, detail = export_pdf_via_playwright(url, pdf_path, width_in=width_in, height_in=height_in)
+        if not ok:
+            app.logger.error("Playwright export failed for %s: %s", project_id, detail)
+            return jsonify(_err("PDF export failed.", detail)), 500
+
+        audit = apply_vector_pdf_underlays(
+            pdf_path,
+            source_pdf_dir=source_pdf_dir,
+            placements=vector_placements,
+        )
+        audit.update({
+            "projectId": project_id,
+            "selectedPageIds": selected_ids,
+            "selectedPageCount": len(pages),
+            "paper": {"width": width_in, "height": height_in},
+        })
+        audit_path = pdf_path.with_suffix(".vector-audit.json")
+        audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+        if audit.get("skipped"):
+            app.logger.warning("Vector PDF export skipped %s placement(s): %s", audit.get("skipped"), audit.get("skippedDetails"))
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("Vector-preserving PDF export failed for %s", project_id)
+        return jsonify(_err("PDF export failed.", str(exc))), 500
+    finally:
+        if temp_dir and temp_dir.is_dir():
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     download = f"{(doc.get('projectDisplayName') or project_id)}.pdf"
     return send_file(

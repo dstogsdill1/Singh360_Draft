@@ -240,10 +240,21 @@ def _normalize_class(raw: Any, index: int, page_rect: "fitz.Rect") -> dict[str, 
     except (TypeError, ValueError):
         marker_size = 18.0
     template_rect = _rect_from_payload(raw.get("templateBox"), page_rect)
+    plain_auto_accept = bool(raw.get("plainAutoAccept", False)) or bool(
+        re.search(r"\bCLEAN\s+SWITCH\b", label, re.IGNORECASE)
+    )
+    match_texts = {code.upper()} if code else set()
+    if plain_auto_accept:
+        # The H-E-B source legend commonly calls this row S / CLEAN SWITCH while
+        # the plan glyph itself may be S, $, CS, or CCS. Keep the alias list
+        # deliberately narrow so unrelated text is never silently accepted.
+        match_texts.update({"$", "CS", "CCS"})
     return {
         "id": class_id,
         "code": code,
         "codeUpper": code.upper(),
+        "matchTexts": sorted(match_texts),
+        "plainAutoAccept": plain_auto_accept,
         "label": label,
         "shape": expected,
         "color": _hex_color(raw.get("color"), "#ffcc00"),
@@ -258,6 +269,7 @@ def _normalize_class(raw: Any, index: int, page_rect: "fitz.Rect") -> dict[str, 
 def _class_public(item: dict[str, Any]) -> dict[str, Any]:
     out = dict(item)
     out.pop("codeUpper", None)
+    out.pop("matchTexts", None)
     return out
 
 
@@ -508,9 +520,11 @@ def _text_candidates(
 ) -> list[dict[str, Any]]:
     by_code: dict[str, list[dict[str, Any]]] = {}
     for cls in classes:
-        code = cls["codeUpper"]
-        if code:
-            by_code.setdefault(code, []).append(cls)
+        match_texts = cls.get("matchTexts") or [cls.get("codeUpper")]
+        for match_text in match_texts:
+            code = str(match_text or "").strip().upper()
+            if code:
+                by_code.setdefault(code, []).append(cls)
     if not by_code:
         return []
 
@@ -542,19 +556,36 @@ def _text_candidates(
         for cls in matching:
             expected = str(cls.get("shape") or "auto")
             evidence = _shape_evidence(hit, markers, expected)
-            accepted = evidence.found and expected != "none"
+            vector_accepted = evidence.found and expected != "none"
+            plain_accepted = (
+                expected == "none"
+                and bool(cls.get("plainAutoAccept"))
+                and text.upper() in set(cls.get("matchTexts") or [])
+            )
+            accepted = vector_accepted or plain_accepted
             status = "accepted" if accepted else "review"
-            score = 1.0 if accepted else (0.72 if len(text) > 1 else 0.55)
+            if vector_accepted:
+                method = "text+vector"
+                evidence_items = ["exact-text", f"vector-{evidence.shape}"]
+                score = 1.0
+            elif plain_accepted:
+                method = "exact-text-plain-standard"
+                evidence_items = ["exact-text", "plain-standard"]
+                score = 0.98
+            else:
+                method = "text-only"
+                evidence_items = ["exact-text"]
+                score = 0.72 if len(text) > 1 else 0.55
             candidates.append(
                 {
-                    "id": _candidate_id(cls["id"], "text", hit),
+                    "id": _candidate_id(cls["id"], method, hit),
                     "classId": cls["id"],
                     "code": cls["code"],
                     "label": cls["label"],
                     "bbox": _rect_tuple(hit),
                     "markerBox": _rect_tuple(_marker_rect(hit, cls["markerSizePt"])),
-                    "method": "text+vector" if accepted else "text-only",
-                    "evidence": ["exact-text"] + ([f"vector-{evidence.shape}"] if accepted else []),
+                    "method": method,
+                    "evidence": evidence_items,
                     "score": score,
                     "status": status,
                     "accepted": accepted,
@@ -1033,6 +1064,7 @@ class SymbolMapperStore:
             raise SymbolMapperError(f"A maximum of {MAX_CLASSES} symbol classes is supported per session.")
 
         source = self._session_dir(session_id) / "source.pdf"
+        legend_rect = None
         with fitz.open(source) as doc:
             page = doc[0]
             classes = [item for idx, raw in enumerate(raw_classes) if (item := _normalize_class(raw, idx, page.rect))]
@@ -1042,6 +1074,25 @@ class SymbolMapperStore:
             candidates = _text_candidates(page, classes, markers)
             visual, visual_warning = _visual_candidates(page, classes, candidates)
             candidates.extend(visual)
+            legend_payload = session.get("legend") if isinstance(session.get("legend"), dict) else {}
+            legend_rect = _rect_from_payload(legend_payload.get("box"), page.rect)
+
+        # The printed SYMBOL KEY is the class source, not a field device. Exclude
+        # its sample icons from plan counts/highlights so a symbol with zero real
+        # occurrences correctly reports zero rather than one.
+        if legend_rect is not None:
+            filtered: list[dict[str, Any]] = []
+            for candidate in candidates:
+                try:
+                    bbox = fitz.Rect(candidate.get("bbox"))
+                except Exception:
+                    filtered.append(candidate)
+                    continue
+                cx, cy = _center(bbox)
+                if legend_rect.x0 <= cx <= legend_rect.x1 and legend_rect.y0 <= cy <= legend_rect.y1:
+                    continue
+                filtered.append(candidate)
+            candidates = filtered
 
         # Candidate IDs are deterministic; keep the best duplicate only.
         by_id: dict[str, dict[str, Any]] = {}
@@ -1064,6 +1115,7 @@ class SymbolMapperStore:
                 "autoAccepted": "exact text plus an enclosing vector marker",
                 "reviewRequired": "text-only and visual-template-only candidates",
                 "finalExport": "accepted candidates only",
+                "counts": "field occurrences only; printed symbol-key samples are excluded",
             },
         }
         self._write_json(session_id, "detection.json", detection)

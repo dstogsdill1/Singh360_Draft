@@ -231,8 +231,11 @@ export async function savePages(projectId: string, pages: PageModel[]): Promise<
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function fetchExportWarnings(projectId: string): Promise<ExportWarning[]> {
-  const res = await fetch(`/api/projects/${projectId}/export/warnings`);
+export async function fetchExportWarnings(projectId: string, pageIds: string[] = []): Promise<ExportWarning[]> {
+  const params = new URLSearchParams();
+  pageIds.forEach((pageId) => params.append('pageId', pageId));
+  const query = params.toString();
+  const res = await fetch(`/api/projects/${projectId}/export/warnings${query ? `?${query}` : ''}`);
   if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
   return data.warnings ?? [];
@@ -240,12 +243,12 @@ export async function fetchExportWarnings(projectId: string): Promise<ExportWarn
 
 export async function exportPdf(
   projectId: string,
-  paper?: { width: number; height: number },
+  options?: { width: number; height: number; pageIds?: string[] },
 ): Promise<Blob> {
   const res = await fetch(`/api/projects/${projectId}/export/pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(paper ?? {}),
+    body: JSON.stringify(options ?? {}),
   });
   if (!res.ok) throw new Error(await res.text());
   return res.blob();

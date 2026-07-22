@@ -126,7 +126,7 @@ export default function App() {
   const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportWarnings, setExportWarnings] = useState<ExportWarning[] | null>(null);
-  const pendingExportRef = useRef<{ width: number; height: number; downloadName: string } | null>(null);
+  const pendingExportRef = useRef<{ width: number; height: number; downloadName: string; pageIds: string[] } | null>(null);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateLibOpen, setTemplateLibOpen] = useState(false);
   const [templateLibManageOnly, setTemplateLibManageOnly] = useState(false);
@@ -1528,7 +1528,7 @@ export default function App() {
     }
   };
 
-  const onExportPdfSized = async (width: number, height: number, rev: { updateRevision: boolean; newRevision: string; notes: string }) => {
+  const onExportPdfSized = async (width: number, height: number, rev: { updateRevision: boolean; newRevision: string; notes: string }, pageIds: string[]) => {
     if (!project) return;
     setExportOpen(false);
     let proj = project;
@@ -1562,13 +1562,13 @@ export default function App() {
     const revSuffix = rev.updateRevision ? `_${rev.newRevision.replace(/\s+/g, '')}` : '';
     const downloadName = `${base}${revSuffix}.pdf`;
     try {
-      const warnings = await fetchExportWarnings(proj.id);
+      const warnings = await fetchExportWarnings(proj.id, pageIds);
       if (warnings.length > 0) {
-        pendingExportRef.current = { width, height, downloadName };
+        pendingExportRef.current = { width, height, downloadName, pageIds };
         setExportWarnings(warnings);
         return;
       }
-      const blob = await exportPdf(proj.id, { width, height });
+      const blob = await exportPdf(proj.id, { width, height, pageIds });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1588,7 +1588,7 @@ export default function App() {
       return;
     }
     try {
-      const blob = await exportPdf(project.id, { width: pending.width, height: pending.height });
+      const blob = await exportPdf(project.id, { width: pending.width, height: pending.height, pageIds: pending.pageIds });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -2167,7 +2167,8 @@ export default function App() {
       <ExportModal
         currentRevision={project.metadata.revision || project.metadata.version || ''}
         packageName={project.metadata.drawingPackageFileName || project.projectDisplayName || project.metadata.projectName || ''}
-        onExport={(w, h, rev) => void onExportPdfSized(w, h, rev)}
+        pages={project.pages}
+        onExport={(w, h, rev, pageIds) => void onExportPdfSized(w, h, rev, pageIds)}
         onCancel={() => setExportOpen(false)}
       />
     )}

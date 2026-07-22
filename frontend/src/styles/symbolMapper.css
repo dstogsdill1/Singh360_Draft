@@ -263,7 +263,7 @@
 .sm-count-list { display: grid; gap: 5px; }
 .sm-count-row {
   display: grid;
-  grid-template-columns: 25px 1fr auto auto;
+  grid-template-columns: 25px minmax(0, 1fr) 196px;
   align-items: center;
   gap: 8px;
   padding: 7px;
@@ -272,10 +272,27 @@
   border-radius: 4px;
 }
 .sm-count-row > span { width: 23px; height: 23px; border: 2px solid transparent; border-radius: 2px; }
-.sm-count-row div { min-width: 0; display: flex; flex-direction: column; }
-.sm-count-row small { color: #5f6871; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.sm-count-row b { font-size: 18px; }
-.sm-count-row em { font-size: 11px; color: #9b5b00; font-style: normal; }
+.sm-count-copy { min-width: 0; display: flex; flex-direction: column; }
+.sm-count-copy small { color: #5f6871; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sm-count-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+}
+.sm-count-metrics > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3px 2px;
+  border: 1px solid #d8dde2;
+  border-radius: 3px;
+  background: #f7f8fa;
+}
+.sm-count-metrics > span.included { background: #e9f7ee; border-color: #9fcfb0; color: #176936; }
+.sm-count-metrics > span.check { background: #fff4dc; border-color: #e1b55e; color: #8b5500; }
+.sm-count-metrics b { font-size: 15px; line-height: 1; }
+.sm-count-metrics small { margin-top: 2px; color: inherit; font-size: 8px; font-weight: 700; text-transform: uppercase; overflow: visible; }
 .sm-quick-check { margin-top: 12px; background: #fff; border: 1px solid #c0c8d0; border-radius: 5px; overflow: hidden; }
 .sm-quick-check-head { padding: 10px; border-bottom: 1px solid #d1d7dc; }
 .sm-quick-check-head > strong { display: grid; place-items: center; min-width: 32px; height: 32px; border-radius: 16px; background: #f2c200; }

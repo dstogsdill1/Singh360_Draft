@@ -1,3 +1,4 @@
+// S360 PDF CROP IMAGE BOUNDS FIX
 // S360 HIGH RES PDF IMPORT UX
 import { useRef, useState, type MouseEvent } from 'react';
 import {
@@ -36,6 +37,7 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const imgWrapRef = useRef<HTMLDivElement>(null);
+  const previewImgRef = useRef<HTMLImageElement>(null);
 
   const page = pages[selected];
 
@@ -58,12 +60,16 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
 
   // ── crop rectangle drawing on the preview image ──
   const localPoint = (clientX: number, clientY: number) => {
-    const el = imgWrapRef.current;
-    if (!el) return { x: 0, y: 0 };
-    const b = el.getBoundingClientRect();
+    const wrap = imgWrapRef.current;
+    const image = previewImgRef.current;
+    if (!wrap || !image) return { x: 0, y: 0 };
+    const wrapBox = wrap.getBoundingClientRect();
+    const imageBox = image.getBoundingClientRect();
+    const imageLeft = imageBox.left - wrapBox.left;
+    const imageTop = imageBox.top - wrapBox.top;
     return {
-      x: Math.max(0, Math.min(clientX - b.left, b.width)),
-      y: Math.max(0, Math.min(clientY - b.top, b.height)),
+      x: imageLeft + Math.max(0, Math.min(clientX - imageBox.left, imageBox.width)),
+      y: imageTop + Math.max(0, Math.min(clientY - imageBox.top, imageBox.height)),
     };
   };
   const onDown = (e: MouseEvent<HTMLDivElement>) => {
@@ -81,19 +87,26 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
 
   // Map the displayed-pixel crop rectangle back to PDF point coordinates.
   const clipPoints = () => {
-    const el = imgWrapRef.current;
-    if (!el || !page) return null;
-    const dispW = el.clientWidth;
-    const dispH = el.clientHeight;
-    if (dispW <= 0 || dispH <= 0) return null;
+    const wrap = imgWrapRef.current;
+    const image = previewImgRef.current;
+    if (!wrap || !image || !page) return null;
+    const wrapBox = wrap.getBoundingClientRect();
+    const imageBox = image.getBoundingClientRect();
+    if (imageBox.width <= 0 || imageBox.height <= 0) return null;
     if (!rect || rect.w < 4 || rect.h < 4) return null; // treat as "whole page"
-    const sx = page.widthPt / dispW;
-    const sy = page.heightPt / dispH;
+    const imageLeft = imageBox.left - wrapBox.left;
+    const imageTop = imageBox.top - wrapBox.top;
+    const x0px = Math.max(0, Math.min(rect.x - imageLeft, imageBox.width));
+    const y0px = Math.max(0, Math.min(rect.y - imageTop, imageBox.height));
+    const x1px = Math.max(x0px, Math.min(rect.x + rect.w - imageLeft, imageBox.width));
+    const y1px = Math.max(y0px, Math.min(rect.y + rect.h - imageTop, imageBox.height));
+    const sx = page.widthPt / imageBox.width;
+    const sy = page.heightPt / imageBox.height;
     return {
-      x0: rect.x * sx,
-      y0: rect.y * sy,
-      x1: (rect.x + rect.w) * sx,
-      y1: (rect.y + rect.h) * sy,
+      x0: x0px * sx,
+      y0: y0px * sy,
+      x1: x1px * sx,
+      y1: y1px * sy,
     };
   };
 
@@ -196,7 +209,7 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
                   onMouseUp={onUp}
                   onMouseLeave={onUp}
                 >
-                  {page && <img className="pdfcrop-preview-img" src={page.previewDataUrl} alt={`Page ${selected + 1}`} draggable={false} />}
+                  {page && <img ref={previewImgRef} className="pdfcrop-preview-img" src={page.previewDataUrl} alt={`Page ${selected + 1}`} draggable={false} />}
                   {rect && rect.w > 2 && rect.h > 2 && (
                     <svg className="pdfcrop-overlay" aria-hidden="true">
                       <rect className="pdfcrop-rect" x={rect.x} y={rect.y} width={rect.w} height={rect.h} />

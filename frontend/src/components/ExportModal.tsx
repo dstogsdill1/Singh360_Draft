@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState, type ChangeEvent, type MouseEvent } from 'react';
+import type { PageModel } from '../model/types';
 
 export interface ExportRevisionResult {
   updateRevision: boolean;
@@ -9,18 +10,18 @@ export interface ExportRevisionResult {
 interface Props {
   currentRevision: string;
   packageName: string;
-  onExport: (width: number, height: number, rev: ExportRevisionResult) => void;
+  pages: PageModel[];
+  onExport: (width: number, height: number, rev: ExportRevisionResult, pageIds: string[]) => void;
   onCancel: () => void;
 }
 
 interface Preset {
   id: string;
   label: string;
-  w: number; // short side (in)
-  h: number; // long side (in)
+  w: number;
+  h: number;
 }
 
-// Paper presets expressed as (short x long) inches; orientation is applied below.
 const PRESETS: Preset[] = [
   { id: 'letter', label: 'Letter (8.5 × 11)', w: 8.5, h: 11 },
   { id: 'ansi_b', label: 'ANSI B / 11 × 17', w: 11, h: 17 },
@@ -34,7 +35,12 @@ const PRESETS: Preset[] = [
   { id: 'custom', label: 'Custom…', w: 17, h: 11 },
 ];
 
-export default function ExportModal({ currentRevision, packageName, onExport, onCancel }: Props) {
+export default function ExportModal({ currentRevision, packageName, pages, onExport, onCancel }: Props) {
+  const includedPages = useMemo(
+    () => pages.filter((page) => page.include).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [pages],
+  );
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(includedPages.map((page) => page.id)));
   const [presetId, setPresetId] = useState('ansi_b');
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
   const [customW, setCustomW] = useState('17');
@@ -46,106 +52,150 @@ export default function ExportModal({ currentRevision, packageName, onExport, on
 
   const nextRevision = (() => {
     if (revMode === 'custom') return customRev.trim() || currentRevision;
-    // Increment: bump a trailing integer, else V1 -> V2, else append " Rev 1".
-    const m = currentRevision.match(/(\d+)\s*$/);
-    if (m) return currentRevision.replace(/\d+\s*$/, String(parseInt(m[1], 10) + 1));
+    const match = currentRevision.match(/(\d+)\s*$/);
+    if (match) return currentRevision.replace(/\d+\s*$/, String(parseInt(match[1], 10) + 1));
     return currentRevision ? `${currentRevision} Rev 1` : 'V1';
   })();
 
-  const preset = PRESETS.find((p) => p.id === presetId)!;
+  const preset = PRESETS.find((item) => item.id === presetId) ?? PRESETS[1];
   const isCustom = presetId === 'custom';
-
   const resolved = (() => {
-    let short = preset.w;
-    let long = preset.h;
     if (isCustom) {
-      short = parseFloat(customW) || 17;
-      long = parseFloat(customH) || 11;
-      // For custom, treat the entered values as literal width/height already.
-      return { width: short, height: long };
+      return {
+        width: parseFloat(customW) || 17,
+        height: parseFloat(customH) || 11,
+      };
     }
-    // Landscape = wider than tall.
-    return orientation === 'landscape' ? { width: long, height: short } : { width: short, height: long };
+    return orientation === 'landscape'
+      ? { width: preset.h, height: preset.w }
+      : { width: preset.w, height: preset.h };
   })();
+
+  const orderedSelected = includedPages.filter((page) => selected.has(page.id)).map((page) => page.id);
+  const toggle = (id: string) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-wide export-pages-modal" onClick={(event: MouseEvent<HTMLDivElement>) => event.stopPropagation()}>
         <div className="modal-head">
           <h2>Export PDF</h2>
           <button className="modal-x" onClick={onCancel} title="Close">×</button>
         </div>
 
-        <div className="modal-body">
-          <div className="field">
-            <label htmlFor="paper">Paper size</label>
-            <select id="paper" value={presetId} onChange={(e) => setPresetId(e.target.value)}>
-              {PRESETS.map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {isCustom ? (
-            <div className="field-row">
-              <div className="field">
-                <label htmlFor="cw">Width (in)</label>
-                <input id="cw" type="number" min={3} max={60} step={0.5} value={customW} onChange={(e) => setCustomW(e.target.value)} />
-              </div>
-              <div className="field">
-                <label htmlFor="ch">Height (in)</label>
-                <input id="ch" type="number" min={3} max={60} step={0.5} value={customH} onChange={(e) => setCustomH(e.target.value)} />
-              </div>
-            </div>
-          ) : (
+        <div className="modal-body export-pages-body">
+          <section className="export-options-column">
             <div className="field">
-              <label htmlFor="orient">Orientation</label>
-              <select id="orient" value={orientation} onChange={(e) => setOrientation(e.target.value as 'landscape' | 'portrait')}>
-                <option value="landscape">Landscape</option>
-                <option value="portrait">Portrait</option>
+              <label htmlFor="paper">Paper size</label>
+              <select id="paper" value={presetId} onChange={(event: ChangeEvent<HTMLSelectElement>) => setPresetId(event.target.value)}>
+                {PRESETS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </div>
-          )}
 
-          <p className="renumber-note">
-            Output: {resolved.width}&quot; × {resolved.height}&quot;. The 17×11 sheet layout (title block + body) is scaled to fit the selected paper — nothing is clipped.
-          </p>
-
-          <div className="export-rev">
-            <div className="field">
-              <label>Current Revision</label>
-              <div className="props-path">{currentRevision || '(none)'} · Package: {packageName || '(project name)'}</div>
-            </div>
-            <label className="lib-showretired" title="Record a new revision in the title block and revision history when you export">
-              <input type="checkbox" checked={updateRev} onChange={(e) => setUpdateRev(e.target.checked)} /> Update revision on export
-            </label>
-            {updateRev && (
-              <>
+            {isCustom ? (
+              <div className="field-row">
                 <div className="field">
-                  <label htmlFor="rev-mode">Revision</label>
-                  <select id="rev-mode" value={revMode} onChange={(e) => setRevMode(e.target.value as 'increment' | 'custom')}>
-                    <option value="increment">Increment → {nextRevision}</option>
-                    <option value="custom">Set custom…</option>
-                  </select>
+                  <label htmlFor="cw">Width (in)</label>
+                  <input id="cw" type="number" min={3} max={60} step={0.5} value={customW} onChange={(event: ChangeEvent<HTMLInputElement>) => setCustomW(event.target.value)} />
                 </div>
-                {revMode === 'custom' && (
-                  <div className="field">
-                    <label htmlFor="rev-custom">Custom Revision</label>
-                    <input id="rev-custom" type="text" placeholder="V2" value={customRev} onChange={(e) => setCustomRev(e.target.value)} />
-                  </div>
-                )}
                 <div className="field">
-                  <label htmlFor="rev-notes">Revision Notes</label>
-                  <input id="rev-notes" type="text" placeholder="Description of this revision" value={revNotes} onChange={(e) => setRevNotes(e.target.value)} />
+                  <label htmlFor="ch">Height (in)</label>
+                  <input id="ch" type="number" min={3} max={60} step={0.5} value={customH} onChange={(event: ChangeEvent<HTMLInputElement>) => setCustomH(event.target.value)} />
                 </div>
-              </>
+              </div>
+            ) : (
+              <div className="field">
+                <label htmlFor="orient">Orientation</label>
+                <select id="orient" value={orientation} onChange={(event: ChangeEvent<HTMLSelectElement>) => setOrientation(event.target.value as 'landscape' | 'portrait')}>
+                  <option value="landscape">Landscape</option>
+                  <option value="portrait">Portrait</option>
+                </select>
+              </div>
             )}
-          </div>
+
+            <p className="renumber-note">
+              Output: {resolved.width}&quot; × {resolved.height}&quot;. Original PDF crops are restored from the source PDF during export so born-digital linework stays sharp.
+            </p>
+
+            <div className="export-rev">
+              <div className="field">
+                <label>Current Revision</label>
+                <div className="props-path">{currentRevision || '(none)'} · Package: {packageName || '(project name)'}</div>
+              </div>
+              <label className="lib-showretired" title="Record a new revision in the title block and revision history when you export">
+                <input type="checkbox" checked={updateRev} onChange={(event: ChangeEvent<HTMLInputElement>) => setUpdateRev(event.target.checked)} /> Update revision on export
+              </label>
+              {updateRev && (
+                <>
+                  <div className="field">
+                    <label htmlFor="rev-mode">Revision</label>
+                    <select id="rev-mode" value={revMode} onChange={(event: ChangeEvent<HTMLSelectElement>) => setRevMode(event.target.value as 'increment' | 'custom')}>
+                      <option value="increment">Increment → {nextRevision}</option>
+                      <option value="custom">Set custom…</option>
+                    </select>
+                  </div>
+                  {revMode === 'custom' && (
+                    <div className="field">
+                      <label htmlFor="rev-custom">Custom Revision</label>
+                      <input id="rev-custom" type="text" placeholder="V2" value={customRev} onChange={(event: ChangeEvent<HTMLInputElement>) => setCustomRev(event.target.value)} />
+                    </div>
+                  )}
+                  <div className="field">
+                    <label htmlFor="rev-notes">Revision Notes</label>
+                    <input id="rev-notes" type="text" placeholder="Description of this revision" value={revNotes} onChange={(event: ChangeEvent<HTMLInputElement>) => setRevNotes(event.target.value)} />
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
+          <section className="export-page-picker">
+            <div className="export-page-picker-head">
+              <div>
+                <strong>Pages to export</strong>
+                <span>{selected.size} of {includedPages.length} selected</span>
+              </div>
+              <div className="export-page-picker-actions">
+                <button className="btn" type="button" onClick={() => setSelected(new Set(includedPages.map((page) => page.id)))}>Select All</button>
+                <button className="btn" type="button" onClick={() => setSelected(new Set())}>None</button>
+              </div>
+            </div>
+            <div className="export-page-list">
+              {includedPages.map((page) => (
+                <label key={page.id} className={`export-page-row ${selected.has(page.id) ? 'selected' : ''}`}>
+                  <input type="checkbox" checked={selected.has(page.id)} onChange={() => toggle(page.id)} />
+                  <span className="export-page-number">{page.pageNumber ?? page.order}</span>
+                  <span className="export-page-code">{page.displaySheetCode || page.sheetCode || '—'}</span>
+                  <span className="export-page-title">{page.sheetTitle}</span>
+                </label>
+              ))}
+            </div>
+          </section>
         </div>
 
         <div className="modal-foot">
+          <span className="export-selection-note">
+            {selected.size ? `${selected.size} page${selected.size === 1 ? '' : 's'} will be exported.` : 'Select at least one page.'}
+          </span>
           <button className="btn" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-primary" onClick={() => onExport(resolved.width, resolved.height, { updateRevision: updateRev, newRevision: nextRevision, notes: revNotes })}>Export PDF</button>
+          <button
+            className="btn btn-primary"
+            disabled={orderedSelected.length === 0}
+            onClick={() => onExport(
+              resolved.width,
+              resolved.height,
+              { updateRevision: updateRev, newRevision: nextRevision, notes: revNotes },
+              orderedSelected,
+            )}
+          >
+            Export Selected PDF
+          </button>
         </div>
       </div>
     </div>

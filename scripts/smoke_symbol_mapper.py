@@ -30,13 +30,21 @@ def _make_fixture(path: Path) -> None:
     page.draw_rect(fitz.Rect(46, 121, 64, 139), color=(0, 0, 0), width=0.8)
     page.insert_textbox(fitz.Rect(46, 121, 64, 139), "CC", fontsize=6.5, align=fitz.TEXT_ALIGN_CENTER)
     page.insert_text((80, 134), "CASE CONTROLLER", fontsize=7)
+    page.draw_circle((55, 160), 9, color=(0, 0, 0), width=0.8)
+    page.insert_textbox(fitz.Rect(46, 151, 64, 169), "S", fontsize=6.5, align=fitz.TEXT_ALIGN_CENTER)
+    page.insert_text((80, 164), "LIQUID LINE SOLENOID VALVE 120V", fontsize=7)
+    # CLEAN SWITCH is intentionally a plain-text source symbol with no enclosing
+    # vector circle. It must be auto-counted from the saved Singh360 standard.
+    page.insert_textbox(fitz.Rect(46, 181, 64, 199), "S", fontsize=6.5, align=fitz.TEXT_ALIGN_CENTER)
+    page.insert_text((80, 194), "CLEAN SWITCH", fontsize=7)
 
     # Plan occurrences.
     for x, y, code, shape in [
-        (250, 180, "TS", "circle"),
-        (350, 260, "TS", "circle"),
-        (500, 210, "DA", "circle"),
+        (250, 230, "TS", "circle"),
+        (350, 290, "TS", "circle"),
+        (500, 230, "DA", "circle"),
         (620, 330, "CC", "square"),
+        (700, 250, "S", "circle"),
     ]:
         box = fitz.Rect(x - 9, y - 9, x + 9, y + 9)
         if shape == "circle":
@@ -44,7 +52,10 @@ def _make_fixture(path: Path) -> None:
         else:
             page.draw_rect(box, color=(0, 0, 0), width=0.8)
         page.insert_textbox(box, code, fontsize=6.5, align=fitz.TEXT_ALIGN_CENTER)
-    # Deliberate text-only note should remain review, not accepted.
+    # Two plain CLEAN SWITCH occurrences: one S and one $ glyph.
+    page.insert_text((250, 455), "S", fontsize=8)
+    page.insert_text((350, 455), "$", fontsize=8)
+    # Deliberate TS text-only note should remain review, not accepted.
     page.insert_text((250, 400), "VERIFY TS SENSOR LOCATION", fontsize=10)
     doc.save(path)
     doc.close()
@@ -105,13 +116,15 @@ def main() -> int:
 
         legend = session.get("legend") or {}
         assert legend.get("found") is True, legend
-        assert [row["code"] for row in legend.get("rows", [])] == ["TS", "DA", "CC"], legend
+        assert [row["code"] for row in legend.get("rows", [])] == ["TS", "DA", "CC", "S", "S"], legend
         assert legend.get("previewDataUrl", "").startswith("data:image/png;base64,"), legend
 
         choices = [
             ("#ffd400", "#ffd400", "solid"),
             ("#e53935", "#e53935", "solid"),
             ("#00a651", "#1e73be", "split-vertical"),
+            ("#8e44ad", "#8e44ad", "solid"),
+            ("#1e73be", "#00a651", "split-vertical"),
         ]
         classes = []
         for row, (color, color2, pattern) in zip(legend["rows"], choices):
@@ -130,11 +143,16 @@ def main() -> int:
         detection = store.detect(session["id"], {"classes": classes})
         accepted = [c for c in detection["candidates"] if c["status"] == "accepted"]
         review = [c for c in detection["candidates"] if c["status"] == "review"]
-        # Legend + plan occurrences: TS=3 accepted, DA=2 accepted, CC=2 accepted.
-        by_code = {}
-        for item in accepted:
-            by_code[item["code"]] = by_code.get(item["code"], 0) + 1
-        assert by_code == {"CC": 2, "DA": 2, "TS": 3}, by_code
+        # Field occurrences only: the five printed SYMBOL KEY samples are excluded.
+        # TS=2, DA=1, CC=1, solenoid S=1, CLEAN SWITCH=2 (S + $).
+        summary_by_label = {row["label"]: row for row in detection["summary"]}
+        assert summary_by_label["TEMPERATURE SENSOR"]["accepted"] == 2, summary_by_label
+        assert summary_by_label["DOOR ALARM"]["accepted"] == 1, summary_by_label
+        assert summary_by_label["CASE CONTROLLER"]["accepted"] == 1, summary_by_label
+        assert summary_by_label["LIQUID LINE SOLENOID VALVE 120V"]["accepted"] == 1, summary_by_label
+        assert summary_by_label["CLEAN SWITCH"]["accepted"] == 2, summary_by_label
+        assert not any(c["label"] == "CLEAN SWITCH" and c["status"] == "review" for c in detection["candidates"]), detection["candidates"]
+        assert any(c["label"] == "CLEAN SWITCH" and c["method"] == "exact-text-plain-standard" for c in accepted), accepted
         # Note has a standalone TS word without an enclosing vector marker.
         assert any(c["code"] == "TS" and c["method"] == "text-only" for c in review), review
 
