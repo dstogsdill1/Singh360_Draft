@@ -52,6 +52,7 @@ import SymbolLegendModal from './components/SymbolLegendModal';
 import PdfCropModal from './components/PdfCropModal';
 import ImageCropModal from './components/ImageCropModal';
 import SymbolMapperModal from './components/SymbolMapperModal';
+import { buildSymbolCountSummaryArtifacts, type SymbolMapperCountPageRequest } from './model/symbolCountSummary';
 import BackupRecoveryModal from './components/BackupRecoveryModal';
 import BusModal from './components/BusModal';
 import CollapsibleSection from './components/CollapsibleSection';
@@ -1003,13 +1004,12 @@ export default function App() {
   };
 
   // S360 SYMBOL MAPPER: append a reviewed output as a normal, user-manageable
-  // canvas page. The source filename supplies the initial sheet code/title when
-  // available, and the operation resolves only after the image and project save
-  // have both been confirmed.
+  // canvas page. Option A also creates a separate exact-table count-summary page.
   const addSymbolMapPage = async (
     result: SymbolMapperRenderResult,
     title: string,
     sheetCode: string,
+    countPage: SymbolMapperCountPageRequest,
   ): Promise<void> => {
     captureActivePageState();
     const current = projectRef.current;
@@ -1052,6 +1052,15 @@ export default function App() {
       pageGroupId: pageId,
     };
 
+    const countArtifacts = countPage?.enabled
+      ? buildSymbolCountSummaryArtifacts(
+          countPage,
+          result.sourceName || cleanTitle,
+          newPageId(),
+          `ws_symbol_count_${newPageId()}`,
+        )
+      : null;
+
     const imageReady = new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         if (pendingSymbolPageRef.current?.pageId === pageId) pendingSymbolPageRef.current = null;
@@ -1061,19 +1070,18 @@ export default function App() {
         pageId,
         url: asset.url,
         name: asset.name,
-        resolve: () => {
-          window.clearTimeout(timer);
-          resolve();
-        },
-        reject: (reason: unknown) => {
-          window.clearTimeout(timer);
-          reject(reason);
-        },
+        resolve: () => { window.clearTimeout(timer); resolve(); },
+        reject: (reason: unknown) => { window.clearTimeout(timer); reject(reason); },
       };
     });
 
-    const pages = withPageNumbers([...latest.pages, page].map((item, index) => ({ ...item, order: index + 1 })));
-    const next: ProjectModel = { ...latest, pages };
+    const pagesToAdd = countArtifacts ? [page, countArtifacts.page] : [page];
+    const pages = withPageNumbers([...latest.pages, ...pagesToAdd].map((item, index) => ({ ...item, order: index + 1 })));
+    const next: ProjectModel = {
+      ...latest,
+      worksheets: countArtifacts ? [...latest.worksheets, countArtifacts.worksheet] : latest.worksheets,
+      pages,
+    };
     setProjectSync(next);
     setActivePageId(pageId);
     setViewMode('normalized');
@@ -1084,11 +1092,16 @@ export default function App() {
 
     await imageReady;
     captureActivePageState();
+    if (countArtifacts) {
+      setActivePageId(countArtifacts.page.id);
+      setOverlayMode(false);
+      setSelection(null);
+    }
     const completed = projectRef.current;
     if (completed) writeRecoverySnapshot(completed);
     const saved = await confirmLatestProjectSaved();
     if (!saved) {
-      throw new Error('The page and image were created, but the project save could not be confirmed. Use Save Now before navigating away.');
+      throw new Error('The highlighted and count-summary pages were created, but the project save could not be confirmed. Use Save Now before navigating away.');
     }
   };
 
@@ -2221,7 +2234,7 @@ export default function App() {
     {symbolMapperOpen && (
       <SymbolMapperModal
         onClose={() => setSymbolMapperOpen(false)}
-        onAddPage={(result, title, sheetCode) => addSymbolMapPage(result, title, sheetCode)}
+        onAddPage={(result, title, sheetCode, countPage) => addSymbolMapPage(result, title, sheetCode, countPage)}
       />
     )}
     {symbolLegendOpen && (

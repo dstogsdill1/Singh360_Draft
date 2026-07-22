@@ -21,10 +21,11 @@ import {
   symbolTemplateKey as templateKey,
   type SymbolPaletteChoice as PaletteChoice,
 } from '../model/symbolPalette';
+import type { SymbolMapperCountPageRequest } from '../model/symbolCountSummary';
 
 interface Props {
   onClose: () => void;
-  onAddPage?: (result: SymbolMapperRenderResult, title: string, sheetCode: string) => Promise<void>;
+  onAddPage?: (result: SymbolMapperRenderResult, title: string, sheetCode: string, countPage: SymbolMapperCountPageRequest) => Promise<void>;
 }
 
 type Step = 'upload' | 'choose' | 'results' | 'output';
@@ -119,6 +120,9 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
   const [rendered, setRendered] = useState<SymbolMapperRenderResult | null>(null);
   const [pageTitle, setPageTitle] = useState('SYMBOL HIGHLIGHT PLAN');
   const [sheetCode, setSheetCode] = useState('NEW');
+  const [addCountPage, setAddCountPage] = useState(true);
+  const [countPageTitle, setCountPageTitle] = useState('SYMBOL COUNT SUMMARY');
+  const [countSheetCode, setCountSheetCode] = useState('NEW');
   const [loading, setLoading] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateStatus, setTemplateStatus] = useState('');
@@ -140,6 +144,24 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     return { item, accepted, review, rejected, total: matches.length };
   }), [symbols, detection]);
 
+  const countPageRows = useMemo(() => summary
+    .filter(({ accepted }) => accepted > 0)
+    .map(({ item, accepted, review, rejected, total }) => {
+      const palette = PALETTE.find((choice) => choice.id === item.paletteId) ?? PALETTE[0];
+      return {
+        code: item.code,
+        label: item.label,
+        paletteLabel: palette.label,
+        color: item.color,
+        color2: item.color2,
+        pattern: item.pattern,
+        found: total,
+        included: accepted,
+        check: review,
+        ignored: rejected,
+      };
+    }), [summary]);
+
   const pickFile = async (file: File) => {
     setLoading(true);
     setError('');
@@ -158,6 +180,11 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
       const outputFields = inferOutputFields(created.sourceName);
       setPageTitle(outputFields.pageTitle);
       setSheetCode(outputFields.sheetCode);
+      setAddCountPage(true);
+      setCountSheetCode('NEW');
+      setCountPageTitle(outputFields.sheetCode !== 'NEW'
+        ? `SYMBOL COUNT SUMMARY — ${outputFields.sheetCode}`
+        : 'SYMBOL COUNT SUMMARY');
       const next = buildSymbols(created.legend.rows, created.template);
       setSymbols(next);
       setTemplateStatus(created.template.symbols.length
@@ -283,7 +310,18 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
     setLoading(true);
     setError('');
     try {
-      await onAddPage(rendered, pageTitle.trim() || 'SYMBOL HIGHLIGHT PLAN', sheetCode.trim() || 'NEW');
+      const countPage: SymbolMapperCountPageRequest = {
+        enabled: addCountPage,
+        sheetCode: countSheetCode.trim() || 'NEW',
+        pageTitle: countPageTitle.trim() || 'SYMBOL COUNT SUMMARY',
+        rows: countPageRows,
+      };
+      await onAddPage(
+        rendered,
+        pageTitle.trim() || 'SYMBOL HIGHLIGHT PLAN',
+        sheetCode.trim() || 'NEW',
+        countPage,
+      );
       onClose();
     } catch (err) {
       setError(String(err));
@@ -547,8 +585,51 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
                       </label>
                     </div>
                     <p className="sm-output-hint">These are read from the PDF filename when available. You can change either one before adding the page.</p>
+                    <div className="sm-count-page-card">
+                      <label className="sm-count-page-toggle">
+                        <input type="checkbox" checked={addCountPage} onChange={(event: ChangeEvent<HTMLInputElement>) => setAddCountPage(event.target.checked)} />
+                        <span>
+                          <strong>Add a separate Symbol Count Summary page</strong>
+                          <small>Option A · final Count equals Included. Zero-count and ignored symbols are omitted.</small>
+                        </span>
+                      </label>
+                      {addCountPage && (
+                        <>
+                          <div className="sm-output-field-row sm-count-page-fields">
+                            <label>
+                              Summary sheet code
+                              <input value={countSheetCode} onChange={(event: ChangeEvent<HTMLInputElement>) => setCountSheetCode(event.target.value)} />
+                            </label>
+                            <label>
+                              Summary page title
+                              <input value={countPageTitle} onChange={(event: ChangeEvent<HTMLInputElement>) => setCountPageTitle(event.target.value)} />
+                            </label>
+                          </div>
+                          <div className="sm-count-page-preview">
+                            <div className="sm-count-page-preview-head">
+                              <strong>Included-symbol preview</strong>
+                              <span>{countPageRows.reduce((sum, row) => sum + row.included, 0)} total</span>
+                            </div>
+                            {countPageRows.length ? (
+                              <table>
+                                <thead><tr><th>Symbol</th><th>Description</th><th>Count</th></tr></thead>
+                                <tbody>
+                                  {countPageRows.map((row) => (
+                                    <tr key={`${row.code}-${row.label}`}>
+                                      <td><i style={{ background: row.color }} />{row.code}</td>
+                                      <td>{row.label}</td>
+                                      <td>{row.included}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : <p>No included symbols were confirmed.</p>}
+                          </div>
+                        </>
+                      )}
+                    </div>
                     <button className="symbol-mapper-primary" disabled={loading} onClick={() => void addPage()}>
-                      {loading ? 'Adding and saving…' : 'Add page to Singh360'}
+                      {loading ? 'Adding and saving…' : addCountPage ? 'Add highlighted + count pages' : 'Add highlighted page'}
                     </button>
                   </div>
                 )}

@@ -475,3 +475,20 @@
 .image-crop-foot { align-items: center; flex-wrap: wrap; }
 .image-crop-spacer { flex: 1; }
 /* S360 IMAGE CROP END */
+
+/* S360 SYMBOL COUNT SUMMARY OPTION A START */
+.sm-count-page-card { margin: 14px 0; padding: 12px; border: 1px solid #aab4c0; border-radius: 6px; background: #f5f7f9; }
+.sm-count-page-toggle { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
+.sm-count-page-toggle input { margin-top: 3px; }
+.sm-count-page-toggle span { display: grid; gap: 2px; }
+.sm-count-page-toggle small { color: #52606d; line-height: 1.25; }
+.sm-count-page-fields { margin-top: 10px; }
+.sm-count-page-preview { margin-top: 10px; max-height: 220px; overflow: auto; border: 1px solid #c7ced6; background: #fff; }
+.sm-count-page-preview-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; padding: 7px 9px; background: #23272f; color: #fff; }
+.sm-count-page-preview table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sm-count-page-preview th, .sm-count-page-preview td { padding: 6px 8px; border-bottom: 1px solid #dde2e7; text-align: left; }
+.sm-count-page-preview th:last-child, .sm-count-page-preview td:last-child { width: 64px; text-align: center; font-weight: 700; }
+.sm-count-page-preview td:first-child { white-space: nowrap; font-weight: 700; }
+.sm-count-page-preview td i { display: inline-block; width: 13px; height: 13px; margin-right: 6px; border: 1px solid #555; vertical-align: -2px; }
+.sm-count-page-preview > p { margin: 0; padding: 12px; color: #52606d; }
+/* S360 SYMBOL COUNT SUMMARY OPTION A END */
