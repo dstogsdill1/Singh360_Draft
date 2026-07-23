@@ -8,6 +8,7 @@ import './styles/sourceParity.css';
 import './styles/symbolMapper.css';
 import './styles/textBoxFormatting.css';
 import './styles/statusHelp.css';
+import './styles/projectDashboard.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

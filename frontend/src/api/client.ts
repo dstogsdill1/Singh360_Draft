@@ -1326,3 +1326,88 @@ export async function deleteSymbolMapperSession(sessionId: string): Promise<void
   if (!res.ok && res.status !== 404) throw new Error(await res.text());
 }
 // S360 SYMBOL MAPPER END
+
+// S360 PROJECT HOME + EXTERNAL WORKBOOK LINK V1
+export interface WorkbookLinkWorkbookInfo {
+  path: string;
+  filename: string;
+  sheetCount: number;
+  projectId?: string;
+  schemaVersion?: string;
+  helpVersion?: string;
+  projectName?: string;
+  modified?: string;
+  size?: number;
+  sha256?: string;
+}
+
+export interface WorkbookLinkStatus {
+  ok: boolean;
+  status: string;
+  mode: string;
+  path: string;
+  message: string;
+  workbook?: WorkbookLinkWorkbookInfo;
+  baselineWorkbookHash?: string;
+  baselineAppHash?: string;
+  currentWorkbookHash?: string;
+  currentAppHash?: string;
+  lastSyncUtc?: string;
+  warning?: string;
+}
+
+export async function getWorkbookLinkStatus(projectId: string): Promise<WorkbookLinkStatus> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-link`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function linkWorkbookPath(projectId: string, path: string): Promise<{ project: ProjectModel; status: WorkbookLinkStatus }> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-link`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function pickWorkbookPath(projectId: string): Promise<{ cancelled?: boolean; project?: ProjectModel; status: WorkbookLinkStatus }> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-link/pick`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function syncWorkbookLink(projectId: string): Promise<{ project: ProjectModel; status: WorkbookLinkStatus }> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-link/sync`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function resolveWorkbookLink(
+  projectId: string,
+  direction: 'workbook_to_app' | 'app_to_workbook' | 'baseline',
+): Promise<{ project: ProjectModel; status: WorkbookLinkStatus }> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-link/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ direction }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function unlinkWorkbook(projectId: string): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-link`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function openLinkedWorkbook(projectId: string): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-link/open`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function revealLinkedWorkbook(projectId: string): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-link/reveal`, { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+}

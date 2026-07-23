@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Singh360 Project Home and Workbook Linking</title>
+<style>
+body{margin:0;background:#edf1f4;color:#20262d;font-family:Segoe UI,Arial,sans-serif;line-height:1.48}
+header{background:#252c34;color:#fff;border-bottom:7px solid #f28c28;padding:28px}main{max-width:1100px;margin:auto;padding:22px}
+section{background:#fff;border:1px solid #d1d7db;border-radius:9px;margin-bottom:16px;overflow:hidden}
+h2{margin:0;background:#252c34;color:#fff;padding:13px 17px;border-left:7px solid #f28c28}.b{padding:18px}
+code{background:#eef1f3;padding:2px 5px;border-radius:4px}.step{border-left:6px solid #276fa8;padding:12px 14px;margin:9px 0;background:#edf6fd}
+.warn{border-left-color:#f28c28;background:#fff6e7}.good{border-left-color:#14845a;background:#edf8f3}
+table{width:100%;border-collapse:collapse}th{background:#dce2e6;text-align:left}th,td{padding:8px;border-bottom:1px solid #d7dce0}
+</style></head><body>
+<header><h1>Singh360 Draft — Project Home and Workbook Linking</h1><p>The application now opens to Project Home before the page editor.</p></header>
+<main>
+<section><h2>Start the application</h2><div class="b">
+<div class="step good"><b>Double-click START_SINGH360_LOCAL.bat.</b> It safely fetches GitHub changes, pulls only when the working tree is clean, rebuilds only when needed, starts port 8766, and opens Project Home.</div>
+<div class="step">Run CREATE_SINGH360_DESKTOP_SHORTCUT.bat once to create a normal desktop shortcut.</div>
+</div></section>
+<section><h2>Link the project workbook</h2><div class="b">
+<div class="step">On Project Home, click <b>Browse</b> in Linked Workbook and choose the real G:, Google Drive, OneDrive, network, or local workbook.</div>
+<div class="step">Click <b>Confirm Link</b>. The application verifies 00_PROJECT_META and 00_INDEX and shows project/schema/help versions.</div>
+<div class="step warn">For the first link or a conflict, choose <b>Use Workbook → Update App</b> or <b>Use App → Update Workbook</b>. The application does not guess.</div>
+</div></section>
+<section><h2>Saving</h2><div class="b">
+<p>The app saves <code>project.json</code> first. A missing, moved, locked, or conflicting workbook no longer blocks page navigation or local project saves.</p>
+<table><tr><th>Message</th><th>Meaning</th></tr>
+<tr><td>Saved</td><td>Project and workbook save completed.</td></tr>
+<tr><td>Project saved · workbook sync pending</td><td>Your app work is safe. Resolve the workbook link from Project Home.</td></tr>
+<tr><td>Conflict</td><td>Both versions changed. Choose which version wins.</td></tr></table>
+</div></section>
+<section><h2>Project tools</h2><div class="b"><p>Project Home provides large buttons for Page Editor, Symbol Mapper, Symbol Legend, Component Library, Drawing Set/Export, Reorder/Renumber, Project Package, Backups, and Instructions.</p></div></section>
+</main></body></html>

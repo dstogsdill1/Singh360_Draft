@@ -64,6 +64,19 @@ from core.vector_pdf_export import (
 from core.vsdx_importer import import_vsdx
 from core.workbook_importer import import_workbook
 from core.workbook_status_sync import WorkbookSyncError, sync_project_from_workbook, sync_project_to_workbook
+from core.workbook_link_manager import (
+    choose_path_native as choose_workbook_path_native,
+    configured_workbook_path,
+    maybe_pull_on_open,
+    open_workbook as open_linked_workbook,
+    resolve as resolve_workbook_link,
+    reveal_workbook as reveal_linked_workbook,
+    save_local_then_try_sync,
+    set_link as set_workbook_link,
+    status_payload,
+    sync_auto as sync_workbook_auto,
+    unlink as unlink_workbook,
+)
 
 HERE = Path(__file__).resolve().parent
 FRONTEND_DIST_DIR = HERE / "frontend" / "dist"
@@ -464,7 +477,7 @@ def get_project(project_id: str):
     doc = ensure_project_shape(doc)
     doc = sync_project_sheet_index(doc)
     try:
-        doc = sync_project_from_workbook(project_id, doc, store)
+        doc = maybe_pull_on_open(project_id, doc, store)
     except WorkbookSyncError as exc:
         doc.setdefault("workbookSync", {})["warning"] = str(exc)
     return jsonify(doc)
@@ -485,16 +498,115 @@ def save_project(project_id: str):
         return jsonify(_err("Project validation failed.", " | ".join(problems[:20]))), 400
 
     try:
-        data = sync_project_to_workbook(project_id, data, store)
-        store.save(project_id, data)
-    except WorkbookSyncError as exc:
-        return jsonify(_err("Workbook synchronization failed.", str(exc))), 409
+        # Local-first persistence: an external workbook can never block app/project saves.
+        data = save_local_then_try_sync(project_id, data, store)
     except OSError as exc:
         app.logger.error("Could not write project %s: %s", project_id, exc)
-        return jsonify(_err("Failed to save project.", str(exc))), 500
+        return jsonify(_err("Failed to save the local project.", str(exc))), 500
 
     return jsonify(data)
 
+
+
+# S360 PROJECT HOME + EXTERNAL WORKBOOK LINK V1
+@app.get("/api/projects/<project_id>/workbook-link")
+def workbook_link_status(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    return jsonify(status_payload(project_id, doc, store))
+
+
+@app.post("/api/projects/<project_id>/workbook-link")
+def workbook_link_set(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        doc, status = set_workbook_link(project_id, doc, store, str(body.get("path") or ""))
+        return jsonify({"ok": True, "project": doc, "status": status})
+    except WorkbookSyncError as exc:
+        return jsonify(_err("Workbook link failed.", str(exc))), 400
+
+
+@app.delete("/api/projects/<project_id>/workbook-link")
+def workbook_link_unlink(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    doc = unlink_workbook(project_id, doc, store)
+    return jsonify({"ok": True, "project": doc, "status": status_payload(project_id, doc, store)})
+
+
+@app.post("/api/projects/<project_id>/workbook-link/pick")
+def workbook_link_pick(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    try:
+        selected = choose_workbook_path_native()
+        if not selected:
+            return jsonify({"ok": True, "cancelled": True, "status": status_payload(project_id, doc, store)})
+        doc, status = set_workbook_link(project_id, doc, store, selected)
+        return jsonify({"ok": True, "cancelled": False, "project": doc, "status": status})
+    except WorkbookSyncError as exc:
+        return jsonify(_err("Workbook picker failed.", str(exc))), 400
+
+
+@app.post("/api/projects/<project_id>/workbook-link/sync")
+def workbook_link_sync(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    try:
+        doc, status = sync_workbook_auto(project_id, doc, store)
+        return jsonify({"ok": True, "project": doc, "status": status})
+    except WorkbookSyncError as exc:
+        return jsonify(_err("Workbook synchronization requires a decision.", str(exc))), 409
+
+
+@app.post("/api/projects/<project_id>/workbook-link/resolve")
+def workbook_link_resolve(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        doc, status = resolve_workbook_link(project_id, doc, store, str(body.get("direction") or ""))
+        return jsonify({"ok": True, "project": doc, "status": status})
+    except WorkbookSyncError as exc:
+        return jsonify(_err("Workbook conflict resolution failed.", str(exc))), 409
+
+
+@app.post("/api/projects/<project_id>/workbook-link/open")
+def workbook_link_open(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    path, _mode = configured_workbook_path(store, project_id, doc)
+    if path is None:
+        return jsonify(_err("No workbook is linked.")), 404
+    try:
+        open_linked_workbook(path)
+        return jsonify({"ok": True})
+    except WorkbookSyncError as exc:
+        return jsonify(_err("Could not open the workbook.", str(exc))), 400
+
+
+@app.post("/api/projects/<project_id>/workbook-link/reveal")
+def workbook_link_reveal(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    path, _mode = configured_workbook_path(store, project_id, doc)
+    if path is None:
+        return jsonify(_err("No workbook is linked.")), 404
+    try:
+        reveal_linked_workbook(path)
+        return jsonify({"ok": True})
+    except WorkbookSyncError as exc:
+        return jsonify(_err("Could not show the workbook.", str(exc))), 400
 
 @app.post("/api/projects/<project_id>/pages")
 def upsert_pages(project_id: str):

@@ -78,6 +78,7 @@ interface Props {
   onExportPackage: () => void;
   onRenumber: () => void;
   onOpenProject: () => void;
+  onOpenHome: () => void;
   onCleanWorkspace: () => void;
   onImportWorksheet: () => void;
   onSavePageTemplate: () => void;
@@ -139,6 +140,7 @@ export default function Ribbon({
   onExportPackage,
   onRenumber,
   onOpenProject,
+  onOpenHome,
   onCleanWorkspace,
   onImportWorksheet,
   onSavePageTemplate,
@@ -215,6 +217,7 @@ export default function Ribbon({
           <span className="brand-sub">Drawing Package Editor</span>
         </div>
         <div className="ribbon-appbar-right">
+          <button type="button" className="ribbon-btn ribbon-home-btn" onClick={onOpenHome}>Project Home</button>
           <span className={`status-pill ${saveStatus}`}>{saveLabel ?? saveStatus}</span>
         </div>
       </div>

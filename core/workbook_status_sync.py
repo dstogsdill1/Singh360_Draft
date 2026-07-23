@@ -79,6 +79,11 @@ def project_hash(project: dict[str, Any]) -> str:
 
 
 def _workbook_path(store: Any, project_id: str, project: dict[str, Any]) -> Path | None:
+    # S360 external-workbook-link path priority.
+    sync = project.get('workbookSync') if isinstance(project.get('workbookSync'), dict) else {}
+    configured = str(sync.get('workbook') or '').strip()
+    if configured:
+        return Path(os.path.expandvars(os.path.expanduser(configured)))
     folder = store.sources_dir(project_id, "workbook", project)
     preferred = str(project.get("sourceWorkbookName") or project.get("metadata", {}).get("sourceFile") or "").strip()
     if preferred:
@@ -303,6 +308,8 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
     path = _workbook_path(store, project_id, project)
     if path is None:
         return project
+    if not path.is_file():
+        raise WorkbookSyncError(f'The linked workbook was not found: {path}')
     with _project_lock(store, project_id, project):
         try:
             wb = load_workbook(path, keep_vba=path.suffix.lower() == ".xlsm", data_only=False, read_only=False)
@@ -343,7 +350,7 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
                         changed = True
             project = {**project, "pages": sorted(pages, key=lambda p: int(p.get("order") or 9999))}
             project.setdefault("metadata", {})["helpVersion"] = HELP_VERSION
-            project["workbookSync"] = {
+            project["workbookSync"] = {**dict(project.get("workbookSync") or {}),
                 "mode": "one-user-two-way-manifest",
                 "workbook": str(path),
                 "lastSyncUtc": utcnow(),
@@ -361,6 +368,8 @@ def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: An
     path = _workbook_path(store, project_id, project)
     if path is None:
         return project
+    if not path.is_file():
+        raise WorkbookSyncError(f'The linked workbook was not found: {path}')
     with _project_lock(store, project_id, project):
         _backup_workbook(path, store, project_id)
         try:
@@ -433,7 +442,7 @@ def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: An
             temp = None
 
             project.setdefault("metadata", {})["helpVersion"] = HELP_VERSION
-            project["workbookSync"] = {
+            project["workbookSync"] = {**dict(project.get("workbookSync") or {}),
                 "mode": "one-user-two-way-manifest",
                 "workbook": str(path),
                 "lastSyncUtc": stamp,

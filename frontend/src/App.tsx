@@ -58,6 +58,7 @@ import BusModal from './components/BusModal';
 import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 import HelpCenter from './components/HelpCenter';
+import ProjectDashboard from './components/ProjectDashboard';
 
 function getUrlParams() {
   const params = new URLSearchParams(window.location.search);
@@ -65,6 +66,8 @@ function getUrlParams() {
     projectId: params.get('project'),
     print: params.get('print') === '1',
     help: params.get('help') === '1',
+    mode: params.get('mode') === 'editor' ? 'editor' : 'home',
+    tool: params.get('tool') || '',
   };
 }
 
@@ -90,13 +93,14 @@ function withPageNumbers(pages: PageModel[]): PageModel[] {
 }
 
 export default function App() {
-  const { projectId: initialProjectId, print: printMode, help: helpMode } = getUrlParams();
+  const { projectId: initialProjectId, print: printMode, help: helpMode, mode: appMode, tool: initialTool } = getUrlParams();
 
   const [project, setProject] = useState<ProjectModel | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [selectedWorksheetId, setSelectedWorksheetId] = useState<string | undefined>(undefined);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'unsaved' | 'saving' | 'saved' | 'failed'>('idle');
   const [savedAt, setSavedAt] = useState<string>('');
+  const [saveNotice, setSaveNotice] = useState<string>('');
 
   // Viewport view-state.
   const [fitMode, setFitMode] = useState<FitMode>('page');
@@ -124,20 +128,20 @@ export default function App() {
     stroke: '#111111', dash: 'solid', strokeWidth: 2, arrowStart: false, arrowEnd: false,
   });
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
-  const [renumberOpen, setRenumberOpen] = useState(false);
+  const [renumberOpen, setRenumberOpen] = useState(initialTool === 'renumber');
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(initialTool === 'export');
   const [exportWarnings, setExportWarnings] = useState<ExportWarning[] | null>(null);
   const pendingExportRef = useRef<{ width: number; height: number; downloadName: string; pageIds: string[] } | null>(null);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateLibOpen, setTemplateLibOpen] = useState(false);
   const [templateLibManageOnly, setTemplateLibManageOnly] = useState(false);
-  const [symbolLegendOpen, setSymbolLegendOpen] = useState(false);
+  const [symbolLegendOpen, setSymbolLegendOpen] = useState(initialTool === 'symbol-legend');
   const [pdfCropOpen, setPdfCropOpen] = useState(false);
   const [imageCropState, setImageCropState] = useState<ImageCropState | null>(null);
-  const [symbolMapperOpen, setSymbolMapperOpen] = useState(false);
-  const [backupOpen, setBackupOpen] = useState(false);
+  const [symbolMapperOpen, setSymbolMapperOpen] = useState(initialTool === 'symbol-mapper');
+  const [backupOpen, setBackupOpen] = useState(initialTool === 'backups');
   const [busOpen, setBusOpen] = useState(false);
   const [addSheetPending, setAddSheetPending] = useState<{ refId: string; where: 'before' | 'after' } | null>(null);
   const [importWsOpen, setImportWsOpen] = useState<{
@@ -182,10 +186,13 @@ export default function App() {
     return next;
   }, []);
 
-  const markSaved = () => {
+  const markSaved = (saved?: ProjectModel) => {
     const d = new Date();
     const p = (n: number) => String(n).padStart(2, '0');
     setSavedAt(`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`);
+    const sync = (saved?.workbookSync || {}) as Record<string, unknown>;
+    const pending = sync.status === 'pending' || sync.status === 'conflict' || Boolean(sync.warning);
+    setSaveNotice(pending ? 'Project Saved · Workbook Sync Pending' : '');
     setSaveStatus('saved');
   };
 
@@ -210,7 +217,7 @@ export default function App() {
       }
       const applied = setProjectSync(savedFromServer);
       lastSavedJsonRef.current = JSON.stringify(applied ?? savedFromServer);
-      markSaved();
+      markSaved(savedFromServer);
       return true;
     } catch {
       savingRef.current = false;
@@ -331,7 +338,7 @@ export default function App() {
       }
       const applied = setProjectSync(savedFromServer);
       lastSavedJsonRef.current = JSON.stringify(applied ?? savedFromServer);
-      markSaved();
+      markSaved(savedFromServer);
       return true;
     } catch {
       savingRef.current = false;
@@ -1801,7 +1808,7 @@ export default function App() {
     saveStatus === 'saving' ? 'Saving…'
     : saveStatus === 'unsaved' ? 'Unsaved Changes'
     : saveStatus === 'failed' ? 'Save Failed'
-    : saveStatus === 'saved' ? (savedAt ? `Saved ${savedAt}` : 'Saved')
+    : saveStatus === 'saved' ? (saveNotice || (savedAt ? `Saved ${savedAt}` : 'Saved'))
     : 'Ready';
 
   const ribbon = (
@@ -1873,6 +1880,7 @@ export default function App() {
       onRenumber={onRenumber}
       renumberBadge={renumberBadge}
       onOpenProject={() => setOpenProjectOpen(true)}
+      onOpenHome={() => window.location.assign(project ? `/app?project=${project.id}` : '/app')}
       onCleanWorkspace={() => setCleanWorkspaceOpen(true)}
       onImportWorksheet={() => setImportWsOpen({
         afterPageId: activePageId ?? undefined,
@@ -1902,6 +1910,11 @@ export default function App() {
         }}
       />
     );
+  }
+
+  // S360 PROJECT HOME DEFAULT ROUTE V1
+  if (!printMode && appMode !== 'editor') {
+    return <ProjectDashboard project={project} />;
   }
 
   // ── Empty state (no project loaded yet) ──

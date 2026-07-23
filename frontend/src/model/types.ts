@@ -258,6 +258,8 @@ export interface ProjectModel {
   pages: PageModel[];
   sources: Record<string, unknown>[];
   modified?: string;
+  /** Timestamp written by ProjectStore after a confirmed local save. */
+  lastSavedAt?: string;
   projectFolder?: string;
   projectDisplayName?: string;
   sourceWorkbookName?: string;
