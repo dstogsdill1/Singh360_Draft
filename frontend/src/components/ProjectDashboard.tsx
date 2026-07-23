@@ -15,7 +15,7 @@ import {
   repairWorkbookQuality,
   resolveWorkbookLink,
   revealLinkedWorkbook,
-  saveProject,
+  savePageInclusion,
   unlinkWorkbook,
   type ProjectListItem,
   type WorkbookLinkStatus,
@@ -256,15 +256,23 @@ export default function ProjectDashboard({ project }: Props) {
     }
   };
 
-  const savePageSelection = async (next: ProjectModel) => {
+  const savePageSelection = async (includedByPageId: Record<string, boolean>) => {
+    if (!project) return;
     setBusy('Saving drawing-set selection');
+    setMessage('');
     try {
-      await saveProject(next);
-      setMessage('Drawing-set selection saved. Excluded pages remain in the editor.');
+      const result = await savePageInclusion(project.id, includedByPageId);
+      const sync = result.workbookSync || {};
+      const pending = sync.status === 'pending' || Boolean(sync.warning);
+      setMessage(
+        pending
+          ? `Selection saved locally: ${result.included} included / ${result.excluded} excluded. Workbook update is pending: ${String(sync.warning || 'review required')}`
+          : `Selection saved: ${result.included} included / ${result.excluded} excluded. Workbook updated.`,
+      );
       setPageManagerOpen(false);
-      window.setTimeout(() => window.location.reload(), 500);
+      window.setTimeout(() => window.location.reload(), 700);
     } catch (error) {
-      setMessage(`Page selection save failed: ${String(error)}`);
+      setMessage(`Page selection save failed before confirmation: ${String(error)}`);
     } finally {
       setBusy('');
     }

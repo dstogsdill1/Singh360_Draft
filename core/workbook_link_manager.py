@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import traceback
 from typing import Any
 
 from openpyxl import load_workbook
@@ -370,38 +371,106 @@ def maybe_pull_on_open(project_id: str, project: dict[str, Any], store: Any) -> 
     return project
 
 
+def _record_runtime_sync_failure(
+    store: Any,
+    project_id: str,
+    stage: str,
+    exc: Exception,
+) -> str:
+    folder = store.docs / "patch_logs" / "workbook_sync_runtime"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{project_id}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.json"
+    target.write_text(
+        json.dumps(
+            {
+                "createdUtc": utcnow(),
+                "projectId": project_id,
+                "stage": stage,
+                "exceptionType": type(exc).__name__,
+                "message": str(exc),
+                "traceback": traceback.format_exc(),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return str(target)
+
+
+def _pending_after_local_save(
+    project: dict[str, Any],
+    reason: str,
+    warning: str,
+    log_path: str = "",
+) -> dict[str, Any]:
+    project = dict(project)
+    project["workbookSync"] = {
+        **dict(project.get("workbookSync") or {}),
+        "status": "pending",
+        "pendingReason": reason,
+        "warning": warning,
+        "runtimeLog": log_path,
+        "localProjectSavedAt": utcnow(),
+    }
+    return project
+
+
 def save_local_then_try_sync(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
-    # Local project persistence is authoritative and must never be blocked by an external workbook.
+    """Save project.json first; external workbook failures can never return a failed app save."""
     store.save(project_id, project)
-    status = status_payload(project_id, project, store)
+
+    try:
+        status = status_payload(project_id, project, store)
+    except Exception as exc:
+        log_path = _record_runtime_sync_failure(store, project_id, "status", exc)
+        project = _pending_after_local_save(
+            project,
+            "status_error",
+            f"Project saved locally. Workbook status check failed: {type(exc).__name__}: {exc}",
+            log_path,
+        )
+        store.save(project_id, project)
+        return project
+
     state = status["status"]
     if state == "not_linked":
         project = dict(project)
-        project["workbookSync"] = {**dict(project.get("workbookSync") or {}), "status": "not_linked", "warning": ""}
-        store.save(project_id, project)
-        return project
-    if state in {"missing", "locked", "invalid", "project_mismatch", "review_required", "conflict"}:
-        project = dict(project)
         project["workbookSync"] = {
             **dict(project.get("workbookSync") or {}),
-            "status": "pending",
-            "pendingReason": state,
-            "warning": status.get("message", ""),
-            "localProjectSavedAt": utcnow(),
+            "status": "not_linked",
+            "warning": "",
         }
         store.save(project_id, project)
         return project
+
+    if state in {
+        "missing",
+        "locked",
+        "invalid",
+        "project_mismatch",
+        "review_required",
+        "conflict",
+    }:
+        project = _pending_after_local_save(
+            project,
+            state,
+            status.get("message", ""),
+        )
+        store.save(project_id, project)
+        return project
+
     try:
         project, _ = resolve(project_id, project, store, "app_to_workbook")
         return project
-    except WorkbookSyncError as exc:
-        project = dict(project)
-        project["workbookSync"] = {
-            **dict(project.get("workbookSync") or {}),
-            "status": "pending",
-            "warning": str(exc),
-            "localProjectSavedAt": utcnow(),
-        }
+    except Exception as exc:
+        log_path = _record_runtime_sync_failure(store, project_id, "write", exc)
+        project = _pending_after_local_save(
+            project,
+            "workbook_write_error",
+            f"Project saved locally. Workbook update is pending: {type(exc).__name__}: {exc}",
+            log_path,
+        )
         store.save(project_id, project)
         return project
 

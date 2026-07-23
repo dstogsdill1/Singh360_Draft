@@ -1,13 +1,15 @@
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import type { PageModel, ProjectModel } from '../model/types';
 
 interface Props {
   project: ProjectModel;
   busy?: boolean;
   onClose: () => void;
-  onSave: (project: ProjectModel) => Promise<void>;
+  onSave: (includedByPageId: Record<string, boolean>) => Promise<void>;
   onOpenPage: (pageId: string) => void;
 }
+
+const PAGE_SIZE = 18;
 
 function statusLabel(page: PageModel): string {
   const value = String(page.issueStatus || 'draft').replace(/_/g, ' ');
@@ -29,96 +31,190 @@ function previewUrl(page: PageModel): string {
   return '';
 }
 
-export default function PageManagerModal({ project, busy, onClose, onSave, onOpenPage }: Props) {
+export default function PageManagerModal({
+  project,
+  busy,
+  onClose,
+  onSave,
+  onOpenPage,
+}: Props) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'included' | 'excluded'>('all');
+  const [pageNumber, setPageNumber] = useState(1);
   const [included, setIncluded] = useState<Record<string, boolean>>(
     Object.fromEntries(project.pages.map((page) => [page.id, Boolean(page.include)])),
   );
 
-  const pages = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    return [...project.pages]
-      .sort((a, b) => a.order - b.order)
-      .filter((page) => {
-        if (filter === 'included' && !included[page.id]) return false;
-        if (filter === 'excluded' && included[page.id]) return false;
-        if (!search) return true;
-        return `${page.sheetCode} ${page.sheetTitle} ${page.sheetTab}`.toLowerCase().includes(search);
-      });
-  }, [project.pages, included, filter, query]);
-
-  const apply = async () => {
-    const next: ProjectModel = {
-      ...project,
-      pages: project.pages.map((page) => ({ ...page, include: Boolean(included[page.id]) })),
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
     };
-    await onSave(next);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+
+  useEffect(() => {
+    setPageNumber(1);
+  }, [query, filter]);
+
+  const sortedPages = useMemo(
+    () => [...project.pages].sort((a, b) => a.order - b.order),
+    [project.pages],
+  );
+
+  const physicalNumber = useMemo(
+    () => Object.fromEntries(sortedPages.map((page, index) => [page.id, index + 1])),
+    [sortedPages],
+  );
+
+  const filteredPages = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return sortedPages.filter((page) => {
+      if (filter === 'included' && !included[page.id]) return false;
+      if (filter === 'excluded' && included[page.id]) return false;
+      if (!search) return true;
+      return `${page.sheetCode} ${page.displaySheetCode || ''} ${page.sheetTitle} ${page.sheetTab}`
+        .toLowerCase()
+        .includes(search);
+    });
+  }, [sortedPages, included, filter, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredPages.length / PAGE_SIZE));
+  const safePageNumber = Math.min(pageNumber, totalPages);
+  const visiblePages = filteredPages.slice(
+    (safePageNumber - 1) * PAGE_SIZE,
+    safePageNumber * PAGE_SIZE,
+  );
+
+  const includedCount = Object.values(included).filter(Boolean).length;
+  const excludedCount = project.pages.length - includedCount;
+
+  const includeAll = () => {
+    setIncluded(Object.fromEntries(project.pages.map((page) => [page.id, true])));
+  };
+
+  const excludeAll = () => {
+    if (!window.confirm(
+      'Exclude every page from the published drawing set? The pages will remain in the editor and can be included again.',
+    )) return;
+    setIncluded(Object.fromEntries(project.pages.map((page) => [page.id, false])));
   };
 
   return (
-    <div className="dashboard-overlay" role="dialog" aria-modal="true">
+    <div className="dashboard-overlay page-manager-overlay" role="dialog" aria-modal="true">
       <div className="dashboard-overlay-panel page-manager-modal">
-        <div className="overlay-head">
+        <div className="overlay-head page-manager-head">
           <div>
+            <div className="eyebrow">DRAWING SET REVIEW</div>
             <h2>Page Manager</h2>
-            <p>Review every page before entering the editor. Excluded pages stay visible and editable.</p>
+            <p>Choose which pages publish. Excluded pages remain visible and editable. Nothing changes until you save.</p>
           </div>
-          <div>
-            <button type="button" disabled={busy} onClick={() => {
-              setIncluded(Object.fromEntries(project.pages.map((page) => [page.id, true])));
-            }}>Include All</button>
-            <button type="button" disabled={busy} onClick={() => {
-              setIncluded(Object.fromEntries(project.pages.map((page) => [page.id, false])));
-            }}>Exclude All</button>
-            <button type="button" className="primary" disabled={busy} onClick={() => void apply()}>Save Include / Exclude</button>
-            <button type="button" onClick={onClose} disabled={busy}>Close</button>
+          <div className="page-manager-head-actions">
+            <button type="button" onClick={onClose}>Close Without Saving</button>
+            <button
+              type="button"
+              className="primary"
+              disabled={busy}
+              onClick={() => void onSave(included)}
+            >
+              Save Drawing Set Selection · {includedCount} Included / {excludedCount} Excluded
+            </button>
           </div>
         </div>
+
+        <div className="page-manager-summary">
+          <div><b>{project.pages.length}</b><span>Total editor pages</span></div>
+          <div className="included"><b>{includedCount}</b><span>Included in drawing set</span></div>
+          <div className="excluded"><b>{excludedCount}</b><span>Excluded but editable</span></div>
+          <div><b>{filteredPages.length}</b><span>Shown by current filter</span></div>
+        </div>
+
         <div className="page-manager-tools">
           <input
             value={query}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)}
-            placeholder="Search sheet code, title, or tab"
+            placeholder="Search sheet code, title, or workbook tab"
           />
-          <button type="button" className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All {project.pages.length}</button>
+          <button type="button" className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
           <button type="button" className={filter === 'included' ? 'active' : ''} onClick={() => setFilter('included')}>Included</button>
           <button type="button" className={filter === 'excluded' ? 'active' : ''} onClick={() => setFilter('excluded')}>Excluded</button>
+          <button type="button" onClick={includeAll}>Include All {project.pages.length}</button>
+          <button type="button" onClick={excludeAll}>Exclude All {project.pages.length}</button>
         </div>
-        <div className="page-thumbnail-grid">
-          {pages.map((page) => {
+
+        <div className="page-manager-pagination">
+          <span>
+            Showing {filteredPages.length ? (safePageNumber - 1) * PAGE_SIZE + 1 : 0}
+            –{Math.min(safePageNumber * PAGE_SIZE, filteredPages.length)} of {filteredPages.length}
+          </span>
+          <div>
+            <button type="button" disabled={safePageNumber <= 1} onClick={() => setPageNumber((current) => Math.max(1, current - 1))}>Previous</button>
+            <strong>Page {safePageNumber} of {totalPages}</strong>
+            <button type="button" disabled={safePageNumber >= totalPages} onClick={() => setPageNumber((current) => Math.min(totalPages, current + 1))}>Next</button>
+          </div>
+        </div>
+
+        <div className="page-thumbnail-grid readable">
+          {visiblePages.map((page) => {
             const image = previewUrl(page);
             const isIncluded = Boolean(included[page.id]);
             return (
-              <article key={page.id} className={`page-thumbnail-card ${isIncluded ? 'included' : 'excluded'}`}>
-                <button type="button" className="page-thumb-preview" onClick={() => onOpenPage(page.id)}>
+              <article key={page.id} className={`page-thumbnail-card readable ${isIncluded ? 'included' : 'excluded'}`}>
+                <button type="button" className="page-thumb-preview readable" onClick={() => onOpenPage(page.id)}>
                   {image ? (
-                    <img src={image} alt="" />
+                    <img src={image} alt={`Preview of ${page.sheetTitle}`} />
                   ) : (
-                    <div className="page-thumb-skeleton">
-                      <div className="thumb-title-band">{page.sheetTitle}</div>
-                      <div className="thumb-lines"><i /><i /><i /><i /><i /><i /></div>
-                      <div className="thumb-title-block">{page.displaySheetCode || page.sheetCode}</div>
+                    <div className="page-thumb-placeholder">
+                      <div className="page-thumb-code">{page.displaySheetCode || page.sheetCode || 'NEW'}</div>
+                      <div className="page-thumb-title">{page.sheetTitle}</div>
+                      <div className="page-thumb-type">{page.pageType || 'Page'}</div>
+                      <div className="page-thumb-titleblock">Open in editor for full page</div>
                     </div>
                   )}
                 </button>
-                <div className="page-thumb-info">
-                  <strong>{page.displaySheetCode || page.sheetCode}</strong>
+
+                <div className="page-thumb-info readable">
+                  <div className="page-thumb-order">Editor Page {physicalNumber[page.id]} of {project.pages.length}</div>
+                  <strong>{page.displaySheetCode || page.sheetCode || 'NEW'}</strong>
                   <span>{page.sheetTitle}</span>
-                  <small>{statusLabel(page)} · {page.pageType}</small>
+                  <small>{statusLabel(page)} · {page.pageType || 'Page'} · Tab: {page.sheetTab}</small>
                 </div>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={isIncluded}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => setIncluded((current) => ({ ...current, [page.id]: event.target.checked }))}
-                  />
-                  {isIncluded ? 'Included in Drawing Set' : 'Excluded — still editable'}
-                </label>
-                <button type="button" onClick={() => onOpenPage(page.id)}>Open This Page in Editor</button>
+
+                <div className="page-include-control">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={isIncluded}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                        const checked = event.target.checked;
+                        setIncluded((current) => ({ ...current, [page.id]: checked }));
+                      }}
+                    />
+                    <span>
+                      <b>{isIncluded ? 'Included in Drawing Set' : 'Excluded from Drawing Set'}</b>
+                      <small>{isIncluded ? 'Will appear in Sheet Index, Page X of Y, and export.' : 'Stays in the editor and can be included later.'}</small>
+                    </span>
+                  </label>
+                </div>
+
+                <button type="button" className="open-page-button" onClick={() => onOpenPage(page.id)}>
+                  Open This Page in Editor
+                </button>
               </article>
             );
           })}
+        </div>
+
+        <div className="page-manager-footer">
+          <button type="button" onClick={onClose}>Close Without Saving</button>
+          <button
+            type="button"
+            className="primary"
+            disabled={busy}
+            onClick={() => void onSave(included)}
+          >
+            Save Drawing Set Selection · {includedCount} Included / {excludedCount} Excluded
+          </button>
         </div>
       </div>
     </div>

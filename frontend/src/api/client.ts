@@ -1471,3 +1471,30 @@ export async function repairWorkbookQuality(
 export function aiGuideUrl(format: 'html' | 'markdown' = 'html'): string {
   return format === 'markdown' ? '/api/docs/ai-guide' : '/docs/ai-guide';
 }
+
+// S360 PAGE INCLUSION SAVE V1
+export interface PageInclusionSaveResult {
+  ok: boolean;
+  project: ProjectModel;
+  included: number;
+  excluded: number;
+  workbookSync?: Record<string, unknown>;
+}
+
+export async function savePageInclusion(
+  projectId: string,
+  includedByPageId: Record<string, boolean>,
+): Promise<PageInclusionSaveResult> {
+  const response = await fetch(`/api/projects/${projectId}/page-inclusion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ includedByPageId }),
+  });
+  const payload = await response.json().catch(async () => ({
+    error: await response.text(),
+  }));
+  if (!response.ok) {
+    throw new Error(payload.detail || payload.error || 'Page selection save failed.');
+  }
+  return payload;
+}

@@ -672,6 +672,60 @@ def ai_ready_guide_html():
         abort(404)
     return send_file(path, mimetype="text/html; charset=utf-8")
 
+# S360 PAGE INCLUSION SAVE V1
+@app.post("/api/projects/<project_id>/page-inclusion")
+def save_page_inclusion(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    body = request.get_json(force=True, silent=True) or {}
+    included_by_page_id = body.get("includedByPageId")
+    if not isinstance(included_by_page_id, dict):
+        return jsonify(_err("Page selection body must contain includedByPageId.")), 400
+
+    pages = doc.get("pages") if isinstance(doc.get("pages"), list) else []
+    known_ids = {
+        str(page.get("id") or "")
+        for page in pages
+        if isinstance(page, dict) and page.get("id")
+    }
+    unknown = sorted(
+        str(page_id)
+        for page_id in included_by_page_id
+        if str(page_id) not in known_ids
+    )
+    if unknown:
+        return jsonify(_err(
+            "Page selection contains unknown page IDs.",
+            ", ".join(unknown[:20]),
+        )), 400
+
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        page_id = str(page.get("id") or "")
+        if page_id in included_by_page_id:
+            page["include"] = bool(included_by_page_id[page_id])
+
+    doc["pages"] = pages
+    doc = ensure_project_shape(doc)
+    doc = sync_project_sheet_index(doc)
+    try:
+        doc = save_local_then_try_sync(project_id, doc, store)
+    except Exception as exc:
+        app.logger.exception("Page inclusion save failed for project %s", project_id)
+        return jsonify(_err("Page selection save failed before the local project could be confirmed.", str(exc))), 500
+
+    included = sum(1 for page in doc.get("pages", []) if page.get("include", True))
+    excluded = len(doc.get("pages", [])) - included
+    return jsonify({
+        "ok": True,
+        "project": doc,
+        "included": included,
+        "excluded": excluded,
+        "workbookSync": doc.get("workbookSync", {}),
+    })
+
 @app.post("/api/projects/<project_id>/pages")
 def upsert_pages(project_id: str):
     doc = _load_doc(project_id)

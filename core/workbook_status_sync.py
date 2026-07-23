@@ -15,6 +15,7 @@ from typing import Any
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.workbook.properties import CalcProperties
 
 HELP_VERSION = "2026.07.22-status-sync-1"
 SCHEMA_VERSION = "5.0"
@@ -430,9 +431,16 @@ def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: An
             page_names = [str(p.get("sheetTab") or "") for p in pages if str(p.get("sheetTab") or "") in wb.sheetnames]
             remaining = [name for name in wb.sheetnames if name not in control_names and name not in page_names]
             wb._sheets = [wb[name] for name in control_names + page_names + remaining]
-            wb.calculation.fullCalcOnLoad = True
-            wb.calculation.forceFullCalc = True
-            wb.calculation.calcMode = "auto"
+            if wb.calculation is None:
+                wb.calculation = CalcProperties(
+                    calcMode="auto",
+                    fullCalcOnLoad=True,
+                    forceFullCalc=True,
+                )
+            else:
+                wb.calculation.fullCalcOnLoad = True
+                wb.calculation.forceFullCalc = True
+                wb.calculation.calcMode = "auto"
 
             fd, temp_name = tempfile.mkstemp(prefix=path.stem + "_", suffix=path.suffix, dir=path.parent)
             os.close(fd)
