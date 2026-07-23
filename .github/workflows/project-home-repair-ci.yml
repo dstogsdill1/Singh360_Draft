@@ -28,6 +28,44 @@ jobs:
       - name: Compile backend
         run: python -m compileall server.py core
 
+      - name: Regression-test existing project workbook recovery
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          from core.project_model import ensure_project_shape
+
+          with TemporaryDirectory() as root:
+              project_folder = Path(root) / 'HEB-829__legacyproject01'
+              workbook_dir = project_folder / 'sources' / 'workbook'
+              workbook_dir.mkdir(parents=True)
+              workbook = workbook_dir / '829_MTN_EMS_V1.xlsm'
+              workbook.write_bytes(b'unchanged-source-copy')
+
+              legacy = {
+                  'id': 'legacyproject01',
+                  'projectFolder': str(project_folder),
+                  'metadata': {'projectName': 'HEB 829', 'sourceFile': 'temp_0123456789abcdef.xlsm'},
+                  'sources': [{
+                      'id': 'src_legacy',
+                      'type': 'workbook',
+                      'name': 'temp_0123456789abcdef.xlsm',
+                      'path': str(Path(root) / 'temp_0123456789abcdef.xlsm'),
+                  }],
+                  'worksheets': [],
+                  'pages': [],
+              }
+
+              repaired = ensure_project_shape(legacy)
+              assert repaired['sourceWorkbookName'] == workbook.name, repaired['sourceWorkbookName']
+              assert repaired['metadata']['sourceFile'] == workbook.name, repaired['metadata']['sourceFile']
+              assert repaired['sources'][0]['name'] == workbook.name, repaired['sources'][0]
+              assert repaired['sources'][0]['path'] == str(workbook), repaired['sources'][0]
+
+          print('Existing project workbook recovery: PASS')
+          PY
+
       - name: Smoke-import sample workbook
         run: python scripts/smoke_import_workbook.py sample_data/S360_EMS_Simple_Workbook.xlsx
 
