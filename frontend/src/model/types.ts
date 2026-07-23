@@ -161,12 +161,21 @@ export interface Worksheet {
   printArea?: string | null;
 }
 
+export type PageIssueStatus = 'draft' | 'draft_confirmed' | 'public' | 'public_confirmed';
+
 export interface PageModel {
   id: string;
   order: number;
   /** Original package slot retained while a page is excluded. */
   restorePackageIndex?: number;
   include: boolean;
+  /** Four-stage issue workflow. Include/Exclude remains separate. */
+  issueStatus?: PageIssueStatus;
+  statusUpdatedAt?: string;
+  statusConfirmedAt?: string;
+  parentPageId?: string;
+  sourceMode?: string;
+  syncDirection?: string;
   sheetCode: string;
   displaySheetCode?: string;
   sheetTitle: string;
@@ -236,6 +245,7 @@ export interface ProjectModel {
     sourceFile?: string;
     version?: string;
     status?: string;
+    helpVersion?: string;
     editedBy?: string;
     date?: string;
     drawnBy?: string;
@@ -252,12 +262,28 @@ export interface ProjectModel {
   projectDisplayName?: string;
   sourceWorkbookName?: string;
   paginationLocked?: boolean;
+  workbookSync?: {
+    mode?: string;
+    workbook?: string;
+    lastSyncUtc?: string;
+    workbookHash?: string;
+    appHash?: string;
+    warning?: string;
+  };
   revisionHistory?: Array<{ revision: string; date: string; description?: string; exportedBy?: string }>;
 }
 
 export type ViewMode = 'normalized' | 'source';
 
 export interface CanvasSelection {
+  /** S360 POWERPOINT TEXT BOX FORMATTING V1 */
+  isTextBox?: boolean;
+  textBoxFill?: string;
+  textBoxFillOpacity?: number;
+  textBoxStroke?: string;
+  textBoxStrokeWidth?: number;
+  textBoxPadding?: number;
+  textBoxRadius?: number;
   type: string;
   name?: string;
   fill: string;

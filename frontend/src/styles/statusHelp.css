@@ -1,0 +1,37 @@
+/* S360 FOUR STAGE STATUS + HELP V1 */
+.vt-issue-status { display:flex; align-items:center; gap:3px; padding-left:8px; margin-left:6px; border-left:1px solid #4a535d; }
+.vt-status-btn { min-height:24px; padding:3px 7px; border:1px solid #5c6671; border-radius:3px; background:#252b32; color:#dce2e7; font-size:10px; cursor:pointer; }
+.vt-status-btn.active { color:#fff; border-color:#fff; box-shadow:inset 0 -3px 0 rgba(255,255,255,.85); }
+.vt-status-btn.status-draft.active { background:#f28c28; }
+.vt-status-btn.status-draft_confirmed.active { background:#76b852; }
+.vt-status-btn.status-public.active { background:#2d7dd2; }
+.vt-status-btn.status-public_confirmed.active { background:#14845a; }
+.vt-include-btn.included { background:#176b49; color:#fff; }
+.vt-include-btn.excluded { background:#6f7880; color:#fff; }
+.vt-help-btn { background:#276fa8 !important; color:#fff !important; }
+.page-tab.status-excluded,.sheet-item.status-excluded { opacity:.58; filter:grayscale(.75); background:#68717a !important; }
+.page-tab.status-draft { border-top:3px solid #f28c28; }
+.page-tab.status-draft_confirmed { border-top:3px solid #76b852; }
+.page-tab.status-public { border-top:3px solid #2d7dd2; }
+.page-tab.status-public_confirmed { border-top:3px solid #14845a; }
+.sheet-item.status-draft { border-left:5px solid #f28c28; }
+.sheet-item.status-draft_confirmed { border-left:5px solid #76b852; }
+.sheet-item.status-public { border-left:5px solid #2d7dd2; }
+.sheet-item.status-public_confirmed { border-left:5px solid #14845a; }
+.sheet-status-select { min-width:135px; font-size:10px; height:24px; }
+.s360-help-center { min-height:100vh; background:#edf1f4; color:#20262d; padding:24px; font-family:Arial,Helvetica,sans-serif; }
+.s360-help-head { max-width:1160px; margin:0 auto 18px; background:#252c34; color:#fff; border-bottom:7px solid #f28c28; padding:22px 26px; display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
+.s360-help-head h1 { margin:2px 0 5px; font-size:34px; }
+.s360-help-head p { margin:0; color:#dbe2e8; }
+.s360-help-eyebrow { font-size:11px; font-weight:800; letter-spacing:.12em; color:#f6a74d; }
+.s360-help-close { padding:9px 14px; border:1px solid #fff; background:#276fa8; color:#fff; cursor:pointer; }
+.s360-help-section { max-width:1160px; margin:0 auto 16px; background:#fff; border:1px solid #ccd3d9; border-radius:8px; padding:20px; box-shadow:0 6px 18px rgba(20,30,40,.08); }
+.s360-help-section h2 { margin:0 0 14px; }
+.s360-help-status-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.s360-help-status-grid article { border:2px solid; border-radius:7px; overflow:hidden; }
+.s360-help-status-grid article p { padding:10px 12px; margin:0; }
+.s360-help-status-title { color:#fff; padding:8px 10px; font-weight:800; }
+.s360-help-callout { border-left:7px solid #276fa8; background:#edf6fd; padding:15px; }
+.s360-help-steps { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.s360-help-steps article { display:grid; grid-template-columns:145px 1fr; gap:10px; border-bottom:1px solid #d7dce0; padding:9px 0; }
+@media (max-width:850px) { .s360-help-status-grid,.s360-help-steps { grid-template-columns:1fr; } .s360-help-head { flex-direction:column; } }

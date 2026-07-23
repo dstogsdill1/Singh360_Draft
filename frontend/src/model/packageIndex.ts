@@ -104,6 +104,8 @@ export function normalizePackagePages(input: PageModel[]): PageModel[] {
   const index = ordered.find(isSheetIndexPage);
   const reserved = new Set([cover?.id, index?.id].filter(Boolean) as string[]);
   const remaining = ordered.filter((page) => !reserved.has(page.id));
+  // S360 EXCLUDED PAGES STAY IN POSITION: Include/Exclude affects export and
+  // Page X of Y, not editor visibility or the user's chosen workbook/app order.
   const includedRest = remaining.filter((page) => page.include !== false);
   const excludedRest = remaining.filter((page) => page.include === false);
 
@@ -123,9 +125,9 @@ export function normalizePackagePages(input: PageModel[]): PageModel[] {
       sheetTab: cleanText(index.sheetTab) || 'Sheet Index',
     });
   }
-  arranged.push(...includedRest, ...excludedRest);
+  arranged.push(...remaining);
 
-  if (!cover && !index) arranged = [...includedRest, ...excludedRest];
+  if (!cover && !index) arranged = [...remaining];
 
   const total = arranged.filter((page) => page.include !== false).length;
   let pageNumber = 0;

@@ -57,12 +57,14 @@ import BackupRecoveryModal from './components/BackupRecoveryModal';
 import BusModal from './components/BusModal';
 import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
+import HelpCenter from './components/HelpCenter';
 
 function getUrlParams() {
   const params = new URLSearchParams(window.location.search);
   return {
     projectId: params.get('project'),
     print: params.get('print') === '1',
+    help: params.get('help') === '1',
   };
 }
 
@@ -88,7 +90,7 @@ function withPageNumbers(pages: PageModel[]): PageModel[] {
 }
 
 export default function App() {
-  const { projectId: initialProjectId, print: printMode } = getUrlParams();
+  const { projectId: initialProjectId, print: printMode, help: helpMode } = getUrlParams();
 
   const [project, setProject] = useState<ProjectModel | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
@@ -1891,6 +1893,17 @@ export default function App() {
     />
   );
 
+  if (helpMode) {
+    return (
+      <HelpCenter
+        onClose={() => {
+          const target = initialProjectId ? `/app?project=${initialProjectId}` : '/app';
+          window.location.assign(target);
+        }}
+      />
+    );
+  }
+
   // ── Empty state (no project loaded yet) ──
   if (!project || !activePage) {
     return (
@@ -1993,6 +2006,7 @@ export default function App() {
           canRestorePageRebuild={canRestorePageRebuild}
           onReplacePageSource={replaceCurrentPageSource}
           onExportPageSource={() => void exportCurrentSourceSheet()}
+          onOpenHelp={() => window.open('/app?help=1', '_blank', 'noopener,noreferrer')}
           activeTool={activeTool}
           snap={snap}
           overlayMode={overlayMode}

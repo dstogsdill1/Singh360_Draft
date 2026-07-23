@@ -633,70 +633,76 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
                 <img src={rendered.pngUrl} alt="Final highlighted drawing" />
               </section>
               <aside className="sm-output-actions">
-                <h3>Done</h3>
-                <p>{rendered.acceptedCount} highlights are in the final drawing.</p>
-                <button className="symbol-mapper-primary sm-download" disabled={loading} onClick={() => void downloadPrimaryPdf()}>
-                  {loading ? 'Preparing download…' : addCountPage && countPageRows.length ? 'Download highlighted + count PDF' : 'Download highlighted PDF'}
-                </button>
-                {onAddPage && (
-                  <div className="sm-add-page-box">
-                    <div className="sm-output-field-row">
-                      <label>
-                        Sheet code
-                        <input value={sheetCode} onChange={(event: ChangeEvent<HTMLInputElement>) => { setSheetCode(event.target.value); setCountPackage(null); }} />
-                      </label>
-                      <label>
-                        Page title
-                        <input value={pageTitle} onChange={(event: ChangeEvent<HTMLInputElement>) => { setPageTitle(event.target.value); setCountPackage(null); }} />
-                      </label>
-                    </div>
-                    <p className="sm-output-hint">These are read from the PDF filename when available. You can change either one before adding the page.</p>
-                    <div className="sm-count-page-card">
-                      <label className="sm-count-page-toggle">
-                        <input type="checkbox" checked={addCountPage} onChange={(event: ChangeEvent<HTMLInputElement>) => { setAddCountPage(event.target.checked); setCountPackage(null); }} />
-                        <span>
-                          <strong>Add a separate Symbol Count Summary page</strong>
-                          <small>Option A · final Count equals Included. Zero-count and ignored symbols are omitted.</small>
-                        </span>
-                      </label>
-                      {addCountPage && (
-                        <>
-                          <div className="sm-output-field-row sm-count-page-fields">
-                            <label>
-                              Summary sheet code
-                              <input value={countSheetCode} onChange={(event: ChangeEvent<HTMLInputElement>) => { setCountSheetCode(event.target.value); setCountPackage(null); }} />
-                            </label>
-                            <label>
-                              Summary page title
-                              <input value={countPageTitle} onChange={(event: ChangeEvent<HTMLInputElement>) => { setCountPageTitle(event.target.value); setCountPackage(null); }} />
-                            </label>
-                          </div>
-                          <div className="sm-count-page-preview sm-count-emblem-preview">
-                            <div className="sm-count-page-preview-head">
-                              <strong>Reusable count emblem</strong>
-                              <span>{countPageRows.reduce((sum, row) => sum + row.included, 0)} total</span>
+                <div className="sm-output-actions-scroll">
+                  <h3>Done</h3>
+                  <p>{rendered.acceptedCount} highlights are in the final drawing.</p>
+                  <button className="symbol-mapper-primary sm-download" disabled={loading} onClick={() => void downloadPrimaryPdf()}>
+                    {loading ? 'Preparing download…' : addCountPage && countPageRows.length ? 'Download highlighted + count PDF' : 'Download highlighted PDF'}
+                  </button>
+                  {onAddPage && (
+                    <div className="sm-add-page-box">
+                      <div className="sm-output-field-row">
+                        <label>
+                          Sheet code
+                          <input value={sheetCode} onChange={(event: ChangeEvent<HTMLInputElement>) => { setSheetCode(event.target.value); setCountPackage(null); }} />
+                        </label>
+                        <label>
+                          Page title
+                          <input value={pageTitle} onChange={(event: ChangeEvent<HTMLInputElement>) => { setPageTitle(event.target.value); setCountPackage(null); }} />
+                        </label>
+                      </div>
+                      <p className="sm-output-hint">These are read from the PDF filename when available. You can change either one before adding the page.</p>
+                      <div className="sm-count-page-card">
+                        <label className="sm-count-page-toggle">
+                          <input type="checkbox" checked={addCountPage} onChange={(event: ChangeEvent<HTMLInputElement>) => { setAddCountPage(event.target.checked); setCountPackage(null); }} />
+                          <span>
+                            <strong>Add a separate Symbol Count Summary page</strong>
+                            <small>Option A · final Count equals Included. Zero-count and ignored symbols are omitted.</small>
+                          </span>
+                        </label>
+                        {addCountPage && (
+                          <>
+                            <div className="sm-output-field-row sm-count-page-fields">
+                              <label>
+                                Summary sheet code
+                                <input value={countSheetCode} onChange={(event: ChangeEvent<HTMLInputElement>) => { setCountSheetCode(event.target.value); setCountPackage(null); }} />
+                              </label>
+                              <label>
+                                Summary page title
+                                <input value={countPageTitle} onChange={(event: ChangeEvent<HTMLInputElement>) => { setCountPageTitle(event.target.value); setCountPackage(null); }} />
+                              </label>
                             </div>
-                            {countPageRows.length ? (
-                              <img
-                                src={symbolCountLegendDataUrl(countPageRows, countPageTitle, rendered.sourceName)}
-                                alt="Included symbol count legend"
-                              />
-                            ) : <p>No included symbols were confirmed.</p>}
-                            {countPageRows.length ? (
-                              <div className="sm-count-download-row">
-                                <button type="button" disabled={loading} onClick={() => void downloadCountLegend('png')}>Download count legend PNG</button>
-                                <button type="button" disabled={loading} onClick={() => void downloadCountLegend('svg')}>Download count legend SVG</button>
+                            <div className="sm-count-page-preview sm-count-emblem-preview">
+                              <div className="sm-count-page-preview-head">
+                                <strong>Reusable count emblem</strong>
+                                <span>{countPageRows.reduce((sum, row) => sum + row.included, 0)} total</span>
                               </div>
-                            ) : null}
-                          </div>
-                        </>
-                      )}
+                              {countPageRows.length ? (
+                                <img
+                                  src={symbolCountLegendDataUrl(countPageRows, countPageTitle, rendered.sourceName)}
+                                  alt="Included symbol count legend"
+                                />
+                              ) : <p>No included symbols were confirmed.</p>}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <button className="symbol-mapper-primary" disabled={loading} onClick={() => void addPage()}>
+                  )}
+                </div>
+                <div className="sm-output-action-dock" aria-label="Symbol Mapper save actions">
+                  {addCountPage && countPageRows.length ? (
+                    <div className="sm-count-download-row sm-count-download-row-docked">
+                      <button type="button" disabled={loading} onClick={() => void downloadCountLegend('png')}>Download count PNG</button>
+                      <button type="button" disabled={loading} onClick={() => void downloadCountLegend('svg')}>Download count SVG</button>
+                    </div>
+                  ) : null}
+                  {onAddPage ? (
+                    <button className="symbol-mapper-primary sm-add-output-pages" disabled={loading} onClick={() => void addPage()}>
                       {loading ? 'Adding and saving…' : addCountPage ? 'Add highlighted + count pages' : 'Add highlighted page'}
                     </button>
-                  </div>
-                )}
+                  ) : null}
+                </div>
               </aside>
             </div>
           )}

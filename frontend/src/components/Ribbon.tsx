@@ -16,6 +16,8 @@ export interface ViewControls {
   toggleSnap: () => void;
 }
 
+import TextBoxFormatControls from './TextBoxFormatControls';
+
 interface Props {
   saveStatus: string;
   saveLabel?: string;
@@ -359,7 +361,11 @@ export default function Ribbon({
                 </label>
                 <button className="ribbon-btn" disabled={!t} onClick={() => onUpdateSelection({ bold: false, italic: false, underline: false })} title="Clear formatting">Clear</button>
               </Group>
-            </>
+                          <TextBoxFormatControls
+                selection={selection}
+                onChange={onUpdateSelection}
+              />
+</>
           );
         })()}
 

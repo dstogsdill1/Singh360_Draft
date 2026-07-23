@@ -63,6 +63,7 @@ from core.vector_pdf_export import (
 )
 from core.vsdx_importer import import_vsdx
 from core.workbook_importer import import_workbook
+from core.workbook_status_sync import WorkbookSyncError, sync_project_from_workbook, sync_project_to_workbook
 
 HERE = Path(__file__).resolve().parent
 FRONTEND_DIST_DIR = HERE / "frontend" / "dist"
@@ -462,6 +463,10 @@ def get_project(project_id: str):
         abort(404)
     doc = ensure_project_shape(doc)
     doc = sync_project_sheet_index(doc)
+    try:
+        doc = sync_project_from_workbook(project_id, doc, store)
+    except WorkbookSyncError as exc:
+        doc.setdefault("workbookSync", {})["warning"] = str(exc)
     return jsonify(doc)
 
 
@@ -480,7 +485,10 @@ def save_project(project_id: str):
         return jsonify(_err("Project validation failed.", " | ".join(problems[:20]))), 400
 
     try:
+        data = sync_project_to_workbook(project_id, data, store)
         store.save(project_id, data)
+    except WorkbookSyncError as exc:
+        return jsonify(_err("Workbook synchronization failed.", str(exc))), 409
     except OSError as exc:
         app.logger.error("Could not write project %s: %s", project_id, exc)
         return jsonify(_err("Failed to save project.", str(exc))), 500

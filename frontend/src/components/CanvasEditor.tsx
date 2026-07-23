@@ -21,11 +21,90 @@ interface Props {
 const CANVAS_W = BODY_W;
 const CANVAS_H = BODY_H;
 const SNAP = 16;
-const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented'];
+const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented', 'textBoxFill', 'textBoxFillOpacity', 'textBoxStroke', 'textBoxStrokeWidth', 'textBoxPadding', 'textBoxRadius'];
+
+// S360 POWERPOINT TEXT BOX FORMATTING V1
+type S360PowerPointTextBox = Textbox & {
+  textBoxFill?: string;
+  textBoxFillOpacity?: number;
+  textBoxStroke?: string;
+  textBoxStrokeWidth?: number;
+  textBoxPadding?: number;
+  textBoxRadius?: number;
+};
+
+function s360RoundedBoxPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const r = Math.max(0, Math.min(radius, width / 2, height / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+const s360TextBoxPrototype = Textbox.prototype as unknown as {
+  _renderBackground?: (this: Textbox, ctx: CanvasRenderingContext2D) => void;
+  __s360PowerPointTextBoxPatched?: boolean;
+};
+
+if (!s360TextBoxPrototype.__s360PowerPointTextBoxPatched) {
+  const originalRenderBackground = s360TextBoxPrototype._renderBackground;
+  s360TextBoxPrototype._renderBackground = function s360TextBoxBackground(
+    this: Textbox,
+    ctx: CanvasRenderingContext2D,
+  ) {
+    if (originalRenderBackground) originalRenderBackground.call(this, ctx);
+    const box = this as S360PowerPointTextBox;
+    const fill = String(box.textBoxFill || 'transparent');
+    const stroke = String(box.textBoxStroke || 'transparent');
+    const strokeWidth = Math.max(0, Number(box.textBoxStrokeWidth || 0));
+    const padding = Math.max(0, Number(box.textBoxPadding ?? 8));
+    const radius = Math.max(0, Number(box.textBoxRadius || 0));
+    const opacity = Math.max(0, Math.min(1, Number(box.textBoxFillOpacity ?? 1)));
+    const textWidth = Math.max(1, Number(box.width || 1));
+    const textHeight = Math.max(1, Number(box.height || 1));
+    const width = textWidth + padding * 2;
+    const height = textHeight + padding * 2;
+    const x = -textWidth / 2 - padding;
+    const y = -textHeight / 2 - padding;
+
+    if ((fill && fill !== 'transparent') || (stroke && stroke !== 'transparent' && strokeWidth > 0)) {
+      ctx.save();
+      s360RoundedBoxPath(ctx, x, y, width, height, radius);
+      if (fill && fill !== 'transparent') {
+        ctx.globalAlpha = opacity;
+        ctx.fillStyle = fill;
+        ctx.fill();
+      }
+      if (stroke && stroke !== 'transparent' && strokeWidth > 0) {
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = strokeWidth;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  };
+  s360TextBoxPrototype.__s360PowerPointTextBoxPatched = true;
+}
 
 function summarize(obj: FabricObject): CanvasSelection {
   const anyObj = obj as unknown as Record<string, unknown>;
   const isText = obj.type === 'textbox' || obj.type === 'text' || 'fontSize' in obj;
+  const isTextBox = isText && (obj.type === 'textbox' || obj.type === 'text');
   const isConnector = obj.type === 'Connector' || 'arrowEnd' in obj;
   const isImage = obj.type === 'image';
   const isGroup = obj.type === 'group';
@@ -50,6 +129,13 @@ function summarize(obj: FabricObject): CanvasSelection {
     underline: anyObj.underline === true,
     textAlign: typeof anyObj.textAlign === 'string' ? (anyObj.textAlign as string) : undefined,
     isText,
+    isTextBox,
+    textBoxFill: typeof anyObj.textBoxFill === 'string' ? anyObj.textBoxFill : 'transparent',
+    textBoxFillOpacity: typeof anyObj.textBoxFillOpacity === 'number' ? anyObj.textBoxFillOpacity : 1,
+    textBoxStroke: typeof anyObj.textBoxStroke === 'string' ? anyObj.textBoxStroke : 'transparent',
+    textBoxStrokeWidth: typeof anyObj.textBoxStrokeWidth === 'number' ? anyObj.textBoxStrokeWidth : 0,
+    textBoxPadding: typeof anyObj.textBoxPadding === 'number' ? anyObj.textBoxPadding : 8,
+    textBoxRadius: typeof anyObj.textBoxRadius === 'number' ? anyObj.textBoxRadius : 0,
     isConnector,
     connectorKind: typeof anyObj.connectorKind === 'string' ? (anyObj.connectorKind as CanvasSelection['connectorKind']) : (isConnector ? 'line' : undefined),
     pointsCount: Array.isArray(anyObj.pointsData) ? anyObj.pointsData.length : (isConnector ? 2 : undefined),
@@ -74,7 +160,24 @@ function summarize(obj: FabricObject): CanvasSelection {
 }
 
 function makeText(x: number, y: number) {
-  return new Textbox('Text', { left: x, top: y, width: 200, fontSize: 20, fill: '#111', padding: 6 });
+  const text = new Textbox('Text', {
+    left: x,
+    top: y,
+    width: 200,
+    fontSize: 20,
+    fill: '#111111',
+    padding: 6,
+  }) as S360PowerPointTextBox;
+  Object.assign(text, {
+    objName: 'Text Box',
+    textBoxFill: 'transparent',
+    textBoxFillOpacity: 1,
+    textBoxStroke: 'transparent',
+    textBoxStrokeWidth: 0,
+    textBoxPadding: 8,
+    textBoxRadius: 0,
+  });
+  return text;
 }
 function makePageTitle(text: string) {
   const t = new Textbox((text || 'PAGE TITLE').toUpperCase(), {
@@ -1696,6 +1799,22 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         const o = c?.getActiveObject();
         if (!c || !o) return;
+      // S360 TEXT BOX PATCH APPLICATION
+      const textBoxPatch = patch as Partial<CanvasSelection>;
+      const textBoxObjects: FabricObject[] = o.type === 'activeselection'
+        ? (o as ActiveSelection).getObjects()
+        : [o];
+      textBoxObjects.forEach((item) => {
+        if (item.type !== 'textbox' && item.type !== 'text') return;
+        const rec = item as unknown as Record<string, unknown>;
+        if (textBoxPatch.textBoxFill !== undefined) rec.textBoxFill = textBoxPatch.textBoxFill;
+        if (textBoxPatch.textBoxFillOpacity !== undefined) rec.textBoxFillOpacity = textBoxPatch.textBoxFillOpacity;
+        if (textBoxPatch.textBoxStroke !== undefined) rec.textBoxStroke = textBoxPatch.textBoxStroke;
+        if (textBoxPatch.textBoxStrokeWidth !== undefined) rec.textBoxStrokeWidth = textBoxPatch.textBoxStrokeWidth;
+        if (textBoxPatch.textBoxPadding !== undefined) rec.textBoxPadding = textBoxPatch.textBoxPadding;
+        if (textBoxPatch.textBoxRadius !== undefined) rec.textBoxRadius = textBoxPatch.textBoxRadius;
+        item.dirty = true;
+      });
         if ((o.lockMovementX || o.lockScalingX || o.lockRotation) && patch.locked !== false) return;
         const anyO = o as unknown as Record<string, unknown>;
         if (patch.fill !== undefined) o.set('fill', patch.fill);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PageModel } from '../model/types';
 import PageNavigator from './PageNavigator';
+import { pageIssueLabel, pageStatusClass } from '../model/pageStatus';
 import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
 
 interface Props {
@@ -19,7 +20,7 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
   const [editValue, setEditValue] = useState('');
   const activeRef = useRef<HTMLDivElement | null>(null);
   const stripRef = useRef<HTMLDivElement | null>(null);
-  const included = pages.filter((p) => p.include);
+  const visible = [...pages].sort((a, b) => a.order - b.order);
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
@@ -74,13 +75,13 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
           if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) stripRef.current?.scrollBy({ left: event.deltaY });
         }}
       >
-        {included.map((p) => (
+        {visible.map((p) => (
           <div
             key={p.id}
             role="button"
             tabIndex={0}
             ref={p.id === activePageId ? activeRef : null}
-            className={`page-tab ${p.id === activePageId ? 'active' : ''} ${p.generatedContinuation ? 'cont' : ''} ${dragOverId === p.id ? 'drag-over' : ''}`}
+            className={`page-tab ${p.id === activePageId ? 'active' : ''} ${p.generatedContinuation ? 'cont' : ''} ${dragOverId === p.id ? 'drag-over' : ''} ${pageStatusClass(p)}`}
             onClick={() => onSelect(p.id)}
             onDoubleClick={() => startEdit(p)}
             onContextMenu={(e) => {
@@ -92,7 +93,7 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
               if (e.key === 'Enter' || e.key === ' ') onSelect(p.id);
               else if (e.key === 'F2') startEdit(p);
             }}
-            title={`Page ${p.pageNumber ?? '—'} · ${p.displaySheetCode || p.sheetCode} ${p.sheetTitle} — double-click to rename`}
+            title={`${p.include ? 'Included' : 'Excluded'} · ${pageIssueLabel(p.issueStatus)} · Page ${p.pageNumber ?? '—'} · ${p.displaySheetCode || p.sheetCode} ${p.sheetTitle} — double-click to rename`}
             draggable={!isCoverPage(p) && !isSheetIndexPage(p) && editId !== p.id}
 
             onDragStart={(event) => {

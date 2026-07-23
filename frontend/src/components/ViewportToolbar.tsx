@@ -1,5 +1,6 @@
 import type { PageModel, ViewMode } from '../model/types';
 import type { ViewControls } from './Ribbon';
+import { PAGE_ISSUE_STATUSES, normalizePageIssueStatus } from '../model/pageStatus';
 
 interface Props {
   activePage: PageModel;
@@ -15,6 +16,8 @@ interface Props {
   canRebuildFromSource?: boolean;
   onRestorePageRebuild?: () => void;
   canRestorePageRebuild?: boolean;
+  onPatchPage?: (patch: Partial<PageModel>) => void;
+  onOpenHelp?: () => void;
 }
 
 export default function ViewportToolbar({
@@ -31,6 +34,8 @@ export default function ViewportToolbar({
   canRebuildFromSource,
   onRestorePageRebuild,
   canRestorePageRebuild,
+  onPatchPage,
+  onOpenHelp,
 }: Props) {
   const pageLabel = sourceOnly && viewMode === 'source'
     ? 'Source-only worksheet'
@@ -51,9 +56,9 @@ export default function ViewportToolbar({
         {sourceOnly && viewMode === 'source' ? (
           <button className="fit-btn publish-source" onClick={onPublishSource} disabled={!onPublishSource}>Publish Worksheet</button>
         ) : (
-          <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Published</button>
+          <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Drawing</button>
         )}
-        <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Draft</button>
+        <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Workbook Draft</button>
         {canRebuildFromSource && onRebuildFromSource ? (
           <button className="fit-btn" type="button" onClick={onRebuildFromSource} title="Rebuild this Published page from the linked Draft worksheet">Rebuild Published Page From Draft</button>
         ) : null}
@@ -61,6 +66,34 @@ export default function ViewportToolbar({
           <button className="fit-btn" type="button" onClick={onRestorePageRebuild} title="Restore the page from before the last rebuild (Ctrl+Z)">Restore Last Page Rebuild</button>
         ) : null}
         {sourceStatusLabel ? <span className="vt-source-status sb-item">{sourceStatusLabel}</span> : null}
+      </span>
+      <span className="vt-issue-status">
+        {PAGE_ISSUE_STATUSES.map((status) => {
+          const active = normalizePageIssueStatus(activePage.issueStatus) === status.value;
+          return (
+            <button
+              key={status.value}
+              type="button"
+              className={`vt-status-btn status-${status.value} ${active ? 'active' : ''}`}
+              title={`Set page status to ${status.label}`}
+              onClick={() => onPatchPage?.({
+                issueStatus: status.value,
+                statusUpdatedAt: new Date().toISOString(),
+                statusConfirmedAt: status.confirmed ? new Date().toISOString() : undefined,
+              })}
+            >
+              {status.confirmed ? '✓ ' : ''}{status.label}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className={`fit-btn vt-include-btn ${activePage.include ? 'included' : 'excluded'}`}
+          onClick={() => onPatchPage?.({ include: !activePage.include })}
+        >
+          {activePage.include ? 'Included in Drawing Set' : 'Excluded from Drawing Set'}
+        </button>
+        <button type="button" className="fit-btn vt-help-btn" onClick={onOpenHelp}>Open Help</button>
       </span>
       <span className="vt-spacer" />
       <span className="sb-item">{pageLabel}</span>

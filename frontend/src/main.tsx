@@ -6,6 +6,8 @@ import './styles/app.css';
 import './styles/sheet.css';
 import './styles/sourceParity.css';
 import './styles/symbolMapper.css';
+import './styles/textBoxFormatting.css';
+import './styles/statusHelp.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -1,5 +1,6 @@
 import { useState, type DragEvent } from 'react';
 import type { PageModel } from '../model/types';
+import { PAGE_ISSUE_STATUSES, normalizePageIssueStatus, pageStatusClass } from '../model/pageStatus';
 import { PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
 import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
 
@@ -79,7 +80,7 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
         return (
           <div
             key={p.id}
-            className={`sheet-item ${p.id === activePageId ? 'active' : ''} ${isCont ? 'cont' : ''} ${dragOverId === p.id ? 'drag-over' : ''}`}
+            className={`sheet-item ${p.id === activePageId ? 'active' : ''} ${isCont ? 'cont' : ''} ${dragOverId === p.id ? 'drag-over' : ''} ${pageStatusClass(p)}`}
             onClick={() => onSelect(p.id)}
             onDragOver={(event) => {
               if (!dragId || isCoverPage(p) || isSheetIndexPage(p)) return;
@@ -201,13 +202,29 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
             )}
 
             <div className="sheet-item-meta" onClick={(e) => e.stopPropagation()}>
-              <label title="Include this page in the exported package">
+              <select
+                className="sheet-status-select"
+                title="Page issue status"
+                value={normalizePageIssueStatus(p.issueStatus)}
+                onChange={(e) => patch(idx, {
+                  issueStatus: e.target.value as PageModel['issueStatus'],
+                  statusUpdatedAt: new Date().toISOString(),
+                  statusConfirmedAt: e.target.value.endsWith('_confirmed') ? new Date().toISOString() : undefined,
+                })}
+              >
+                {PAGE_ISSUE_STATUSES.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.confirmed ? '✓ ' : ''}{status.label}
+                  </option>
+                ))}
+              </select>
+              <label title="Include this page in the drawing set">
                 <input
                   type="checkbox"
                   checked={p.include}
                   onChange={() => onToggleInclude(p.id)}
                 />
-                include
+                include in drawing set
               </label>
               <select
                 className="sheet-item-type"

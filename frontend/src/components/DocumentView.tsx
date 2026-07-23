@@ -70,6 +70,7 @@ interface Props {
   onPublishSource?: () => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
+  onOpenHelp?: () => void;
 }
 
 export default function DocumentView({
@@ -109,6 +110,7 @@ export default function DocumentView({
   onPublishSource,
   onReplacePageSource,
   onExportPageSource,
+  onOpenHelp,
 }: Props) {
   const linkedWorksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
   const selectedWorksheet = selectedWorksheetId ? worksheets.find((w) => w.id === selectedWorksheetId) : undefined;
@@ -194,6 +196,8 @@ export default function DocumentView({
         onPublishSource={onPublishSource}
         onRestorePageRebuild={onRestorePageRebuild}
         canRestorePageRebuild={canRestorePageRebuild}
+        onPatchPage={(patch) => onPatchPage(activePage.id, patch)}
+        onOpenHelp={onOpenHelp}
       />
       <div
         className="sheet-viewport"
