@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -11,6 +13,10 @@ def utcnow_iso() -> str:
 
 
 PROJECT_SCHEMA_VERSION = 1
+_WORKBOOK_TEMP_NAME_RE = re.compile(
+    r"^(?:temp|preview)_[a-f0-9]{16}\.(?:xlsx|xlsm)$", re.IGNORECASE
+)
+_WORKBOOK_SUFFIXES = {".xlsx", ".xlsm"}
 
 
 def _clean_scalar(value: Any) -> Any:
@@ -92,6 +98,9 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
         "revisionHistory": [],
         "projectDisplayName": "",
         "projectFolder": "",
+        "projectSlug": "",
+        "sourceWorkbookName": "",
+        "lastSavedAt": "",
         "modified": created,
         "importWarnings": [],
         "archivedPages": [],
@@ -114,6 +123,110 @@ def recalc_page_numbers(project: dict[str, Any]) -> None:
             page["pageTotal"] = total
 
 
+def _is_real_workbook_name(value: Any) -> bool:
+    name = Path(str(value or "").strip()).name
+    return bool(
+        name
+        and Path(name).suffix.lower() in _WORKBOOK_SUFFIXES
+        and not _WORKBOOK_TEMP_NAME_RE.fullmatch(name)
+    )
+
+
+def _newest_source_workbook(project: dict[str, Any]) -> Path | None:
+    """Find the newest real workbook already stored inside this project package."""
+    folder = str(project.get("projectFolder") or "").strip()
+    if not folder:
+        return None
+    source_dir = Path(folder) / "sources" / "workbook"
+    try:
+        candidates = [
+            path
+            for path in source_dir.iterdir()
+            if path.is_file()
+            and path.suffix.lower() in _WORKBOOK_SUFFIXES
+            and not _WORKBOOK_TEMP_NAME_RE.fullmatch(path.name)
+        ]
+    except OSError:
+        return None
+    if not candidates:
+        return None
+
+    def modified_key(path: Path) -> tuple[float, str]:
+        try:
+            modified = path.stat().st_mtime
+        except OSError:
+            modified = 0.0
+        return modified, path.name.lower()
+
+    return max(candidates, key=modified_key)
+
+
+def _workbook_identity(project: dict[str, Any]) -> tuple[str, str]:
+    """Return the best supported workbook filename and project-local path."""
+    top_name = str(project.get("sourceWorkbookName") or "").strip()
+    if _is_real_workbook_name(top_name):
+        folder = str(project.get("projectFolder") or "").strip()
+        if folder:
+            matching = Path(folder) / "sources" / "workbook" / Path(top_name).name
+            if matching.is_file():
+                return matching.name, str(matching)
+        return Path(top_name).name, ""
+
+    sources = project.get("sources")
+    if isinstance(sources, list):
+        for source in sources:
+            if not isinstance(source, dict) or str(source.get("type") or "").lower() != "workbook":
+                continue
+            source_name = str(source.get("name") or "").strip()
+            if _is_real_workbook_name(source_name):
+                return Path(source_name).name, str(source.get("path") or "").strip()
+
+    stored_copy = _newest_source_workbook(project)
+    if stored_copy is not None:
+        return stored_copy.name, str(stored_copy)
+
+    metadata = project.get("metadata")
+    if isinstance(metadata, dict):
+        source_file = str(metadata.get("sourceFile") or "").strip()
+        if _is_real_workbook_name(source_file):
+            return Path(source_file).name, ""
+
+    return "", ""
+
+
+def _restore_original_workbook_identity(project: dict[str, Any]) -> None:
+    """Repair parser temp names without rebuilding pages or touching manual work.
+
+    Fresh ingest records the user-selected filename before project shaping. Older
+    broken projects may have lost that field, but their untouched workbook copy
+    remains under ``<projectFolder>/sources/workbook``. The newest real workbook
+    in that folder is used only to repair identity/path metadata.
+    """
+    original_name, source_path = _workbook_identity(project)
+    if not original_name:
+        return
+
+    project["sourceWorkbookName"] = original_name
+    metadata = project.get("metadata")
+    if isinstance(metadata, dict):
+        source_file = str(metadata.get("sourceFile") or "").strip()
+        if not _is_real_workbook_name(source_file):
+            metadata["sourceFile"] = original_name
+
+    sources = project.get("sources")
+    if isinstance(sources, list):
+        for source in sources:
+            if not isinstance(source, dict) or str(source.get("type") or "").lower() != "workbook":
+                continue
+            source_name = str(source.get("name") or "").strip()
+            if not _is_real_workbook_name(source_name):
+                source["name"] = original_name
+            if source_path:
+                recorded_path = str(source.get("path") or "").strip()
+                if not recorded_path or _WORKBOOK_TEMP_NAME_RE.fullmatch(Path(recorded_path).name):
+                    source["path"] = source_path
+
+
 def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
     base = default_project(project.get("id"))
     merged = deepcopy(base)
@@ -125,8 +238,14 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
     for key in ("sources", "worksheets", "pages", "templates", "assets", "revisionLog", "revisionHistory"):
         if isinstance(project.get(key), list):
             merged[key] = project[key]
-    # Preserve string identity fields set by the project store / rename flow.
-    for key in ("projectDisplayName", "projectFolder"):
+    # Preserve identity fields set by ingest, the project store, and rename flow.
+    for key in (
+        "projectDisplayName",
+        "projectFolder",
+        "projectSlug",
+        "sourceWorkbookName",
+        "lastSavedAt",
+    ):
         if isinstance(project.get(key), str) and project[key]:
             merged[key] = project[key]
     if "paginationLocked" in project:
@@ -134,6 +253,7 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
     if "workbookSync" in project and isinstance(project["workbookSync"], dict):
         merged["workbookSync"] = project["workbookSync"]
 
+    _restore_original_workbook_identity(merged)
     merged = sanitize_json(merged)
     merged["modified"] = utcnow_iso()
     recalc_page_numbers(merged)
