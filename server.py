@@ -498,7 +498,7 @@ def save_project(project_id: str):
         return jsonify(_err("Project validation failed.", " | ".join(problems[:20]))), 400
 
     try:
-        # Local-first persistence: an external workbook can never block app/project saves.
+        # Local-first persistence: an external workbook can never block project saves.
         data = save_local_then_try_sync(project_id, data, store)
     except OSError as exc:
         app.logger.error("Could not write project %s: %s", project_id, exc)

@@ -69,6 +69,8 @@ def main() -> int:
         "externalLinkApi": (not repository_mode) or ("linkWorkbookPath" in client and "/workbook-link/pick" in client),
         "nativePickerRoute": (not repository_mode) or "choose_workbook_path_native" in server,
         "localFirstSave": (not repository_mode) or "save_local_then_try_sync" in server,
+        "structuralServerPatchApplied": (not repository_mode) or "maybe_pull_on_open(project_id, doc, store)" in server,
+        "workbookFailureDoesNotReturn409": (not repository_mode) or "Workbook synchronization failed." not in server,
         "homeButton": (not repository_mode) or "Project Home" in ribbon,
         "externalPathPreferred": (not repository_mode) or ("external-workbook-link" in sync or "workbookSync" in sync),
         "fetchOnStart": "fetch origin --prune" in start and "pull --ff-only" in start,
