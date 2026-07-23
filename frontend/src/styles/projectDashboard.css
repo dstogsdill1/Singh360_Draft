@@ -84,3 +84,25 @@
   .project-summary-card { grid-template-columns:1fr; }
   .health-card { grid-template-columns:repeat(2,1fr); }
 }
+
+.workbook-selection-pending {
+  margin: 0 16px 10px;
+  padding: 12px;
+  border: 2px solid #f28c28;
+  border-left-width: 7px;
+  border-radius: 6px;
+  background: #fff7e8;
+}
+.workbook-selection-pending strong,
+.workbook-selection-pending code,
+.workbook-selection-pending span { display: block; }
+.workbook-selection-pending code {
+  margin: 7px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 11px;
+}
+.workbook-selection-pending span {
+  color: #745017;
+  font-size: 11px;
+}

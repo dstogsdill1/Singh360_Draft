@@ -166,9 +166,42 @@ def status_payload(project_id: str, project: dict[str, Any], store: Any) -> dict
     }
 
 
+def _project_name(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _project_name_key(value: Any) -> str:
+    return "".join(ch.lower() for ch in _project_name(value) if ch.isalnum())
+
+
+def _current_project_name(project: dict[str, Any]) -> str:
+    metadata = project.get("metadata") if isinstance(project.get("metadata"), dict) else {}
+    return (
+        _project_name(project.get("projectDisplayName"))
+        or _project_name(metadata.get("projectName"))
+        or _project_name(metadata.get("project"))
+    )
+
+
+def _validate_workbook_project_name(project: dict[str, Any], meta: dict[str, Any]) -> None:
+    workbook_name = _project_name(meta.get("projectName"))
+    current_name = _current_project_name(project)
+    if not workbook_name or not current_name:
+        return
+    workbook_key = _project_name_key(workbook_name)
+    current_key = _project_name_key(current_name)
+    if workbook_key and current_key and workbook_key != current_key:
+        raise WorkbookSyncError(
+            "The selected workbook appears to belong to a different project. "
+            f"Active project: {current_name}. Workbook project: {workbook_name}. "
+            "Select the correct project on the left before confirming the workbook."
+        )
+
+
 def set_link(project_id: str, project: dict[str, Any], store: Any, path_value: str) -> tuple[dict[str, Any], dict[str, Any]]:
     path = normalize_path(path_value)
     meta = workbook_metadata(path)
+    _validate_workbook_project_name(project, meta)
     project = dict(project)
     sync = dict(project.get("workbookSync") or {})
     sync.update({

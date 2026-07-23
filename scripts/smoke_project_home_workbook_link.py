@@ -83,6 +83,12 @@ def main() -> int:
         "dashboardCss": "PROJECT HOME + EXTERNAL WORKBOOK LINK" in (root / "frontend/src/styles/projectDashboard.css").read_text(encoding="utf-8"),
         "projectLastSavedType": (not repository_mode) or "lastSavedAt?: string;" in types,
         "dashboardLastSaveFallback": "project.lastSavedAt || project.modified" in dash,
+        "browseDoesNotUseGenericReload": "run('Browse workbook'" not in dash,
+        "browseKeepsSelectedPath": "setLinkPath(selected)" in dash,
+        "pendingWorkbookSelection": "Selected workbook — not linked yet" in dash,
+        "projectMismatchGuard": "_validate_workbook_project_name" in (
+            root / "core/workbook_link_manager.py"
+        ).read_text(encoding="utf-8"),
     }
     if not all(checks.values()):
         raise AssertionError(checks)

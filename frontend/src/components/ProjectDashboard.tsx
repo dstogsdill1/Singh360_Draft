@@ -83,6 +83,10 @@ export default function ProjectDashboard({ project }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
 
+  const selectedWorkbookPending = Boolean(
+    linkPath.trim() && linkPath.trim() !== String(link?.path || '').trim(),
+  );
+
   const included = project?.pages.filter((p) => p.include).length ?? 0;
   const excluded = (project?.pages.length ?? 0) - included;
   const stageCounts = useMemo(() => {
@@ -110,6 +114,30 @@ export default function ProjectDashboard({ project }: Props) {
       await reload();
     } catch (err) {
       setMessage(`${label} failed: ${String(err)}`);
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const browseWorkbook = async () => {
+    if (!project) return;
+    setBusy('Browse workbook');
+    setMessage('');
+    try {
+      const result = await pickWorkbookPath(project.id);
+      if (result.cancelled) {
+        setMessage('Workbook selection cancelled. The existing link was not changed.');
+        return;
+      }
+      const selected = (result.selectedPath || '').trim();
+      if (!selected) {
+        setMessage('No workbook was selected. The existing link was not changed.');
+        return;
+      }
+      setLinkPath(selected);
+      setMessage('Workbook selected — not linked yet. Review the path, then click Confirm Selected Workbook.');
+    } catch (err) {
+      setMessage(`Browse workbook failed: ${String(err)}`);
     } finally {
       setBusy('');
     }
@@ -242,16 +270,7 @@ export default function ProjectDashboard({ project }: Props) {
                   <button
                     type="button"
                     disabled={!!busy}
-                    onClick={() => void run('Browse workbook', async () => {
-                      if (!project) return;
-                      const result = await pickWorkbookPath(project.id);
-                      if (result.cancelled) {
-                        setMessage('Workbook selection cancelled.');
-                        return;
-                      }
-                      setLinkPath(result.selectedPath || '');
-                      setMessage('Workbook selected. Click Confirm Link to validate and link it.');
-                    })}
+                    onClick={() => void browseWorkbook()}
                   >
                     Browse
                   </button>
@@ -265,9 +284,16 @@ export default function ProjectDashboard({ project }: Props) {
                       setLink(result.status);
                     })}
                   >
-                    Confirm Link
+                    {selectedWorkbookPending ? 'Confirm Selected Workbook' : 'Confirm Link'}
                   </button>
                 </div>
+                {selectedWorkbookPending && (
+                  <div className="workbook-selection-pending">
+                    <strong>Selected workbook — not linked yet</strong>
+                    <code>{linkPath}</code>
+                    <span>The existing workbook link stays active until you click Confirm Selected Workbook.</span>
+                  </div>
+                )}
                 <div className="workbook-status-detail">
                   <strong>{link?.message || 'Choose the project workbook.'}</strong>
                   {link?.path && <code>{link.path}</code>}
