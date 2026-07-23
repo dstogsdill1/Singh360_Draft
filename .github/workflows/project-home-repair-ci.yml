@@ -79,19 +79,33 @@ jobs:
           import os
           import requests
 
-          path = 'sample_data/S360_EMS_Simple_Workbook.xlsx'
+          expected_name = 'S360_EMS_Simple_Workbook.xlsx'
+          path = f'sample_data/{expected_name}'
           with open(path, 'rb') as workbook:
               response = requests.post(
                   'http://127.0.0.1:8765/api/projects/new',
-                  files={'file': ('S360_EMS_Simple_Workbook.xlsx', workbook)},
+                  files={'file': (expected_name, workbook)},
                   timeout=120,
               )
           response.raise_for_status()
           payload = response.json()
           project_id = payload['id']
+
+          project_response = requests.get(
+              f'http://127.0.0.1:8765/api/projects/{project_id}',
+              timeout=30,
+          )
+          project_response.raise_for_status()
+          project = project_response.json()
+          assert project.get('sourceWorkbookName') == expected_name, project.get('sourceWorkbookName')
+          assert project.get('metadata', {}).get('sourceFile') == expected_name, project.get('metadata', {}).get('sourceFile')
+          workbook_sources = [source for source in project.get('sources', []) if source.get('type') == 'workbook']
+          assert workbook_sources and workbook_sources[0].get('name') == expected_name, workbook_sources
+
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
               env_file.write(f'PROJECT_ID={project_id}\n')
           print(f'Disposable project: {project_id}')
+          print(f'Workbook identity: {expected_name}')
           PY
 
       - name: Verify Project Home and page review in browser
@@ -103,6 +117,7 @@ jobs:
           from playwright.sync_api import sync_playwright
 
           base = 'http://127.0.0.1:8765/app'
+          expected_name = 'S360_EMS_Simple_Workbook.xlsx'
           project_id = os.environ['PROJECT_ID']
           artifacts = Path('browser-artifacts')
           console_errors = []
@@ -120,6 +135,8 @@ jobs:
               page.goto(f'{base}?project={project_id}', wait_until='networkidle')
               page.get_by_role('button', name='Open Editor').wait_for()
               page.get_by_role('button', name='Review Included Pages').wait_for()
+              page.get_by_text(expected_name, exact=True).wait_for()
+              assert 'temp_' not in page.locator('body').inner_text().lower(), 'Temporary parser filename leaked into Project Home.'
               page.screenshot(path=str(artifacts / '02-project-home.png'), full_page=True)
 
               page.goto(f'{base}?project={project_id}&review=1', wait_until='networkidle')
