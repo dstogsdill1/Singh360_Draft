@@ -1,0 +1,58 @@
+name: Project Home Repair CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile backend
+        run: python -m compileall server.py core
+
+      - name: Smoke-import sample workbook
+        run: python smoke_import_workbook.py sample_data/S360_EMS_Simple_Workbook.xlsx
+
+      - name: Check API health route
+        run: |
+          python - <<'PY'
+          from server import app
+          client = app.test_client()
+          response = client.get('/api/health')
+          assert response.status_code == 200, response.data
+          assert response.get_json() == {'ok': True}, response.get_json()
+          print('API health: PASS')
+          PY
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
