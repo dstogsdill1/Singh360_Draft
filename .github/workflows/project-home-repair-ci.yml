@@ -108,7 +108,7 @@ jobs:
           print(f'Workbook identity: {expected_name}')
           PY
 
-      - name: Verify Project Home and page review in browser
+      - name: Verify Project Home, page review, and editor handoff
         run: |
           mkdir -p browser-artifacts
           python - <<'PY'
@@ -141,10 +141,18 @@ jobs:
 
               page.goto(f'{base}?project={project_id}&review=1', wait_until='networkidle')
               page.get_by_role('heading', name='Review drawing pages').wait_for()
-              page.get_by_role('button', name='Save & Open Editor').wait_for()
+              save_and_open = page.get_by_role('button', name='Save & Open Editor')
+              save_and_open.wait_for()
               assert page.locator('tbody tr').count() > 0, 'Page review table is empty.'
               assert page.locator('.vite-error-overlay, #webpack-dev-server-client-overlay').count() == 0
               page.screenshot(path=str(artifacts / '03-page-review.png'), full_page=True)
+
+              save_and_open.click()
+              page.wait_for_url(f'**/app?project={project_id}&editor=1', timeout=30000)
+              page.get_by_text('Published Package', exact=True).wait_for(timeout=30000)
+              page.get_by_text('Workbook Drafts', exact=True).wait_for(timeout=30000)
+              assert page.locator('.vite-error-overlay, #webpack-dev-server-client-overlay').count() == 0
+              page.screenshot(path=str(artifacts / '04-editor-handoff.png'), full_page=True)
 
               if console_errors:
                   raise AssertionError(f'Browser console errors: {console_errors}')
