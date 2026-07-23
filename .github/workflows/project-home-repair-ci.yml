@@ -187,8 +187,15 @@ jobs:
 
               save_and_open.click()
               page.wait_for_url(f'**/app?project={project_id}&editor=1', timeout=30000)
-              page.get_by_text('Published Package', exact=True).wait_for(timeout=30000)
-              page.get_by_text('Workbook Drafts', exact=True).wait_for(timeout=30000)
+              page.locator('.app-shell').wait_for(timeout=30000)
+              page.locator('.editor-center').wait_for(timeout=30000)
+              assert page.get_by_text('No workbook loaded', exact=True).count() == 0, 'Editor opened without the reviewed project.'
+              navigation_rail = page.locator('.panel-rail-left')
+              if navigation_rail.is_visible():
+                  navigation_rail.hover()
+              page.locator('.panel-left').wait_for(timeout=10000)
+              page.get_by_text('Published Package', exact=True).wait_for(timeout=10000)
+              page.get_by_text('Workbook Drafts', exact=True).wait_for(timeout=10000)
               assert page.locator('.vite-error-overlay, #webpack-dev-server-client-overlay').count() == 0
               page.screenshot(path=str(artifacts / '04-editor-handoff.png'), full_page=True)
 
