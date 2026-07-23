@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -11,6 +12,9 @@ def utcnow_iso() -> str:
 
 
 PROJECT_SCHEMA_VERSION = 1
+_WORKBOOK_TEMP_NAME_RE = re.compile(
+    r"^(?:temp|preview)_[a-f0-9]{16}\.(?:xlsx|xlsm)$", re.IGNORECASE
+)
 
 
 def _clean_scalar(value: Any) -> Any:
@@ -92,6 +96,9 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
         "revisionHistory": [],
         "projectDisplayName": "",
         "projectFolder": "",
+        "projectSlug": "",
+        "sourceWorkbookName": "",
+        "lastSavedAt": "",
         "modified": created,
         "importWarnings": [],
         "archivedPages": [],
@@ -113,6 +120,35 @@ def recalc_page_numbers(project: dict[str, Any]) -> None:
             page["pageTotal"] = total
 
 
+def _restore_original_workbook_identity(project: dict[str, Any]) -> None:
+    """Keep the user-selected workbook name instead of the disposable parser name.
+
+    New-project ingest writes the upload to ``temp_<project-id>.xlsx`` before
+    parsing it. ``server.py`` then records ``sourceWorkbookName`` with the real
+    uploaded filename. Older project shaping discarded that top-level field,
+    leaving the temporary filename in project properties and title blocks.
+    """
+    original_name = str(project.get("sourceWorkbookName") or "").strip()
+    if not original_name:
+        return
+
+    project["sourceWorkbookName"] = original_name
+    metadata = project.get("metadata")
+    if isinstance(metadata, dict):
+        source_file = str(metadata.get("sourceFile") or "").strip()
+        if not source_file or _WORKBOOK_TEMP_NAME_RE.fullmatch(source_file):
+            metadata["sourceFile"] = original_name
+
+    sources = project.get("sources")
+    if isinstance(sources, list):
+        for source in sources:
+            if not isinstance(source, dict) or str(source.get("type") or "").lower() != "workbook":
+                continue
+            source_name = str(source.get("name") or "").strip()
+            if not source_name or _WORKBOOK_TEMP_NAME_RE.fullmatch(source_name):
+                source["name"] = original_name
+
+
 def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
     base = default_project(project.get("id"))
     merged = deepcopy(base)
@@ -124,13 +160,20 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
     for key in ("sources", "worksheets", "pages", "templates", "assets", "revisionLog", "revisionHistory"):
         if isinstance(project.get(key), list):
             merged[key] = project[key]
-    # Preserve string identity fields set by the project store / rename flow.
-    for key in ("projectDisplayName", "projectFolder"):
+    # Preserve string identity fields set by ingest / project store / rename flow.
+    for key in (
+        "projectDisplayName",
+        "projectFolder",
+        "projectSlug",
+        "sourceWorkbookName",
+        "lastSavedAt",
+    ):
         if isinstance(project.get(key), str) and project[key]:
             merged[key] = project[key]
     if "paginationLocked" in project:
         merged["paginationLocked"] = bool(project["paginationLocked"])
 
+    _restore_original_workbook_identity(merged)
     merged = sanitize_json(merged)
     merged["modified"] = utcnow_iso()
     recalc_page_numbers(merged)
