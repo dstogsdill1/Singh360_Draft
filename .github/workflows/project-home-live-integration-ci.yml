@@ -105,23 +105,24 @@ jobs:
           cat /tmp/singh360-server.log
           exit 1
 
-      - name: Create disposable synchronized project
+      - name: Create disposable synchronized long-package project
         run: |
           python - <<'PY'
           import os
           import requests
 
+          base = 'http://127.0.0.1:8766'
           filename = 'S360_EMS_Simple_Workbook.xlsx'
           with open(f'sample_data/{filename}', 'rb') as workbook:
               created = requests.post(
-                  'http://127.0.0.1:8766/api/projects/new',
+                  f'{base}/api/projects/new',
                   files={'file': (filename, workbook)},
                   timeout=180,
               )
           created.raise_for_status()
           project_id = created.json()['id']
           project_response = requests.get(
-              f'http://127.0.0.1:8766/api/projects/{project_id}',
+              f'{base}/api/projects/{project_id}',
               timeout=120,
           )
           project_response.raise_for_status()
@@ -130,9 +131,49 @@ jobs:
           assert project.get('metadata', {}).get('sourceFile') == filename
           assert project.get('workbookSync', {}).get('lastSyncUtc'), project.get('workbookSync')
           assert len(project.get('pages', [])) > 0
+
+          # Add enough app-owned drawing pages to prove the real review table can
+          # scroll through a long drawing package. These are disposable CI pages.
+          first_order = max(int(page.get('order') or 0) for page in project['pages']) + 1
+          statuses = ('draft', 'draft_confirmed', 'public', 'public_confirmed')
+          for index in range(1, 31):
+              project['pages'].append({
+                  'id': f'ci_review_page_{index:02d}',
+                  'order': first_order + index - 1,
+                  'include': index % 5 != 0,
+                  'issueStatus': statuses[(index - 1) % len(statuses)],
+                  'sheetCode': f'CI {index:02d}',
+                  'displaySheetCode': f'CI {index:02d}',
+                  'sheetTitle': f'CI REVIEW DRAWING PAGE {index:02d}',
+                  'sheetTab': f'CI REVIEW {index:02d}',
+                  'pageType': 'canvas',
+                  'pageFamily': 'layout',
+                  'sourceMode': 'App',
+                  'syncDirection': 'App to Workbook',
+                  'renderMode': 'normalized',
+                  'templateId': 'ansi-b-standard',
+                  'blocks': [],
+                  'canvasObjects': [],
+                  'notes': 'Disposable long-package browser verification page.',
+                  'pageGroupId': f'ci_review_page_{index:02d}',
+                  'continuationOf': None,
+                  'continuationIndex': 0,
+                  'generatedContinuation': False,
+              })
+
+          saved = requests.post(
+              f'{base}/api/projects/{project_id}',
+              json=project,
+              timeout=240,
+          )
+          saved.raise_for_status()
+          synchronized = saved.json()
+          assert len(synchronized.get('pages', [])) >= 30, len(synchronized.get('pages', []))
+          assert synchronized.get('workbookSync', {}).get('lastSyncUtc')
+
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
               env_file.write(f'PROJECT_ID={project_id}\n')
-          print(f'Disposable project: {project_id}')
+          print(f'Disposable long-package project: {project_id}')
           PY
 
       - name: Verify Project Home, review scrolling, tools, and editor return path
@@ -181,6 +222,7 @@ jobs:
               page.get_by_role('heading', name='Review Drawing Pages').wait_for()
               table_scroll = page.locator('.review-table-wrap')
               table_scroll.wait_for()
+              assert page.locator('.review-table tbody tr').count() >= 30
               dimensions = table_scroll.evaluate('(el) => ({scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, overflowY: getComputedStyle(el).overflowY})')
               assert dimensions['overflowY'] in ('auto', 'scroll'), dimensions
               assert dimensions['scrollHeight'] > dimensions['clientHeight'], dimensions
