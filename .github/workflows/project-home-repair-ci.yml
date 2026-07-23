@@ -29,7 +29,7 @@ jobs:
         run: python -m compileall server.py core
 
       - name: Smoke-import sample workbook
-        run: python smoke_import_workbook.py sample_data/S360_EMS_Simple_Workbook.xlsx
+        run: python scripts/smoke_import_workbook.py sample_data/S360_EMS_Simple_Workbook.xlsx
 
       - name: Check API health route
         run: |
