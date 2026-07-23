@@ -70,7 +70,12 @@ def workbook_metadata(path: Path) -> dict[str, Any]:
             raise WorkbookSyncError("This is not a Singh360 workbook. It must contain 00_PROJECT_META and 00_INDEX.")
         meta: dict[str, str] = {}
         ws = wb["00_PROJECT_META"]
-        for row in ws.iter_rows(min_row=1, max_row=min(max(ws.max_row, 1), 80), min_col=1, max_col=2, values_only=True):
+        for row_number, row in enumerate(
+            ws.iter_rows(min_row=1, min_col=1, max_col=2, values_only=True),
+            start=1,
+        ):
+            if row_number > 80:
+                break
             key = str(row[0] or "").strip()
             if key:
                 meta[key.casefold()] = str(row[1] or "").strip()
@@ -305,22 +310,56 @@ def save_local_then_try_sync(project_id: str, project: dict[str, Any], store: An
 
 
 def choose_path_native() -> str:
+    """Open a Windows workbook picker in its own STA process.
+
+    Flask handles requests on worker threads. tkinter can display a dialog from
+    those threads and then fail during cleanup, which produced the HTML 500 after
+    the user selected a valid G: drive workbook. A separate PowerShell STA
+    process owns the Windows Forms dialog and returns only the selected path.
+    """
     if os.name != "nt":
-        raise WorkbookSyncError("Native workbook browsing is available only in the local Windows application.")
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        selected = filedialog.askopenfilename(
-            title="Choose the Singh360 project workbook",
-            filetypes=[("Excel workbooks", "*.xlsx *.xlsm"), ("All files", "*.*")],
+        raise WorkbookSyncError(
+            "Native workbook browsing is available only in the local Windows application."
         )
-        root.destroy()
-    except Exception as exc:
-        raise WorkbookSyncError(f"The Windows workbook picker could not open: {exc}") from exc
-    return selected or ""
+
+    script = r"""
+Add-Type -AssemblyName System.Windows.Forms
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Title = 'Choose the Singh360 project workbook'
+$dialog.Filter = 'Excel workbooks (*.xlsx;*.xlsm)|*.xlsx;*.xlsm|All files (*.*)|*.*'
+$dialog.CheckFileExists = $true
+$dialog.CheckPathExists = $true
+$dialog.Multiselect = $false
+$dialog.RestoreDirectory = $true
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    [Console]::Out.Write($dialog.FileName)
+}
+"""
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-STA",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=900,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip()
+        raise WorkbookSyncError(
+            "The Windows workbook picker failed."
+            + (f" {detail}" if detail else "")
+        )
+    return (completed.stdout or "").strip()
 
 
 def open_workbook(path: Path) -> None:

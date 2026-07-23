@@ -1372,12 +1372,18 @@ export async function linkWorkbookPath(projectId: string, path: string): Promise
   return res.json();
 }
 
-export async function pickWorkbookPath(projectId: string): Promise<{ cancelled?: boolean; project?: ProjectModel; status: WorkbookLinkStatus }> {
+export async function pickWorkbookPath(projectId: string): Promise<{
+  cancelled: boolean;
+  selectedPath?: string;
+  status: WorkbookLinkStatus;
+}> {
   const res = await fetch(`/api/projects/${projectId}/workbook-link/pick`, { method: 'POST' });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const payload = await res.json().catch(async () => ({
+    error: await res.text(),
+  }));
+  if (!res.ok) throw new Error(payload.detail || payload.error || 'Workbook picker failed.');
+  return payload;
 }
-
 export async function syncWorkbookLink(projectId: string): Promise<{ project: ProjectModel; status: WorkbookLinkStatus }> {
   const res = await fetch(`/api/projects/${projectId}/workbook-link/sync`, { method: 'POST' });
   if (!res.ok) throw new Error(await res.text());

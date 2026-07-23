@@ -245,9 +245,12 @@ export default function ProjectDashboard({ project }: Props) {
                     onClick={() => void run('Browse workbook', async () => {
                       if (!project) return;
                       const result = await pickWorkbookPath(project.id);
-                      if (result.cancelled) return;
-                      setLink(result.status);
-                      setLinkPath(result.status.path || '');
+                      if (result.cancelled) {
+                        setMessage('Workbook selection cancelled.');
+                        return;
+                      }
+                      setLinkPath(result.selectedPath || '');
+                      setMessage('Workbook selected. Click Confirm Link to validate and link it.');
                     })}
                   >
                     Browse

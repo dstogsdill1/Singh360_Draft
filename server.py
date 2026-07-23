@@ -546,12 +546,17 @@ def workbook_link_pick(project_id: str):
         abort(404)
     try:
         selected = choose_workbook_path_native()
-        if not selected:
-            return jsonify({"ok": True, "cancelled": True, "status": status_payload(project_id, doc, store)})
-        doc, status = set_workbook_link(project_id, doc, store, selected)
-        return jsonify({"ok": True, "cancelled": False, "project": doc, "status": status})
+        return jsonify({
+            "ok": True,
+            "cancelled": not bool(selected),
+            "selectedPath": selected,
+            "status": status_payload(project_id, doc, store),
+        })
     except WorkbookSyncError as exc:
         return jsonify(_err("Workbook picker failed.", str(exc))), 400
+    except Exception as exc:
+        app.logger.exception("Unexpected workbook picker failure for project %s", project_id)
+        return jsonify(_err("Workbook picker failed.", str(exc))), 500
 
 
 @app.post("/api/projects/<project_id>/workbook-link/sync")
