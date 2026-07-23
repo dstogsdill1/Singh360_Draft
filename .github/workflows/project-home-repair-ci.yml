@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-and-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -56,3 +56,94 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+
+      - name: Install Chromium for browser verification
+        run: python -m playwright install --with-deps chromium
+
+      - name: Start Singh360 Draft
+        run: |
+          SINGH360_PORT=8765 python server.py > /tmp/singh360-server.log 2>&1 &
+          echo $! > /tmp/singh360-server.pid
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:8765/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/singh360-server.log
+          exit 1
+
+      - name: Create disposable sample project
+        run: |
+          python - <<'PY'
+          import os
+          import requests
+
+          path = 'sample_data/S360_EMS_Simple_Workbook.xlsx'
+          with open(path, 'rb') as workbook:
+              response = requests.post(
+                  'http://127.0.0.1:8765/api/projects/new',
+                  files={'file': ('S360_EMS_Simple_Workbook.xlsx', workbook)},
+                  timeout=120,
+              )
+          response.raise_for_status()
+          payload = response.json()
+          project_id = payload['id']
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
+              env_file.write(f'PROJECT_ID={project_id}\n')
+          print(f'Disposable project: {project_id}')
+          PY
+
+      - name: Verify Project Home and page review in browser
+        run: |
+          mkdir -p browser-artifacts
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+
+          base = 'http://127.0.0.1:8765/app'
+          project_id = os.environ['PROJECT_ID']
+          artifacts = Path('browser-artifacts')
+          console_errors = []
+
+          with sync_playwright() as playwright:
+              browser = playwright.chromium.launch()
+              page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+              page.on('console', lambda message: console_errors.append(message.text) if message.type == 'error' else None)
+
+              page.goto(base, wait_until='networkidle')
+              page.get_by_role('heading', name='Drawing Package Editor').wait_for()
+              page.get_by_role('button', name='Choose Workbook').wait_for()
+              page.screenshot(path=str(artifacts / '01-all-projects.png'), full_page=True)
+
+              page.goto(f'{base}?project={project_id}', wait_until='networkidle')
+              page.get_by_role('button', name='Open Editor').wait_for()
+              page.get_by_role('button', name='Review Included Pages').wait_for()
+              page.screenshot(path=str(artifacts / '02-project-home.png'), full_page=True)
+
+              page.goto(f'{base}?project={project_id}&review=1', wait_until='networkidle')
+              page.get_by_role('heading', name='Review drawing pages').wait_for()
+              page.get_by_role('button', name='Save & Open Editor').wait_for()
+              assert page.locator('tbody tr').count() > 0, 'Page review table is empty.'
+              assert page.locator('.vite-error-overlay, #webpack-dev-server-client-overlay').count() == 0
+              page.screenshot(path=str(artifacts / '03-page-review.png'), full_page=True)
+
+              if console_errors:
+                  raise AssertionError(f'Browser console errors: {console_errors}')
+              browser.close()
+
+          print('Browser verification: PASS')
+          PY
+
+      - name: Upload browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-home-browser-screenshots
+          path: browser-artifacts
+          if-no-files-found: warn
+
+      - name: Show server log on failure
+        if: failure()
+        run: cat /tmp/singh360-server.log || true
