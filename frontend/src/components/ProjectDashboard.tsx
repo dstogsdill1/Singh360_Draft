@@ -321,7 +321,9 @@ export default function ProjectDashboard({ project }: Props) {
         <div className="project-home-head-actions">
           <button type="button" onClick={() => window.open(aiGuideUrl('html'), '_blank', 'noopener,noreferrer')}>AI-Ready Instructions</button>
           <button type="button" onClick={() => window.open('/app?help=1', '_blank', 'noopener,noreferrer')}>Quick Help</button>
-          {project && <button type="button" className="primary" onClick={() => setPageManagerOpen(true)}>Open Page Editor</button>}
+          <button type="button" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}>Component Builder</button>
+          {project && <button type="button" onClick={() => window.location.assign(actionUrl('symbol-mapper'))}>Symbol Mapper</button>}
+          {project && <button type="button" className="primary" onClick={() => window.location.assign(actionUrl())}>Open Page Editor</button>}
         </div>
       </header>
 
@@ -372,7 +374,10 @@ export default function ProjectDashboard({ project }: Props) {
             <section className="welcome-card">
               <h2>Choose a saved project or create one from a workbook</h2>
               <p>Do not create a duplicate project merely to change the workbook link.</p>
-              <button type="button" className="primary large" onClick={() => newWorkbookRef.current?.click()}>Choose Workbook and Create New Project</button>
+              <div className="welcome-actions">
+                <button type="button" className="primary large" onClick={() => newWorkbookRef.current?.click()}>Choose Workbook and Create New Project</button>
+                <button type="button" className="large" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}>Open Component Builder</button>
+              </div>
             </section>
           ) : (
             <>
@@ -398,20 +403,25 @@ export default function ProjectDashboard({ project }: Props) {
               </section>
 
               <section className="quick-actions-card">
-                <div className="card-head"><h2>Project Tools</h2><span>All major actions are available before entering the editor</span></div>
-                <div className="quick-action-grid expanded">
-                  <button type="button" className="primary" onClick={() => setPageManagerOpen(true)}><b>Page Manager / Editor</b><span>Thumbnails, Include/Exclude, then open an exact page</span></button>
+                <div className="card-head"><h2>Start Here</h2><span>The five tools used for normal drawing-package work</span></div>
+                <div className="project-start-tools">
+                  <button type="button" className="primary" onClick={() => window.location.assign(actionUrl())}><b>Open Page Editor</b><span>Open the complete File / Home / Insert / Symbols / Draw editor</span></button>
+                  <button type="button" onClick={() => setPageManagerOpen(true)}><b>Review Drawing Pages</b><span>Scroll through every page and choose what publishes</span></button>
+                  <button type="button" onClick={() => window.location.assign(actionUrl('symbol-mapper'))}><b>Run Symbol Mapper</b><span>Upload a drawing PDF, identify symbols, highlight, and count</span></button>
+                  <button type="button" onClick={() => window.location.assign(actionUrl('symbol-legend'))}><b>Symbol Maker / Legend Builder</b><span>Edit the Singh360 symbol standard and insert a legend</span></button>
+                  <button type="button" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}><b>Component Builder</b><span>Create, approve, edit, and maintain reusable components</span></button>
+                </div>
+                <div className="card-head secondary-tool-head"><h2>Project Administration</h2><span>Workbook, output, recovery, and maintenance tools</span></div>
+                <div className="project-more-tools">
                   <button type="button" onClick={() => setQualityOpen(true)}><b>Workbook Inspector / Repair</b><span>Audit, restructure, normalize, and recover from backup</span></button>
-                  <button type="button" onClick={() => void reviewSync()}><b>Review Workbook Sync</b><span>Clear version choice with automatic safety backups</span></button>
-                  <button type="button" onClick={() => window.location.assign(actionUrl('symbol-mapper'))}><b>Run Symbol Mapper</b><span>Highlight and count drawing symbols</span></button>
-                  <button type="button" onClick={() => window.location.assign(actionUrl('symbol-legend'))}><b>Build Symbol Legend</b><span>Build and insert the saved legend standard</span></button>
-                  <button type="button" onClick={() => setLibraryOpen(true)}><b>Component Library</b><span>Search, clean, review, and manage components</span></button>
+                  <button type="button" onClick={() => void reviewSync()}><b>Review Workbook Sync</b><span>Compare workbook and app versions with safety backups</span></button>
+                  <button type="button" onClick={() => setLibraryOpen(true)}><b>Component Library Browser</b><span>Search and review the component library inside this project</span></button>
                   <button type="button" onClick={() => window.location.assign(actionUrl('export'))}><b>Drawing Set / Export PDF</b><span>Pick exact sheets and export</span></button>
                   <button type="button" onClick={() => window.location.assign(actionUrl('renumber'))}><b>Reorder / Renumber</b><span>Review and apply sheet-code order</span></button>
                   <button type="button" onClick={() => void run('Export package', packageDownload)}><b>Export Project Package</b><span>Download project.json, sources, assets, and exports</span></button>
                   <button type="button" onClick={() => window.location.assign(actionUrl('backups'))}><b>Backups / Recovery</b><span>Review project, page, workbook, and resolution snapshots</span></button>
                   <button type="button" onClick={() => window.open(aiGuideUrl('markdown'), '_blank', 'noopener,noreferrer')}><b>Copy / Feed AI Instructions</b><span>Open the source-of-truth Markdown guide for ChatGPT</span></button>
-                  <button type="button" className="danger" onClick={() => setDeleteOpen(true)}><b>Delete This Project</b><span>Requires typing the exact project name; external workbook is untouched</span></button>
+                  <button type="button" className="danger" onClick={() => setDeleteOpen(true)}><b>Delete This Project</b><span>Requires the exact project name; external workbook is untouched</span></button>
                 </div>
               </section>
 

@@ -293,3 +293,109 @@
   .page-thumbnail-grid.readable { grid-template-columns: 1fr; }
   .page-manager-summary { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* S360 CURRENT DASHBOARD LIVE V10 */
+.project-home {
+  height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.project-home-head-actions {
+  max-width: 760px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.project-home-head-actions button { white-space: nowrap; }
+.welcome-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.project-start-tools {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+}
+.project-start-tools button {
+  min-height: 118px;
+  padding: 16px;
+  text-align: left;
+  border-width: 2px;
+}
+.project-start-tools b,
+.project-start-tools span,
+.project-more-tools b,
+.project-more-tools span {
+  display: block;
+}
+.project-start-tools b { margin-bottom: 7px; font-size: 15px; }
+.project-start-tools span,
+.project-more-tools span {
+  color: #65717b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.project-start-tools button.primary span { color: #eaf4fb; }
+.secondary-tool-head {
+  border-top: 1px solid #d6dce0;
+  background: #f7f9fa;
+}
+.project-more-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(190px, 1fr));
+  gap: 9px;
+  padding: 12px 14px 15px;
+}
+.project-more-tools button {
+  min-height: 78px;
+  padding: 12px;
+  text-align: left;
+}
+.project-more-tools b { margin-bottom: 5px; font-size: 13px; }
+
+.page-manager-modal {
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+}
+.page-manager-scroll-note {
+  padding: 7px 14px;
+  color: #53606a;
+  background: #fff;
+  border-bottom: 1px solid #cbd3d8;
+  font-size: 11px;
+  font-weight: 700;
+}
+.page-manager-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  background: #e9edf0;
+}
+.page-manager-scroll .page-thumbnail-grid.readable {
+  min-height: min-content;
+  overflow: visible;
+}
+.page-manager-footer {
+  position: relative;
+  z-index: 3;
+  box-shadow: 0 -5px 14px rgba(25, 35, 45, .08);
+}
+
+@media(max-width: 1250px) {
+  .project-start-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media(max-width: 900px) {
+  .project-start-tools,
+  .project-more-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media(max-width: 620px) {
+  .project-start-tools,
+  .project-more-tools { grid-template-columns: 1fr; }
+  .project-home-head { flex-direction: column; }
+  .project-home-head-actions { justify-content: flex-start; max-width: none; }
+}
+

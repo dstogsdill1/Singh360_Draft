@@ -9,7 +9,6 @@ interface Props {
   onOpenPage: (pageId: string) => void;
 }
 
-const PAGE_SIZE = 18;
 
 function statusLabel(page: PageModel): string {
   const value = String(page.issueStatus || 'draft').replace(/_/g, ' ');
@@ -40,7 +39,6 @@ export default function PageManagerModal({
 }: Props) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'included' | 'excluded'>('all');
-  const [pageNumber, setPageNumber] = useState(1);
   const [included, setIncluded] = useState<Record<string, boolean>>(
     Object.fromEntries(project.pages.map((page) => [page.id, Boolean(page.include)])),
   );
@@ -52,10 +50,6 @@ export default function PageManagerModal({
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
-
-  useEffect(() => {
-    setPageNumber(1);
-  }, [query, filter]);
 
   const sortedPages = useMemo(
     () => [...project.pages].sort((a, b) => a.order - b.order),
@@ -79,12 +73,7 @@ export default function PageManagerModal({
     });
   }, [sortedPages, included, filter, query]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredPages.length / PAGE_SIZE));
-  const safePageNumber = Math.min(pageNumber, totalPages);
-  const visiblePages = filteredPages.slice(
-    (safePageNumber - 1) * PAGE_SIZE,
-    safePageNumber * PAGE_SIZE,
-  );
+  const visiblePages = filteredPages;
 
   const includedCount = Object.values(included).filter(Boolean).length;
   const excludedCount = project.pages.length - includedCount;
@@ -106,8 +95,8 @@ export default function PageManagerModal({
         <div className="overlay-head page-manager-head">
           <div>
             <div className="eyebrow">DRAWING SET REVIEW</div>
-            <h2>Page Manager</h2>
-            <p>Choose which pages publish. Excluded pages remain visible and editable. Nothing changes until you save.</p>
+            <h2>Review Drawing Pages</h2>
+            <p>Scroll through every page, choose what publishes, or open an exact page in the editor. Nothing changes until you save.</p>
           </div>
           <div className="page-manager-head-actions">
             <button type="button" onClick={onClose}>Close Without Saving</button>
@@ -142,19 +131,11 @@ export default function PageManagerModal({
           <button type="button" onClick={excludeAll}>Exclude All {project.pages.length}</button>
         </div>
 
-        <div className="page-manager-pagination">
-          <span>
-            Showing {filteredPages.length ? (safePageNumber - 1) * PAGE_SIZE + 1 : 0}
-            –{Math.min(safePageNumber * PAGE_SIZE, filteredPages.length)} of {filteredPages.length}
-          </span>
-          <div>
-            <button type="button" disabled={safePageNumber <= 1} onClick={() => setPageNumber((current) => Math.max(1, current - 1))}>Previous</button>
-            <strong>Page {safePageNumber} of {totalPages}</strong>
-            <button type="button" disabled={safePageNumber >= totalPages} onClick={() => setPageNumber((current) => Math.min(totalPages, current + 1))}>Next</button>
-          </div>
+        <div className="page-manager-scroll-note">
+          Showing all {filteredPages.length} matching page{filteredPages.length === 1 ? '' : 's'}. Use the scrollbar to review the complete drawing package.
         </div>
-
-        <div className="page-thumbnail-grid readable">
+        <div className="page-manager-scroll" aria-label="Complete drawing page list">
+          <div className="page-thumbnail-grid readable">
           {visiblePages.map((page) => {
             const image = previewUrl(page);
             const isIncluded = Boolean(included[page.id]);
@@ -203,6 +184,7 @@ export default function PageManagerModal({
               </article>
             );
           })}
+          </div>
         </div>
 
         <div className="page-manager-footer">
