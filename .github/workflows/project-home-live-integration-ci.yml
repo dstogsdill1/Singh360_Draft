@@ -1,0 +1,238 @@
+name: Project Home Live Integration CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-sync-and-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile backend
+        run: python -m compileall server.py core
+
+      - name: Verify existing-project workbook identity recovery
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          from core.project_model import ensure_project_shape
+
+          with TemporaryDirectory() as root:
+              project_folder = Path(root) / 'HEB-829__legacyproject01'
+              workbook_dir = project_folder / 'sources' / 'workbook'
+              workbook_dir.mkdir(parents=True)
+              workbook = workbook_dir / '829_Mi_Tienda_EMS_V1.xlsx'
+              workbook.write_bytes(b'untouched-workbook-copy')
+              project = {
+                  'id': 'legacyproject01',
+                  'projectFolder': str(project_folder),
+                  'metadata': {'projectName': 'Mi Tienda 03', 'sourceFile': 'temp_0123456789abcdef.xlsx'},
+                  'sources': [{
+                      'id': 'src_legacy',
+                      'type': 'workbook',
+                      'name': 'temp_0123456789abcdef.xlsx',
+                      'path': str(Path(root) / 'temp_0123456789abcdef.xlsx'),
+                  }],
+                  'worksheets': [],
+                  'pages': [],
+                  'workbookSync': {},
+              }
+              repaired = ensure_project_shape(project)
+              assert repaired['sourceWorkbookName'] == workbook.name
+              assert repaired['metadata']['sourceFile'] == workbook.name
+              assert repaired['sources'][0]['name'] == workbook.name
+              assert repaired['sources'][0]['path'] == str(workbook)
+          print('Workbook identity recovery: PASS')
+          PY
+
+      - name: Smoke-import sample workbook
+        run: python scripts/smoke_import_workbook.py sample_data/S360_EMS_Simple_Workbook.xlsx
+
+      - name: Verify live launcher target
+        shell: pwsh
+        run: |
+          $text = Get-Content -Raw ./start-live.ps1
+          if ($text -notmatch '\$Port = 8766') { throw 'start-live.ps1 is not targeting port 8766.' }
+          if ($text -notmatch 'https://twig-convent-makeshift.ngrok-free.dev') { throw 'Fixed public ngrok URL is missing.' }
+          Write-Host 'Live launcher target: PASS'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Start Singh360 Draft on the live local port
+        run: |
+          SINGH360_PORT=8766 python server.py > /tmp/singh360-server.log 2>&1 &
+          echo $! > /tmp/singh360-server.pid
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8766/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/singh360-server.log
+          exit 1
+
+      - name: Create disposable synchronized project
+        run: |
+          python - <<'PY'
+          import os
+          import requests
+
+          filename = 'S360_EMS_Simple_Workbook.xlsx'
+          with open(f'sample_data/{filename}', 'rb') as workbook:
+              created = requests.post(
+                  'http://127.0.0.1:8766/api/projects/new',
+                  files={'file': (filename, workbook)},
+                  timeout=180,
+              )
+          created.raise_for_status()
+          project_id = created.json()['id']
+          project_response = requests.get(
+              f'http://127.0.0.1:8766/api/projects/{project_id}',
+              timeout=120,
+          )
+          project_response.raise_for_status()
+          project = project_response.json()
+          assert project.get('sourceWorkbookName') == filename, project.get('sourceWorkbookName')
+          assert project.get('metadata', {}).get('sourceFile') == filename
+          assert project.get('workbookSync', {}).get('lastSyncUtc'), project.get('workbookSync')
+          assert len(project.get('pages', [])) > 0
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
+              env_file.write(f'PROJECT_ID={project_id}\n')
+          print(f'Disposable project: {project_id}')
+          PY
+
+      - name: Verify Project Home, review scrolling, tools, and editor return path
+        run: |
+          mkdir -p browser-artifacts
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+
+          base = 'http://127.0.0.1:8766/app'
+          project_id = os.environ['PROJECT_ID']
+          artifacts = Path('browser-artifacts')
+          page_errors = []
+
+          with sync_playwright() as playwright:
+              browser = playwright.chromium.launch()
+              page = browser.new_page(viewport={'width': 1440, 'height': 900})
+              page.set_default_timeout(45000)
+              page.on('pageerror', lambda error: page_errors.append(str(error)))
+
+              page.goto(base, wait_until='networkidle')
+              page.get_by_role('heading', name='Drawing Package Editor').wait_for()
+              page.get_by_role('button', name='Choose Workbook').wait_for()
+              page.get_by_role('button', name='Component Builder').wait_for()
+              page.screenshot(path=str(artifacts / '01-all-projects.png'), full_page=True)
+
+              catalog = page.request.get('http://127.0.0.1:8766/component-catalog')
+              assert catalog.status == 200, catalog.status
+
+              page.goto(f'{base}?project={project_id}', wait_until='networkidle')
+              for text in (
+                  'Open Page Editor',
+                  'Review Drawing Pages',
+                  'Run Symbol Mapper',
+                  'Build Symbol Legend',
+                  'Component Builder',
+                  'Check Workbook Now',
+              ):
+                  page.locator('button', has_text=text).first.wait_for()
+              page.get_by_text('Workbook synchronized', exact=False).first.wait_for()
+              assert 'temp_' not in page.locator('body').inner_text().lower()
+              page.screenshot(path=str(artifacts / '02-project-home.png'), full_page=True)
+
+              page.locator('button', has_text='Review Drawing Pages').first.click()
+              page.get_by_role('heading', name='Review Drawing Pages').wait_for()
+              table_scroll = page.locator('.review-table-wrap')
+              table_scroll.wait_for()
+              dimensions = table_scroll.evaluate('(el) => ({scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, overflowY: getComputedStyle(el).overflowY})')
+              assert dimensions['overflowY'] in ('auto', 'scroll'), dimensions
+              assert dimensions['scrollHeight'] > dimensions['clientHeight'], dimensions
+              table_scroll.evaluate('(el) => { el.scrollTop = el.scrollHeight; }')
+              assert table_scroll.evaluate('(el) => el.scrollTop') > 0
+              page.screenshot(path=str(artifacts / '03-review-pages-scrolled.png'), full_page=True)
+
+              page.get_by_role('button', name='Save & Open Page Editor').click()
+              page.wait_for_url(f'**/app?project={project_id}&editor=1', timeout=90000)
+              page.locator('.app-shell').wait_for(timeout=60000)
+              page.locator('.ribbon-tab', has_text='File').wait_for()
+              page.locator('.ribbon-tab', has_text='Home').wait_for()
+              page.locator('.ribbon-tab', has_text='Insert').wait_for()
+              page.locator('.ribbon-tab', has_text='Symbols').wait_for()
+              page.get_by_role('button', name='Project Home').wait_for()
+              page.get_by_role('button', name='Components').wait_for()
+              page.screenshot(path=str(artifacts / '04-page-editor.png'), full_page=True)
+
+              page.get_by_role('button', name='Project Home').click()
+              page.wait_for_url(f'**/app?project={project_id}', timeout=60000)
+              page.locator('button', has_text='Run Symbol Mapper').first.wait_for()
+
+              page.locator('button', has_text='Run Symbol Mapper').first.click()
+              page.get_by_role('dialog', name='Symbol Mapper').wait_for(timeout=90000)
+              page.screenshot(path=str(artifacts / '05-symbol-mapper.png'), full_page=True)
+              page.get_by_role('dialog', name='Symbol Mapper').get_by_title('Close').click()
+              page.get_by_role('button', name='Project Home').click()
+              page.wait_for_url(f'**/app?project={project_id}', timeout=60000)
+
+              page.locator('button', has_text='Build Symbol Legend').first.click()
+              page.get_by_role('heading', name='Build / Insert Symbol Legend').wait_for(timeout=90000)
+              page.screenshot(path=str(artifacts / '06-symbol-legend.png'), full_page=True)
+
+              print_page = browser.new_page(viewport={'width': 1440, 'height': 900})
+              print_page.goto(f'{base}?project={project_id}&print=1', wait_until='networkidle')
+              assert print_page.locator('.editor-global-nav').count() == 0, 'Editor navigation leaked into print mode.'
+              print_page.close()
+
+              assert not page_errors, page_errors
+              browser.close()
+
+          print('Project Home live browser verification: PASS')
+          PY
+
+      - name: Upload browser verification screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-home-live-integration-screenshots
+          path: browser-artifacts
+          if-no-files-found: warn
+
+      - name: Show server log on failure
+        if: failure()
+        run: cat /tmp/singh360-server.log || true
