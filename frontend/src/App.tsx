@@ -68,6 +68,7 @@ function getUrlParams() {
     help: params.get('help') === '1',
     mode: params.get('mode') === 'editor' ? 'editor' : 'home',
     tool: params.get('tool') || '',
+    requestedPageId: params.get('page') || '',
   };
 }
 
@@ -93,7 +94,7 @@ function withPageNumbers(pages: PageModel[]): PageModel[] {
 }
 
 export default function App() {
-  const { projectId: initialProjectId, print: printMode, help: helpMode, mode: appMode, tool: initialTool } = getUrlParams();
+  const { projectId: initialProjectId, print: printMode, help: helpMode, mode: appMode, tool: initialTool, requestedPageId } = getUrlParams();
 
   const [project, setProject] = useState<ProjectModel | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
@@ -362,7 +363,16 @@ export default function App() {
       lastSavedJsonRef.current = JSON.stringify(normalized);
       resetSourceEditState();
       setProjectSync(normalized);
-      const firstPage = normalized.pages?.[0];
+      // S360 PAGE MANAGER DEEP LINK V1
+      let savedPageId = '';
+      try {
+        savedPageId = localStorage.getItem(`singh360-open-page:${initialProjectId}`) || '';
+        localStorage.removeItem(`singh360-open-page:${initialProjectId}`);
+      } catch {
+        savedPageId = '';
+      }
+      const targetPageId = requestedPageId || savedPageId;
+      const firstPage = normalized.pages?.find((page) => page.id === targetPageId) ?? normalized.pages?.[0];
       setActivePageId(firstPage?.id ?? null);
       setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? normalized.worksheets?.[0]?.id);
     });

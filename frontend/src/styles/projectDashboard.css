@@ -106,3 +106,78 @@
   color: #745017;
   font-size: 11px;
 }
+
+/* S360 FOOLPROOF PROJECT WORKFLOW V1 */
+.workflow-strip {
+  display:flex; justify-content:center; gap:6px; flex-wrap:wrap;
+  padding:8px 16px; background:#dfe5e9; border-bottom:1px solid #bec8cf;
+}
+.workflow-strip span { padding:5px 9px; border-radius:999px; background:#fff; border:1px solid #aeb8c0; font-size:11px; font-weight:700; }
+.workflow-strip span.done { background:#d9f2e7; color:#0d6843; border-color:#8fc8ae; }
+.quick-action-grid.expanded { grid-template-columns:repeat(4,minmax(180px,1fr)); }
+.health-card.expanded { grid-template-columns:repeat(5,1fr); }
+
+.sync-decision-modal {
+  width:min(1000px,96vw); max-height:95vh; overflow:auto; background:#fff;
+  border-radius:9px; box-shadow:0 20px 60px rgba(0,0,0,.35);
+}
+.sync-decision-modal > header {
+  display:flex; justify-content:space-between; gap:16px; padding:18px 20px;
+  background:#252c34; color:#fff; border-bottom:7px solid #f28c28;
+}
+.sync-decision-modal h2,.sync-decision-modal p { margin:3px 0; }
+.sync-state-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:#d4dade; }
+.sync-state-summary div { background:#fff; padding:12px; }
+.sync-state-summary b,.sync-state-summary span { display:block; }
+.sync-state-summary span { color:#5d6872; margin-top:4px; }
+.sync-choice { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:18px; align-items:center; margin:16px; padding:16px; border:2px solid #cfd6db; border-left-width:8px; border-radius:7px; }
+.sync-choice.workbook-choice { border-left-color:#276fa8; background:#edf6fd; }
+.sync-choice.app-choice { border-left-color:#14845a; background:#edf8f3; }
+.sync-choice h3 { margin:0 0 6px; }.sync-choice p { margin:4px 0; }.sync-choice li { margin:4px 0; }
+.sync-decision-modal footer { margin:16px; padding:12px; background:#fff7e8; border-left:7px solid #f28c28; }
+.sync-decision-modal footer strong,.sync-decision-modal footer span { display:block; }
+
+.page-manager-modal { width:min(1550px,98vw); height:min(930px,97vh); }
+.page-manager-tools { display:flex; gap:7px; padding:10px 14px; background:#eef2f4; border-bottom:1px solid #cbd2d7; }
+.page-manager-tools input { min-width:300px; flex:1; padding:8px; border:1px solid #aab5bd; }
+.page-manager-tools button.active { background:#276fa8; color:#fff; }
+.page-thumbnail-grid { padding:14px; overflow:auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
+.page-thumbnail-card { border:2px solid #cbd2d7; border-radius:8px; background:#fff; overflow:hidden; }
+.page-thumbnail-card.excluded { opacity:.65; filter:grayscale(.55); border-color:#8e989f; }
+.page-thumbnail-card.included { border-color:#2d7dd2; }
+.page-thumb-preview { display:block!important; width:100%; height:150px; border:0!important; padding:0!important; background:#dfe4e7!important; overflow:hidden; }
+.page-thumb-preview img { width:100%; height:100%; object-fit:contain; background:#fff; }
+.page-thumb-skeleton { position:relative; height:100%; margin:8px; background:#fff; border:2px solid #333; }
+.thumb-title-band { height:24px; background:#252c34; color:#fff; font-size:8px; padding:6px; overflow:hidden; white-space:nowrap; }
+.thumb-lines { padding:15px; display:grid; gap:8px; }.thumb-lines i { display:block; height:4px; background:#d8dde1; }
+.thumb-title-block { position:absolute; right:0; bottom:0; width:80px; height:30px; border:1px solid #333; display:grid; place-items:center; font-size:8px; font-weight:800; }
+.page-thumb-info { padding:10px; min-height:78px; }.page-thumb-info strong,.page-thumb-info span,.page-thumb-info small { display:block; }
+.page-thumb-info span { margin-top:3px; }.page-thumb-info small { color:#68737c; margin-top:5px; }
+.page-thumbnail-card label { display:block; padding:8px 10px; border-top:1px solid #d8dde0; font-size:11px; }
+.page-thumbnail-card > button:last-child { margin:0 10px 10px; width:calc(100% - 20px); }
+
+.workbook-quality-modal { width:min(1250px,97vw); height:min(900px,96vh); }
+.quality-body { overflow:auto; padding:15px; }
+.quality-counts { display:grid; grid-template-columns:repeat(6,1fr); gap:7px; }
+.quality-counts div { background:#eef2f4; border-radius:6px; padding:11px; text-align:center; }
+.quality-counts b,.quality-counts span { display:block; }.quality-counts b { font-size:24px; }
+.quality-actions { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:14px 0; }
+.quality-actions section { border:1px solid #cad2d8; border-left:7px solid #276fa8; padding:14px; border-radius:6px; }
+.quality-actions section:last-child { border-left-color:#f28c28; }
+.quality-warning { background:#fff7e8; border-left:7px solid #f28c28; padding:12px; margin-bottom:12px; }
+.quality-issues { display:grid; gap:8px; }.quality-issue { border:1px solid #d4dade; border-left:7px solid #75818a; padding:10px; }
+.quality-issue.critical,.quality-issue.error { border-left-color:#b43838; }.quality-issue.warning { border-left-color:#f28c28; }.quality-issue.info { border-left-color:#276fa8; }
+.quality-issue div { display:flex; gap:10px; }.quality-issue pre { max-height:180px; overflow:auto; background:#f4f6f7; padding:8px; white-space:pre-wrap; }
+.quality-clean,.quality-empty { padding:28px; text-align:center; color:#16704b; }
+
+.delete-project-modal { width:min(620px,94vw); background:#fff; border-radius:8px; padding:20px; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+.delete-project-modal h2 { color:#9c2525; }.delete-project-modal label,.delete-project-modal input,.delete-safety code { display:block; width:100%; }
+.delete-project-modal input { margin-top:7px; padding:9px; }.delete-safety { background:#fff0f0; border-left:7px solid #b43838; padding:12px; margin:12px 0; }
+.delete-project-modal > div:last-child { display:flex; justify-content:flex-end; gap:8px; margin-top:15px; }
+
+@media(max-width:1100px) {
+  .quick-action-grid.expanded { grid-template-columns:repeat(2,1fr); }
+  .health-card.expanded,.quality-counts { grid-template-columns:repeat(2,1fr); }
+  .sync-choice { grid-template-columns:1fr; }
+  .sync-state-summary { grid-template-columns:1fr; }
+}

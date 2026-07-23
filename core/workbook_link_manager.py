@@ -258,21 +258,85 @@ def _baseline(project: dict[str, Any], path: Path, status: str = "in_sync") -> d
     return project
 
 
+def _trim_resolution_backups(folder: Path, keep: int = 20) -> None:
+    if not folder.is_dir():
+        return
+    entries = sorted(
+        [item for item in folder.iterdir() if item.is_dir()],
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    for stale in entries[keep:]:
+        shutil.rmtree(stale, ignore_errors=True)
+
+
+def create_resolution_backup(
+    project_id: str,
+    project: dict[str, Any],
+    store: Any,
+    workbook_path: Path,
+    direction: str,
+) -> Path:
+    """Create a matched project/workbook snapshot before either side is changed."""
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    root = store.docs / "backups" / "workbook_resolution" / project_id
+    target = root / stamp
+    target.mkdir(parents=True, exist_ok=False)
+
+    project_folder = store.dir_for(project_id, project)
+    project_json = project_folder / "project.json"
+    if project_json.is_file():
+        shutil.copy2(project_json, target / "project_before.json")
+    else:
+        (target / "project_before.json").write_text(
+            json.dumps(project, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
+    shutil.copy2(workbook_path, target / f"workbook_before{workbook_path.suffix.lower()}")
+    (target / "resolution_manifest.json").write_text(
+        json.dumps(
+            {
+                "createdUtc": utcnow(),
+                "projectId": project_id,
+                "direction": direction,
+                "workbook": str(workbook_path),
+                "projectHash": project_hash(project),
+                "workbookHash": file_hash(workbook_path),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _trim_resolution_backups(root)
+    return target
+
+
 def resolve(project_id: str, project: dict[str, Any], store: Any, direction: str) -> tuple[dict[str, Any], dict[str, Any]]:
     path, _ = configured_workbook_path(store, project_id, project)
     if path is None or not path.is_file():
         raise WorkbookSyncError("The linked workbook is missing. Relocate it first.")
+    if direction not in {"workbook_to_app", "app_to_workbook", "baseline"}:
+        raise WorkbookSyncError("Unknown synchronization direction.")
+
+    backup = create_resolution_backup(project_id, project, store, path, direction)
+
     if direction == "workbook_to_app":
         project = sync_project_from_workbook(project_id, project, store)
     elif direction == "app_to_workbook":
         project = sync_project_to_workbook(project_id, project, store)
-    elif direction == "baseline":
-        pass
-    else:
-        raise WorkbookSyncError("Unknown synchronization direction.")
+
     project = _baseline(project, path)
+    sync = dict(project.get("workbookSync") or {})
+    sync["lastResolutionBackup"] = str(backup)
+    sync["lastResolutionDirection"] = direction
+    project["workbookSync"] = sync
     store.save(project_id, project)
-    return project, status_payload(project_id, project, store)
+    status = status_payload(project_id, project, store)
+    status["resolutionBackup"] = str(backup)
+    status["resolutionDirection"] = direction
+    return project, status
 
 
 def sync_auto(project_id: str, project: dict[str, Any], store: Any) -> tuple[dict[str, Any], dict[str, Any]]:

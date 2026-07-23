@@ -613,6 +613,65 @@ def workbook_link_reveal(project_id: str):
     except WorkbookSyncError as exc:
         return jsonify(_err("Could not show the workbook.", str(exc))), 400
 
+
+# S360 FOOLPROOF PROJECT WORKFLOW V1
+@app.get("/api/projects/<project_id>/workbook-quality")
+def workbook_quality_audit(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    path, _mode = configured_workbook_path(store, project_id, doc)
+    if path is None:
+        return jsonify(_err("No workbook is linked.")), 404
+    try:
+        from core.workbook_quality_manager import audit_workbook
+        return jsonify(audit_workbook(path))
+    except Exception as exc:
+        app.logger.exception("Workbook audit failed for project %s", project_id)
+        return jsonify(_err("Workbook audit failed.", str(exc))), 500
+
+
+@app.post("/api/projects/<project_id>/workbook-quality/repair")
+def workbook_quality_repair(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    path, _mode = configured_workbook_path(store, project_id, doc)
+    if path is None:
+        return jsonify(_err("No workbook is linked.")), 404
+    body = request.get_json(force=True, silent=True) or {}
+    mode = str(body.get("mode") or "safe")
+    try:
+        from core.workbook_quality_manager import repair_workbook
+        result = repair_workbook(path, project_id, store, mode)
+        refreshed = _load_doc(project_id) or doc
+        refreshed.setdefault("workbookSync", {})["workbookHash"] = ""
+        refreshed.setdefault("workbookSync", {})["appHash"] = ""
+        refreshed.setdefault("workbookSync", {})["status"] = "review_required"
+        store.save(project_id, refreshed)
+        return jsonify(result)
+    except PermissionError as exc:
+        return jsonify(_err("Workbook repair failed.", "Close Excel and try again. " + str(exc))), 409
+    except Exception as exc:
+        app.logger.exception("Workbook repair failed for project %s", project_id)
+        return jsonify(_err("Workbook repair failed.", str(exc))), 500
+
+
+@app.get("/api/docs/ai-guide")
+def ai_ready_guide_markdown():
+    path = HERE / "docs" / "SINGH360_AI_ASSISTANT_GUIDE.md"
+    if not path.is_file():
+        abort(404)
+    return send_file(path, mimetype="text/markdown; charset=utf-8")
+
+
+@app.get("/docs/ai-guide")
+def ai_ready_guide_html():
+    path = HERE / "docs" / "SINGH360_AI_ASSISTANT_GUIDE.html"
+    if not path.is_file():
+        abort(404)
+    return send_file(path, mimetype="text/html; charset=utf-8")
+
 @app.post("/api/projects/<project_id>/pages")
 def upsert_pages(project_id: str):
     doc = _load_doc(project_id)

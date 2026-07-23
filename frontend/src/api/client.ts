@@ -1417,3 +1417,57 @@ export async function revealLinkedWorkbook(projectId: string): Promise<void> {
   const res = await fetch(`/api/projects/${projectId}/workbook-link/reveal`, { method: 'POST' });
   if (!res.ok) throw new Error(await res.text());
 }
+
+// S360 FOOLPROOF PROJECT WORKFLOW V1
+export interface WorkbookQualityIssue {
+  severity: 'critical' | 'error' | 'warning' | 'info';
+  code: string;
+  message: string;
+  items?: unknown[];
+}
+
+export interface WorkbookQualityReport {
+  ok: boolean;
+  path: string;
+  filename: string;
+  modifiedUtc: string;
+  counts: {
+    sheets: number;
+    indexRows: number;
+    includedRows: number;
+    excludedRows: number;
+    unindexedSheets: number;
+    formulaErrors: number;
+    critical: number;
+    errors: number;
+    warnings: number;
+  };
+  issues: WorkbookQualityIssue[];
+  safeRepairAvailable: boolean;
+  strictRepairAvailable: boolean;
+}
+
+export async function getWorkbookQuality(projectId: string): Promise<WorkbookQualityReport> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-quality`);
+  const payload = await res.json().catch(async () => ({ error: await res.text() }));
+  if (!res.ok) throw new Error(payload.detail || payload.error || 'Workbook audit failed.');
+  return payload;
+}
+
+export async function repairWorkbookQuality(
+  projectId: string,
+  mode: 'safe' | 'strict',
+): Promise<{ ok: boolean; mode: string; backup: string; changes: string[]; audit: WorkbookQualityReport; message: string }> {
+  const res = await fetch(`/api/projects/${projectId}/workbook-quality/repair`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  });
+  const payload = await res.json().catch(async () => ({ error: await res.text() }));
+  if (!res.ok) throw new Error(payload.detail || payload.error || 'Workbook repair failed.');
+  return payload;
+}
+
+export function aiGuideUrl(format: 'html' | 'markdown' = 'html'): string {
+  return format === 'markdown' ? '/api/docs/ai-guide' : '/docs/ai-guide';
+}
