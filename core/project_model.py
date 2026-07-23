@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 import re
 from typing import Any
 from uuid import uuid4
@@ -15,6 +16,7 @@ PROJECT_SCHEMA_VERSION = 1
 _WORKBOOK_TEMP_NAME_RE = re.compile(
     r"^(?:temp|preview)_[a-f0-9]{16}\.(?:xlsx|xlsm)$", re.IGNORECASE
 )
+_WORKBOOK_SUFFIXES = {".xlsx", ".xlsm"}
 
 
 def _clean_scalar(value: Any) -> Any:
@@ -120,15 +122,88 @@ def recalc_page_numbers(project: dict[str, Any]) -> None:
             page["pageTotal"] = total
 
 
-def _restore_original_workbook_identity(project: dict[str, Any]) -> None:
-    """Keep the user-selected workbook name instead of the disposable parser name.
+def _is_real_workbook_name(value: Any) -> bool:
+    name = str(value or "").strip()
+    return bool(
+        name
+        and Path(name).suffix.lower() in _WORKBOOK_SUFFIXES
+        and not _WORKBOOK_TEMP_NAME_RE.fullmatch(Path(name).name)
+    )
 
-    New-project ingest writes the upload to ``temp_<project-id>.xlsx`` before
-    parsing it. ``server.py`` then records ``sourceWorkbookName`` with the real
-    uploaded filename. Older project shaping discarded that top-level field,
-    leaving the temporary filename in project properties and title blocks.
+
+def _newest_source_workbook(project: dict[str, Any]) -> Path | None:
+    """Find the newest real workbook stored inside an existing project package."""
+    folder = str(project.get("projectFolder") or "").strip()
+    if not folder:
+        return None
+    source_dir = Path(folder) / "sources" / "workbook"
+    try:
+        candidates = [
+            path
+            for path in source_dir.iterdir()
+            if path.is_file()
+            and path.suffix.lower() in _WORKBOOK_SUFFIXES
+            and not _WORKBOOK_TEMP_NAME_RE.fullmatch(path.name)
+        ]
+    except OSError:
+        return None
+    if not candidates:
+        return None
+
+    def modified_key(path: Path) -> tuple[float, str]:
+        try:
+            modified = path.stat().st_mtime
+        except OSError:
+            modified = 0.0
+        return modified, path.name.lower()
+
+    return max(candidates, key=modified_key)
+
+
+def _workbook_identity(project: dict[str, Any]) -> tuple[str, str]:
+    """Return the best supported workbook name and its project-local path."""
+    top_name = str(project.get("sourceWorkbookName") or "").strip()
+    if _is_real_workbook_name(top_name):
+        folder = str(project.get("projectFolder") or "").strip()
+        if folder:
+            matching = Path(folder) / "sources" / "workbook" / Path(top_name).name
+            if matching.is_file():
+                return Path(top_name).name, str(matching)
+        return Path(top_name).name, ""
+
+    sources = project.get("sources")
+    if isinstance(sources, list):
+        for source in sources:
+            if not isinstance(source, dict) or str(source.get("type") or "").lower() != "workbook":
+                continue
+            source_name = str(source.get("name") or "").strip()
+            if _is_real_workbook_name(source_name):
+                source_path = str(source.get("path") or "").strip()
+                return Path(source_name).name, source_path
+
+    stored_copy = _newest_source_workbook(project)
+    if stored_copy is not None:
+        return stored_copy.name, str(stored_copy)
+
+    metadata = project.get("metadata")
+    if isinstance(metadata, dict):
+        source_file = str(metadata.get("sourceFile") or "").strip()
+        if _is_real_workbook_name(source_file):
+            return Path(source_file).name, ""
+
+    return "", ""
+
+
+def _restore_original_workbook_identity(project: dict[str, Any]) -> None:
+    """Keep or recover the user-selected workbook name, never a parser temp name.
+
+    Fresh ingest records ``sourceWorkbookName`` before shaping the project. Older
+    broken projects may have lost that field, but their untouched workbook copy
+    remains under ``<projectFolder>/sources/workbook``. In that case the newest
+    real .xlsx/.xlsm source copy repairs the project identity without rebuilding
+    any drawing page or touching manual canvas data.
     """
-    original_name = str(project.get("sourceWorkbookName") or "").strip()
+    original_name, source_path = _workbook_identity(project)
     if not original_name:
         return
 
@@ -136,7 +211,7 @@ def _restore_original_workbook_identity(project: dict[str, Any]) -> None:
     metadata = project.get("metadata")
     if isinstance(metadata, dict):
         source_file = str(metadata.get("sourceFile") or "").strip()
-        if not source_file or _WORKBOOK_TEMP_NAME_RE.fullmatch(source_file):
+        if not _is_real_workbook_name(source_file):
             metadata["sourceFile"] = original_name
 
     sources = project.get("sources")
@@ -145,8 +220,12 @@ def _restore_original_workbook_identity(project: dict[str, Any]) -> None:
             if not isinstance(source, dict) or str(source.get("type") or "").lower() != "workbook":
                 continue
             source_name = str(source.get("name") or "").strip()
-            if not source_name or _WORKBOOK_TEMP_NAME_RE.fullmatch(source_name):
+            if not _is_real_workbook_name(source_name):
                 source["name"] = original_name
+            if source_path:
+                recorded_path = str(source.get("path") or "").strip()
+                if not recorded_path or _WORKBOOK_TEMP_NAME_RE.fullmatch(Path(recorded_path).name):
+                    source["path"] = source_path
 
 
 def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
