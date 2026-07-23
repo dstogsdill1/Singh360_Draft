@@ -1,5 +1,6 @@
 // Client mirror of core/workbook_importer.py RDM/IDF network table builder.
 // Used when rebuilding network_48_port pages from source — never raw excelRange.
+// S360_HEB_IDF_SWITCH_MATRIX_V1: H-E-B seven-column switch-pair profile.
 
 import type { PageBlock, Worksheet } from './types';
 
@@ -12,6 +13,13 @@ const IDF_ROW_H = 20;
 const IDF_HEADER_H = 24;
 const IDF_SCALE_TARGET_MIN = 0.65;
 const IDF_SCALE_TARGET_MAX = 0.75;
+
+const HEB_TABLE_PROFILE = 'heb_idf_switch_matrix';
+const HEB_HEADERS = ['Label #', 'Description', 'Controller ID', 'IP Address', 'IDF#', 'Switch#', 'Port#'];
+const HEB_COL_WIDTHS = [98, 354, 98, 86, 38, 62, 46];
+const HEB_FONT_SIZE = 8.0;
+const HEB_HEADER_HEIGHT = 20;
+const HEB_BODY_BUDGET = 690;
 
 const IDF_COL_W: Record<string, number> = {
   Port: 40,
@@ -53,7 +61,232 @@ const DEVICE_ABBREVIATIONS: Record<string, string> = {
 };
 
 function normalizeHeaderCell(h: unknown): string {
-  return String(h ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return String(h ?? '').trim().replace(/#/g, ' # ').replace(/\s+/g, ' ').toLowerCase();
+}
+
+function compactHeaderCell(h: unknown): string {
+  return normalizeHeaderCell(h).replace(/\s+/g, '');
+}
+
+interface HebHeaderMap {
+  label: number | null;
+  description: number | null;
+  controller: number | null;
+  ip: number | null;
+  idf: number | null;
+  switchNo: number | null;
+  port: number | null;
+}
+
+function hebHeaderMap(row: unknown[]): HebHeaderMap {
+  const low = row.map(normalizeHeaderCell);
+  const compact = row.map(compactHeaderCell);
+
+  const find = (kind: keyof HebHeaderMap): number | null => {
+    for (let i = 0; i < low.length; i += 1) {
+      const h = low[i];
+      const c = compact[i];
+      if (kind === 'label' && (c === 'label#' || c === 'label' || h.startsWith('label #'))) return i;
+      if (kind === 'description' && h === 'description') return i;
+      if (kind === 'controller' && (h.includes('controller id') || c === 'controllerid')) return i;
+      if (kind === 'ip' && (h.includes('ip address') || c === 'ipaddress' || c === 'ipaddr')) return i;
+      if (kind === 'idf' && (c === 'idf#' || c === 'idf' || h.startsWith('idf #'))) return i;
+      if (kind === 'switchNo' && (c === 'switch#' || c === 'switch' || h.startsWith('switch #'))) return i;
+      if (kind === 'port' && (c === 'port#' || c === 'port' || h.startsWith('port #'))) return i;
+    }
+    return null;
+  };
+
+  return {
+    label: find('label'),
+    description: find('description'),
+    controller: find('controller'),
+    ip: find('ip'),
+    idf: find('idf'),
+    switchNo: find('switchNo'),
+    port: find('port'),
+  };
+}
+
+function hebHeaderScore(mapping: HebHeaderMap): number {
+  return Object.values(mapping).filter((value) => value != null).length;
+}
+
+export function hebIdfHeaderRow(grid: string[][]): number | null {
+  let fallback: { score: number; row: number } | null = null;
+  for (let r = 0; r < Math.min(grid.length, 24); r += 1) {
+    const mapping = hebHeaderMap(grid[r] ?? []);
+    const score = hebHeaderScore(mapping);
+    if (score === 7) return r;
+    if (score >= 6 && mapping.switchNo != null && mapping.port != null && mapping.label != null) {
+      if (!fallback || score > fallback.score) fallback = { score, row: r };
+    }
+  }
+  return fallback?.row ?? null;
+}
+
+function isHebIdfSwitchMatrix(grid: string[][], headerRow: number): boolean {
+  if (headerRow < 0 || headerRow >= grid.length) return false;
+  return hebHeaderScore(hebHeaderMap(grid[headerRow] ?? [])) === 7;
+}
+
+function looksLikeRepeatedHebHeader(row: string[]): boolean {
+  return hebHeaderScore(hebHeaderMap(row ?? [])) >= 6;
+}
+
+function plainNumber(value: unknown): string {
+  const text = String(value ?? '').trim();
+  return /^[-+]?\d+\.0+$/.test(text) ? text.split('.', 1)[0] : text;
+}
+
+function sourceCell(row: string[], index: number | null, integerish = false): string {
+  if (index == null || index < 0 || index >= row.length) return '';
+  const value = String(row[index] ?? '').trim();
+  return integerish ? plainNumber(value) : value;
+}
+
+interface HebSwitchGroup {
+  idf: string;
+  switchNo: string;
+  rows: string[][];
+}
+
+function parseHebGroups(grid: string[][], headerRow: number): { groups: HebSwitchGroup[]; warnings: string[] } {
+  const mapping = hebHeaderMap(grid[headerRow] ?? []);
+  const specs = [
+    mapping.label,
+    mapping.description,
+    mapping.controller,
+    mapping.ip,
+    mapping.idf,
+    mapping.switchNo,
+    mapping.port,
+  ];
+  const groups = new Map<string, HebSwitchGroup>();
+  const warnings: string[] = [];
+  let currentKey: string | null = null;
+
+  for (let ri = headerRow + 1; ri < grid.length; ri += 1) {
+    const sourceRow = grid[ri] ?? [];
+    if (looksLikeRepeatedHebHeader(sourceRow)) continue;
+    const values = specs.map((index, position) => sourceCell(sourceRow, index, [2, 4, 5, 6].includes(position)));
+    if (!values.some(Boolean)) continue;
+
+    const [label, description, controller, ip, idf, switchNo, port] = values;
+    if (!port && ![label, description, controller, ip].some(Boolean)) continue;
+
+    let key = `${idf}\u0000${switchNo}`;
+    if (!idf && !switchNo && currentKey) {
+      key = currentKey;
+    } else if (idf || switchNo) {
+      currentKey = key;
+    }
+    if (!switchNo) {
+      warnings.push(`Source row ${ri + 1} has network data but no Switch#; row was kept in an unnumbered switch group.`);
+    }
+    const existing = groups.get(key) ?? { idf, switchNo, rows: [] };
+    existing.rows.push(values);
+    groups.set(key, existing);
+  }
+
+  return { groups: [...groups.values()], warnings };
+}
+
+function worksheetIdfNumber(sheetName: string, groups: HebSwitchGroup[]): string {
+  const match = /\bIDF\s*#?\s*(\d+)\b/i.exec(sheetName ?? '');
+  if (match) return match[1];
+  const source = [...new Set(groups.map((group) => group.idf).filter(Boolean))];
+  return source.length === 1 ? source[0] : '';
+}
+
+function switchText(value: string): string {
+  return String(value || '?').trim() || '?';
+}
+
+function hebTitle(idf: string, switches: string[]): string {
+  const base = idf ? `IDF #${idf}` : 'IDF';
+  if (switches.length >= 2) return `${base} TABLE (SWITCH ${switches[0]} & ${switches[1]})`;
+  if (switches.length === 1) return `${base} TABLE (SWITCH ${switches[0]})`;
+  return `${base} TABLE`;
+}
+
+function hebRowHeight(maxRows: number): number {
+  if (maxRows <= 0) return 13;
+  const fitted = Math.floor((HEB_BODY_BUDGET - HEB_HEADER_HEIGHT) / maxRows);
+  return Math.max(11, Math.min(14, fitted));
+}
+
+function buildHebIdfNetworkBlock(
+  ws: Worksheet,
+  headerRow: number,
+  blockId: string,
+  pairIndex = 0,
+): PageBlock | null {
+  const grid = ws.grid ?? [];
+  if (!isHebIdfSwitchMatrix(grid, headerRow)) return null;
+
+  const parsed = parseHebGroups(grid, headerRow);
+  const groups = parsed.groups;
+  if (!groups.length) return null;
+
+  const pageCount = Math.ceil(groups.length / 2);
+  const selectedPairIndex = Math.max(0, Math.min(Math.trunc(pairIndex || 0), pageCount - 1));
+  const selected = groups.slice(selectedPairIndex * 2, selectedPairIndex * 2 + 2);
+  const sheetName = ws.sourceSheet || ws.name || '';
+  const idf = worksheetIdfNumber(sheetName, groups);
+  const warnings = [...parsed.warnings];
+  const sourceIdfs = [...new Set(groups.map((group) => group.idf).filter(Boolean))];
+  if (idf && sourceIdfs.length && !(sourceIdfs.length === 1 && sourceIdfs[0] === idf)) {
+    warnings.push(`Worksheet title identifies IDF #${idf}, but source IDF# values are ${sourceIdfs.join(', ')}; source values were preserved.`);
+  }
+
+  const switches = selected.map((group) => switchText(group.switchNo));
+  const maxRows = Math.max(...selected.map((group) => group.rows.length), 0);
+  const rowHeight = hebRowHeight(maxRows);
+  const layoutMode: 'single' | 'two_up' = selected.length === 2 ? 'two_up' : 'single';
+  const contentWidth = HEB_COL_WIDTHS.reduce((sum, width) => sum + width, 0) * (layoutMode === 'two_up' ? 2 : 1)
+    + (layoutMode === 'two_up' ? 18 : 0);
+
+  return {
+    id: blockId,
+    type: 'idfNetworkTable',
+    sourceWorksheetId: ws.id,
+    sourceSheet: sheetName,
+    sourceRange: ws.sourceRange || '',
+    renderMode: 'excel_exact',
+    tableProfile: HEB_TABLE_PROFILE,
+    layoutMode,
+    sectionTitle: hebTitle(idf, switches),
+    headers: [...HEB_HEADERS],
+    rows: layoutMode === 'single' ? selected[0].rows : [],
+    leftRows: layoutMode === 'two_up' ? selected[0].rows : [],
+    rightRows: layoutMode === 'two_up' ? selected[1].rows : [],
+    leftCaption: '',
+    rightCaption: '',
+    portRangeLeft: '',
+    portRangeRight: '',
+    colWidths: [...HEB_COL_WIDTHS],
+    rowHeight,
+    headerHeight: HEB_HEADER_HEIGHT,
+    fontSize: HEB_FONT_SIZE,
+    contentWidth,
+    contentHeight: HEB_HEADER_HEIGHT + maxRows * rowHeight,
+    sourceRowCount: groups.reduce((sum, group) => sum + group.rows.length, 0),
+    bodyRowFillMode: 'none',
+    gridLines: true,
+    styleRole: 'network-two-up',
+    splitMode: 'none',
+    allowContinuation: false,
+    minScale: 1.0,
+    scaleMode: 'fit_body',
+    orientation: 'landscape',
+    editable: false,
+    layoutWarnings: warnings,
+    pageCount,
+    pairIndex: selectedPairIndex,
+    switchKeys: switches,
+    scaledUp: false,
+  };
 }
 
 function idfColIndex(headers: string[], ...keys: string[]): number | null {
@@ -66,8 +299,11 @@ function idfColIndex(headers: string[], ...keys: string[]): number | null {
   return null;
 }
 
-/** First row that looks like a Port/Label or Port/Controller-ID network header. */
+/** First row that looks like a real network header. H-E-B exact header wins. */
 export function idfHeaderRow(grid: string[][]): number | null {
+  const heb = hebIdfHeaderRow(grid);
+  if (heb != null) return heb;
+
   for (let r = 0; r < Math.min(grid.length, 12); r += 1) {
     const low = (grid[r] ?? []).map(normalizeHeaderCell);
     const hasPort = low.some((c) => c && c.includes('port'));
@@ -149,15 +385,21 @@ export function isIdfNetworkPage(page: { layoutProfile?: string; pageFamily?: st
   return b?.type === 'idfNetworkTable';
 }
 
-/** Build the special RDM/IDF network table block (two-up 48-port by default). */
+/** Build either the H-E-B switch-pair table or the legacy generic IDF table. */
 export function buildIdfNetworkBlock(
   ws: Worksheet,
   headerRow: number,
   blockId: string,
-  opts?: { showTerminatedBy?: boolean },
+  opts?: { showTerminatedBy?: boolean; pairIndex?: number },
 ): PageBlock {
-  const showTerminatedBy = opts?.showTerminatedBy ?? false;
   const grid = ws.grid ?? [];
+  const hebHeader = hebIdfHeaderRow(grid);
+  if (hebHeader != null) {
+    const heb = buildHebIdfNetworkBlock(ws, hebHeader, blockId, opts?.pairIndex ?? 0);
+    if (heb) return heb;
+  }
+
+  const showTerminatedBy = opts?.showTerminatedBy ?? false;
   const headersSrc = grid[headerRow] ?? [];
 
   const assemble = (

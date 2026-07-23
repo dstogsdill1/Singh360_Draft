@@ -12,6 +12,7 @@ from openpyxl.utils.cell import column_index_from_string, get_column_letter, ran
 from core.metadata_inference import infer_metadata_from_labeled_grid
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 from core.page_normalizer import normalize_page
+from core.heb_idf_switch_matrix import replace_heb_idf_pages  # S360_HEB_IDF_SWITCH_MATRIX_V1
 from core.page_composer import (
     BODY_BUDGET,
     BODY_W,
@@ -2363,7 +2364,11 @@ def import_workbook(
         order_cursor += 1
 
     pages = sorted(pages, key=lambda p: p["order"])
-    project["pages"] = compose_pages(pages)
+    pages = compose_pages(pages)
+    # H-E-B IDF worksheets carry a seven-column switch matrix plus separate
+    # title/legend cells. Rebuild only those pages from the exact source columns
+    # and add deterministic switch-pair continuations without touching sources.
+    project["pages"] = replace_heb_idf_pages(pages, project["worksheets"], index_entries)
     _append_continuation_rows_to_index(project)
     project["paginationLocked"] = True
     recalc_page_numbers(project)

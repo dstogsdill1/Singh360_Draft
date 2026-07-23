@@ -103,6 +103,13 @@ export interface PageBlock {
   maxScale?: number;
   /** RDM / IDF network table (idfNetworkTable) payload — TABLE STYLE 4F. */
   layoutMode?: 'single' | 'two_up';
+  /** S360_HEB_IDF_SWITCH_MATRIX_V1 — exact schema; H-E-B uses seven source columns only. */
+  tableProfile?: string;
+  leftCaption?: string;
+  rightCaption?: string;
+  pageCount?: number;
+  pairIndex?: number;
+  switchKeys?: string[];
   sectionTitle?: string;
   leftRows?: string[][];
   rightRows?: string[][];

@@ -216,6 +216,17 @@ def set_link(project_id: str, project: dict[str, Any], store: Any, path_value: s
     })
     project["workbookSync"] = sync
     project["sourceWorkbookName"] = path.name
+    # Keep the human-facing project identity tied to the real external file,
+    # never the disposable temp_<project-id>.xlsx parser name.
+    metadata = dict(project.get("metadata") or {})
+    metadata["sourceFile"] = path.name
+    project["metadata"] = metadata
+    sources = list(project.get("sources") or [])
+    for source in sources:
+        if isinstance(source, dict) and str(source.get("type") or "").lower() == "workbook":
+            source["name"] = path.name
+            source["path"] = str(path)
+    project["sources"] = sources
 
     # Keep a recovery copy inside the project package. The external path remains authoritative.
     try:
@@ -444,6 +455,20 @@ def save_local_then_try_sync(project_id: str, project: dict[str, Any], store: An
         store.save(project_id, project)
         return project
 
+    # S360 FAST SAFE SAVE V12
+    # A normal project save must not rewrite a large external workbook when
+    # the page manifest already matches. That unnecessary write caused slow
+    # saves, workbook locks, and false SAVE FAILED badges.
+    if state == "in_sync":
+        project = dict(project)
+        project["workbookSync"] = {
+            **dict(project.get("workbookSync") or {}),
+            "status": "in_sync",
+            "warning": "",
+            "observedAt": utcnow(),
+        }
+        return project
+
     if state in {
         "missing",
         "locked",
@@ -451,11 +476,21 @@ def save_local_then_try_sync(project_id: str, project: dict[str, Any], store: An
         "project_mismatch",
         "review_required",
         "conflict",
+        "workbook_changed",
     }:
         project = _pending_after_local_save(
             project,
             state,
             status.get("message", ""),
+        )
+        store.save(project_id, project)
+        return project
+
+    if state != "app_changed":
+        project = _pending_after_local_save(
+            project,
+            state,
+            status.get("message", "Workbook synchronization requires review."),
         )
         store.save(project_id, project)
         return project

@@ -1,98 +1,98 @@
-# Singh360 Draft local server plus ngrok tunnel.
-# This file intentionally uses no PowerShell here-strings.
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+[CmdletBinding()]
+param()
+
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 $Root = $PSScriptRoot
 $Port = 8766
-$LocalApp = "http://127.0.0.1:$Port/app"
-$PublicRoot = "https://twig-convent-makeshift.ngrok-free.dev"
-$PublicApp = "$PublicRoot/app"
-$Python = Join-Path $Root ".venv\Scripts\python.exe"
+$LocalRoot = "http://127.0.0.1:$Port"
+$ProjectId = "b0904c99f2404524"
+$Target = "$LocalRoot/app?project=$ProjectId&mode=editor"
+$PythonConsole = Join-Path $Root ".venv\Scripts\python.exe"
+$PythonWindowless = Join-Path $Root ".venv\Scripts\pythonw.exe"
+$Python = if (Test-Path $PythonWindowless) { $PythonWindowless } else { $PythonConsole }
+$Runtime = Join-Path $Root ".docs\runtime"
+$LogDir = Join-Path $Root ".docs\runtime_logs\$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+$ServerPidFile = Join-Path $Runtime "singh360-server.pid"
+$NgrokPidFile = Join-Path $Runtime "singh360-ngrok.pid"
+$ServerOut = Join-Path $LogDir "server.stdout.log"
+$ServerErr = Join-Path $LogDir "server.stderr.log"
+$NgrokOut = Join-Path $LogDir "ngrok.stdout.log"
+$NgrokErr = Join-Path $LogDir "ngrok.stderr.log"
 
+New-Item -ItemType Directory -Path $Runtime -Force | Out-Null
+New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 Set-Location $Root
 
-if (-not (Test-Path $Python)) {
-    Write-Host "ERROR: Python virtual environment was not found:" -ForegroundColor Red
-    Write-Host "  $Python" -ForegroundColor Red
-    exit 1
-}
-
-if (-not (Get-Command ngrok -ErrorAction SilentlyContinue)) {
-    Write-Host "ERROR: ngrok was not found on PATH." -ForegroundColor Red
-    Write-Host "Install or repair ngrok, then run this script again." -ForegroundColor Yellow
-    exit 1
-}
-
-$distIndex = Join-Path $Root "frontend\dist\index.html"
-if (-not (Test-Path $distIndex)) {
-    Write-Host "Frontend build is missing. Building now..." -ForegroundColor Yellow
-    Push-Location (Join-Path $Root "frontend")
-    try {
-        if (-not (Test-Path "node_modules")) {
-            npm install
-            if ($LASTEXITCODE -ne 0) { throw "npm install failed." }
-        }
-        npm run build
-        if ($LASTEXITCODE -ne 0) { throw "npm run build failed." }
+function Stop-Pid([string]$Path) {
+    if (-not (Test-Path $Path)) { return }
+    $raw = Get-Content $Path -ErrorAction SilentlyContinue | Select-Object -First 1
+    $value = 0
+    if ([int]::TryParse([string]$raw, [ref]$value) -and $value -gt 0) {
+        Stop-Process -Id $value -Force -ErrorAction SilentlyContinue
     }
-    finally {
-        Pop-Location
-    }
+    Remove-Item $Path -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host ""
-Write-Host "Stopping old Singh360 listener on port $Port..." -ForegroundColor DarkGray
-$connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-if ($connections) {
-    $connections |
-        Select-Object -ExpandProperty OwningProcess -Unique |
-        ForEach-Object {
-            Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
+function Wait-Health([string]$Url) {
+    for ($i = 1; $i -le 80; $i++) {
+        try {
+            $reply = Invoke-RestMethod -Uri $Url -TimeoutSec 3
+            if ($reply.ok -eq $true) { return $true }
+        } catch {
         }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
 }
+
+Stop-Pid $ServerPidFile
+Stop-Pid $NgrokPidFile
+Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique |
+    ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 Get-Process -Name ngrok -ErrorAction SilentlyContinue |
     Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 1
 
-$serverCommand = 'cd /d "' + $Root + '" && set "SINGH360_PORT=' + $Port + '" && "' + $Python + '" server.py'
-Write-Host "Starting local server in a new window..." -ForegroundColor Yellow
-Start-Process -FilePath "cmd.exe" -ArgumentList @("/k", $serverCommand)
+$env:SINGH360_PORT = [string]$Port
+$server = Start-Process `
+    -FilePath $Python `
+    -ArgumentList @("server.py") `
+    -WorkingDirectory $Root `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $ServerOut `
+    -RedirectStandardError $ServerErr `
+    -PassThru
+Set-Content $ServerPidFile $server.Id -Encoding ASCII
 
-Write-Host "Waiting for $LocalApp ..." -ForegroundColor DarkGray
-$ready = $false
-for ($i = 0; $i -lt 60; $i++) {
-    try {
-        $response = Invoke-WebRequest -Uri $LocalApp -UseBasicParsing -TimeoutSec 3
-        if ($response.StatusCode -eq 200) {
-            $ready = $true
-            break
-        }
-    }
-    catch {
-    }
-    Start-Sleep -Seconds 1
+if (-not (Wait-Health "$LocalRoot/api/health")) {
+    Get-Content $ServerOut -Tail 120 -ErrorAction SilentlyContinue
+    Get-Content $ServerErr -Tail 120 -ErrorAction SilentlyContinue
+    throw "Singh360 did not start."
 }
 
-if (-not $ready) {
-    Write-Host "ERROR: The local app did not start." -ForegroundColor Red
-    Write-Host "Check the Singh360 Server window for the actual Python error." -ForegroundColor Yellow
-    exit 1
+$ngrokCommand = Get-Command ngrok.exe -ErrorAction SilentlyContinue
+if (-not $ngrokCommand) { $ngrokCommand = Get-Command ngrok -ErrorAction SilentlyContinue }
+if ($ngrokCommand) {
+    $ngrok = Start-Process `
+        -FilePath $ngrokCommand.Source `
+        -ArgumentList @(
+            "http",
+            [string]$Port,
+            "--url",
+            "https://twig-convent-makeshift.ngrok-free.dev"
+        ) `
+        -WorkingDirectory $Root `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $NgrokOut `
+        -RedirectStandardError $NgrokErr `
+        -PassThru
+    Set-Content $NgrokPidFile $ngrok.Id -Encoding ASCII
 }
 
-Write-Host "Local app ready: $LocalApp" -ForegroundColor Green
-
-$ngrokCommand = 'ngrok http ' + $Port + ' --url ' + $PublicRoot
-Write-Host "Starting ngrok in a new window..." -ForegroundColor Yellow
-Start-Process -FilePath "cmd.exe" -ArgumentList @("/k", $ngrokCommand)
-
-Start-Sleep -Seconds 3
-
-Write-Host ""
-Write-Host "Singh360 Draft is running." -ForegroundColor Green
-Write-Host "Local app:  $LocalApp"
-Write-Host "Public app: $PublicApp" -ForegroundColor Green
-Write-Host ""
-Write-Host "The server and ngrok are running in separate windows." -ForegroundColor DarkGray
-
-Start-Process $LocalApp
+Start-Process $Target
+Write-Host "Mi Tienda 829 is open: $Target" -ForegroundColor Green
+Write-Host "Server and ngrok are hidden. Closing this window will not stop them." -ForegroundColor Green
+Start-Sleep -Seconds 2

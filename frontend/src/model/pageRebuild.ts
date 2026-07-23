@@ -13,6 +13,7 @@ export function rebuildSinglePageFromSource(page: PageModel, ws: Worksheet): Pag
     if (headerRow == null) return page;
     const block = buildIdfNetworkBlock(ws, headerRow, `${ws.id}_idf`, {
       showTerminatedBy: page.showTerminatedBy ?? false,
+      pairIndex: page.continuationIndex ?? 0, // S360_HEB_IDF_SWITCH_MATRIX_V1
     });
     return {
       ...page,

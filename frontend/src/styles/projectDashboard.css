@@ -399,3 +399,135 @@
   .project-home-head-actions { justify-content: flex-start; max-width: none; }
 }
 
+/* S360 SIMPLE OPEN + SYNC V11 */
+.project-list > button small::before {
+  content: "Open project · ";
+  color: #176aa6;
+  font-weight: 800;
+}
+.simple-project-open {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 18px 20px;
+  border: 2px solid #aeb8c0!important;
+  border-left-width: 10px!important;
+}
+.simple-project-open.green {
+  border-color: #14845a!important;
+  background: #edf8f3!important;
+}
+.simple-project-open.yellow {
+  border-color: #d88700!important;
+  background: #fff8e8!important;
+}
+.simple-project-open.red {
+  border-color: #b43838!important;
+  background: #fff0f0!important;
+}
+.simple-project-open-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  min-width: 0;
+}
+.simple-status-light {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #75818a;
+  box-shadow: 0 0 0 5px rgba(117,129,138,.14);
+}
+.simple-project-open.green .simple-status-light {
+  background: #14845a;
+  box-shadow: 0 0 0 5px rgba(20,132,90,.15);
+}
+.simple-project-open.yellow .simple-status-light {
+  background: #d88700;
+  box-shadow: 0 0 0 5px rgba(216,135,0,.16);
+}
+.simple-project-open.red .simple-status-light {
+  background: #b43838;
+  box-shadow: 0 0 0 5px rgba(180,56,56,.14);
+}
+.simple-project-open h2 {
+  margin: 3px 0 5px;
+  font-size: 22px;
+}
+.simple-project-open p {
+  margin: 0;
+  color: #52606a;
+}
+.simple-edit-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 10px;
+}
+.simple-edit-times span {
+  display: grid;
+  gap: 2px;
+  padding: 6px 9px;
+  border: 1px solid #cbd3d8;
+  border-radius: 5px;
+  background: rgba(255,255,255,.72);
+  font-size: 10px;
+}
+.simple-edit-times b {
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.simple-project-open-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.workbook-link-card .link-path-row,
+.workbook-link-card .workbook-selection-pending {
+  display: none;
+}
+.sync-state-summary.simple div {
+  position: relative;
+}
+.sync-state-summary.simple div.newer {
+  background: #e7f5ed;
+  border-top: 6px solid #14845a;
+}
+.sync-state-summary.simple div.newer::after {
+  content: "LATEST EDIT";
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  color: #14845a;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+.sync-state-summary.simple b,
+.sync-state-summary.simple span,
+.sync-state-summary.simple small {
+  display: block;
+}
+.sync-state-summary.simple small {
+  margin-top: 7px;
+  color: #596670;
+}
+.sync-choice.match-choice {
+  border-left-color: #14845a;
+  background: #edf8f3;
+}
+@media(max-width: 850px) {
+  .simple-project-open {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .simple-project-open-actions {
+    justify-content: flex-start;
+  }
+}
+

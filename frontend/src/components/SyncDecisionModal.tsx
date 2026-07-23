@@ -3,30 +3,49 @@ import type { WorkbookLinkStatus } from '../api/client';
 interface Props {
   status: WorkbookLinkStatus;
   projectName: string;
+  projectSavedAt?: string;
   busy?: boolean;
   onClose: () => void;
-  onResolve: (direction: 'workbook_to_app' | 'app_to_workbook') => Promise<void>;
+  onResolve: (direction: 'workbook_to_app' | 'app_to_workbook' | 'baseline') => Promise<void>;
 }
 
-export default function SyncDecisionModal({ status, projectName, busy, onClose, onResolve }: Props) {
+export default function SyncDecisionModal({ status, projectName, projectSavedAt, busy, onClose, onResolve }: Props) {
   const workbookName = status.workbook?.projectName || status.workbook?.filename || 'Linked workbook';
+  const workbookModified = status.workbook?.modified || '';
+  const workbookTime = workbookModified ? Date.parse(workbookModified) : Number.NaN;
+  const projectTime = projectSavedAt ? Date.parse(projectSavedAt) : Number.NaN;
+  const workbookNewer = Number.isFinite(workbookTime) && (!Number.isFinite(projectTime) || workbookTime > projectTime);
+  const projectNewer = Number.isFinite(projectTime) && (!Number.isFinite(workbookTime) || projectTime > workbookTime);
   return (
     <div className="dashboard-overlay sync-decision-overlay" role="dialog" aria-modal="true">
       <div className="sync-decision-modal">
         <header>
           <div>
             <div className="eyebrow">SAFE SYNCHRONIZATION REVIEW</div>
-            <h2>Choose which structure should be used</h2>
-            <p>No action happens until you choose. A matched project.json and workbook backup is created first.</p>
+            <h2>Which version was edited last?</h2>
+            <p>Green means matching. Yellow means one side changed. Red means both changed or the wrong workbook is linked. A backup is created before either version is used.</p>
           </div>
           <button type="button" onClick={onClose} disabled={busy}>Cancel — Make No Changes</button>
         </header>
 
-        <div className="sync-state-summary">
-          <div><b>Active app project</b><span>{projectName}</span></div>
-          <div><b>Linked workbook</b><span>{workbookName}</span></div>
-          <div><b>Current state</b><span>{status.message}</span></div>
+        <div className="sync-state-summary simple">
+          <div className={projectNewer ? 'newer' : ''}><b>Singh360 Project</b><span>{projectName}</span><small>Last save: {projectSavedAt || 'Not recorded'}</small></div>
+          <div className={workbookNewer ? 'newer' : ''}><b>Excel Workbook</b><span>{workbookName}</span><small>Last edit: {workbookModified || 'Not recorded'}</small></div>
+          <div><b>What is different?</b><span>{status.message}</span></div>
         </div>
+
+        {status.status === 'review_required' && (
+          <section className="sync-choice match-choice">
+            <div>
+              <h3>They Match</h3>
+              <p><b>Choose this when the workbook and project already represent the same current drawing set.</b></p>
+              <p>Neither version replaces the other. Singh360 records the matching baseline and opens normally.</p>
+            </div>
+            <button type="button" className="primary" disabled={busy} onClick={() => void onResolve('baseline')}>
+              They Match — Link and Continue
+            </button>
+          </section>
+        )}
 
         <section className="sync-choice workbook-choice">
           <div>
@@ -39,7 +58,7 @@ export default function SyncDecisionModal({ status, projectName, busy, onClose, 
             </ul>
           </div>
           <button type="button" className="primary" disabled={busy} onClick={() => void onResolve('workbook_to_app')}>
-            Create Backup, Then Import Workbook Structure into App
+            Use Workbook
           </button>
         </section>
 
@@ -54,7 +73,7 @@ export default function SyncDecisionModal({ status, projectName, busy, onClose, 
             </ul>
           </div>
           <button type="button" className="primary" disabled={busy} onClick={() => void onResolve('app_to_workbook')}>
-            Create Backup, Then Write App Structure into Workbook
+            Use Project
           </button>
         </section>
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from core.heb_idf_switch_matrix import build_heb_idf_network_block, find_heb_idf_header_row  # S360_HEB_IDF_SWITCH_MATRIX_V1
 from core.page_composer import BODY_BUDGET, BODY_W
 from core.workbook_importer import _build_idf_network_block, _idf_header_row, _is_idf_network_table
 
@@ -28,12 +29,23 @@ def rebuild_single_page_from_source(page: dict[str, Any], ws: dict[str, Any]) ->
             header_row = _idf_header_row(ws.get("grid") or [])
         if header_row is None:
             return page
-        block = _build_idf_network_block(
-            ws,
-            header_row,
-            f"{ws['id']}_idf",
-            show_terminated_by=bool(page.get("showTerminatedBy")),
-        )
+        heb_header = find_heb_idf_header_row(ws.get("grid") or [])
+        if heb_header is not None:
+            block = build_heb_idf_network_block(
+                ws,
+                f"{ws['id']}_idf",
+                pair_index=int(page.get("continuationIndex") or 0),
+                header_row=heb_header,
+            )
+            if block is None:
+                return page
+        else:
+            block = _build_idf_network_block(
+                ws,
+                header_row,
+                f"{ws['id']}_idf",
+                show_terminated_by=bool(page.get("showTerminatedBy")),
+            )
         out = dict(page)
         out.update(
             {

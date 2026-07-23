@@ -141,7 +141,11 @@ class ProjectStore:
         target.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        self.write_page_snapshots(project_dir, data)
+        # S360 INCREMENTAL SAFETY V12
+        # The complete prior project.json is already backed up above. Writing a
+        # separate snapshot for every page on every autosave created hundreds
+        # of OneDrive filesystem writes for large packages. Page snapshots are
+        # still created explicitly before page rebuild/recovery operations.
         # Migrate: drop legacy flat file once saved into the folder structure.
         legacy = self.legacy_json(project_id)
         try:

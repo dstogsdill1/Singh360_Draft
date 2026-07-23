@@ -12,6 +12,7 @@ import copy
 import re
 from typing import Any
 
+from core.heb_idf_switch_matrix import next_available_continuation_code, sheet_code_key  # S360_HEB_IDF_SWITCH_MATRIX_V1
 from core.page_composer import continuation_code
 from core.sheet_index_pagination import prepare_sheet_index_pages, split_sheet_index_pages
 from core.project_model import recalc_page_numbers
@@ -111,6 +112,21 @@ def sync_sheet_codes_from_index(project: dict[str, Any]) -> None:
     tab_codes = _tab_to_code(entries)
     pages: list[dict[str, Any]] = project.get("pages", [])
     group_to_code: dict[str, str] = {}
+    # Reserve every workbook-controlled sheet code, including excluded/source
+    # subpages such as EMS 13.1a, before assigning generated continuation codes.
+    used_codes = {
+        sheet_code_key(str(entry.get("sheetCodeRaw") or ""))
+        for entry in entries
+        if str(entry.get("sheetCodeRaw") or "").strip()
+    }
+    for candidate in pages:
+        if not candidate.get("include", True):
+            continue
+        if candidate.get("continuationOf") or candidate.get("generatedContinuation"):
+            continue
+        existing = (candidate.get("displaySheetCode") or candidate.get("sheetCode") or "").strip()
+        if existing:
+            used_codes.add(sheet_code_key(existing))
 
     for page in pages:
         if not page.get("include", True):
@@ -126,6 +142,7 @@ def sync_sheet_codes_from_index(project: dict[str, Any]) -> None:
         if code:
             page["sheetCode"] = code
             page["displaySheetCode"] = code
+            used_codes.add(sheet_code_key(code))
             group_to_code[page.get("id") or ""] = code
             gid = page.get("pageGroupId") or page.get("id") or ""
             group_to_code[gid] = code
@@ -152,7 +169,7 @@ def sync_sheet_codes_from_index(project: dict[str, Any]) -> None:
         if not base_code:
             continue
         ci = int(page.get("continuationIndex") or 1)
-        code = continuation_code(base_code, ci)
+        code = next_available_continuation_code(base_code, ci, used_codes)
         page["sheetCode"] = code
         page["displaySheetCode"] = code
 

@@ -663,6 +663,67 @@
 }
 /* SINGH360 PUBLISHED INDEX NOTES + DRAFT LABELS END */
 
+/* S360_HEB_IDF_KYLE_LAYOUT_V4 — fixed Kyle-style 48-port IDF tables */
+/* Reclaim the normalized page's 48px left/right padding so two 782px switch
+   tables plus the 18px center gap fit the 1598px drawing body at true width. */
+.np-idf-heb {
+  width: calc(100% + 96px);
+  margin-left: -48px;
+  box-sizing: border-box;
+}
+.np-idf-heb .np-idf-section-band {
+  max-width: 72%;
+  margin: 0 auto 10px;
+  padding: 2px 8px 4px;
+  background: #fff;
+  border: none;
+  border-bottom: 1px solid #707070;
+  color: #000;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.np-idf-heb .np-idf-two-up-row {
+  width: 100%;
+  gap: 18px;
+  justify-content: center;
+}
+.np-idf-heb .np-idf-two-up-col,
+.np-idf-heb .np-idf-single-slot {
+  flex: 0 0 782px;
+  width: 782px;
+  min-width: 782px;
+  max-width: 782px;
+  box-sizing: border-box;
+}
+.np-idf-heb .np-idf-single-slot {
+  margin: 0 auto;
+}
+.np-idf-table-heb {
+  width: 782px;
+  min-width: 782px;
+  max-width: 782px;
+  table-layout: fixed;
+}
+.np-idf-table-heb th,
+.np-idf-table-heb td {
+  border-color: #111;
+  padding: 1px 3px;
+  text-overflow: clip;
+  background: #fff;
+  color: #111;
+}
+.np-idf-table-heb .np-idf-colhead {
+  background: #fff;
+  color: #000;
+  font-weight: 700;
+  text-align: left;
+}
+/* No automatic row fill. A fill appears only when the source/app explicitly
+   stores one; the renderer no longer treats every populated row as green. */
+
 /* S360 VECTOR PDF EXPORT START */
 /* The export-only project hides raster PDF previews.  These backgrounds must be
    transparent so PyMuPDF can place the original vector PDF behind the remaining

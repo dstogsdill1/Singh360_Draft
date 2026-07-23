@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import type { ProjectModel } from '../model/types';
 import {
   aiGuideUrl,
+  archiveProject,
   createProjectFromWorkbook,
-  deleteProject,
   exportPackage,
   getLibV2,
   getWorkbookLinkStatus,
@@ -162,7 +162,14 @@ export default function ProjectDashboard({ project }: Props) {
         return;
       }
       setLinkPath(selected);
-      setMessage('Workbook selected — not linked yet. Review the path, then click Confirm Selected Workbook.');
+      const linked = await linkWorkbookPath(project.id, selected);
+      setLink(linked.status);
+      if (['review_required', 'conflict', 'workbook_changed', 'app_changed'].includes(linked.status.status)) {
+        setMessage('Workbook selected. Choose which version should be used.');
+        setSyncDecisionOpen(true);
+      } else {
+        setMessage(linked.status.message || 'Workbook linked.');
+      }
     } catch (error) {
       setMessage(`Browse workbook failed: ${String(error)}`);
     } finally {
@@ -209,9 +216,9 @@ export default function ProjectDashboard({ project }: Props) {
     }
   };
 
-  const resolveSync = async (direction: 'workbook_to_app' | 'app_to_workbook') => {
+  const resolveSync = async (direction: 'workbook_to_app' | 'app_to_workbook' | 'baseline') => {
     if (!project) return;
-    setBusy(direction === 'workbook_to_app' ? 'Importing workbook structure' : 'Writing app structure');
+    setBusy(direction === 'baseline' ? 'Linking matching versions' : direction === 'workbook_to_app' ? 'Importing workbook structure' : 'Writing app structure');
     setMessage('');
     try {
       const result = await resolveWorkbookLink(project.id, direction);
@@ -290,17 +297,50 @@ export default function ProjectDashboard({ project }: Props) {
 
   const removeProject = async () => {
     if (!project) return;
-    setBusy('Deleting project');
+    setBusy('Removing project');
     try {
-      await deleteProject(project.id);
+      await archiveProject(project.id);
       setDeleteOpen(false);
       window.location.assign('/app');
     } catch (error) {
-      setMessage(`Project deletion failed: ${String(error)}`);
+      setMessage(`Project removal failed: ${String(error)}`);
     } finally {
       setBusy('');
     }
   };
+
+  const confirmNewProject = () => {
+    if (!window.confirm(
+      'Create a separate Singh360 project? Use this only for a different store or a genuinely different workbook. Click Cancel to open an existing project instead.',
+    )) return;
+    newWorkbookRef.current?.click();
+  };
+
+  const syncTone = !project
+    ? 'neutral'
+    : link?.status === 'in_sync'
+      ? 'green'
+      : ['workbook_changed', 'app_changed', 'review_required', 'pending'].includes(link?.status || '')
+        ? 'yellow'
+        : ['conflict', 'project_mismatch', 'missing', 'locked', 'invalid'].includes(link?.status || '')
+          ? 'red'
+          : 'neutral';
+
+  const syncHeadline = !project
+    ? 'Choose an existing project'
+    : link?.status === 'in_sync'
+      ? 'Ready — Project and workbook match'
+      : link?.status === 'workbook_changed'
+        ? 'Workbook changed after the last sync'
+        : link?.status === 'app_changed'
+          ? 'Project changed after the last sync'
+          : link?.status === 'conflict'
+            ? 'Both versions changed — choose which one is correct'
+            : link?.status === 'project_mismatch'
+              ? 'Wrong workbook is linked to this project'
+              : link?.status === 'review_required'
+                ? 'First link — confirm whether the versions match'
+                : link?.message || 'Choose the correct project workbook';
 
   const qualityState = !quality
     ? 'Not audited'
@@ -339,7 +379,7 @@ export default function ProjectDashboard({ project }: Props) {
         <aside className="project-list-card">
           <div className="card-head">
             <h2>Projects</h2>
-            <button type="button" onClick={() => newWorkbookRef.current?.click()}>New from Workbook</button>
+            <button type="button" onClick={confirmNewProject}>Create New Project</button>
             <input
               ref={newWorkbookRef}
               type="file"
@@ -358,7 +398,7 @@ export default function ProjectDashboard({ project }: Props) {
                 type="button"
                 key={item.id}
                 className={item.id === project?.id ? 'active' : ''}
-                onClick={() => window.location.assign(`/app?project=${item.id}`)}
+                onClick={() => window.location.assign(`/app?project=${item.id}&mode=editor`)}
               >
                 <strong>{projectName(item)}</strong>
                 <span>{item.sourceWorkbook || 'No workbook name'}</span>
@@ -372,10 +412,10 @@ export default function ProjectDashboard({ project }: Props) {
         <main className="project-home-main">
           {!project ? (
             <section className="welcome-card">
-              <h2>Choose a saved project or create one from a workbook</h2>
-              <p>Do not create a duplicate project merely to change the workbook link.</p>
+              <h2>Open a saved project from the left</h2>
+              <p>Click a project to open it. Create New Project is only for a different store or a genuinely different workbook.</p>
               <div className="welcome-actions">
-                <button type="button" className="primary large" onClick={() => newWorkbookRef.current?.click()}>Choose Workbook and Create New Project</button>
+                <button type="button" className="primary large" onClick={confirmNewProject}>Create a Different Project</button>
                 <button type="button" className="large" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}>Open Component Builder</button>
               </div>
             </section>
@@ -399,6 +439,33 @@ export default function ProjectDashboard({ project }: Props) {
                   <span className="draft-confirmed">✓ Draft Confirmed {stageCounts.draft_confirmed}</span>
                   <span className="public">Public {stageCounts.public}</span>
                   <span className="public-confirmed">✓ Public Confirmed {stageCounts.public_confirmed}</span>
+                </div>
+              </section>
+
+              <section className={`simple-project-open ${syncTone}`}>
+                <div className="simple-project-open-status">
+                  <span className="simple-status-light" aria-hidden="true" />
+                  <div>
+                    <div className="eyebrow">PROJECT / WORKBOOK CHECK</div>
+                    <h2>{syncHeadline}</h2>
+                    <p>{link?.message || 'Choose the project workbook.'}</p>
+                    <div className="simple-edit-times">
+                      <span><b>Workbook last edit</b>{link?.workbook?.modified || 'Not recorded'}</span>
+                      <span><b>Project last save</b>{project.lastSavedAt || project.modified || 'Not recorded'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="simple-project-open-actions">
+                  {link?.status === 'in_sync' ? (
+                    <>
+                      <button type="button" className="primary large" onClick={() => window.location.assign(actionUrl())}>Open Project</button>
+                      <button type="button" onClick={() => project && void openLinkedWorkbook(project.id)}>Open Workbook</button>
+                    </>
+                  ) : ['review_required', 'conflict', 'workbook_changed', 'app_changed'].includes(link?.status || '') ? (
+                    <button type="button" className="primary large" onClick={() => void reviewSync()}>Compare Versions</button>
+                  ) : (
+                    <button type="button" className="primary large" onClick={() => void browseWorkbook()}>Choose Correct Workbook</button>
+                  )}
                 </div>
               </section>
 
@@ -473,6 +540,7 @@ export default function ProjectDashboard({ project }: Props) {
                   )}
                 </div>
                 <div className="workbook-action-row">
+                  <button type="button" disabled={!project || !!busy} onClick={() => void browseWorkbook()}>Change Workbook</button>
                   <button type="button" className="primary" disabled={!project || !!busy || !link?.path} onClick={() => void reviewSync()}>
                     {link?.status === 'in_sync' ? 'Check for Workbook Changes' : 'Review and Synchronize Safely'}
                   </button>
@@ -505,6 +573,7 @@ export default function ProjectDashboard({ project }: Props) {
         <SyncDecisionModal
           status={link}
           projectName={activeProjectName(project)}
+          projectSavedAt={project.lastSavedAt || project.modified || ''}
           busy={!!busy}
           onClose={() => setSyncDecisionOpen(false)}
           onResolve={resolveSync}

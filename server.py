@@ -2685,13 +2685,53 @@ def archive_project(project_id: str):
     if not project_dir:
         return jsonify(_err("Project folder not found.")), 404
     dest = archive_root / project_dir.name
+    archive_mode = "folder-move"
     try:
         import shutil
         shutil.move(str(project_dir), str(dest))
     except Exception as exc:
-        app.logger.error("archive_project failed for %s: %s", project_id, exc)
-        return jsonify(_err("Failed to archive project.", str(exc))), 500
-    return jsonify({"ok": True, "id": project_id, "archivedTo": str(dest)})
+        # S360 ARCHIVE-FIRST PROJECT REMOVAL V14
+        # OneDrive may deny a folder move while a generated image placeholder
+        # is being synchronized. Deactivate the project in place by renaming
+        # only project.json. The package remains restorable and immediately
+        # disappears from the active project list.
+        app.logger.warning(
+            "archive_project folder move failed for %s; deactivating in place: %s",
+            project_id,
+            exc,
+        )
+        project_json = project_dir / "project.json"
+        if not project_json.is_file():
+            return jsonify(_err("Failed to archive project.", str(exc))), 500
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        archived_json = project_dir / f"project.archived_{stamp}.json"
+        try:
+            project_json.rename(archived_json)
+            (project_dir / "ARCHIVED_PROJECT.txt").write_text(
+                "Removed from active Singh360 projects at "
+                + datetime.now().isoformat(timespec="seconds")
+                + "\nOriginal project ID: "
+                + project_id
+                + "\nOriginal folder retained because OneDrive denied the folder move.\n",
+                encoding="utf-8",
+            )
+        except OSError as fallback_exc:
+            app.logger.error(
+                "archive_project fallback failed for %s: %s",
+                project_id,
+                fallback_exc,
+            )
+            return jsonify(
+                _err("Failed to archive project.", str(fallback_exc))
+            ), 500
+        dest = project_dir
+        archive_mode = "deactivated-in-place"
+    return jsonify({
+        "ok": True,
+        "id": project_id,
+        "archivedTo": str(dest),
+        "archiveMode": archive_mode,
+    })
 
 
 @app.post("/api/projects/<project_id>/export/package")

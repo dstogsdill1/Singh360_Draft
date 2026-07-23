@@ -95,6 +95,34 @@ def _workbook_path(store: Any, project_id: str, project: dict[str, Any]) -> Path
     return files[0] if files else None
 
 
+# S360 DEAD LOCK SELF-HEAL V13
+def _pid_is_running(pid: int) -> bool:
+    # Return True only when the recorded lock owner still exists.
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            process_query_limited_information = 0x1000
+            handle = ctypes.windll.kernel32.OpenProcess(
+                process_query_limited_information,
+                False,
+                pid,
+            )
+            if not handle:
+                return False
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        except Exception:
+            return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError, PermissionError):
+        return False
+
+
 @contextmanager
 def _project_lock(store: Any, project_id: str, project: dict[str, Any]):
     project_dir = store.dir_for(project_id, project)
@@ -102,8 +130,23 @@ def _project_lock(store: Any, project_id: str, project: dict[str, Any]):
     lock = project_dir / ".workbook-status-sync.lock"
     if lock.exists():
         age = datetime.now().timestamp() - lock.stat().st_mtime
-        if age < 1800:
-            raise WorkbookSyncError(f"Workbook sync is already running. Lock: {lock}")
+        owner_pid = 0
+        try:
+            payload = json.loads(lock.read_text(encoding="utf-8"))
+            owner_pid = int(payload.get("pid") or 0)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            owner_pid = 0
+
+        # Keep a real active lock. Remove a dead-process lock immediately
+        # instead of blocking the project for 30 minutes after a crash/close.
+        if owner_pid and _pid_is_running(owner_pid) and age < 1800:
+            raise WorkbookSyncError(
+                f"Workbook sync is already running in process {owner_pid}. Lock: {lock}"
+            )
+        if not owner_pid and age < 30:
+            raise WorkbookSyncError(
+                f"Workbook sync lock was just created and cannot yet be verified. Lock: {lock}"
+            )
         lock.unlink(missing_ok=True)
     try:
         fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
