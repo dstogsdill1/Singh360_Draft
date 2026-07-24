@@ -235,6 +235,9 @@ export interface PageModel {
   continuationOf?: string | null;
   continuationIndex?: number;
   generatedContinuation?: boolean;
+  indexRowsOnPage?: number;
+  indexRowsPerPage?: number;
+  indexPageCount?: number;
   layoutWarnings?: string[];
 }
 

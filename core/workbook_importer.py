@@ -10,6 +10,7 @@ from openpyxl.cell.cell import MergedCell
 from openpyxl.utils.cell import column_index_from_string, get_column_letter, range_boundaries
 
 from core.metadata_inference import infer_metadata_from_labeled_grid
+from core.page_identity import is_sheet_index_page
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 from core.page_normalizer import normalize_page
 from core.heb_idf_switch_matrix import replace_heb_idf_pages  # S360_HEB_IDF_SWITCH_MATRIX_V1
@@ -691,7 +692,7 @@ def _append_continuation_rows_to_index(project: dict[str, Any]) -> None:
       - Never duplicate an already-present continuation sheet code.
     """
     index_page = next(
-        (p for p in project.get("pages", []) if p.get("pageType") == "index" and p.get("renderMode") == "excel_exact"),
+        (p for p in project.get("pages", []) if is_sheet_index_page(p) and p.get("renderMode") == "excel_exact"),
         None,
     )
     if not index_page:
@@ -843,7 +844,7 @@ def _should_use_excel_exact(page_type: str, family: str, ws: dict[str, Any]) -> 
         return False
     if not _tabular_enough(ws):
         return False
-    if page_type == "index":
+    if is_sheet_index_page({"pageType": page_type}):
         return True
     if family in EXCEL_EXACT_FAMILIES or family == "text":
         return True
@@ -890,7 +891,7 @@ def _split_settings_for_page(family: str, page_type: str, use_exact: bool) -> di
         settings["minScale"] = 0.75
     elif family in ("ioSchedule", "panelDetail", "rackLayout"):
         settings["minScale"] = 0.75
-    elif page_type == "index":
+    elif is_sheet_index_page({"pageType": page_type}):
         # A Sheet Index / TOC never spills onto a continuation page.
         settings.update({"splitMode": "none", "allowContinuation": False, "scaleMode": "fit_body"})
     elif family == "text":
@@ -2187,7 +2188,7 @@ def import_workbook(
             use_exact = True
             blocks = [exact_block]
         elif use_exact:
-            render_ws = _filter_index_payload_for_output(ws) if page_type == "index" else ws
+            render_ws = _filter_index_payload_for_output(ws) if is_sheet_index_page({"pageType": page_type}) else ws
             exact_block = _excel_range_block(render_ws, f"{ws['id']}_xr", split_settings)
             if family == "text" and layout_profile in ("front_matter_table", "instruction_table"):
                 _compact_text_instruction_block(exact_block)
@@ -2277,10 +2278,16 @@ def import_workbook(
             if layout_profile == "front_matter_narrative_table"
             else RENDER_PROFILE
         )
+        workbook_order = order_cursor
+        if idx:
+            try:
+                workbook_order = int(float(idx.get("orderRaw") or order_cursor))
+            except (TypeError, ValueError):
+                workbook_order = order_cursor
 
         page = {
             "id": f"page_{i+1}",
-            "order": order_cursor,
+            "order": workbook_order,
             "include": include,
             "sheetCode": sheet_code,
             "displaySheetCode": sheet_code,
@@ -2346,7 +2353,7 @@ def import_workbook(
 
             cont_page = deepcopy(page)
             cont_page["id"] = f"page_{i+1}_b"
-            cont_page["order"] = order_cursor
+            cont_page["order"] = float(page["order"]) + 0.001
             cont_page["sheetCode"] = continuation_code(sheet_code, 1)
             cont_page["displaySheetCode"] = cont_page["sheetCode"]
             if "continued" not in title.lower():
@@ -2370,6 +2377,11 @@ def import_workbook(
     # and add deterministic switch-pair continuations without touching sources.
     project["pages"] = replace_heb_idf_pages(pages, project["worksheets"], index_entries)
     _append_continuation_rows_to_index(project)
+    # The imported project must already be publishable. Use the same shared
+    # Sheet Index pipeline as open/save/export so callers never observe the
+    # one-page clipped source TOC between import and synchronization.
+    from core.sheet_index_sync import sync_project_sheet_index
+    project = sync_project_sheet_index(project)
     project["paginationLocked"] = True
     recalc_page_numbers(project)
     try:

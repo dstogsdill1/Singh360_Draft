@@ -17,6 +17,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.workbook.properties import CalcProperties
 
+from core.page_identity import is_sheet_index_page
+
 HELP_VERSION = "2026.07.22-status-sync-1"
 SCHEMA_VERSION = "5.0"
 STATUS_LABELS = {
@@ -59,24 +61,6 @@ def file_hash(path: Path) -> str:
     return sha256(path.read_bytes()).hexdigest()
 
 
-def project_hash(project: dict[str, Any]) -> str:
-    payload = {
-        "metadata": project.get("metadata", {}),
-        "pages": [
-            {
-                "id": p.get("id"),
-                "order": p.get("order"),
-                "include": p.get("include", True),
-                "sheetCode": p.get("sheetCode"),
-                "sheetTitle": p.get("sheetTitle"),
-                "sheetTab": p.get("sheetTab"),
-                "issueStatus": normalize_status(p.get("issueStatus")),
-            }
-            for p in project.get("pages", [])
-            if isinstance(p, dict)
-        ],
-    }
-    return sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
 def _workbook_path(store: Any, project_id: str, project: dict[str, Any]) -> Path | None:
@@ -123,38 +107,6 @@ def _pid_is_running(pid: int) -> bool:
         return False
 
 
-@contextmanager
-def _project_lock(store: Any, project_id: str, project: dict[str, Any]):
-    project_dir = store.dir_for(project_id, project)
-    project_dir.mkdir(parents=True, exist_ok=True)
-    lock = project_dir / ".workbook-status-sync.lock"
-    if lock.exists():
-        age = datetime.now().timestamp() - lock.stat().st_mtime
-        owner_pid = 0
-        try:
-            payload = json.loads(lock.read_text(encoding="utf-8"))
-            owner_pid = int(payload.get("pid") or 0)
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            owner_pid = 0
-
-        # Keep a real active lock. Remove a dead-process lock immediately
-        # instead of blocking the project for 30 minutes after a crash/close.
-        if owner_pid and _pid_is_running(owner_pid) and age < 1800:
-            raise WorkbookSyncError(
-                f"Workbook sync is already running in process {owner_pid}. Lock: {lock}"
-            )
-        if not owner_pid and age < 30:
-            raise WorkbookSyncError(
-                f"Workbook sync lock was just created and cannot yet be verified. Lock: {lock}"
-            )
-        lock.unlink(missing_ok=True)
-    try:
-        fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(json.dumps({"pid": os.getpid(), "created": utcnow()}, indent=2))
-        yield
-    finally:
-        lock.unlink(missing_ok=True)
 
 
 def _backup_workbook(path: Path, store: Any, project_id: str) -> Path:
@@ -348,72 +300,593 @@ def _write_companion_sheet(wb, page: dict[str, Any], project_id: str) -> str:
     return tab
 
 
+
+
+# S360 WORKBOOK AUTHORITY V15
+# The linked workbook owns workbook-driven structure and source worksheets.
+# App-only canvas/assets remain protected in project.json and are merged back
+# after every workbook refresh.
+
+from contextlib import contextmanager as _s360_contextmanager
+from copy import copy as _s360_copy
+from datetime import date as _s360_date, datetime as _s360_datetime
+import threading as _s360_threading
+
+_S360_PROJECT_LOCKS: dict[str, _s360_threading.Lock] = {}
+
+
+def project_hash(project: dict[str, Any]) -> str:
+    """Hash all persisted editor state, not just the page manifest."""
+    payload = {
+        "metadata": project.get("metadata", {}),
+        "pages": [
+            {
+                "id": p.get("id"),
+                "order": p.get("order"),
+                "include": p.get("include", True),
+                "sheetCode": p.get("sheetCode"),
+                "displaySheetCode": p.get("displaySheetCode"),
+                "sheetTitle": p.get("sheetTitle"),
+                "sheetTab": p.get("sheetTab"),
+                "issueStatus": normalize_status(p.get("issueStatus")),
+                "canvasObjects": p.get("canvasObjects", []),
+                "assets": p.get("assets", []),
+                "notes": p.get("notes", ""),
+            }
+            for p in project.get("pages", [])
+            if isinstance(p, dict)
+        ],
+        "worksheets": [
+            {
+                "id": w.get("id"),
+                "name": w.get("name"),
+                "grid": w.get("grid", []),
+                "formulas": w.get("formulas", {}),
+                "styles": w.get("styles", {}),
+                "rowHeights": w.get("rowHeights", {}),
+                "columnWidths": w.get("columnWidths", {}),
+            }
+            for w in project.get("worksheets", [])
+            if isinstance(w, dict)
+        ],
+    }
+    return sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+@_s360_contextmanager
+def _project_lock(store: Any, project_id: str, project: dict[str, Any]):
+    """One in-process sync at a time; remove stale crash locks safely."""
+    gate = _S360_PROJECT_LOCKS.setdefault(project_id, _s360_threading.Lock())
+    if not gate.acquire(timeout=180):
+        raise WorkbookSyncError("Workbook save is still running. Wait a moment and save again.")
+    project_dir = store.dir_for(project_id, project)
+    project_dir.mkdir(parents=True, exist_ok=True)
+    lock = project_dir / ".workbook-status-sync.lock"
+    try:
+        if lock.exists():
+            age = datetime.now().timestamp() - lock.stat().st_mtime
+            pid = 0
+            try:
+                pid = int(json.loads(lock.read_text(encoding="utf-8")).get("pid") or 0)
+            except Exception:
+                pid = 0
+            # The in-process gate proves another V15 thread is not active. A lock
+            # from this PID or an old process is stale. A fresh foreign PID gets a
+            # brief safety window before it is treated as stale.
+            if pid != os.getpid() and age < 120:
+                raise WorkbookSyncError(f"Workbook save is already running. Lock: {lock}")
+            lock.unlink(missing_ok=True)
+        fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps({"pid": os.getpid(), "created": utcnow()}, indent=2))
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
+        gate.release()
+
+
+
+
+def _s360_page_match(page: dict[str, Any], manifest: list[dict[str, Any]]) -> dict[str, Any] | None:
+    tab = str(page.get("sheetTab") or "").strip().casefold()
+    code = str(page.get("sheetCode") or "").strip().casefold()
+    for item in manifest:
+        if tab and code and tab == str(item.get("sheetTab") or "").casefold() and code == str(item.get("sheetCode") or "").casefold():
+            return item
+    for item in manifest:
+        if tab and tab == str(item.get("sheetTab") or "").casefold():
+            return item
+    for item in manifest:
+        if code and code == str(item.get("sheetCode") or "").casefold():
+            return item
+    return None
+
+
+def _normalize_continuation_identities(
+    pages: list[dict[str, Any]],
+    base_id_remap: dict[str, str],
+) -> None:
+    """Attach every generated page to its final controlled base Page ID."""
+    reserved = {
+        str(page.get("id") or "")
+        for page in pages
+        if not page.get("generatedContinuation") and not page.get("continuationOf")
+    }
+    used = set(reserved)
+    for page in pages:
+        if not page.get("generatedContinuation") and not page.get("continuationOf"):
+            page["pageGroupId"] = page.get("id")
+            page["continuationOf"] = None
+            page["continuationIndex"] = 0
+            continue
+
+        old_base = str(page.get("continuationOf") or page.get("pageGroupId") or "")
+        base_id = base_id_remap.get(old_base, old_base)
+        page["pageGroupId"] = base_id
+        page["continuationOf"] = base_id
+        index = max(1, int(page.get("continuationIndex") or 1))
+        candidate = f"{base_id}__continuation_{index}"
+        discriminator = 2
+        while candidate in used:
+            candidate = f"{base_id}__continuation_{index}_{discriminator}"
+            discriminator += 1
+        page["id"] = candidate
+        used.add(candidate)
+
+        title = str(page.get("sheetTitle") or "Untitled Sheet")
+        title = re.sub(
+            r"(?:\s*[—-]\s*)?CONTINUED(?:\s*[—-]\s*CONTINUED)*\s*$",
+            "",
+            title,
+            flags=re.IGNORECASE,
+        ).strip(" —-")
+        page["sheetTitle"] = f"{title} — CONTINUED"
+
+
 def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
+    """Import the complete workbook, including brand-new 00_INDEX pages."""
     path = _workbook_path(store, project_id, project)
     if path is None:
-        return project
+        raise WorkbookSyncError("No workbook is linked to this project.")
     if not path.is_file():
-        raise WorkbookSyncError(f'The linked workbook was not found: {path}')
+        raise WorkbookSyncError(f"The linked workbook was not found: {path}")
+
     with _project_lock(store, project_id, project):
+        from core.project_model import ensure_project_shape, recalc_page_numbers
+        from core.sheet_index_sync import sync_project_sheet_index
+        from core.workbook_importer import import_workbook
+
         try:
-            wb = load_workbook(path, keep_vba=path.suffix.lower() == ".xlsm", data_only=False, read_only=False)
+            imported = import_workbook(
+                path,
+                project_id=project_id,
+                assets_dir=store.assets_excel_dir(project_id, project),
+                asset_url_prefix=f"/api/assets/{project_id}",
+            )
         except PermissionError as exc:
-            raise WorkbookSyncError("The linked workbook is open or locked. Close Excel, then reopen the project.") from exc
+            raise WorkbookSyncError(
+                "The linked workbook is open or locked. Close Excel, then reopen the project."
+            ) from exc
+        except Exception as exc:
+            raise WorkbookSyncError(
+                f"The linked workbook could not rebuild the project: {type(exc).__name__}: {exc}"
+            ) from exc
+
+        manifest = _s360_index_manifest(path)
+        old_pages = [deepcopy(p) for p in project.get("pages", []) if isinstance(p, dict)]
+        old_worksheets = [deepcopy(w) for w in project.get("worksheets", []) if isinstance(w, dict)]
+        old_by_id = {str(p.get("id") or ""): p for p in old_pages if p.get("id")}
+        old_by_pair = {
+            (str(p.get("sheetTab") or "").strip().casefold(), str(p.get("sheetCode") or "").strip().casefold()): p
+            for p in old_pages
+            if p.get("sheetTab") or p.get("sheetCode")
+        }
+        old_by_tab = {str(p.get("sheetTab") or "").strip().casefold(): p for p in old_pages if p.get("sheetTab")}
+        old_by_code = {str(p.get("sheetCode") or "").strip().casefold(): p for p in old_pages if p.get("sheetCode")}
+        old_ws_name_by_id = {
+            str(w.get("id") or ""): str(w.get("name") or w.get("sourceSheet") or "")
+            for w in old_worksheets
+        }
+
+        app_owned_fields = {
+            "canvasObjects", "assets", "underlay", "underlays", "background", "overlays",
+            "annotations", "pastedImages", "imageCrop", "crop", "crops", "masks",
+            "highlightedCells", "manualObjects", "lockedObjects", "connectors",
+        }
+        workbook_owned_fields = {
+            "order", "include", "sheetCode", "displaySheetCode", "sheetTitle",
+            "sheetTab", "pageType", "pageFamily", "layoutProfile", "renderMode",
+            "renderProfile", "sourceSheet", "sourceRange", "printArea", "splitMode",
+            "repeatRows", "minScale", "allowContinuation", "scaleMode", "orientation",
+            "template", "templateId", "linkedWorksheetId", "blocks", "sourceRevision",
+            "notes", "pageNumber", "pageTotal", "pageGroupId", "continuationOf",
+            "continuationIndex", "generatedContinuation", "layoutWarnings", "issueStatus",
+            "parentPageId", "sourceMode", "syncDirection",
+        }
+
+        imported_pages: list[dict[str, Any]] = []
+        base_id_remap: dict[str, str] = {}
+        used_old: set[int] = set()
+        for raw in imported.get("pages", []):
+            if not isinstance(raw, dict):
+                continue
+            page = deepcopy(raw)
+            imported_id = str(page.get("id") or "")
+            item = _s360_page_match(page, manifest) if not page.get("continuationOf") else None
+            if item:
+                for key in (
+                    "include", "order", "sheetCode", "displaySheetCode", "sheetTab",
+                    "sheetTitle", "pageFamily", "notes", "renderProfile", "splitMode",
+                    "parentPageId", "issueStatus", "sourceMode", "syncDirection",
+                ):
+                    if item.get(key) not in (None, ""):
+                        page[key] = deepcopy(item[key])
+                if item.get("pageType"):
+                    page["pageType"] = item["pageType"]
+                if item.get("id"):
+                    page["id"] = item["id"]
+
+            tab = str(page.get("sheetTab") or "").strip().casefold()
+            code = str(page.get("sheetCode") or "").strip().casefold()
+            existing = (
+                old_by_id.get(str(page.get("id") or ""))
+                or old_by_pair.get((tab, code))
+                or old_by_tab.get(tab)
+                or old_by_code.get(code)
+            )
+            if existing is not None and id(existing) not in used_old:
+                used_old.add(id(existing))
+                # Workbook Page IDs are stable base identities. Preserve an old
+                # ID only for legacy rows whose controlled manifest has none.
+                if existing.get("id") and not (item and item.get("id")):
+                    page["id"] = existing["id"]
+                for key, value in existing.items():
+                    if key not in workbook_owned_fields and key not in page:
+                        page[key] = deepcopy(value)
+                for key in app_owned_fields:
+                    if existing.get(key) not in (None, "", [], {}):
+                        page[key] = deepcopy(existing[key])
+            if not page.get("generatedContinuation") and not page.get("continuationOf"):
+                base_id_remap[imported_id] = str(page.get("id") or imported_id)
+            imported_pages.append(page)
+
+        _normalize_continuation_identities(imported_pages, base_id_remap)
+        for page in imported_pages:
+            code_key = str(
+                page.get("displaySheetCode") or page.get("sheetCode") or ""
+            ).strip().casefold()
+            if code_key.startswith("src ") or code_key == "template":
+                page["include"] = False
+
+        archived_manual: list[dict[str, Any]] = []
+        # Preserve unmatched app-only pages. If a removed workbook page carries
+        # manual work, archive it explicitly instead of silently dropping it or
+        # publishing it as a duplicate base page.
+        for existing in old_pages:
+            if id(existing) in used_old:
+                continue
+            has_manual = any(existing.get(k) not in (None, "", [], {}) for k in app_owned_fields)
+            app_only = (
+                not existing.get("linkedWorksheetId")
+                or str(existing.get("sourceMode") or "").strip().casefold() in {"app", "manual", "app-only"}
+                or str(existing.get("pageType") or "").strip().casefold() in {"canvas", "underlay"}
+            )
+            if app_only:
+                preserved = deepcopy(existing)
+                code_key = str(
+                    preserved.get("displaySheetCode")
+                    or preserved.get("sheetCode")
+                    or ""
+                ).strip().casefold()
+                if code_key.startswith("src ") or code_key == "template":
+                    preserved["include"] = False
+                preserved["order"] = len(imported_pages) + 1
+                imported_pages.append(preserved)
+                continue
+            if has_manual:
+                archived = deepcopy(existing)
+                archived["archivedReason"] = (
+                    "Workbook refresh could not safely map this page to a controlled base Page ID."
+                )
+                archived["archivedAt"] = utcnow()
+                archived_manual.append(archived)
+
+        old_ws_by_name = {
+            str(w.get("name") or w.get("sourceSheet") or "").strip().casefold(): w
+            for w in old_worksheets
+        }
+        merged_worksheets: list[dict[str, Any]] = []
+        for raw in imported.get("worksheets", []):
+            if not isinstance(raw, dict):
+                continue
+            worksheet = deepcopy(raw)
+            old = old_ws_by_name.get(str(worksheet.get("name") or worksheet.get("sourceSheet") or "").strip().casefold())
+            if old:
+                for field in ("hiddenRows", "hiddenColumns", "hiddenCells"):
+                    if old.get(field) not in (None, "", [], {}):
+                        worksheet[field] = deepcopy(old[field])
+            merged_worksheets.append(worksheet)
+
+        merged = deepcopy(project)
+        metadata = deepcopy(project.get("metadata") or {})
+        metadata.update(deepcopy(imported.get("metadata") or {}))
+        metadata["sourceFile"] = path.name
+        merged["id"] = project_id
+        merged["metadata"] = metadata
+        merged["worksheets"] = merged_worksheets
+        merged["pages"] = imported_pages
+        merged["archivedPages"] = [
+            *deepcopy(project.get("archivedPages") or []),
+            *archived_manual,
+        ]
+        recalc_page_numbers(merged)
+        merged["sourceWorkbookName"] = path.name
+        merged["projectDisplayName"] = (
+            imported.get("projectDisplayName")
+            or metadata.get("projectName")
+            or merged.get("projectDisplayName")
+            or path.stem
+        )
+        merged = sync_project_sheet_index(ensure_project_shape(merged))
+
+        # S360 GENERATED INDEX VALIDATION V15.3
+        # Every explicitly included normal worksheet must import. The Sheet
+        # Index is different: Singh360 regenerates it from the final page
+        # manifest and may assign generated continuation codes/tabs such as
+        # EMS 2.0a. Validate that an actual generated index page exists rather
+        # than requiring the exact source worksheet pair.
+        actual_pages = [
+            item for item in merged.get("pages", [])
+            if isinstance(item, dict)
+        ]
+        actual_pairs = {
+            (
+                str(
+                    item.get("sheetCode")
+                    or item.get("displaySheetCode")
+                    or ""
+                ).strip().casefold(),
+                str(item.get("sheetTab") or "").strip().casefold(),
+            )
+            for item in actual_pages
+        }
+
+        has_generated_index = any(is_sheet_index_page(item) for item in actual_pages)
+        missing: list[str] = []
+        for item in manifest:
+            if not item.get("include"):
+                continue
+
+            code = str(item.get("sheetCode") or "").strip()
+            tab = str(item.get("sheetTab") or "").strip()
+            title = str(item.get("sheetTitle") or "").strip()
+            page_type = str(item.get("pageType") or "").strip()
+
+            code_key = code.casefold()
+            tab_key = tab.casefold()
+            if is_sheet_index_page(item):
+                if not has_generated_index:
+                    missing.append(f"{code} / {tab}")
+                continue
+
+            if (code_key, tab_key) not in actual_pairs:
+                missing.append(f"{code} / {tab}")
+
+        if missing:
+            raise WorkbookSyncError(
+                "Workbook import omitted included 00_INDEX pages: "
+                + "; ".join(missing[:20])
+            )
+
+        sync = dict(merged.get("workbookSync") or {})
+        sync.update({
+            "mode": "external-workbook-link",
+            "workbook": str(path),
+            "status": "in_sync",
+            "warning": "",
+            "lastSyncUtc": utcnow(),
+            "workbookHash": file_hash(path),
+            "appHash": project_hash(merged),
+            "authority": "workbook",
+            "lastAuthorityAction": "workbook_to_app",
+        })
+        merged["workbookSync"] = sync
+        store.save(project_id, merged)
+        return merged
+
+
+def _s360_cell_display(cell: Any) -> str:
+    value = cell.value
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    if isinstance(value, (_s360_datetime, _s360_date)):
+        return value.isoformat()
+    return str(value)
+
+
+def _s360_coerce(value: Any, existing: Any) -> Any:
+    text = "" if value is None else str(value)
+    if text == "":
+        return None
+    if isinstance(existing, bool):
+        return text.strip().casefold() in {"true", "yes", "y", "1", "x"}
+    if isinstance(existing, int) and not isinstance(existing, bool):
         try:
-            if "00_INDEX" not in wb.sheetnames:
-                return project
-            ws, headers = _ensure_index(wb)
-            pages = deepcopy(project.get("pages", []))
-            page_by_id = {str(p.get("id") or ""): p for p in pages if isinstance(p, dict) and p.get("id")}
-            page_by_tab = {str(p.get("sheetTab") or "").casefold(): p for p in pages if isinstance(p, dict) and p.get("sheetTab")}
-            changed = False
-            for row in range(5, ws.max_row + 1):
-                page_id = str(ws.cell(row, headers["page id"]).value or "").strip()
-                tab = str(ws.cell(row, headers["sheet tab"]).value or "").strip()
-                if not page_id and not tab:
+            return int(float(text.replace(",", "")))
+        except Exception:
+            return text
+    if isinstance(existing, float):
+        try:
+            return float(text.replace(",", ""))
+        except Exception:
+            return text
+    if isinstance(existing, (_s360_datetime, _s360_date)):
+        try:
+            return _s360_datetime.fromisoformat(text)
+        except Exception:
+            return text
+    stripped = text.strip()
+    if stripped.casefold() in {"true", "false"}:
+        return stripped.casefold() == "true"
+    try:
+        if stripped and re.fullmatch(r"[-+]?\d+", stripped.replace(",", "")):
+            return int(stripped.replace(",", ""))
+        if stripped and re.fullmatch(r"[-+]?(?:\d+\.\d*|\d*\.\d+)", stripped.replace(",", "")):
+            return float(stripped.replace(",", ""))
+    except Exception:
+        pass
+    return text
+
+
+def _s360_hex(value: Any) -> str | None:
+    text = str(value or "").strip().lstrip("#")
+    if len(text) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in text):
+        return text.upper()
+    return None
+
+
+def _s360_apply_worksheet_payload(wb: Any, project: dict[str, Any]) -> None:
+    from openpyxl.cell.cell import MergedCell as _S360MergedCell
+    from openpyxl.styles import Border as _S360Border, PatternFill as _S360Fill, Side as _S360Side
+    from openpyxl.utils import get_column_letter as _s360_col
+
+    for payload in project.get("worksheets", []):
+        if not isinstance(payload, dict):
+            continue
+        name = str(payload.get("sourceSheet") or payload.get("name") or "").strip()
+        if not name or name in {"00_PROJECT_META", "00_INDEX", "00_HELP"} or name not in wb.sheetnames:
+            continue
+        ws = wb[name]
+        grid = payload.get("grid") if isinstance(payload.get("grid"), list) else []
+        formulas = payload.get("formulas") if isinstance(payload.get("formulas"), dict) else {}
+        styles = payload.get("styles") if isinstance(payload.get("styles"), dict) else {}
+        for row_number, row in enumerate(grid, start=1):
+            if not isinstance(row, list):
+                continue
+            for col_number, display in enumerate(row, start=1):
+                cell = ws.cell(row_number, col_number)
+                if isinstance(cell, _S360MergedCell):
                     continue
-                page = page_by_id.get(page_id) or page_by_tab.get(tab.casefold())
-                if page is None:
+                address = f"{_s360_col(col_number)}{row_number}"
+                if address in formulas and str(formulas[address] or "").startswith("="):
+                    desired = formulas[address]
+                    if cell.value != desired:
+                        cell.value = desired
+                else:
+                    desired_display = "" if display is None else str(display)
+                    if _s360_cell_display(cell) != desired_display:
+                        cell.value = _s360_coerce(display, cell.value)
+
+                spec = styles.get(address)
+                if not isinstance(spec, dict):
                     continue
-                code = str(ws.cell(row, headers["sheet code"]).value or page.get("sheetCode") or "NEW")
-                patch = {
-                    "include": str(ws.cell(row, headers["include"]).value or "NO").strip().upper() == "YES",
-                    "order": int(ws.cell(row, headers["order"]).value or page.get("order") or 9999),
-                    "sheetCode": code,
-                    "displaySheetCode": code,
-                    "sheetTab": tab or page.get("sheetTab"),
-                    "sheetTitle": str(ws.cell(row, headers["page title"]).value or page.get("sheetTitle") or "Untitled Sheet"),
-                    "issueStatus": normalize_status(ws.cell(row, headers["issue status"]).value),
-                    "parentPageId": str(ws.cell(row, headers["parent page id"]).value or ""),
-                    "sourceMode": str(ws.cell(row, headers["source mode"]).value or "Workbook"),
-                    "syncDirection": str(ws.cell(row, headers["sync direction"]).value or "Both"),
+                font = _s360_copy(cell.font)
+                changed_font = False
+                mapping = {
+                    "bold": "bold", "italic": "italic", "underline": "underline",
+                    "fontSize": "size", "fontName": "name",
                 }
-                for key, value in patch.items():
-                    if page.get(key) != value:
-                        page[key] = value
-                        changed = True
-            project = {**project, "pages": sorted(pages, key=lambda p: int(p.get("order") or 9999))}
-            project.setdefault("metadata", {})["helpVersion"] = HELP_VERSION
-            project["workbookSync"] = {**dict(project.get("workbookSync") or {}),
-                "mode": "one-user-two-way-manifest",
-                "workbook": str(path),
-                "lastSyncUtc": utcnow(),
-                "workbookHash": file_hash(path),
-                "appHash": project_hash(project),
-            }
-            if changed:
-                store.save(project_id, project)
-            return project
-        finally:
-            wb.close()
+                for source_key, target_key in mapping.items():
+                    if source_key in spec:
+                        setattr(font, target_key, spec[source_key])
+                        changed_font = True
+                color = _s360_hex(spec.get("fontColor")) if "fontColor" in spec else None
+                if color:
+                    font.color = color
+                    changed_font = True
+                if changed_font:
+                    cell.font = font
+
+                alignment = _s360_copy(cell.alignment)
+                changed_alignment = False
+                for source_key, target_key in (
+                    ("hAlign", "horizontal"), ("vAlign", "vertical"),
+                    ("wrap", "wrap_text"), ("rotation", "text_rotation"),
+                    ("indent", "indent"),
+                ):
+                    if source_key in spec:
+                        setattr(alignment, target_key, spec[source_key])
+                        changed_alignment = True
+                if changed_alignment:
+                    cell.alignment = alignment
+
+                fill = _s360_hex(spec.get("fill")) if "fill" in spec else None
+                if fill:
+                    cell.fill = _S360Fill("solid", fgColor=fill)
+
+                border_spec = spec.get("borders")
+                if isinstance(border_spec, dict):
+                    old = cell.border
+                    sides: dict[str, Any] = {}
+                    for side_name in ("left", "right", "top", "bottom"):
+                        side_data = border_spec.get(side_name)
+                        if isinstance(side_data, dict) and side_data.get("style"):
+                            sides[side_name] = _S360Side(
+                                style=str(side_data.get("style")),
+                                color=_s360_hex(side_data.get("color")) or "000000",
+                            )
+                        else:
+                            sides[side_name] = getattr(old, side_name)
+                    cell.border = _S360Border(
+                        left=sides["left"], right=sides["right"],
+                        top=sides["top"], bottom=sides["bottom"],
+                        diagonal=old.diagonal, diagonal_direction=old.diagonal_direction,
+                        diagonalUp=old.diagonalUp, diagonalDown=old.diagonalDown,
+                        outline=old.outline, vertical=old.vertical, horizontal=old.horizontal,
+                    )
+
+        row_heights = payload.get("rowHeights") if isinstance(payload.get("rowHeights"), dict) else {}
+        for key, value in row_heights.items():
+            try:
+                ws.row_dimensions[int(key)].height = float(value)
+            except Exception:
+                pass
+        column_widths = payload.get("columnWidths") if isinstance(payload.get("columnWidths"), dict) else {}
+        for key, value in column_widths.items():
+            try:
+                ws.column_dimensions[str(key)].width = float(value)
+            except Exception:
+                pass
+
+
+def _s360_find_index_header(ws: Any) -> tuple[int, dict[str, int]]:
+    for row_number in range(1, min(ws.max_row or 0, 25) + 1):
+        headers: dict[str, int] = {}
+        for col in range(1, max(ws.max_column or 0, len(INDEX_HEADERS)) + 1):
+            label = str(ws.cell(row_number, col).value or "").strip().casefold()
+            if label:
+                headers[label] = col
+        if {"include", "sheet tab", "page title"}.issubset(headers):
+            next_col = max(headers.values(), default=0) + 1
+            for label in INDEX_HEADERS:
+                key = label.casefold()
+                if key not in headers:
+                    ws.cell(row_number, next_col, label)
+                    headers[key] = next_col
+                    next_col += 1
+            return row_number, headers
+    row_number = 1
+    headers = {}
+    for col, label in enumerate(INDEX_HEADERS, start=1):
+        ws.cell(row_number, col, label)
+        headers[label.casefold()] = col
+    return row_number, headers
 
 
 def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
+    """Write worksheet edits and package structure to the authoritative workbook."""
     path = _workbook_path(store, project_id, project)
     if path is None:
-        return project
+        raise WorkbookSyncError("No workbook is linked to this project.")
     if not path.is_file():
-        raise WorkbookSyncError(f'The linked workbook was not found: {path}')
+        raise WorkbookSyncError(f"The linked workbook was not found: {path}")
+
     with _project_lock(store, project_id, project):
         _backup_workbook(path, store, project_id)
         try:
@@ -422,38 +895,48 @@ def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: An
             raise WorkbookSyncError("The linked workbook is open or locked. Close Excel and save again.") from exc
         temp: Path | None = None
         try:
+            _s360_apply_worksheet_payload(wb, project)
             _ensure_help_sheet(wb)
             _ensure_meta(wb, project)
-            ws, headers = _ensure_index(wb)
-            by_id, by_tab = _row_maps(ws, headers)
+            ws = _s360_select_index_sheet(wb, writable=True)
+            header_row, headers = _s360_find_index_header(ws)
+            by_id: dict[str, int] = {}
+            by_tab: dict[str, int] = {}
+            for row in range(header_row + 1, (ws.max_row or header_row) + 1):
+                page_id = str(ws.cell(row, headers["page id"]).value or "").strip()
+                tab = str(ws.cell(row, headers["sheet tab"]).value or "").strip()
+                if page_id:
+                    by_id[page_id] = row
+                if tab:
+                    by_tab[tab.casefold()] = row
+
             stamp = utcnow()
             app_digest = project_hash(project)
             pages = sorted(project.get("pages", []), key=lambda p: int(p.get("order") or 9999))
-            for order, page in enumerate(pages, start=1):
+            base_pages = [
+                page for page in pages
+                if isinstance(page, dict)
+                and not page.get("generatedContinuation")
+                and not page.get("continuationOf")
+            ]
+            for page in base_pages:
                 if not isinstance(page, dict):
                     continue
                 page_id = str(page.get("id") or "").strip()
                 tab = str(page.get("sheetTab") or "").strip()
                 row = by_id.get(page_id) or by_tab.get(tab.casefold())
                 if row is None:
-                    row = max(ws.max_row + 1, 5)
-                if tab not in wb.sheetnames:
-                    tab = _write_companion_sheet(wb, page, project_id)
-                    page["sheetTab"] = tab
+                    # Workbook Order and base-page structure are controlled by
+                    # existing 00_INDEX rows. App-only/manual pages and generated
+                    # continuations never create physical control rows.
+                    continue
                 include = bool(page.get("include", True))
                 status = normalize_status(page.get("issueStatus"))
                 values = {
                     "include": "YES" if include else "NO",
-                    "order": order,
-                    "sheet code": page.get("displaySheetCode") or page.get("sheetCode") or "NEW",
-                    "sheet tab": tab,
-                    "page title": page.get("sheetTitle") or "Untitled Sheet",
-                    "family": page.get("pageFamily") or "",
-                    "page type": page.get("pageType") or "",
                     "notes": page.get("notes") or "",
                     "render profile": page.get("renderProfile") or page.get("layoutProfile") or "",
                     "split mode": page.get("splitMode") or "",
-                    "page id": page_id,
                     "parent page id": page.get("parentPageId") or "",
                     "issue status": STATUS_LABELS[status],
                     "source mode": page.get("sourceMode") or ("Workbook" if page.get("linkedWorksheetId") else "App"),
@@ -463,23 +946,17 @@ def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: An
                 }
                 for key, value in values.items():
                     ws.cell(row, headers[key], value)
-                wb[tab].sheet_properties.tabColor = _tab_color(include, status)
+                if tab in wb.sheetnames:
+                    wb[tab].sheet_properties.tabColor = _tab_color(include, status)
 
             for control in ("00_PROJECT_META", "00_INDEX"):
                 if control in wb.sheetnames:
                     wb[control].sheet_properties.tabColor = TAB_COLORS["control"]
             if "00_HELP" in wb.sheetnames:
                 wb["00_HELP"].sheet_properties.tabColor = TAB_COLORS["help"]
-            control_names = [name for name in ("00_PROJECT_META", "00_INDEX", "00_HELP") if name in wb.sheetnames]
-            page_names = [str(p.get("sheetTab") or "") for p in pages if str(p.get("sheetTab") or "") in wb.sheetnames]
-            remaining = [name for name in wb.sheetnames if name not in control_names and name not in page_names]
-            wb._sheets = [wb[name] for name in control_names + page_names + remaining]
+
             if wb.calculation is None:
-                wb.calculation = CalcProperties(
-                    calcMode="auto",
-                    fullCalcOnLoad=True,
-                    forceFullCalc=True,
-                )
+                wb.calculation = CalcProperties(calcMode="auto", fullCalcOnLoad=True, forceFullCalc=True)
             else:
                 wb.calculation.fullCalcOnLoad = True
                 wb.calculation.forceFullCalc = True
@@ -492,14 +969,21 @@ def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: An
             os.replace(temp, path)
             temp = None
 
+            project = dict(project)
             project.setdefault("metadata", {})["helpVersion"] = HELP_VERSION
-            project["workbookSync"] = {**dict(project.get("workbookSync") or {}),
-                "mode": "one-user-two-way-manifest",
+            sync = dict(project.get("workbookSync") or {})
+            sync.update({
+                "mode": "external-workbook-link",
                 "workbook": str(path),
+                "status": "in_sync",
+                "warning": "",
                 "lastSyncUtc": stamp,
                 "workbookHash": file_hash(path),
-                "appHash": app_digest,
-            }
+                "appHash": project_hash(project),
+                "authority": "workbook",
+                "lastAuthorityAction": "app_to_workbook",
+            })
+            project["workbookSync"] = sync
             return project
         except PermissionError as exc:
             raise WorkbookSyncError("The linked workbook is open or locked. Close Excel and save again.") from exc
@@ -507,3 +991,135 @@ def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: An
             if temp is not None:
                 temp.unlink(missing_ok=True)
             wb.close()
+
+
+# S360 ROBUST INDEX SELECTOR V15.1
+def _s360_scan_index_sheet(ws) -> tuple[list[dict[str, Any]], int]:
+    # Read one candidate 00_INDEX without relying on dimension metadata.
+    raw_rows: list[tuple[Any, ...]] = []
+    header_offset = -1
+    headers: dict[str, int] = {}
+
+    try:
+        for row_number, row in enumerate(ws.iter_rows(values_only=True), start=1):
+            values = tuple(row)
+            raw_rows.append(values)
+            if header_offset < 0 and row_number <= 75:
+                found: dict[str, int] = {}
+                for index, value in enumerate(values):
+                    label = str(value or "").strip().casefold()
+                    if label:
+                        found[label] = index
+                if {"include", "sheet tab", "page title"}.issubset(found):
+                    header_offset = len(raw_rows) - 1
+                    headers = found
+            if row_number >= 10000:
+                break
+    except Exception as exc:
+        raise WorkbookSyncError(
+            f"Could not stream candidate 00_INDEX sheet: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    if header_offset < 0:
+        raise WorkbookSyncError(
+            "Candidate 00_INDEX does not contain Include, Sheet Tab, and Page Title headers."
+        )
+
+    def cell(row: tuple[Any, ...], name: str, default: Any = "") -> Any:
+        index = headers.get(name)
+        if index is None or index >= len(row):
+            return default
+        value = row[index]
+        return default if value is None else value
+
+    result: list[dict[str, Any]] = []
+    blank_run = 0
+    for values in raw_rows[header_offset + 1:]:
+        tab = str(cell(values, "sheet tab")).strip()
+        title = str(cell(values, "page title")).strip()
+        code = str(cell(values, "sheet code")).strip()
+        page_id = str(cell(values, "page id")).strip()
+        if not tab and not title and not code and not page_id:
+            blank_run += 1
+            if blank_run >= 50:
+                break
+            continue
+        blank_run = 0
+        include_raw = str(cell(values, "include")).strip().upper()
+        order_raw = cell(values, "order", None)
+        try:
+            order = int(float(order_raw))
+        except Exception:
+            order = len(result) + 1
+
+        def value(name: str, default: str = "") -> str:
+            return str(cell(values, name, default)).strip()
+
+        result.append({
+            "include": include_raw in {"YES", "TRUE", "INCLUDE", "Y", "1", "X", "✓"},
+            "order": order,
+            "sheetCode": code,
+            "displaySheetCode": code,
+            "sheetTab": tab,
+            "sheetTitle": title or tab,
+            "pageFamily": value("family"),
+            "pageType": value("page type"),
+            "notes": value("notes"),
+            "renderProfile": value("render profile"),
+            "splitMode": value("split mode"),
+            "id": page_id,
+            "parentPageId": value("parent page id"),
+            "issueStatus": normalize_status(value("issue status", "Draft")),
+            "sourceMode": value("source mode", "Workbook"),
+            "syncDirection": value("sync direction", "Both"),
+        })
+
+    score = (
+        len(result) * 1000
+        + sum(1 for item in result if item.get("include")) * 10
+        + sum(1 for item in result if item.get("sheetTab"))
+    )
+    return result, score
+
+
+def _s360_index_candidates(wb) -> list[tuple[int, int, Any, list[dict[str, Any]]]]:
+    candidates: list[tuple[int, int, Any, list[dict[str, Any]]]] = []
+    diagnostics: list[str] = []
+    for position, ws in enumerate(wb.worksheets):
+        if str(ws.title or "").strip().casefold() != "00_index":
+            continue
+        try:
+            manifest, score = _s360_scan_index_sheet(ws)
+            candidates.append((score, position, ws, manifest))
+        except WorkbookSyncError as exc:
+            diagnostics.append(f"sheet#{position + 1}: {exc}")
+    if not candidates:
+        detail = "; ".join(diagnostics) if diagnostics else "No 00_INDEX worksheet exists."
+        raise WorkbookSyncError("No usable 00_INDEX worksheet was found. " + detail)
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return candidates
+
+
+def _s360_select_index_sheet(wb, writable: bool = False):
+    # Select the populated control sheet when malformed files contain duplicates.
+    try:
+        return _s360_index_candidates(wb)[0][2]
+    except WorkbookSyncError:
+        if not writable:
+            raise
+        if "00_INDEX" in wb.sheetnames:
+            return wb["00_INDEX"]
+        return wb.create_sheet("00_INDEX", 1)
+
+
+def _s360_index_manifest(path: Path) -> list[dict[str, Any]]:
+    wb = load_workbook(
+        path,
+        read_only=True,
+        data_only=False,
+        keep_vba=path.suffix.lower() == ".xlsm",
+    )
+    try:
+        return _s360_index_candidates(wb)[0][3]
+    finally:
+        wb.close()

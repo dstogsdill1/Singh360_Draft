@@ -13,6 +13,7 @@ import re
 from typing import Any
 
 from core.heb_idf_switch_matrix import next_available_continuation_code, sheet_code_key  # S360_HEB_IDF_SWITCH_MATRIX_V1
+from core.page_identity import is_sheet_index_page
 from core.page_composer import continuation_code
 from core.sheet_index_pagination import prepare_sheet_index_pages, split_sheet_index_pages
 from core.project_model import recalc_page_numbers
@@ -29,13 +30,45 @@ from core.workbook_importer import (
 _DEFAULT_ROW_PX = 20
 
 
+def _place_cover_and_index_first(project: dict[str, Any]) -> None:
+    """Keep Cover first and the base Sheet Index second in published order."""
+    pages = list(project.get("pages") or [])
+    cover = next(
+        (
+            page for page in pages
+            if not page.get("generatedContinuation")
+            and (
+                str(page.get("pageType") or "").strip().casefold() == "cover"
+                or (
+                    str(page.get("sheetCode") or "").strip().casefold() == "ems 1.0"
+                    and "cover" in f"{page.get('sheetTab', '')} {page.get('sheetTitle', '')}".casefold()
+                )
+            )
+        ),
+        None,
+    )
+    index = next(
+        (
+            page for page in pages
+            if is_sheet_index_page(page) and not page.get("generatedContinuation")
+        ),
+        None,
+    )
+    front = [page for page in (cover, index) if page is not None]
+    if len(front) != 2:
+        return
+    project["pages"] = front + [page for page in pages if page not in front]
+    for order, page in enumerate(project["pages"], start=1):
+        page["order"] = order
+
+
 def _norm_tab(tab: str) -> str:
     return (tab or "").strip().lower()
 
 
 def _find_index_worksheet(project: dict[str, Any]) -> dict[str, Any] | None:
     index_page = next(
-        (p for p in project.get("pages", []) if p.get("pageType") == "index"),
+        (p for p in project.get("pages", []) if is_sheet_index_page(p)),
         None,
     )
     if not index_page:
@@ -177,7 +210,7 @@ def sync_sheet_codes_from_index(project: dict[str, Any]) -> None:
 def rebuild_normalized_index_block(project: dict[str, Any]) -> None:
     """Rewrite the normalized Sheet Index excel block to match exported pages."""
     index_page = next(
-        (p for p in project.get("pages", []) if p.get("pageType") == "index" and p.get("renderMode") == "excel_exact"),
+        (p for p in project.get("pages", []) if is_sheet_index_page(p)),
         None,
     )
     if not index_page:
@@ -245,6 +278,7 @@ def rebuild_normalized_index_block(project: dict[str, Any]) -> None:
 
 def sync_project_sheet_index(project: dict[str, Any]) -> dict[str, Any]:
     """Repair page sheet codes + normalized index from the source index worksheet."""
+    _place_cover_and_index_first(project)
     # Rebuild deterministic TOC continuation pages before generating rows.
     prepare_sheet_index_pages(project)
     sync_sheet_codes_from_index(project)

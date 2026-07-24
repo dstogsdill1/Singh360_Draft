@@ -165,7 +165,7 @@ export default function ProjectDashboard({ project }: Props) {
       const linked = await linkWorkbookPath(project.id, selected);
       setLink(linked.status);
       if (['review_required', 'conflict', 'workbook_changed', 'app_changed'].includes(linked.status.status)) {
-        setMessage('Workbook selected. Choose which version should be used.');
+        setMessage('Workbook selected. It is authoritative and is being loaded.');
         setSyncDecisionOpen(true);
       } else {
         setMessage(linked.status.message || 'Workbook linked.');
@@ -181,7 +181,7 @@ export default function ProjectDashboard({ project }: Props) {
     setBusy('Creating project');
     try {
       const result = await createProjectFromWorkbook(file);
-      window.location.assign(`/app?project=${result.id}`);
+      window.location.assign(`/app?project=${result.id}&mode=editor`);
     } catch (error) {
       setMessage(`Project creation failed: ${String(error)}`);
       setBusy('');
@@ -339,7 +339,7 @@ export default function ProjectDashboard({ project }: Props) {
             : link?.status === 'project_mismatch'
               ? 'Wrong workbook is linked to this project'
               : link?.status === 'review_required'
-                ? 'First link — confirm whether the versions match'
+                ? 'Workbook is authoritative — opening refreshes the project'
                 : link?.message || 'Choose the correct project workbook';
 
   const qualityState = !quality
@@ -481,7 +481,7 @@ export default function ProjectDashboard({ project }: Props) {
                 <div className="card-head secondary-tool-head"><h2>Project Administration</h2><span>Workbook, output, recovery, and maintenance tools</span></div>
                 <div className="project-more-tools">
                   <button type="button" onClick={() => setQualityOpen(true)}><b>Workbook Inspector / Repair</b><span>Audit, restructure, normalize, and recover from backup</span></button>
-                  <button type="button" onClick={() => void reviewSync()}><b>Review Workbook Sync</b><span>Compare workbook and app versions with safety backups</span></button>
+                  <button type="button" onClick={() => void reviewSync()}><b>Review Workbook Sync</b><span>Refresh the project from the authoritative workbook</span></button>
                   <button type="button" onClick={() => setLibraryOpen(true)}><b>Component Library Browser</b><span>Search and review the component library inside this project</span></button>
                   <button type="button" onClick={() => window.location.assign(actionUrl('export'))}><b>Drawing Set / Export PDF</b><span>Pick exact sheets and export</span></button>
                   <button type="button" onClick={() => window.location.assign(actionUrl('renumber'))}><b>Reorder / Renumber</b><span>Review and apply sheet-code order</span></button>

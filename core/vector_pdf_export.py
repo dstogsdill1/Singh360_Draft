@@ -18,6 +18,8 @@ from typing import Any, Iterable
 
 import fitz  # PyMuPDF
 
+from core.page_identity import is_sheet_index_page
+
 SHEET_W = 1632.0
 SHEET_H = 1056.0
 PAGE_ID_MARKER_PREFIX = "S360PID_"
@@ -279,7 +281,7 @@ def build_selected_export_document(
     allowed = set(selected) & originally_included
     selected_base_index = any(
         str(page.get("id")) in allowed
-        and str(page.get("pageType") or "").lower() == "index"
+        and is_sheet_index_page(page)
         and not page.get("generatedContinuation")
         for page in pages if isinstance(page, dict)
     )
@@ -295,7 +297,7 @@ def build_selected_export_document(
             str(page.get("id"))
             for page in pages
             if isinstance(page, dict)
-            and str(page.get("pageType") or "").lower() == "index"
+            and is_sheet_index_page(page)
             and page.get("generatedContinuation")
             and page.get("include", True)
         }

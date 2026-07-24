@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from core.page_identity import is_sheet_index_page
 from core.page_composer import BODY_W, page_render_diagnostics
 
 # Contextual readable font floors (pt) — match each family's established floor.
@@ -128,7 +129,7 @@ def _index_codes_from_rendered_page(project: dict[str, Any]) -> set[str]:
     from core.workbook_importer import _find_index_header_row, _header_map, _index_row_sheet_code
 
     index_page = next(
-        (p for p in project.get("pages", []) if p.get("pageType") == "index" and p.get("include", True)),
+        (p for p in project.get("pages", []) if is_sheet_index_page(p) and p.get("include", True)),
         None,
     )
     if not index_page:
@@ -178,7 +179,10 @@ def compute_export_warnings(project: dict[str, Any]) -> list[dict[str, str]]:
                     }
                 )
 
-        if diag.get("clipping"):
+        # Generated Sheet Index pages use their own fixed 46-row renderer; the
+        # generic excel-range scale diagnostic describes the source worksheet,
+        # not the published TOC chunk.
+        if diag.get("clipping") and not is_sheet_index_page(page):
             warnings.append(
                 {
                     "pageCode": code,
@@ -190,7 +194,7 @@ def compute_export_warnings(project: dict[str, Any]) -> list[dict[str, str]]:
 
         floor = _font_floor_for_page(page)
         eff_font = _effective_font_pt(page, diag)
-        if eff_font < floor - 0.05:
+        if not is_sheet_index_page(page) and eff_font < floor - 0.05:
             warnings.append(
                 {
                     "pageCode": code,
@@ -248,7 +252,7 @@ def compute_export_warnings(project: dict[str, Any]) -> list[dict[str, str]]:
             tab = (p.get("sheetTab") or "").strip().lower()
             if pcode and effective_index_codes and pcode not in effective_index_codes:
                 # The index page itself is often absent from its own table.
-                if p.get("pageType") == "index" or tab in ("00_index", "index"):
+                if is_sheet_index_page(p) or tab in ("00_index", "index"):
                     continue
                 # Auto-generated continuations (EMS 16.0a) are not source rows.
                 if _is_generated_continuation(p):
@@ -265,6 +269,8 @@ def compute_export_warnings(project: dict[str, Any]) -> list[dict[str, str]]:
         # Title block vs index sheet code mismatch (by tab).
         index_by_tab = {tab.lower(): code for code, tab, _ in index_entries if tab and code}
         for p in pages:
+            if _is_generated_continuation(p):
+                continue
             tab = (p.get("sheetTab") or "").strip().lower()
             pcode = (p.get("displaySheetCode") or p.get("sheetCode") or "").strip()
             icode = index_by_tab.get(tab)

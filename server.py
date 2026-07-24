@@ -479,7 +479,8 @@ def get_project(project_id: str):
     try:
         doc = maybe_pull_on_open(project_id, doc, store)
     except WorkbookSyncError as exc:
-        doc.setdefault("workbookSync", {})["warning"] = str(exc)
+        app.logger.error("Could not open authoritative workbook project %s: %s", project_id, exc)
+        return jsonify(_err("The editor cannot open until the authoritative workbook is available.", str(exc))), 409
     return jsonify(doc)
 
 
@@ -498,11 +499,12 @@ def save_project(project_id: str):
         return jsonify(_err("Project validation failed.", " | ".join(problems[:20]))), 400
 
     try:
-        # Local-first persistence: an external workbook can never block project saves.
+        # Save a local recovery first, but report success only after every
+        # required authoritative-workbook operation succeeds.
         data = save_local_then_try_sync(project_id, data, store)
-    except OSError as exc:
-        app.logger.error("Could not write project %s: %s", project_id, exc)
-        return jsonify(_err("Failed to save the local project.", str(exc))), 500
+    except (OSError, WorkbookSyncError) as exc:
+        app.logger.error("Could not save project and authoritative workbook %s: %s", project_id, exc)
+        return jsonify(_err("Workbook save failed. The editor is not marked Saved.", str(exc))), 500
 
     return jsonify(data)
 
@@ -2475,6 +2477,16 @@ def _write_export_only_project(export_doc: dict, temp_id: str):
     temp_doc = ensure_project_shape(export_doc)
     temp_doc["id"] = temp_id
     temp_doc["projectDisplayName"] = f"{temp_doc.get('projectDisplayName') or temp_id} export"
+    # The export clone is a read-only render artifact, not another workbook
+    # authority participant. Keeping the live link would make its temporary ID
+    # fail the workbook Project ID guard during the print-page GET.
+    temp_doc["workbookSync"] = {
+        **dict(temp_doc.get("workbookSync") or {}),
+        "mode": "none",
+        "status": "not_linked",
+        "workbook": "",
+        "warning": "",
+    }
     temp_dir = store.dir_for(temp_id, temp_doc)
     store.ensure_folders(temp_dir)
     temp_doc["projectFolder"] = str(temp_dir)

@@ -16,6 +16,8 @@ import re
 from copy import deepcopy
 from typing import Any
 
+from core.page_identity import is_sheet_index_page
+
 # Usable body height budget (logical px) for one 17x11 sheet, after title block
 # and page padding are removed. Kept conservative so print never scrolls.
 BODY_BUDGET = 720
@@ -96,14 +98,50 @@ def continuation_code(base_code: str, index: int) -> str:
     - eng      "EMS 3.10" -> "EMS 3.10a", "EMS 3.10b"
     """
     base = (base_code or "").strip()
-    letter = chr(ord("a") + index - 1)
+    index = max(1, int(index))
     if re.fullmatch(r"\d+", base):
         return f"{base}.{index}"
-    if re.fullmatch(r"\d+\.\d+", base):
-        return f"{base}{letter}"
+
+    match = re.fullmatch(r"(.*\d(?:\.\d+)?)([a-z]+)?", base, re.IGNORECASE)
+    stem = match.group(1) if match else base
+    existing = (match.group(2) or "").lower() if match else ""
+
+    def suffix_value(value: str) -> int:
+        total = 0
+        for char in value:
+            total = total * 26 + ord(char) - ord("a") + 1
+        return total
+
+    value = suffix_value(existing) + index
+    suffix = ""
+    while value:
+        value, remainder = divmod(value - 1, 26)
+        suffix = chr(ord("a") + remainder) + suffix
+
+    if match:
+        return f"{stem}{suffix}"
     if base:
-        return f"{base}{letter}"
+        return f"{base}{suffix}"
     return f"cont-{index}"
+
+
+def _code_key(code: str) -> str:
+    return re.sub(r"\s+", "", str(code or "").casefold())
+
+
+def _next_available_continuation_code(
+    base_code: str,
+    start_index: int,
+    used_codes: set[str],
+) -> str:
+    candidate_index = max(1, int(start_index))
+    while True:
+        candidate = continuation_code(base_code, candidate_index)
+        key = _code_key(candidate)
+        if key not in used_codes:
+            used_codes.add(key)
+            return candidate
+        candidate_index += 1
 
 
 # --------------------------------------------------------------------------
@@ -782,7 +820,7 @@ def _page_should_paginate(page: dict[str, Any]) -> bool:
         return False
     if page.get("splitMode") == "none" or not page.get("allowContinuation", False):
         return False
-    if page.get("pageType") in ("index", "cover", "canvas", "hybrid", "underlay"):
+    if is_sheet_index_page(page) or page.get("pageType") in ("cover", "canvas", "hybrid", "underlay"):
         return False
     return True
 
@@ -791,6 +829,7 @@ def _append_continuation_pages(
     composed: list[dict[str, Any]],
     base: dict[str, Any],
     groups: list[list[dict[str, Any]]],
+    used_codes: set[str],
 ) -> None:
     """Insert generated continuation pages immediately after ``base``."""
     base_code = base.get("sheetCode", "")
@@ -805,13 +844,14 @@ def _append_continuation_pages(
     composed.append(base)
 
     for ci, grp in enumerate(groups[1:], start=1):
+        code = _next_available_continuation_code(base_code, ci, used_codes)
         composed.append(
             {
                 "id": f"{group_id}_c{ci}",
                 "order": base.get("order", 0),
                 "include": base.get("include", True),
-                "sheetCode": continuation_code(base_code, ci),
-                "displaySheetCode": continuation_code(base_code, ci),
+                "sheetCode": code,
+                "displaySheetCode": code,
                 "sheetTitle": cont_title,
                 "sheetTab": base.get("sheetTab", ""),
                 "pageType": base.get("pageType", "data-grid"),
@@ -925,7 +965,11 @@ def page_render_diagnostics(pages: list[dict[str, Any]]) -> list[dict[str, Any]]
             content_h = int(idf.get("contentHeight") or 0)
             rows = int(idf.get("sourceRowCount") or 0)
             font_size = float(idf.get("fontSize") or DENSE_FONT_SIZE_FALLBACK)
-            clipping = bool(idf.get("layoutWarnings"))
+            clipping = any(
+                token in str(warning).casefold()
+                for warning in (idf.get("layoutWarnings") or [])
+                for token in ("clip", "overflow")
+            )
             if two_up:
                 reason = "network_48_port: two-up 1–24 / 25–48" if rows == 48 else (
                     f"network_48_port: two-up {idf.get('portRangeLeft', '')} / {idf.get('portRangeRight', '')}"
@@ -1035,7 +1079,22 @@ def compose_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     continuation pages. Base pages keep their id; continuations are inserted
     immediately after and flagged as generated.
     """
+    if any(
+        page.get("generatedContinuation")
+        and re.fullmatch(r".+_c\d+", str(page.get("id") or ""))
+        for page in pages
+    ):
+        existing = deepcopy(pages)
+        for order, page in enumerate(existing, start=1):
+            page["order"] = order
+        return existing
+
     composed: list[dict[str, Any]] = []
+    used_codes = {
+        _code_key(str(page.get("displaySheetCode") or page.get("sheetCode") or ""))
+        for page in pages
+        if str(page.get("displaySheetCode") or page.get("sheetCode") or "").strip()
+    }
 
     for page in pages:
         if not page.get("include", True):
@@ -1067,7 +1126,7 @@ def compose_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     composed.append(page)
                 else:
                     base = deepcopy(page)
-                    _append_continuation_pages(composed, base, [[p] for p in parts])
+                    _append_continuation_pages(composed, base, [[p] for p in parts], used_codes)
             else:
                 composed.append(page)
             continue
@@ -1083,7 +1142,7 @@ def compose_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
 
         base = deepcopy(page)
-        _append_continuation_pages(composed, base, groups)
+        _append_continuation_pages(composed, base, groups, used_codes)
 
     # Re-sequence order to reflect insertion order.
     for i, p in enumerate(composed, start=1):

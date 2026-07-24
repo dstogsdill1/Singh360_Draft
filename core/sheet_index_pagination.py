@@ -12,27 +12,14 @@ import math
 import re
 from typing import Any
 
+from core.heb_idf_switch_matrix import next_available_continuation_code, sheet_code_key
+from core.page_identity import is_sheet_index_page
+
 ROWS_PER_INDEX_PAGE = 46
 
 
 def _is_generated_index_continuation(page: dict[str, Any]) -> bool:
     return bool(page.get("indexContinuation") or page.get("generatedIndexContinuation"))
-
-
-def _continuation_suffix(index: int) -> str:
-    """1 -> a, 2 -> b, 26 -> z, 27 -> aa."""
-    value = max(1, int(index))
-    out = ""
-    while value:
-        value, rem = divmod(value - 1, 26)
-        out = chr(ord("a") + rem) + out
-    return out
-
-
-def _continuation_code(base_code: str, index: int) -> str:
-    base = str(base_code or "").strip()
-    suffix = _continuation_suffix(index)
-    return f"{base}{suffix}" if base else suffix
 
 
 def _clean_continued_title(title: str) -> str:
@@ -46,7 +33,7 @@ def _index_base_page(project: dict[str, Any]) -> dict[str, Any] | None:
         (
             page
             for page in pages
-            if page.get("pageType") == "index" and not _is_generated_index_continuation(page)
+            if is_sheet_index_page(page) and not _is_generated_index_continuation(page)
         ),
         None,
     )
@@ -91,12 +78,24 @@ def prepare_sheet_index_pages(project: dict[str, Any]) -> int:
     base_title = _clean_continued_title(str(base.get("sheetTitle") or "Sheet Index / TOC"))
     base_index = pages.index(base)
     continuations: list[dict[str, Any]] = []
+    used_codes = {
+        sheet_code_key(str(page.get("displaySheetCode") or page.get("sheetCode") or ""))
+        for page in pages
+        if str(page.get("displaySheetCode") or page.get("sheetCode") or "").strip()
+    }
+    used_ids = {str(page.get("id") or "") for page in pages if page.get("id")}
     for index in range(1, required):
         page = copy.deepcopy(base)
-        code = _continuation_code(base_code, index)
+        code = next_available_continuation_code(base_code, index, used_codes)
+        page_id = f"{base_id}__index_cont_{index}"
+        discriminator = 2
+        while page_id in used_ids:
+            page_id = f"{base_id}__index_cont_{index}_{discriminator}"
+            discriminator += 1
+        used_ids.add(page_id)
         page.update(
             {
-                "id": f"{base_id}__index_cont_{index}",
+                "id": page_id,
                 "include": True,
                 "sheetCode": code,
                 "displaySheetCode": code,
@@ -123,7 +122,11 @@ def prepare_sheet_index_pages(project: dict[str, Any]) -> int:
 def _find_index_header(grid: list[list[Any]]) -> int:
     for index, row in enumerate(grid[:30]):
         values = {str(value or "").strip().upper() for value in row}
-        if "PAGE" in values and "SHEET CODE" in values and ("PAGE TITLE" in values or "SHEET TITLE" in values):
+        if (
+            ("PAGE" in values or "ORDER" in values)
+            and "SHEET CODE" in values
+            and ("PAGE TITLE" in values or "SHEET TITLE" in values)
+        ):
             return index
     return 0
 
@@ -180,7 +183,7 @@ def split_sheet_index_pages(project: dict[str, Any]) -> int:
     index_pages = sorted(
         [
             page for page in (project.get("pages") or [])
-            if page.get("pageType") == "index"
+            if is_sheet_index_page(page)
             and (page is base or _is_generated_index_continuation(page))
         ],
         key=lambda page: int(page.get("continuationIndex") or 0),
@@ -213,5 +216,6 @@ def split_sheet_index_pages(project: dict[str, Any]) -> int:
         block["indexRowsOnPage"] = len(chunk)
         block["indexRowsPerPage"] = ROWS_PER_INDEX_PAGE
         page["indexRowsOnPage"] = len(chunk)
+        page["indexRowsPerPage"] = ROWS_PER_INDEX_PAGE
         page["indexPageCount"] = len(index_pages)
     return len(index_pages)

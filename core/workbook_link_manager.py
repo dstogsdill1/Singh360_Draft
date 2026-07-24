@@ -199,47 +199,6 @@ def _validate_workbook_project_name(project: dict[str, Any], meta: dict[str, Any
         )
 
 
-def set_link(project_id: str, project: dict[str, Any], store: Any, path_value: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    path = normalize_path(path_value)
-    meta = workbook_metadata(path)
-    _validate_workbook_project_name(project, meta)
-    project = dict(project)
-    sync = dict(project.get("workbookSync") or {})
-    sync.update({
-        "mode": "external-workbook-link",
-        "workbook": str(path),
-        "status": "review_required",
-        "linkedAt": utcnow(),
-        "warning": "",
-        "workbookHash": "",
-        "appHash": "",
-    })
-    project["workbookSync"] = sync
-    project["sourceWorkbookName"] = path.name
-    # Keep the human-facing project identity tied to the real external file,
-    # never the disposable temp_<project-id>.xlsx parser name.
-    metadata = dict(project.get("metadata") or {})
-    metadata["sourceFile"] = path.name
-    project["metadata"] = metadata
-    sources = list(project.get("sources") or [])
-    for source in sources:
-        if isinstance(source, dict) and str(source.get("type") or "").lower() == "workbook":
-            source["name"] = path.name
-            source["path"] = str(path)
-    project["sources"] = sources
-
-    # Keep a recovery copy inside the project package. The external path remains authoritative.
-    try:
-        internal = store.sources_dir(project_id, "workbook", project) / path.name
-        if internal.resolve() != path.resolve():
-            shutil.copy2(path, internal)
-    except OSError:
-        pass
-
-    store.save(project_id, project)
-    return project, status_payload(project_id, project, store)
-
-
 def unlink(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
     project = dict(project)
     project["workbookSync"] = {
@@ -367,21 +326,6 @@ def sync_auto(project_id: str, project: dict[str, Any], store: Any) -> tuple[dic
     raise WorkbookSyncError(status.get("message") or "Workbook synchronization is unavailable.")
 
 
-def maybe_pull_on_open(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
-    status = status_payload(project_id, project, store)
-    if status["status"] == "workbook_changed":
-        project, status = resolve(project_id, project, store, "workbook_to_app")
-    project = dict(project)
-    sync = dict(project.get("workbookSync") or {})
-    sync.update({
-        "status": status["status"],
-        "warning": "" if status["status"] in {"in_sync", "workbook_changed"} else status.get("message", ""),
-        "observedAt": utcnow(),
-    })
-    project["workbookSync"] = sync
-    return project
-
-
 def _record_runtime_sync_failure(
     store: Any,
     project_id: str,
@@ -425,89 +369,6 @@ def _pending_after_local_save(
         "localProjectSavedAt": utcnow(),
     }
     return project
-
-
-def save_local_then_try_sync(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
-    """Save project.json first; external workbook failures can never return a failed app save."""
-    store.save(project_id, project)
-
-    try:
-        status = status_payload(project_id, project, store)
-    except Exception as exc:
-        log_path = _record_runtime_sync_failure(store, project_id, "status", exc)
-        project = _pending_after_local_save(
-            project,
-            "status_error",
-            f"Project saved locally. Workbook status check failed: {type(exc).__name__}: {exc}",
-            log_path,
-        )
-        store.save(project_id, project)
-        return project
-
-    state = status["status"]
-    if state == "not_linked":
-        project = dict(project)
-        project["workbookSync"] = {
-            **dict(project.get("workbookSync") or {}),
-            "status": "not_linked",
-            "warning": "",
-        }
-        store.save(project_id, project)
-        return project
-
-    # S360 FAST SAFE SAVE V12
-    # A normal project save must not rewrite a large external workbook when
-    # the page manifest already matches. That unnecessary write caused slow
-    # saves, workbook locks, and false SAVE FAILED badges.
-    if state == "in_sync":
-        project = dict(project)
-        project["workbookSync"] = {
-            **dict(project.get("workbookSync") or {}),
-            "status": "in_sync",
-            "warning": "",
-            "observedAt": utcnow(),
-        }
-        return project
-
-    if state in {
-        "missing",
-        "locked",
-        "invalid",
-        "project_mismatch",
-        "review_required",
-        "conflict",
-        "workbook_changed",
-    }:
-        project = _pending_after_local_save(
-            project,
-            state,
-            status.get("message", ""),
-        )
-        store.save(project_id, project)
-        return project
-
-    if state != "app_changed":
-        project = _pending_after_local_save(
-            project,
-            state,
-            status.get("message", "Workbook synchronization requires review."),
-        )
-        store.save(project_id, project)
-        return project
-
-    try:
-        project, _ = resolve(project_id, project, store, "app_to_workbook")
-        return project
-    except Exception as exc:
-        log_path = _record_runtime_sync_failure(store, project_id, "write", exc)
-        project = _pending_after_local_save(
-            project,
-            "workbook_write_error",
-            f"Project saved locally. Workbook update is pending: {type(exc).__name__}: {exc}",
-            log_path,
-        )
-        store.save(project_id, project)
-        return project
 
 
 def choose_path_native() -> str:
@@ -579,3 +440,109 @@ def reveal_workbook(path: Path) -> None:
         subprocess.Popen(["explorer.exe", f"/select,{path}"])
     else:
         subprocess.Popen(["xdg-open", str(path.parent)])
+# S360 WORKBOOK AUTHORITY LINK V15
+# Workbook is authoritative. There is no first-sync version-choice workflow.
+
+
+def set_link(project_id: str, project: dict[str, Any], store: Any, path_value: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    path = normalize_path(path_value)
+    meta = workbook_metadata(path)
+    _validate_workbook_project_name(project, meta)
+    project = dict(project)
+    sync = dict(project.get("workbookSync") or {})
+    sync.update({
+        "mode": "external-workbook-link",
+        "workbook": str(path),
+        "status": "workbook_changed",
+        "linkedAt": utcnow(),
+        "warning": "",
+        "workbookHash": "",
+        "appHash": "",
+        "authority": "workbook",
+    })
+    project["workbookSync"] = sync
+    project["sourceWorkbookName"] = path.name
+    metadata = dict(project.get("metadata") or {})
+    metadata["sourceFile"] = path.name
+    project["metadata"] = metadata
+    sources = list(project.get("sources") or [])
+    for source in sources:
+        if isinstance(source, dict) and str(source.get("type") or "").casefold() == "workbook":
+            source["name"] = path.name
+            source["path"] = str(path)
+    project["sources"] = sources
+    try:
+        internal = store.sources_dir(project_id, "workbook", project) / path.name
+        if internal.resolve() != path.resolve():
+            shutil.copy2(path, internal)
+    except OSError:
+        pass
+    store.save(project_id, project)
+    project, status = resolve(project_id, project, store, "workbook_to_app")
+    return project, status
+
+
+def maybe_pull_on_open(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
+    status = status_payload(project_id, project, store)
+    state = status["status"]
+    if state == "in_sync":
+        return project
+    if state in {"workbook_changed", "app_changed", "conflict", "review_required", "pending"}:
+        project, _ = resolve(project_id, project, store, "workbook_to_app")
+        return project
+    if state == "not_linked":
+        project = dict(project)
+        sync = dict(project.get("workbookSync") or {})
+        sync.update({
+            "status": "not_linked",
+            "warning": "Link the authoritative project workbook before opening the editor.",
+            "authority": "workbook",
+        })
+        project["workbookSync"] = sync
+        return project
+    raise WorkbookSyncError(status.get("message") or "The authoritative workbook is unavailable.")
+
+
+def save_local_then_try_sync(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
+    """Never return Saved unless the project and workbook writes both succeed."""
+    store.save(project_id, project)  # local recovery first
+    try:
+        status = status_payload(project_id, project, store)
+        state = status["status"]
+        if state in {"not_linked", "missing", "locked", "invalid", "project_mismatch"}:
+            raise WorkbookSyncError(status.get("message") or "The authoritative workbook is unavailable.")
+        if state in {"workbook_changed", "conflict"}:
+            raise WorkbookSyncError(
+                "The workbook changed after this editor session opened. Reopen the project to load it before saving."
+            )
+        if state == "in_sync":
+            saved = dict(project)
+            saved["workbookSync"] = {
+                **dict(project.get("workbookSync") or {}),
+                "status": "in_sync",
+                "warning": "",
+                "observedAt": utcnow(),
+            }
+            store.save(project_id, saved)
+            return saved
+        if state != "app_changed":
+            raise WorkbookSyncError(
+                status.get("message") or f"Workbook synchronization is blocked ({state})."
+            )
+        project, _ = resolve(project_id, project, store, "app_to_workbook")
+        store.save(project_id, project)
+        return project
+    except Exception as exc:
+        log_path = _record_runtime_sync_failure(store, project_id, "required_write", exc)
+        pending = _pending_after_local_save(
+            project,
+            "workbook_write_required",
+            f"Workbook save failed: {type(exc).__name__}: {exc}",
+            log_path,
+        )
+        store.save(project_id, pending)
+        if isinstance(exc, WorkbookSyncError):
+            raise
+        raise WorkbookSyncError(
+            f"The local recovery copy was saved, but the authoritative workbook was not: {exc}"
+        ) from exc

@@ -15,13 +15,24 @@ interface Props {
  * workbook worksheet remains untouched and fully visible/editable in Draft.
  * Internal/excluded pages and internal-only columns never appear here.
  */
-export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) {
-  const included = useMemo(
+export default function GeneratedIndexRenderer({ project, page, onPatchPage }: Props) {
+  const allIncluded = useMemo(
     () => [...(project.pages ?? [])]
       .filter((page) => page.include !== false)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [project.pages],
   );
+  const included = useMemo(() => {
+    const rowsPerPage = page.indexRowsPerPage ?? 46;
+    const start = (page.continuationIndex ?? 0) * rowsPerPage;
+    const count = page.indexRowsOnPage ?? rowsPerPage;
+    return allIncluded.slice(start, start + count);
+  }, [
+    allIncluded,
+    page.continuationIndex,
+    page.indexRowsOnPage,
+    page.indexRowsPerPage,
+  ]);
 
   const commitCode = (target: PageModel, value: string) => {
     const next = value.trim();
@@ -117,7 +128,7 @@ export default function GeneratedIndexRenderer({ project, onPatchPage }: Props) 
                 onBlur={(e) => commitTitle(page, e.currentTarget.textContent ?? '')}
                 onKeyDown={(e) => onKeyDown(e, page, 'title')}
               >
-                {page.sheetTitle}
+                {page.sheetTitle.replace(/\s*[—-]\s*CONTINUED\s*$/i, '').trim()}
                 {page.generatedContinuation && <span className="ni-cont-mark"> — CONTINUED</span>}
               </td>
               <td className="ni-type">{indexPageTypeLabel(page)}</td>
