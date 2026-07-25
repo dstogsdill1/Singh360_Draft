@@ -1,5 +1,7 @@
 import type { WorkbookLinkStatus } from '../api/client';
 
+// S360 FULL WORKBOOK MIRROR UX V25
+
 interface Props {
   status: WorkbookLinkStatus;
   projectName: string;
@@ -64,16 +66,16 @@ export default function SyncDecisionModal({ status, projectName, projectSavedAt,
 
         <section className="sync-choice app-choice">
           <div>
-            <h3>Use App Structure</h3>
-            <p><b>Choose this when the app has the correct page order, codes, titles, Include/Exclude choices, or statuses.</b></p>
+            <h3>Sync Project to Workbook</h3>
+            <p><b>Choose this when Singh360 has the correct base-page order, codes, titles, Include/Exclude choices, or statuses.</b></p>
             <ul>
-              <li>Updates 00_INDEX, workbook tab order, status colors, and companion sheets.</li>
-              <li>Keeps existing worksheet cells, formulas, images, merges, and manual app drawings.</li>
+              <li>Mirrors every Singh360 base page into 00_INDEX and the physical workbook tab order.</li>
+              <li>Creates missing companion worksheets, grays excluded tabs, and preserves existing worksheet cells, formulas, images, merges, and app drawings.</li>
               <li>Does not replace the app project with a new project.</li>
             </ul>
           </div>
           <button type="button" className="primary" disabled={busy} onClick={() => void onResolve('app_to_workbook')}>
-            Use Project
+            Sync Project to Workbook Now
           </button>
         </section>
 

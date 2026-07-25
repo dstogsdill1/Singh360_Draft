@@ -1,19 +1,45 @@
 import { useEffect, useRef, useState } from 'react';
-import type { PageModel } from '../model/types';
+import type { PageModel, ProjectModel, Worksheet } from '../model/types';
 import PageNavigator from './PageNavigator';
 import { pageIssueLabel, pageStatusClass } from '../model/pageStatus';
 import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
 
 interface Props {
+  project: ProjectModel;
+  worksheets: Worksheet[];
   pages: PageModel[];
   activePageId: string | null;
   onSelect: (id: string) => void;
   onReorder: (pages: PageModel[]) => void;
   onRenameTitle: (id: string, title: string) => void;
+  onEditCode: (id: string, code: string) => void;
+  onDuplicatePage: (id: string, title: string, code: string) => void;
+  onCreateBlankPage: (
+    id: string,
+    where: 'before' | 'after',
+    title: string,
+    code: string,
+  ) => void;
+  onToggleInclude: (id: string) => void;
+  onDeletePage: (id: string) => void;
   onContextMenu: (id: string, x: number, y: number) => void;
 }
 
-export default function PageTabs({ pages, activePageId, onSelect, onReorder, onRenameTitle, onContextMenu }: Props) {
+export default function PageTabs({
+  project,
+  worksheets,
+  pages,
+  activePageId,
+  onSelect,
+  onReorder,
+  onRenameTitle,
+  onEditCode,
+  onDuplicatePage,
+  onCreateBlankPage,
+  onToggleInclude,
+  onDeletePage,
+  onContextMenu,
+}: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -50,71 +76,92 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
     onReorder(next.map((page, index) => ({ ...page, order: index + 1 })));
   };
 
-  const startEdit = (p: PageModel) => {
-    setEditId(p.id);
-    setEditValue(p.sheetTitle);
+  const startEdit = (page: PageModel) => {
+    setEditId(page.id);
+    setEditValue(page.sheetTitle);
   };
+
   const commitEdit = () => {
     if (editId) onRenameTitle(editId, editValue.trim() || 'Untitled Sheet');
     setEditId(null);
   };
 
-  const scroll = (direction: -1 | 1) => stripRef.current?.scrollBy({ left: direction * 420, behavior: 'smooth' });
+  const scroll = (direction: -1 | 1) =>
+    stripRef.current?.scrollBy({ left: direction * 420, behavior: 'smooth' });
+
+  const navigator = (
+    <PageNavigator
+      project={project}
+      worksheets={worksheets}
+      pages={pages}
+      activePageId={activePageId}
+      onSelect={onSelect}
+      onReorder={onReorder}
+      onRenameTitle={onRenameTitle}
+      onEditCode={onEditCode}
+      onDuplicatePage={onDuplicatePage}
+      onCreateBlankPage={onCreateBlankPage}
+      onToggleInclude={onToggleInclude}
+      onDeletePage={onDeletePage}
+    />
+  );
 
   return (
     <div className="page-tabs-shell">
       <div className="page-tabs-controls">
-        <PageNavigator pages={pages} activePageId={activePageId} onSelect={onSelect} />
+        {navigator}
         <button type="button" title="Scroll tabs left" onClick={() => scroll(-1)}>‹</button>
         <button type="button" title="Scroll tabs right" onClick={() => scroll(1)}>›</button>
       </div>
+
       <div
         className="page-tabs"
         ref={stripRef}
         onWheel={(event) => {
-          if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) stripRef.current?.scrollBy({ left: event.deltaY });
+          if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+            stripRef.current?.scrollBy({ left: event.deltaY });
+          }
         }}
       >
-        {visible.map((p) => (
+        {visible.map((page) => (
           <div
-            key={p.id}
+            key={page.id}
             role="button"
             tabIndex={0}
-            ref={p.id === activePageId ? activeRef : null}
-            className={`page-tab ${p.id === activePageId ? 'active' : ''} ${p.generatedContinuation ? 'cont' : ''} ${dragOverId === p.id ? 'drag-over' : ''} ${pageStatusClass(p)}`}
-            onClick={() => onSelect(p.id)}
-            onDoubleClick={() => startEdit(p)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              onContextMenu(p.id, e.clientX, e.clientY);
+            ref={page.id === activePageId ? activeRef : null}
+            className={`page-tab ${page.id === activePageId ? 'active' : ''} ${page.generatedContinuation ? 'cont' : ''} ${dragOverId === page.id ? 'drag-over' : ''} ${pageStatusClass(page)}`}
+            onClick={() => onSelect(page.id)}
+            onDoubleClick={() => startEdit(page)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onContextMenu(page.id, event.clientX, event.clientY);
             }}
-            onKeyDown={(e) => {
-              if (editId === p.id) return;
-              if (e.key === 'Enter' || e.key === ' ') onSelect(p.id);
-              else if (e.key === 'F2') startEdit(p);
+            onKeyDown={(event) => {
+              if (editId === page.id) return;
+              if (event.key === 'Enter' || event.key === ' ') onSelect(page.id);
+              else if (event.key === 'F2') startEdit(page);
             }}
-            title={`${p.include ? 'Included' : 'Excluded'} · ${pageIssueLabel(p.issueStatus)} · Page ${p.pageNumber ?? '—'} · ${p.displaySheetCode || p.sheetCode} ${p.sheetTitle} — double-click to rename`}
-            draggable={!isCoverPage(p) && !isSheetIndexPage(p) && editId !== p.id}
-
+            title={`${page.include ? 'Included' : 'Excluded'} · ${pageIssueLabel(page.issueStatus)} · Page ${page.pageNumber ?? '—'} · ${page.displaySheetCode || page.sheetCode} ${page.sheetTitle} — double-click to rename`}
+            draggable={!isCoverPage(page) && !isSheetIndexPage(page) && editId !== page.id}
             onDragStart={(event) => {
-              if (isCoverPage(p) || isSheetIndexPage(p)) return;
+              if (isCoverPage(page) || isSheetIndexPage(page)) return;
               event.dataTransfer.effectAllowed = 'move';
-              event.dataTransfer.setData('text/plain', p.id);
-              setDragId(p.id);
+              event.dataTransfer.setData('text/plain', page.id);
+              setDragId(page.id);
               setDragOverId(null);
             }}
             onDragOver={(event) => {
-              if (!dragId || isCoverPage(p) || isSheetIndexPage(p)) return;
+              if (!dragId || isCoverPage(page) || isSheetIndexPage(page)) return;
               event.preventDefault();
               event.dataTransfer.dropEffect = 'move';
-              setDragOverId(p.id);
+              setDragOverId(page.id);
             }}
             onDragLeave={() => {
-              if (dragOverId === p.id) setDragOverId(null);
+              if (dragOverId === page.id) setDragOverId(null);
             }}
             onDrop={(event) => {
               event.preventDefault();
-              if (dragId) reorder(dragId, p.id);
+              if (dragId) reorder(dragId, page.id);
               setDragId(null);
               setDragOverId(null);
             }}
@@ -123,11 +170,13 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
               setDragOverId(null);
             }}
           >
-            <span className={`pt-drag ${isCoverPage(p) || isSheetIndexPage(p) ? 'locked' : ''}`} aria-hidden="true">{isCoverPage(p) || isSheetIndexPage(p) ? 'LOCK' : '⋮⋮'}</span>
-            {p.generatedContinuation && <span className="pt-cont">↳</span>}
-            <span className="pt-page">{p.pageNumber ?? '—'}</span>
-            <span className="pt-code">{p.displaySheetCode || p.sheetCode}</span>
-            {editId === p.id ? (
+            <span className={`pt-drag ${isCoverPage(page) || isSheetIndexPage(page) ? 'locked' : ''}`} aria-hidden="true">
+              {isCoverPage(page) || isSheetIndexPage(page) ? 'LOCK' : '⋮⋮'}
+            </span>
+            {page.generatedContinuation && <span className="pt-cont">↳</span>}
+            <span className="pt-page">{page.pageNumber ?? '—'}</span>
+            <span className="pt-code">{page.displaySheetCode || page.sheetCode}</span>
+            {editId === page.id ? (
               <input
                 className="pt-title-input"
                 value={editValue}
@@ -135,24 +184,25 @@ export default function PageTabs({ pages, activePageId, onSelect, onReorder, onR
                 aria-label="Sheet title"
                 title="Sheet title — Enter to save, Esc to cancel"
                 placeholder="Sheet title"
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => setEditValue(e.target.value)}
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) => setEditValue(event.target.value)}
                 onBlur={commitEdit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitEdit();
-                  else if (e.key === 'Escape') setEditId(null);
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') commitEdit();
+                  else if (event.key === 'Escape') setEditId(null);
                 }}
               />
             ) : (
-              <span className="pt-title">{p.sheetTitle}</span>
+              <span className="pt-title">{page.sheetTitle}</span>
             )}
           </div>
         ))}
       </div>
+
       <div className="page-tabs-controls page-tabs-controls-right">
         <button type="button" title="Scroll tabs left" onClick={() => scroll(-1)}>‹</button>
         <button type="button" title="Scroll tabs right" onClick={() => scroll(1)}>›</button>
-        <PageNavigator pages={pages} activePageId={activePageId} onSelect={onSelect} />
+        {navigator}
       </div>
     </div>
   );

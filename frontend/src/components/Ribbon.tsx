@@ -73,6 +73,9 @@ interface Props {
   onInsertImage: (file: File) => void;
   onInsertPdfPage: () => void;
   onSaveNow: () => void;
+  // S360 SAVE + WRITE EXCEL BUTTON V26
+  onWriteExcel: () => void;
+  writeExcelBusy?: boolean;
   onOpenBackups: () => void;
   onExportPdf: () => void;
   onExportPackage: () => void;
@@ -135,6 +138,8 @@ export default function Ribbon({
   onInsertImage,
   onInsertPdfPage,
   onSaveNow,
+  onWriteExcel,
+  writeExcelBusy,
   onOpenBackups,
   onExportPdf,
   onExportPackage,
@@ -218,6 +223,16 @@ export default function Ribbon({
         </div>
         <div className="ribbon-appbar-right">
           <button type="button" className="ribbon-btn ribbon-home-btn" onClick={onOpenHome}>Project Home</button>
+          {/* S360 SAVE + WRITE EXCEL BUTTON V26 */}
+          <button
+            type="button"
+            className="ribbon-btn ribbon-write-excel-btn"
+            disabled={!hasProject || writeExcelBusy || saveStatus === 'saving'}
+            onClick={onWriteExcel}
+            title="Save locally, then mirror page rows, worksheet tabs, order, codes, titles, and Include/Exclude to the linked Excel workbook"
+          >
+            {writeExcelBusy ? 'WRITING EXCEL…' : 'SAVE + WRITE EXCEL'}
+          </button>
           <span className={`status-pill ${saveStatus}`}>{saveLabel ?? saveStatus}</span>
         </div>
       </div>
@@ -238,6 +253,7 @@ export default function Ribbon({
             <Group title="Project">
               <button className="ribbon-btn" onClick={onOpenProject} title="Browse and open a saved project">Open Project</button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow} title="Save the project now">Save Now</button>
+              <button className="ribbon-btn ribbon-write-excel-btn" disabled={!hasProject || writeExcelBusy} onClick={onWriteExcel} title="Save locally and immediately mirror the project structure to the linked Excel workbook">{writeExcelBusy ? 'Writing Excel…' : 'Save + Write Excel'}</button>
               <button className={`ribbon-btn ${renumberBadge ? 'badge-warn' : ''}`} disabled={!hasProject} onClick={onRenumber} title="Preview and apply new engineering sheet codes">
                 Renumber Sheet Codes{renumberBadge ? ' ⚠' : ''}
               </button>

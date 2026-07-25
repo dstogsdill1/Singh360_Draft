@@ -879,8 +879,18 @@ def _s360_find_index_header(ws: Any) -> tuple[int, dict[str, int]]:
     return row_number, headers
 
 
-def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
-    """Write worksheet edits and package structure to the authoritative workbook."""
+
+# S360 FULL BASE-PAGE MANIFEST MIRROR V25
+def sync_project_to_workbook(
+    project_id: str,
+    project: dict[str, Any],
+    store: Any,
+) -> dict[str, Any]:
+    """Mirror every app base page into 00_INDEX and workbook tab order.
+
+    Generated continuation pages remain app/PDF output only. Existing workbook
+    cells, formulas, images, merges, and unmatched source sheets are preserved.
+    """
     path = _workbook_path(store, project_id, project)
     if path is None:
         raise WorkbookSyncError("No workbook is linked to this project.")
@@ -888,109 +898,49 @@ def sync_project_to_workbook(project_id: str, project: dict[str, Any], store: An
         raise WorkbookSyncError(f"The linked workbook was not found: {path}")
 
     with _project_lock(store, project_id, project):
-        _backup_workbook(path, store, project_id)
         try:
-            wb = load_workbook(path, keep_vba=path.suffix.lower() == ".xlsm", data_only=False, read_only=False)
+            from core.full_workbook_sync import synchronize_project_to_workbook
+
+            updated = synchronize_project_to_workbook(
+                path,
+                project_id,
+                project,
+                store,
+                app_hash=project_hash(project),
+            )
         except PermissionError as exc:
-            raise WorkbookSyncError("The linked workbook is open or locked. Close Excel and save again.") from exc
-        temp: Path | None = None
-        try:
-            _s360_apply_worksheet_payload(wb, project)
-            _ensure_help_sheet(wb)
-            _ensure_meta(wb, project)
-            ws = _s360_select_index_sheet(wb, writable=True)
-            header_row, headers = _s360_find_index_header(ws)
-            by_id: dict[str, int] = {}
-            by_tab: dict[str, int] = {}
-            for row in range(header_row + 1, (ws.max_row or header_row) + 1):
-                page_id = str(ws.cell(row, headers["page id"]).value or "").strip()
-                tab = str(ws.cell(row, headers["sheet tab"]).value or "").strip()
-                if page_id:
-                    by_id[page_id] = row
-                if tab:
-                    by_tab[tab.casefold()] = row
+            raise WorkbookSyncError(
+                "The linked workbook is open or Drive has it locked. "
+                "Close Excel and Google Sheets, then sync again."
+            ) from exc
+        except WorkbookSyncError:
+            raise
+        except Exception as exc:
+            raise WorkbookSyncError(
+                f"Full workbook mirror failed: {type(exc).__name__}: {exc}"
+            ) from exc
 
-            stamp = utcnow()
-            app_digest = project_hash(project)
-            pages = sorted(project.get("pages", []), key=lambda p: int(p.get("order") or 9999))
-            base_pages = [
-                page for page in pages
-                if isinstance(page, dict)
-                and not page.get("generatedContinuation")
-                and not page.get("continuationOf")
-            ]
-            for page in base_pages:
-                if not isinstance(page, dict):
-                    continue
-                page_id = str(page.get("id") or "").strip()
-                tab = str(page.get("sheetTab") or "").strip()
-                row = by_id.get(page_id) or by_tab.get(tab.casefold())
-                if row is None:
-                    # Workbook Order and base-page structure are controlled by
-                    # existing 00_INDEX rows. App-only/manual pages and generated
-                    # continuations never create physical control rows.
-                    continue
-                include = bool(page.get("include", True))
-                status = normalize_status(page.get("issueStatus"))
-                values = {
-                    "include": "YES" if include else "NO",
-                    "notes": page.get("notes") or "",
-                    "render profile": page.get("renderProfile") or page.get("layoutProfile") or "",
-                    "split mode": page.get("splitMode") or "",
-                    "parent page id": page.get("parentPageId") or "",
-                    "issue status": STATUS_LABELS[status],
-                    "source mode": page.get("sourceMode") or ("Workbook" if page.get("linkedWorksheetId") else "App"),
-                    "sync direction": page.get("syncDirection") or "Both",
-                    "last sync utc": stamp,
-                    "app hash": app_digest,
-                }
-                for key, value in values.items():
-                    ws.cell(row, headers[key], value)
-                if tab in wb.sheetnames:
-                    wb[tab].sheet_properties.tabColor = _tab_color(include, status)
-
-            for control in ("00_PROJECT_META", "00_INDEX"):
-                if control in wb.sheetnames:
-                    wb[control].sheet_properties.tabColor = TAB_COLORS["control"]
-            if "00_HELP" in wb.sheetnames:
-                wb["00_HELP"].sheet_properties.tabColor = TAB_COLORS["help"]
-
-            if wb.calculation is None:
-                wb.calculation = CalcProperties(calcMode="auto", fullCalcOnLoad=True, forceFullCalc=True)
-            else:
-                wb.calculation.fullCalcOnLoad = True
-                wb.calculation.forceFullCalc = True
-                wb.calculation.calcMode = "auto"
-
-            fd, temp_name = tempfile.mkstemp(prefix=path.stem + "_", suffix=path.suffix, dir=path.parent)
-            os.close(fd)
-            temp = Path(temp_name)
-            wb.save(temp)
-            os.replace(temp, path)
-            temp = None
-
-            project = dict(project)
-            project.setdefault("metadata", {})["helpVersion"] = HELP_VERSION
-            sync = dict(project.get("workbookSync") or {})
-            sync.update({
+        stamp = utcnow()
+        sync = dict(updated.get("workbookSync") or {})
+        sync.update(
+            {
                 "mode": "external-workbook-link",
                 "workbook": str(path),
                 "status": "in_sync",
                 "warning": "",
+                "pendingReason": "",
                 "lastSyncUtc": stamp,
                 "workbookHash": file_hash(path),
-                "appHash": project_hash(project),
+                "appHash": project_hash(updated),
                 "authority": "workbook",
-                "lastAuthorityAction": "app_to_workbook",
-            })
-            project["workbookSync"] = sync
-            return project
-        except PermissionError as exc:
-            raise WorkbookSyncError("The linked workbook is open or locked. Close Excel and save again.") from exc
-        finally:
-            if temp is not None:
-                temp.unlink(missing_ok=True)
-            wb.close()
+                "lastAuthorityAction": "full_app_to_workbook_mirror",
+                "syncEngineVersion": "V25",
+            }
+        )
+        updated["workbookSync"] = sync
+        store.save(project_id, updated)
+        return updated
+
 
 
 # S360 ROBUST INDEX SELECTOR V15.1

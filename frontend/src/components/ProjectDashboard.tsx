@@ -37,7 +37,7 @@ const statusLabel: Record<string, string> = {
   review_required: 'First sync decision required',
   in_sync: 'In sync',
   workbook_changed: 'Workbook changed',
-  app_changed: 'App changed',
+  app_changed: 'Project saved locally — workbook update pending',
   conflict: 'Both changed — review required',
   missing: 'Workbook missing',
   locked: 'Workbook locked',
@@ -333,7 +333,7 @@ export default function ProjectDashboard({ project }: Props) {
       : link?.status === 'workbook_changed'
         ? 'Workbook changed after the last sync'
         : link?.status === 'app_changed'
-          ? 'Project changed after the last sync'
+          ? 'Project saved locally — workbook update pending'
           : link?.status === 'conflict'
             ? 'Both versions changed — choose which one is correct'
             : link?.status === 'project_mismatch'
@@ -481,7 +481,7 @@ export default function ProjectDashboard({ project }: Props) {
                 <div className="card-head secondary-tool-head"><h2>Project Administration</h2><span>Workbook, output, recovery, and maintenance tools</span></div>
                 <div className="project-more-tools">
                   <button type="button" onClick={() => setQualityOpen(true)}><b>Workbook Inspector / Repair</b><span>Audit, restructure, normalize, and recover from backup</span></button>
-                  <button type="button" onClick={() => void reviewSync()}><b>Review Workbook Sync</b><span>Refresh the project from the authoritative workbook</span></button>
+                  <button type="button" onClick={() => void reviewSync()}><b>Review Workbook Sync</b><span>Push the current project page order, tabs, and statuses to Excel</span></button>
                   <button type="button" onClick={() => setLibraryOpen(true)}><b>Component Library Browser</b><span>Search and review the component library inside this project</span></button>
                   <button type="button" onClick={() => window.location.assign(actionUrl('export'))}><b>Drawing Set / Export PDF</b><span>Pick exact sheets and export</span></button>
                   <button type="button" onClick={() => window.location.assign(actionUrl('renumber'))}><b>Reorder / Renumber</b><span>Review and apply sheet-code order</span></button>

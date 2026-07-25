@@ -54,6 +54,17 @@ interface Props {
   onSelectPage: (id: string) => void;
   onReorderPages: (pages: PageModel[]) => void;
   onRenamePageTitle: (id: string, title: string) => void;
+  // S360 VISUAL PAGE ACTIONS V29
+  onEditPageCode: (id: string, code: string) => void;
+  onDuplicatePageWithIdentity: (id: string, title: string, code: string) => void;
+  onCreateBlankPage: (
+    id: string,
+    where: 'before' | 'after',
+    title: string,
+    code: string,
+  ) => void;
+  onTogglePageInclude: (id: string) => void;
+  onDeletePage: (id: string) => void;
   onPageContextMenu: (id: string, x: number, y: number) => void;
   onDropImageFile: (file: File) => void;
   onDropComponent?: (
@@ -101,6 +112,11 @@ export default function DocumentView({
   onSelectPage,
   onReorderPages,
   onRenamePageTitle,
+  onEditPageCode,
+  onDuplicatePageWithIdentity,
+  onCreateBlankPage,
+  onTogglePageInclude,
+  onDeletePage,
   onPageContextMenu,
   onDropImageFile,
   onDropComponent,
@@ -268,7 +284,21 @@ export default function DocumentView({
           </div>
         </div>
       </div>
-      <PageTabs pages={pages} activePageId={activePage.id} onSelect={onSelectPage} onReorder={onReorderPages} onRenameTitle={onRenamePageTitle} onContextMenu={onPageContextMenu} />
+      <PageTabs
+        project={project}
+        worksheets={worksheets}
+        pages={pages}
+        activePageId={activePage.id}
+        onSelect={onSelectPage}
+        onReorder={onReorderPages}
+        onRenameTitle={onRenamePageTitle}
+        onEditCode={onEditPageCode}
+        onDuplicatePage={onDuplicatePageWithIdentity}
+        onCreateBlankPage={onCreateBlankPage}
+        onToggleInclude={onTogglePageInclude}
+        onDeletePage={onDeletePage}
+        onContextMenu={onPageContextMenu}
+      /> {/* S360 VISUAL PAGE MANAGER V27 */}
     </>
   );
 }

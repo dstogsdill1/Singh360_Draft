@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import threading
+import time
 import traceback
 from typing import Any
 
@@ -482,38 +485,217 @@ def set_link(project_id: str, project: dict[str, Any], store: Any, path_value: s
     return project, status
 
 
+# S360 LOCAL DRAFT OPEN MODE V23.1
+
+# S360 CONTROLLED OPEN SYNC V25
+# S360 EDITOR WRITE-BACK OPEN POLICY V26
 def maybe_pull_on_open(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
     status = status_payload(project_id, project, store)
-    state = status["status"]
+    state = str(status.get("status") or "")
     if state == "in_sync":
         return project
-    if state in {"workbook_changed", "app_changed", "conflict", "review_required", "pending"}:
-        project, _ = resolve(project_id, project, store, "workbook_to_app")
-        return project
+    if state == "workbook_changed":
+        refreshed, _ = resolve(project_id, project, store, "workbook_to_app")
+        return refreshed
+    if state in {"app_changed", "pending"}:
+        opened = dict(project)
+        sync = dict(opened.get("workbookSync") or {})
+        sync.update({
+            "status": "app_changed",
+            "warning": "Project changes are saved locally and have not been written to Excel. Click SAVE + WRITE EXCEL when ready.",
+            "pendingReason": "project_ahead_of_workbook",
+            "lastAuthorityAction": "opened_local_project",
+        })
+        opened["workbookSync"] = sync
+        return opened
     if state == "not_linked":
-        project = dict(project)
-        sync = dict(project.get("workbookSync") or {})
+        opened = dict(project)
+        sync = dict(opened.get("workbookSync") or {})
         sync.update({
             "status": "not_linked",
-            "warning": "Link the authoritative project workbook before opening the editor.",
-            "authority": "workbook",
+            "warning": "The project is open locally, but no workbook is linked. Link it from Project Home before writing to Excel.",
         })
-        project["workbookSync"] = sync
-        return project
-    raise WorkbookSyncError(status.get("message") or "The authoritative workbook is unavailable.")
+        opened["workbookSync"] = sync
+        return opened
+    if state == "review_required":
+        raise WorkbookSyncError("Choose the matching workbook/project baseline from Project Home before opening the editor.")
+    if state == "conflict":
+        raise WorkbookSyncError("Both Excel and the local project changed after the last sync. Review the two versions from Project Home.")
+    raise WorkbookSyncError(status.get("message") or "The linked workbook is unavailable.")
 
 
-def save_local_then_try_sync(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
-    """Never return Saved unless the project and workbook writes both succeed."""
-    store.save(project_id, project)  # local recovery first
+
+
+
+# S360 APP-ONLY SAVE CLASSIFIER V22.1
+# App-only drawing edits stay in project.json. Excel is rewritten only when a
+# workbook-backed field actually changes.
+
+_S360_SAVE_GATES: dict[str, threading.Lock] = {}
+
+
+def _s360_workbook_projection(project: dict[str, Any]) -> dict[str, Any]:
+    pages: list[dict[str, Any]] = []
+    for page in project.get("pages", []) or []:
+        if not isinstance(page, dict):
+            continue
+        if (
+            page.get("generatedContinuation")
+            or page.get("continuationOf")
+            or page.get("indexContinuation")
+            or page.get("generatedIndexContinuation")
+        ):
+            continue
+        pages.append(
+            {
+                "id": page.get("id"),
+                "include": bool(page.get("include", True)),
+                "notes": page.get("notes", ""),
+                "renderProfile": page.get("renderProfile") or page.get("layoutProfile") or "",
+                "splitMode": page.get("splitMode") or "",
+                "parentPageId": page.get("parentPageId") or "",
+                "issueStatus": page.get("issueStatus") or "draft",
+                "sourceMode": page.get("sourceMode") or "",
+                "syncDirection": page.get("syncDirection") or "",
+            }
+        )
+    pages.sort(key=lambda item: str(item.get("id") or ""))
+
+    worksheets: list[dict[str, Any]] = []
+    for worksheet in project.get("worksheets", []) or []:
+        if not isinstance(worksheet, dict):
+            continue
+        worksheets.append(
+            {
+                "id": worksheet.get("id"),
+                "name": worksheet.get("name"),
+                "grid": worksheet.get("grid", []),
+                "formulas": worksheet.get("formulas", {}),
+                "styles": worksheet.get("styles", {}),
+                "mergedCells": worksheet.get("mergedCells", []),
+                "rowHeights": worksheet.get("rowHeights", {}),
+                "columnWidths": worksheet.get("columnWidths", {}),
+                "rowHeightsPx": worksheet.get("rowHeightsPx", []),
+                "colWidthsPx": worksheet.get("colWidthsPx", []),
+                "printArea": worksheet.get("printArea"),
+            }
+        )
+    worksheets.sort(
+        key=lambda item: (
+            str(item.get("id") or ""),
+            str(item.get("name") or ""),
+        )
+    )
+    return {"pages": pages, "worksheets": worksheets}
+
+
+def _s360_workbook_projection_hash(project: dict[str, Any]) -> str:
+    return sha256(
+        json.dumps(
+            _s360_workbook_projection(project),
+            sort_keys=True,
+            ensure_ascii=False,
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _s360_transient_workbook_error(exc: Exception) -> bool:
+    message = str(exc).casefold()
+    return any(
+        token in message
+        for token in (
+            "open or locked",
+            "being used by another process",
+            "permission denied",
+            "access is denied",
+            "temporarily unavailable",
+            "resource busy",
+        )
+    )
+
+
+def save_local_then_try_sync(
+    project_id: str,
+    project: dict[str, Any],
+    store: Any,
+) -> dict[str, Any]:
+    """Persist app-only work locally and write Excel only when required."""
+    gate = _S360_SAVE_GATES.setdefault(project_id, threading.Lock())
+    if not gate.acquire(timeout=180):
+        raise WorkbookSyncError(
+            "Another save is still finishing. Wait a moment and save again."
+        )
+
     try:
+        previous = store.load(project_id) or {}
+        previous_projection = _s360_workbook_projection_hash(previous)
+        incoming_projection = _s360_workbook_projection_hash(project)
+
+        # Always protect the user's latest app work first.
+        store.save(project_id, project)
+
+        path, mode = configured_workbook_path(store, project_id, project)
+        if path is None:
+            raise WorkbookSyncError(
+                "No authoritative workbook is linked to this project."
+            )
+        if not path.is_file():
+            raise WorkbookSyncError(
+                f"The linked workbook was not found: {path}"
+            )
+
+        if previous_projection == incoming_projection:
+            # Symbols, legends, images, crops, annotations, and canvas work are
+            # app-owned. Save them locally without rewriting the Excel workbook.
+            meta = workbook_metadata(path)
+            incoming_sync = dict(project.get("workbookSync") or {})
+            previous_sync = dict(previous.get("workbookSync") or {})
+            baseline_workbook = str(
+                incoming_sync.get("workbookHash")
+                or previous_sync.get("workbookHash")
+                or ""
+            )
+            current_workbook = str(meta.get("sha256") or "")
+            if baseline_workbook and current_workbook != baseline_workbook:
+                raise WorkbookSyncError(
+                    "The workbook changed after this editor session opened. "
+                    "Reopen the project before continuing."
+                )
+
+            saved = dict(project)
+            sync = dict(saved.get("workbookSync") or {})
+            sync.update(
+                {
+                    "mode": sync.get("mode") or mode or "external-workbook-link",
+                    "workbook": str(path),
+                    "status": "in_sync",
+                    "warning": "",
+                    "pendingReason": "",
+                    "runtimeLog": "",
+                    "workbookHash": current_workbook,
+                    "appHash": project_hash(saved),
+                    "localProjectSavedAt": utcnow(),
+                    "observedAt": utcnow(),
+                    "lastAuthorityAction": "app_only_local_save",
+                }
+            )
+            saved["workbookSync"] = sync
+            store.save(project_id, saved)
+            return saved
+
         status = status_payload(project_id, project, store)
         state = status["status"]
+
         if state in {"not_linked", "missing", "locked", "invalid", "project_mismatch"}:
-            raise WorkbookSyncError(status.get("message") or "The authoritative workbook is unavailable.")
+            raise WorkbookSyncError(
+                status.get("message")
+                or "The authoritative workbook is unavailable."
+            )
         if state in {"workbook_changed", "conflict"}:
             raise WorkbookSyncError(
-                "The workbook changed after this editor session opened. Reopen the project to load it before saving."
+                "The workbook changed after this editor session opened. "
+                "Reopen the project before saving workbook-backed edits."
             )
         if state == "in_sync":
             saved = dict(project)
@@ -522,18 +704,39 @@ def save_local_then_try_sync(project_id: str, project: dict[str, Any], store: An
                 "status": "in_sync",
                 "warning": "",
                 "observedAt": utcnow(),
+                "appHash": project_hash(saved),
             }
             store.save(project_id, saved)
             return saved
         if state != "app_changed":
             raise WorkbookSyncError(
-                status.get("message") or f"Workbook synchronization is blocked ({state})."
+                status.get("message")
+                or f"Workbook synchronization is blocked ({state})."
             )
-        project, _ = resolve(project_id, project, store, "app_to_workbook")
-        store.save(project_id, project)
-        return project
+
+        for attempt in range(1, 6):
+            try:
+                synced, _ = resolve(
+                    project_id,
+                    project,
+                    store,
+                    "app_to_workbook",
+                )
+                store.save(project_id, synced)
+                return synced
+            except Exception as exc:
+                if not _s360_transient_workbook_error(exc) or attempt >= 5:
+                    raise
+                time.sleep(0.6 * attempt)
+
+        raise WorkbookSyncError("Workbook synchronization did not complete.")
     except Exception as exc:
-        log_path = _record_runtime_sync_failure(store, project_id, "required_write", exc)
+        log_path = _record_runtime_sync_failure(
+            store,
+            project_id,
+            "required_write",
+            exc,
+        )
         pending = _pending_after_local_save(
             project,
             "workbook_write_required",
@@ -544,5 +747,8 @@ def save_local_then_try_sync(project_id: str, project: dict[str, Any], store: An
         if isinstance(exc, WorkbookSyncError):
             raise
         raise WorkbookSyncError(
-            f"The local recovery copy was saved, but the authoritative workbook was not: {exc}"
+            "The local recovery copy was saved, but the authoritative workbook "
+            f"was not: {exc}"
         ) from exc
+    finally:
+        gate.release()

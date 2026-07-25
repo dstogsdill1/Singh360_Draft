@@ -485,7 +485,13 @@ def get_project(project_id: str):
 
 
 @app.post("/api/projects/<project_id>")
+# S360 LOCAL DRAFT SAVE MODE V23.1
+@app.post("/api/projects/<project_id>")
+
+# S360 LOCAL AUTOSAVE / EXPLICIT WORKBOOK SYNC V25
+@app.post("/api/projects/<project_id>")
 def save_project(project_id: str):
+    """Save the working drawing locally; Excel changes are an explicit sync."""
     _safe_id(project_id)
     data = request.get_json(force=True, silent=True)
     if data is None:
@@ -494,19 +500,50 @@ def save_project(project_id: str):
     data["id"] = project_id
     data = ensure_project_shape(data)
     data = sync_project_sheet_index(data)
+
     problems = validate_project(data)
     if problems:
-        return jsonify(_err("Project validation failed.", " | ".join(problems[:20]))), 400
+        data["draftValidationWarnings"] = list(problems[:100])
+    else:
+        data.pop("draftValidationWarnings", None)
+
+    previous = _load_doc(project_id) or {}
+    previous_sync = (
+        previous.get("workbookSync")
+        if isinstance(previous.get("workbookSync"), dict)
+        else {}
+    )
+    incoming_sync = (
+        data.get("workbookSync")
+        if isinstance(data.get("workbookSync"), dict)
+        else {}
+    )
+    sync = {**previous_sync, **incoming_sync}
+    sync.update(
+        {
+            "status": "app_changed",
+            "warning": (
+                "Project saved locally. Workbook update is pending. "
+                "Use Project Home > Review Workbook Sync > "
+                "Sync Project to Workbook Now."
+            ),
+            "pendingReason": "app_changes_pending",
+            "localProjectSavedAt": _utcnow(),
+            "lastAuthorityAction": "local_autosave",
+            "syncEngineVersion": "V25",
+        }
+    )
+    data["workbookSync"] = sync
 
     try:
-        # Save a local recovery first, but report success only after every
-        # required authoritative-workbook operation succeeds.
-        data = save_local_then_try_sync(project_id, data, store)
-    except (OSError, WorkbookSyncError) as exc:
-        app.logger.error("Could not save project and authoritative workbook %s: %s", project_id, exc)
-        return jsonify(_err("Workbook save failed. The editor is not marked Saved.", str(exc))), 500
+        store.save(project_id, data)
+    except OSError as exc:
+        app.logger.error("Could not save local project %s: %s", project_id, exc)
+        return jsonify(_err("Local project save failed.", str(exc))), 500
 
     return jsonify(data)
+
+
 
 
 

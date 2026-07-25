@@ -11,6 +11,7 @@ import {
   previewImportWorksheets,
   renameProject,
   saveProject,
+  resolveWorkbookLink,
   savePageRebuildBackup,
   uploadAssetDataUrl,
   uploadAssetFile,
@@ -102,6 +103,8 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'unsaved' | 'saving' | 'saved' | 'failed'>('idle');
   const [savedAt, setSavedAt] = useState<string>('');
   const [saveNotice, setSaveNotice] = useState<string>('');
+  // S360 SAVE + WRITE EXCEL BUTTON V26
+  const [excelWriteBusy, setExcelWriteBusy] = useState(false);
 
   // Viewport view-state.
   const [fitMode, setFitMode] = useState<FitMode>('page');
@@ -348,6 +351,51 @@ export default function App() {
       return false;
     }
   }, [printMode, captureActivePageState, setProjectSync]);
+
+  // S360 SAVE + WRITE EXCEL BUTTON V26
+  const writeProjectToExcel = useCallback(async (): Promise<boolean> => {
+    if (excelWriteBusy || printMode) return false;
+    captureActivePageState();
+    const current = projectRef.current;
+    if (!current) {
+      window.alert('Open a project before writing to Excel.');
+      return false;
+    }
+    setExcelWriteBusy(true);
+    setSaveStatus('saving');
+    setSaveNotice('Saving project locally…');
+    try {
+      const localSaved = await saveNow();
+      if (!localSaved) throw new Error('The local project save did not complete.');
+      const latest = projectRef.current;
+      if (!latest) throw new Error('The active project disappeared before Excel synchronization.');
+      setSaveStatus('saving');
+      setSaveNotice('Writing project to Excel…');
+      const result = await resolveWorkbookLink(latest.id, 'app_to_workbook');
+      const synced = normalizeProjectAssetUrls(result.project);
+      const applied = setProjectSync(synced);
+      lastSavedJsonRef.current = JSON.stringify(applied ?? synced);
+      markSaved(synced);
+      setSaveStatus('saved');
+      setSaveNotice('PROJECT + EXCEL SAVED');
+      window.setTimeout(() => {
+        setSaveNotice((notice) => notice === 'PROJECT + EXCEL SAVED' ? '' : notice);
+      }, 6000);
+      return true;
+    } catch (error) {
+      console.error('Save + Write Excel failed', error);
+      setSaveStatus('failed');
+      setSaveNotice('EXCEL WRITE FAILED · LOCAL PROJECT IS STILL SAVED');
+      writeRecoverySnapshot(projectRef.current ?? current);
+      window.alert(
+        `Could not write the project to Excel.\n\n${String(error)}\n\n`
+        + 'Your local Singh360 project remains saved. Close Excel and try again.',
+      );
+      return false;
+    } finally {
+      setExcelWriteBusy(false);
+    }
+  }, [excelWriteBusy, printMode, captureActivePageState, saveNow, setProjectSync]);
 
   const resetSourceEditState = useCallback(() => {
     sourceHistoryRef.current.clear();
@@ -1143,6 +1191,49 @@ export default function App() {
     });
   };
 
+
+  // S360 VISUAL PAGE ACTIONS V29
+  const duplicatePageWithIdentity = (id: string, title: string, code: string) => {
+    mutatePages((pages) => {
+      const index = pages.findIndex((page) => page.id === id);
+      if (index < 0) return pages;
+      const source = pages[index];
+      const newId = newPageId();
+      const copy: PageModel = {
+        ...structuredClone(source),
+        id: newId,
+        order: source.order + 0.5,
+        sheetTitle: title.trim() || `${source.sheetTitle} Copy`,
+        sheetCode: code.trim() || 'NEW',
+        displaySheetCode: code.trim() || 'NEW',
+        sheetTab: '',
+        linkedWorksheetId: undefined,
+        continuationOf: null,
+        generatedContinuation: false,
+        continuationIndex: undefined,
+        pageGroupId: newId,
+      };
+      const next = [...pages];
+      next.splice(index + 1, 0, copy);
+      return next;
+    });
+  };
+
+  const createBlankPageFromManager = (
+    id: string,
+    where: 'before' | 'after',
+    title: string,
+    code: string,
+  ) => {
+    addSheetFromModal(
+      title.trim() || 'New Sheet',
+      code.trim() || 'NEW',
+      'canvas',
+      id,
+      where,
+    );
+  };
+
   const addPage = (refId: string, where: 'before' | 'after') => {
     setAddSheetPending({ refId, where });
   };
@@ -1884,6 +1975,8 @@ export default function App() {
       onInsertImage={(f) => void onDropImageFile(f)}
       onInsertPdfPage={() => setPdfCropOpen(true)}
       onSaveNow={() => void saveNow()}
+      onWriteExcel={() => { void writeProjectToExcel(); }}
+      writeExcelBusy={excelWriteBusy}
       onOpenBackups={() => setBackupOpen(true)}
       onExportPdf={() => setExportOpen(true)}
       onExportPackage={() => void onExportPackage()}
@@ -2044,6 +2137,14 @@ export default function App() {
           }}
           onReorderPages={(pages) => void updatePages(pages)}
           onRenamePageTitle={onRenamePageTitle}
+          onEditPageCode={(id, code) => patchPage(id, {
+            sheetCode: code.trim(),
+            displaySheetCode: code.trim(),
+          })}
+          onDuplicatePageWithIdentity={duplicatePageWithIdentity}
+          onCreateBlankPage={createBlankPageFromManager}
+          onTogglePageInclude={toggleInclude}
+          onDeletePage={deletePage}
           onPageContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })}
           onDropImageFile={(file) => void onDropImageFile(file)}
           onDropComponent={onDropComponent}
