@@ -1,0 +1,139 @@
+diff --git a/frontend/src/components/LibraryPanelV2.tsx b/frontend/src/components/LibraryPanelV2.tsx
+index 3d976c6..ee49ff9 100644
+--- a/frontend/src/components/LibraryPanelV2.tsx
++++ b/frontend/src/components/LibraryPanelV2.tsx
+@@ -3,6 +3,7 @@ import {
+   batchUpdateLibV2Components,
+   cleanLibV2PhysicalDuplicates,
+   duplicateLibV2Component,
++  getLegendTemplate,
+   getLibV2,
+   libV2AssetUrl,
+   listLegendTemplates,
+@@ -18,6 +19,7 @@ import {
+   type LibV2Data,
+   type LibV2HistoryEntry,
+ } from '../api/client';
++import type { SymbolLegendInsertConfig } from '../model/types';
+ import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
+ import '../styles/libraryV2.css';
+ 
+@@ -31,6 +33,7 @@ interface Props {
+   canInsert: boolean;
+   activePageType?: string;
+   onOpenLegendEditor?: () => void;
++  onInsertLegend?: (config: SymbolLegendInsertConfig) => void;
+ }
+ 
+ type ViewRep = 'source' | 'edge' | 'bw';
+@@ -283,7 +286,7 @@ function CardPreview({ c, rep, small = false }: { c: LibV2Component; rep: ViewRe
+   );
+ }
+ 
+-export default function LibraryPanelV2({ onInsert, canInsert, activePageType, onOpenLegendEditor }: Props) {
++export default function LibraryPanelV2({ onInsert, canInsert, activePageType, onOpenLegendEditor, onInsertLegend }: Props) {
+   const [data, setData] = useState<LibV2Data | null>(null);
+   const [loading, setLoading] = useState(false);
+   const [loadError, setLoadError] = useState('');
+@@ -310,6 +313,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
+   const [bulkStatus, setBulkStatus] = useState('');
+ 
+   const [legendTemplates, setLegendTemplates] = useState<LegendTemplateEntry[]>([]);
++  const [legendInsertBusy, setLegendInsertBusy] = useState('');
+   const [libraryHistory, setLibraryHistory] = useState<LibV2HistoryEntry[]>([]);
+   const [bulkUndo, setBulkUndo] = useState<Record<string, Partial<AnyComp>> | null>(null);
+ 
+@@ -339,6 +343,13 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
+   };
+ 
+   useEffect(() => { void load(true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
++  useEffect(() => {
++    const refreshLegends = () => {
++      void listLegendTemplates().then(setLegendTemplates).catch((error) => setLoadError(String(error)));
++    };
++    window.addEventListener('singh360:legend-template-saved', refreshLegends);
++    return () => window.removeEventListener('singh360:legend-template-saved', refreshLegends);
++  }, []);
+   useEffect(() => { setRep(defaultRepForPage(activePageType, data)); }, [activePageType, data]);
+ 
+   const components = data?.components ?? [];
+@@ -348,6 +359,33 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
+     return components.find((c) => c.id === selectedId) || components.find((c) => selectedIds.includes(c.id)) || null;
+   }, [components, selectedId, selectedIds]);
+ 
++  const visibleLegendTemplates = useMemo(() => {
++    if (category !== 'all' && category !== 'legends') return [];
++    const search = query.trim().toLowerCase();
++    return legendTemplates.filter((entry) => !search || `${entry.name} ${entry.category || ''}`.toLowerCase().includes(search));
++  }, [legendTemplates, category, query]);
++
++  const insertLegendTemplate = async (entry: LegendTemplateEntry) => {
++    if (!canInsert || !onInsertLegend) return;
++    setLegendInsertBusy(entry.id);
++    setLoadError('');
++    try {
++      const payload = await getLegendTemplate(entry.id);
++      onInsertLegend({
++        title: payload.title || entry.name || 'SYMBOLS KEY:',
++        rows: payload.rows,
++        columns: payload.columns === 2 ? 2 : 1,
++        markerSize: payload.markerSize,
++        frame: payload.frame,
++        highlighted: payload.highlighted,
++      });
++    } catch (error) {
++      setLoadError(`Legend insert failed: ${String(error)}`);
++    } finally {
++      setLegendInsertBusy('');
++    }
++  };
++
+   const categories = useMemo(() => {
+     const ids = new Set<string>();
+     CATEGORY_PRESETS.forEach((c) => ids.add(c.id));
+@@ -668,7 +706,7 @@ This is NOT saved until you click Save All Edits.`,
+           .replace(/\s+/g, ' ')
+           .replace(/\b(li|da|ls|lsc|es|ea|idf|mdf|wicp|lcp|rdm|ems|cat6|oat|ct|eev|llv)\b/gi, (m) => {
+             const map: Record<string, string> = {
+-              li: 'LI', da: 'DA', ls: 'LS', lsc: 'LSc', es: 'ES', ea: 'EA',
++              li: 'LI', da: 'DA', ls: 'LS', lsc: 'LSC', es: 'ES', ea: 'EA',
+               idf: 'IDF', mdf: 'MDF', wicp: 'WICP', lcp: 'LCP', rdm: 'RDM',
+               ems: 'EMS', cat6: 'CAT6', oat: 'OAT', ct: 'CT', eev: 'EEV', llv: 'LLV',
+             };
+@@ -802,6 +840,27 @@ This is NOT saved until you click Save All Edits.`,
+       </div>
+ 
+       <div className="libv2-grid">
++        {visibleLegendTemplates.map((entry) => (
++          <div key={`legend-${entry.id}`} className="libv2-card libv2-legend-card" title={entry.name}>
++            <div className="libv2-preview libv2-legend-preview">
++              <strong>SYMBOLS KEY</strong>
++              <span>{entry.rowCount ?? 0} saved rows</span>
++            </div>
++            <div className="libv2-meta">
++              <div className="libv2-name">{entry.name}</div>
++              <div className="libv2-part">Saved legend</div>
++              <div className="libv2-actions">
++                <button
++                  onClick={() => void insertLegendTemplate(entry)}
++                  disabled={!canInsert || !onInsertLegend || legendInsertBusy === entry.id}
++                >
++                  {legendInsertBusy === entry.id ? 'Inserting…' : 'Insert Legend'}
++                </button>
++                <button onClick={onOpenLegendEditor} disabled={!onOpenLegendEditor}>Edit</button>
++              </div>
++            </div>
++          </div>
++        ))}
+         {visibleCards.map((c) => {
+           const canCurrent = !!(variantUrl(c, rep) || previewUrl(c, rep));
+           return (
+@@ -826,7 +885,7 @@ This is NOT saved until you click Save All Edits.`,
+             </div>
+           );
+         })}
+-        {!visibleCards.length && <div className="libv2-empty">No matching components.</div>}
++        {!visibleCards.length && !visibleLegendTemplates.length && <div className="libv2-empty">No matching components.</div>}
+       </div>
+ 
+       {showDashboard && (
