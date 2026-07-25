@@ -1,8 +1,8 @@
 diff --git a/frontend/src/components/CanvasEditor.tsx b/frontend/src/components/CanvasEditor.tsx
-index 3080535..0ad35f8 100644
+index 3080535..d47d4bd 100644
 --- a/frontend/src/components/CanvasEditor.tsx
 +++ b/frontend/src/components/CanvasEditor.tsx
-@@ -1517,6 +1675,23 @@ export default function CanvasEditor({
+@@ -1517,6 +1674,23 @@ export default function CanvasEditor({
          c.setActiveObject(group);
          c.requestRenderAll();
        },
@@ -16,7 +16,7 @@ index 3080535..0ad35f8 100644
 +        const startX = CANVAS_W * 0.56;
 +        const startY = CANVAS_H * 0.08;
 +        const groups = rows.map((row, index) => makeSymbolLegendRow(row, markerSize, startX, startY + index * (rowHeight + 8)));
-+        groups.forEach((group) => c.add(group));
++        groups.forEach((group) => { styleForSelection(group); c.add(group); });
 +        const selection = new ActiveSelection(groups, { canvas: c });
 +        c.setActiveObject(selection);
 +        c.requestRenderAll();
