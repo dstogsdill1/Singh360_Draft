@@ -32,7 +32,23 @@ jobs:
             scripts/smoke_symbol_standard_v38.py
 
       - name: Isolated symbol standard and library smoke test
-        run: python scripts/smoke_symbol_standard_v38.py
+        id: smoke
+        continue-on-error: true
+        run: python scripts/smoke_symbol_standard_v38.py > symbol-v38-smoke.log 2>&1
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: symbol-v38-smoke-${{ github.run_id }}
+          path: symbol-v38-smoke.log
+          if-no-files-found: error
+
+      - name: Fail when smoke test failed
+        if: steps.smoke.outcome == 'failure'
+        run: |
+          cat symbol-v38-smoke.log
+          exit 1
 
       - name: Set up Node
         uses: actions/setup-node@v4
