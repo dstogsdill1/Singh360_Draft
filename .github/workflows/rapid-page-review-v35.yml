@@ -1,0 +1,90 @@
+name: Rapid Page Review V35 Validation
+
+on:
+  push:
+    branches:
+      - validation/rapid-page-review-v35-20260725
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact validation branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply bounded Rapid Page Review patch
+        run: python scripts/apply_rapid_page_review_v35.py --repo .
+
+      - name: Verify bounded patch state
+        run: python scripts/apply_rapid_page_review_v35.py --repo . --check
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript and Vite production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify compiled rapid-review controls
+        working-directory: frontend
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          bundle = '\n'.join(
+              path.read_text(encoding='utf-8', errors='ignore')
+              for path in Path('dist/assets').glob('*')
+              if path.suffix in {'.js', '.css'}
+          )
+          required = [
+              'Include in Drawing:',
+              'Included Only',
+              'Not Included',
+              'All Pages',
+              'PAGE REVIEW SAVED',
+              'vt-page-filter-widget',
+              'vt-rapid-include',
+          ]
+          missing = [token for token in required if token not in bundle]
+          if missing:
+              raise SystemExit(f'Missing compiled Rapid Page Review tokens: {missing}')
+          print(f'Verified {len(required)} compiled Rapid Page Review tokens')
+          PY
+
+      - name: Diff integrity
+        run: git diff --check
+
+      - name: Commit validated source to validation branch
+        run: |
+          if git diff --quiet -- frontend/src; then
+            echo 'Validated source is already committed.'
+            exit 0
+          fi
+          git config user.name 'Singh360 Validation Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add \
+            frontend/src/App.tsx \
+            frontend/src/components/Ribbon.tsx \
+            frontend/src/components/DocumentView.tsx \
+            frontend/src/components/ViewportToolbar.tsx \
+            frontend/src/styles/rapidPageReview.css
+          git commit -m 'Add rapid page review navigation and filters'
+          git push origin HEAD:${GITHUB_REF_NAME}
