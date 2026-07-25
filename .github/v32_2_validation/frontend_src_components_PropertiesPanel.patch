@@ -1,0 +1,79 @@
+diff --git a/frontend/src/components/PropertiesPanel.tsx b/frontend/src/components/PropertiesPanel.tsx
+index 74e7d00..b391d09 100644
+--- a/frontend/src/components/PropertiesPanel.tsx
++++ b/frontend/src/components/PropertiesPanel.tsx
+@@ -279,6 +279,18 @@ export default function PropertiesPanel({
+                 <input id="sel-name" type="text" title="A label for this object (does not appear on the sheet)" value={selection.name} onChange={(e) => onUpdateSelection({ name: e.target.value })} />
+               </div>
+             )}
++            {selection.isLegendRow && (
++              <div className="props-subgroup">
++                <div className="field">
++                  <label htmlFor="sel-legend-code">Symbol Code</label>
++                  <input id="sel-legend-code" value={selection.legendCode ?? ''} onChange={(e) => onUpdateSelection({ legendCode: e.target.value })} />
++                </div>
++                <div className="field">
++                  <label htmlFor="sel-legend-label">Symbol Description</label>
++                  <textarea id="sel-legend-label" rows={3} value={selection.legendLabel ?? ''} onChange={(e) => onUpdateSelection({ legendLabel: e.target.value })} />
++                </div>
++              </div>
++            )}
+             <div className="field-row">
+               <div className="field">
+                 <label htmlFor="sel-x" title="Horizontal position on the sheet (pixels from the left)">X Position</label>
+@@ -336,6 +348,55 @@ export default function PropertiesPanel({
+                 </div>
+               </>
+             )}
++            {selection.isImage && (
++              <div className="props-subgroup image-style-properties">
++                <h4>Image / PDF Border</h4>
++                <div className="field-row">
++                  <div className="field">
++                    <label htmlFor="sel-image-border-color">Border Color</label>
++                    <input id="sel-image-border-color" type="color" value={selection.imageBorderColor || '#000000'} onChange={(e) => onUpdateSelection({ imageBorderColor: e.target.value })} />
++                  </div>
++                  <div className="field">
++                    <label htmlFor="sel-image-border-width">Border Width</label>
++                    <input id="sel-image-border-width" type="number" min={0} max={24} step={0.5} value={selection.imageBorderWidth ?? 0} onChange={(e) => onUpdateSelection({ imageBorderWidth: Number(e.target.value) })} />
++                  </div>
++                </div>
++                <h4>Image / PDF Shadow</h4>
++                <div className="field">
++                  <label htmlFor="sel-image-shadow-style">Shadow Style</label>
++                  <select id="sel-image-shadow-style" value={selection.imageShadowStyle ?? 'none'} onChange={(e) => onUpdateSelection({ imageShadowStyle: e.target.value as CanvasSelection['imageShadowStyle'] })}>
++                    <option value="none">None</option>
++                    <option value="soft">Soft</option>
++                    <option value="hard">Hard</option>
++                    <option value="glow">Glow</option>
++                  </select>
++                </div>
++                <div className="field-row">
++                  <div className="field">
++                    <label htmlFor="sel-image-shadow-color">Shadow Color</label>
++                    <input id="sel-image-shadow-color" type="color" value={selection.imageShadowColor || '#000000'} onChange={(e) => onUpdateSelection({ imageShadowColor: e.target.value })} />
++                  </div>
++                  <div className="field">
++                    <label htmlFor="sel-image-shadow-opacity">Opacity</label>
++                    <input id="sel-image-shadow-opacity" type="number" min={0} max={1} step={0.05} value={selection.imageShadowOpacity ?? 0.28} onChange={(e) => onUpdateSelection({ imageShadowOpacity: Number(e.target.value) })} />
++                  </div>
++                </div>
++                <div className="field">
++                  <label htmlFor="sel-image-shadow-blur">Shadow Amount / Blur</label>
++                  <input id="sel-image-shadow-blur" type="number" min={0} max={80} step={1} value={selection.imageShadowBlur ?? 14} onChange={(e) => onUpdateSelection({ imageShadowBlur: Number(e.target.value) })} />
++                </div>
++                <div className="field-row">
++                  <div className="field">
++                    <label htmlFor="sel-image-shadow-x">Offset X</label>
++                    <input id="sel-image-shadow-x" type="number" step={1} value={selection.imageShadowOffsetX ?? 8} onChange={(e) => onUpdateSelection({ imageShadowOffsetX: Number(e.target.value) })} />
++                  </div>
++                  <div className="field">
++                    <label htmlFor="sel-image-shadow-y">Offset Y</label>
++                    <input id="sel-image-shadow-y" type="number" step={1} value={selection.imageShadowOffsetY ?? 8} onChange={(e) => onUpdateSelection({ imageShadowOffsetY: Number(e.target.value) })} />
++                  </div>
++                </div>
++              </div>
++            )}
+             {!selection.isConnector && !selection.isImage && (
+               <div className="field">
+                 <label htmlFor="sel-fill" title="Inside (fill) color. Use 'transparent' for no fill.">Fill Color</label>
