@@ -1,0 +1,11 @@
+/* S360 RAPID PAGE REVIEW V35 */
+.viewport-toolbar { flex-wrap: wrap; height: auto; min-height: 36px; gap: 4px; overflow: visible; }
+.vt-page-filter-widget { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid #64748b; background: #e2e8f0; color: #0f172a; font-weight: 800; font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vt-page-filter-widget.filter-included { background: #dcfce7; border-color: #16a34a; color: #14532d; }
+.vt-page-filter-widget.filter-excluded { background: #fee2e2; border-color: #dc2626; color: #7f1d1d; }
+.vt-review-nav { font-weight: 800; }
+.vt-rapid-include { min-width: 172px; font-weight: 900; border-width: 2px; }
+.vt-rapid-include.included { background: #15803d; border-color: #166534; color: #fff; }
+.vt-rapid-include.excluded { background: #b91c1c; border-color: #7f1d1d; color: #fff; }
+.vt-rapid-include:disabled { opacity: .58; cursor: not-allowed; }
+@media (max-width: 1500px) { .viewport-toolbar .vt-label { flex-basis: min(100%, 520px); } .viewport-toolbar .vt-spacer { display: none; } }

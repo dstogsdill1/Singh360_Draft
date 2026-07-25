@@ -1,5 +1,7 @@
 import type { PageModel, ViewMode } from '../model/types';
-import type { ViewControls } from './Ribbon';
+import type { PageReviewFilter, ViewControls } from './Ribbon';
+import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
+import '../styles/rapidPageReview.css';
 import { PAGE_ISSUE_STATUSES, normalizePageIssueStatus } from '../model/pageStatus';
 
 interface Props {
@@ -18,6 +20,11 @@ interface Props {
   canRestorePageRebuild?: boolean;
   onPatchPage?: (patch: Partial<PageModel>) => void;
   onOpenHelp?: () => void;
+  reviewPages: PageModel[];
+  pageFilter: PageReviewFilter;
+  rapidReviewBusy: boolean;
+  onNavigateReview: (direction: -1 | 1) => void;
+  onToggleIncludeAndAdvance: () => void;
 }
 
 export default function ViewportToolbar({
@@ -36,6 +43,11 @@ export default function ViewportToolbar({
   canRestorePageRebuild,
   onPatchPage,
   onOpenHelp,
+  reviewPages,
+  pageFilter,
+  rapidReviewBusy,
+  onNavigateReview,
+  onToggleIncludeAndAdvance,
 }: Props) {
   const pageLabel = sourceOnly && viewMode === 'source'
     ? 'Source-only worksheet'
@@ -44,6 +56,13 @@ export default function ViewportToolbar({
       : 'Not included';
   const displayCode = viewMode === 'source' && sourceOnly ? 'DRAFT' : activePage.sheetCode;
   const displayTitle = viewMode === 'source' && sourceWorksheetName ? sourceWorksheetName : activePage.sheetTitle;
+  // S360 RAPID PAGE REVIEW V35
+  const reviewIndex = reviewPages.findIndex((page) => page.id === activePage.id);
+  const filterLabel = pageFilter === 'included' ? 'Included only' : pageFilter === 'excluded' ? 'Not included' : 'All pages';
+  const filterPosition = reviewIndex >= 0 ? reviewIndex + 1 : 0;
+  const includeLocked = isCoverPage(activePage) || isSheetIndexPage(activePage);
+  const canPrevious = reviewPages.length > 0 && (reviewIndex < 0 || reviewIndex > 0);
+  const canNext = reviewPages.length > 0 && (reviewIndex < 0 || reviewIndex < reviewPages.length - 1);
 
   return (
     <div className="viewport-toolbar">
@@ -96,6 +115,18 @@ export default function ViewportToolbar({
         <button type="button" className="fit-btn vt-help-btn" onClick={onOpenHelp}>Open Help</button>
       </span>
       <span className="vt-spacer" />
+      <span className={`vt-page-filter-widget filter-${pageFilter}`}>{filterLabel} · {filterPosition} of {reviewPages.length}</span>
+      <button type="button" className="fit-btn vt-review-nav" disabled={!canPrevious || rapidReviewBusy} onClick={() => onNavigateReview(-1)}>← Previous</button>
+      <button
+        type="button"
+        className={`fit-btn vt-rapid-include ${activePage.include ? 'included' : 'excluded'}`}
+        disabled={includeLocked || rapidReviewBusy}
+        onClick={onToggleIncludeAndAdvance}
+        title={includeLocked ? 'Cover and Sheet Index are required pages' : 'Toggle Include, save automatically, then advance'}
+      >
+        {rapidReviewBusy ? 'Saving…' : `Include in Drawing: ${activePage.include ? 'YES' : 'NO'} →`}
+      </button>
+      <button type="button" className="fit-btn vt-review-nav" disabled={!canNext || rapidReviewBusy} onClick={() => onNavigateReview(1)}>Next →</button>
       <span className="sb-item">{pageLabel}</span>
       <button className={`fit-btn ${view.fitMode === 'width' ? 'active' : ''}`} onClick={() => view.setFitMode('width')}>Fit Width</button>
       <button className={`fit-btn ${view.fitMode === 'page' ? 'active' : ''}`} onClick={() => view.setFitMode('page')}>Fit Page</button>

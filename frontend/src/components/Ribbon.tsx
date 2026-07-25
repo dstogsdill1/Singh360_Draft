@@ -3,6 +3,8 @@ import type { FitMode } from './DocumentView';
 import type { CanvasSelection, LineStyle, SymbolLegendInsertConfig } from '../model/types';
 import { CONNECTOR_PRESETS } from '../model/connectorPresets';
 
+export type PageReviewFilter = 'all' | 'included' | 'excluded';
+
 export interface ViewControls {
   fitMode: FitMode;
   showGrid: boolean;
@@ -97,6 +99,8 @@ interface Props {
   selection: CanvasSelection | null;
   onUpdateSelection: (patch: Partial<CanvasSelection>) => void;
   onSetLineStyle: (style: LineStyle) => void;
+  pageFilter: PageReviewFilter;
+  onSetPageFilter: (filter: PageReviewFilter) => void;
 }
 
 type RibbonTab = 'File' | 'Home' | 'Insert' | 'Symbols' | 'Draw' | 'Text' | 'Arrange' | 'View' | 'Export';
@@ -161,6 +165,8 @@ export default function Ribbon({
   selection,
   onUpdateSelection,
   onSetLineStyle,
+  pageFilter,
+  onSetPageFilter,
 }: Props) {
   const [tab, setTab] = useState<RibbonTab>('File');
 
@@ -517,6 +523,12 @@ export default function Ribbon({
               <button className="ribbon-btn" disabled={!hasProject} onClick={view.zoomOut}>−</button>
               <button className="ribbon-btn" disabled title="Current zoom">{view.zoomPct}%</button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={view.zoomIn}>+</button>
+            </Group>
+            {/* S360 RAPID PAGE REVIEW V35 */}
+            <Group title="Page Filter">
+              <button className={`ribbon-btn ${pageFilter === 'all' ? 'active' : ''}`} disabled={!hasProject} onClick={() => onSetPageFilter('all')}>All Pages</button>
+              <button className={`ribbon-btn ${pageFilter === 'included' ? 'active' : ''}`} disabled={!hasProject} onClick={() => onSetPageFilter('included')}>Included Only</button>
+              <button className={`ribbon-btn ${pageFilter === 'excluded' ? 'active' : ''}`} disabled={!hasProject} onClick={() => onSetPageFilter('excluded')}>Not Included</button>
             </Group>
             <Group title="Grid">
               <button className={`ribbon-btn ${view.showGrid ? 'active' : ''}`} disabled={!hasProject} onClick={view.toggleGrid}>Show Grid</button>

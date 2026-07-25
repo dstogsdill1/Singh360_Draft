@@ -38,7 +38,7 @@ import LibraryPanelV2 from './components/LibraryPanelV2';
 import DocumentView, { type FitMode, MAX_SCALE, MIN_SCALE } from './components/DocumentView';
 import PropertiesPanel from './components/PropertiesPanel';
 import PrintView from './components/PrintView';
-import Ribbon, { type ViewControls } from './components/Ribbon';
+import Ribbon, { type PageReviewFilter, type ViewControls } from './components/Ribbon';
 import RenumberModal from './components/RenumberModal';
 import OpenProjectModal from './components/OpenProjectModal';
 import CleanWorkspaceModal from './components/CleanWorkspaceModal';
@@ -112,6 +112,15 @@ export default function App() {
   const [effectiveScale, setEffectiveScale] = useState(0.5);
   const [showGrid, setShowGrid] = useState(false);
   const [snap, setSnap] = useState(true);
+  // S360 RAPID PAGE REVIEW V35
+  const [pageFilter, setPageFilter] = useState<PageReviewFilter>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('singh360-page-filter') : null;
+    return saved === 'included' || saved === 'excluded' ? saved : 'all';
+  });
+  const [rapidReviewBusy, setRapidReviewBusy] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem('singh360-page-filter', pageFilter); } catch { /* ignore */ }
+  }, [pageFilter]);
 
   // Rendering + editing state.
   const [viewMode, setViewMode] = useState<ViewMode>('normalized');
@@ -455,6 +464,24 @@ export default function App() {
     if (!project || !activePageId) return null;
     return project.pages.find((p) => p.id === activePageId) ?? null;
   }, [project, activePageId]);
+
+  // S360 RAPID PAGE REVIEW V35
+  const reviewPages = useMemo(() => {
+    const ordered = [...(project?.pages ?? [])].sort((a, b) => a.order - b.order);
+    if (pageFilter === 'included') return ordered.filter((page) => page.include);
+    if (pageFilter === 'excluded') return ordered.filter((page) => !page.include);
+    return ordered;
+  }, [project?.pages, pageFilter]);
+
+  const navigateReviewPage = useCallback(async (direction: -1 | 1) => {
+    if (!reviewPages.length) return;
+    const currentIndex = reviewPages.findIndex((page) => page.id === activePageRef.current?.id);
+    const targetIndex = currentIndex < 0
+      ? (direction > 0 ? 0 : reviewPages.length - 1)
+      : currentIndex + direction;
+    if (targetIndex < 0 || targetIndex >= reviewPages.length) return;
+    await switchPageSafely(reviewPages[targetIndex].id);
+  }, [reviewPages, switchPageSafely]);
 
   // Auto-enable overlay edit mode only for pages whose *base* is not itself
   // editable (pure image/canvas/underlay sheets, or pages that already carry
@@ -1314,6 +1341,51 @@ export default function App() {
       return target ? setPageIncludedAtStoredPosition(pages, id, !target.include) : pages;
     });
 
+  // S360 RAPID PAGE REVIEW V35
+  const toggleIncludeAndAdvance = async () => {
+    if (rapidReviewBusy) return;
+    const currentPage = activePageRef.current;
+    const currentProject = projectRef.current;
+    if (!currentPage || !currentProject) return;
+    const includeLocked = currentPage.pageType === 'cover' || isSheetIndexPage(currentPage);
+    if (includeLocked) return;
+
+    const ordered = [...currentProject.pages].sort((a, b) => a.order - b.order);
+    const filteredBefore = pageFilter === 'included'
+      ? ordered.filter((page) => page.include)
+      : pageFilter === 'excluded'
+        ? ordered.filter((page) => !page.include)
+        : ordered;
+    const currentIndex = filteredBefore.findIndex((page) => page.id === currentPage.id);
+    const nextPageId = currentIndex >= 0
+      ? (filteredBefore[currentIndex + 1]?.id ?? filteredBefore[currentIndex - 1]?.id ?? null)
+      : (filteredBefore[0]?.id ?? null);
+
+    const pages = withPageNumbers(setPageIncludedAtStoredPosition(currentProject.pages, currentPage.id, !currentPage.include));
+    const nextProject = { ...currentProject, pages };
+    setRapidReviewBusy(true);
+    setProjectSync(nextProject);
+    setSaveStatus('saving');
+    setSaveNotice('Saving page review…');
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 700));
+    const saved = await confirmLatestProjectSaved(15000);
+    if (!saved) {
+      setSaveStatus('failed');
+      setSaveNotice('PAGE REVIEW SAVE FAILED · STAYING ON CURRENT PAGE');
+      setRapidReviewBusy(false);
+      return;
+    }
+    if (nextPageId && nextPageId !== currentPage.id) {
+      const target = projectRef.current?.pages.find((page) => page.id === nextPageId);
+      setActivePageId(nextPageId);
+      if (target?.linkedWorksheetId) setSelectedWorksheetId(target.linkedWorksheetId);
+      setSelection(null);
+    }
+    setSaveNotice('PAGE REVIEW SAVED');
+    window.setTimeout(() => setSaveNotice((notice) => notice === 'PAGE REVIEW SAVED' ? '' : notice), 2500);
+    setRapidReviewBusy(false);
+  };
+
   const openWorksheetDraft = useCallback(async (worksheetId: string) => {
     const ok = await ensureSavedBeforeNavigation();
     if (!ok) return;
@@ -2001,6 +2073,8 @@ export default function App() {
       selection={selection}
       onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
       onSetLineStyle={(style) => setLineStyle(style)}
+      pageFilter={pageFilter}
+      onSetPageFilter={setPageFilter}
     />
   );
 
@@ -2123,6 +2197,11 @@ export default function App() {
           onReplacePageSource={replaceCurrentPageSource}
           onExportPageSource={() => void exportCurrentSourceSheet()}
           onOpenHelp={() => window.open('/app?help=1', '_blank', 'noopener,noreferrer')}
+          reviewPages={reviewPages}
+          pageFilter={pageFilter}
+          rapidReviewBusy={rapidReviewBusy}
+          onNavigateReview={(direction) => { void navigateReviewPage(direction); }}
+          onToggleIncludeAndAdvance={() => { void toggleIncludeAndAdvance(); }}
           activeTool={activeTool}
           snap={snap}
           overlayMode={overlayMode}

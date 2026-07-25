@@ -14,7 +14,7 @@ import TitleBlock from './TitleBlock';
 import PageTabs from './PageTabs';
 import ViewportToolbar from './ViewportToolbar';
 import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
-import type { ViewControls } from './Ribbon';
+import type { PageReviewFilter, ViewControls } from './Ribbon';
 
 export type FitMode = 'width' | 'page' | 'actual';
 
@@ -82,6 +82,11 @@ interface Props {
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
   onOpenHelp?: () => void;
+  reviewPages: PageModel[];
+  pageFilter: PageReviewFilter;
+  rapidReviewBusy: boolean;
+  onNavigateReview: (direction: -1 | 1) => void;
+  onToggleIncludeAndAdvance: () => void;
 }
 
 export default function DocumentView({
@@ -127,6 +132,11 @@ export default function DocumentView({
   onReplacePageSource,
   onExportPageSource,
   onOpenHelp,
+  reviewPages,
+  pageFilter,
+  rapidReviewBusy,
+  onNavigateReview,
+  onToggleIncludeAndAdvance,
 }: Props) {
   const linkedWorksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
   const selectedWorksheet = selectedWorksheetId ? worksheets.find((w) => w.id === selectedWorksheetId) : undefined;
@@ -214,6 +224,11 @@ export default function DocumentView({
         canRestorePageRebuild={canRestorePageRebuild}
         onPatchPage={(patch) => onPatchPage(activePage.id, patch)}
         onOpenHelp={onOpenHelp}
+        reviewPages={reviewPages}
+        pageFilter={pageFilter}
+        rapidReviewBusy={rapidReviewBusy}
+        onNavigateReview={onNavigateReview}
+        onToggleIncludeAndAdvance={onToggleIncludeAndAdvance}
       />
       <div
         className="sheet-viewport"
