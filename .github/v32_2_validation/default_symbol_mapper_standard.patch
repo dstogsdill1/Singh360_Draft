@@ -1,0 +1,32 @@
+diff --git a/defaults/symbol_mapper_standard.json b/defaults/symbol_mapper_standard.json
+index c525977..0f30d8c 100644
+--- a/defaults/symbol_mapper_standard.json
++++ b/defaults/symbol_mapper_standard.json
+@@ -2,7 +2,7 @@
+   "version": 1,
+   "id": "singh360-standard",
+   "name": "Singh360 Standard",
+-  "updatedAt": "2026-07-21T22:52:21Z",
++  "updatedAt": "2026-07-25T04:19:02Z",
+   "symbols": [
+     {
+       "key": "TS|TEMPERATURE SENSOR",
+@@ -40,6 +40,18 @@
+       "shape": "circle",
+       "glyph": "LS"
+     },
++    {
++      "key": "LSC|CO2 REFRIGERANT LEAK SENSOR",
++      "code": "LSC",
++      "label": "CO₂ REFRIGERANT LEAK SENSOR",
++      "enabled": true,
++      "paletteId": "yellow",
++      "color": "#ffd400",
++      "color2": "#ffd400",
++      "pattern": "solid",
++      "shape": "circle",
++      "glyph": "LSC"
++    },
+     {
+       "key": "LI|REFRIGERANT LEAK INDICATOR AUDIO VISUAL ALARM",
+       "code": "LI",
