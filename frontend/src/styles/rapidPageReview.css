@@ -1,80 +1,11 @@
-/* S360 RAPID PAGE REVIEW V37 — responsive two-row toolbar */
-.viewport-toolbar {
-  flex-wrap: wrap;
-  height: auto;
-  min-height: 36px;
-  gap: 4px;
-  overflow: visible;
-  align-content: center;
-}
-
-/* First row: page identity, source controls, and issue/include status. */
-.viewport-toolbar .vt-label {
-  flex: 1 1 260px;
-  min-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.viewport-toolbar .vt-viewmode,
-.viewport-toolbar .vt-issue-status {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Always force rapid-review navigation and zoom controls onto row two. */
-.viewport-toolbar .vt-spacer {
-  display: block;
-  flex: 0 0 100%;
-  width: 100%;
-  height: 0;
-  margin: 0;
-  padding: 0;
-}
-
-.vt-page-filter-widget {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid #64748b;
-  background: #e2e8f0;
-  color: #0f172a;
-  font-weight: 800;
-  font-size: 11px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
+/* S360 RAPID PAGE REVIEW V35 */
+.viewport-toolbar { flex-wrap: wrap; height: auto; min-height: 36px; gap: 4px; overflow: visible; }
+.vt-page-filter-widget { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid #64748b; background: #e2e8f0; color: #0f172a; font-weight: 800; font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .vt-page-filter-widget.filter-included { background: #dcfce7; border-color: #16a34a; color: #14532d; }
 .vt-page-filter-widget.filter-excluded { background: #fee2e2; border-color: #dc2626; color: #7f1d1d; }
-.vt-review-nav { font-weight: 800; white-space: nowrap; }
-.vt-rapid-include {
-  min-width: 172px;
-  font-weight: 900;
-  border-width: 2px;
-  white-space: nowrap;
-}
+.vt-review-nav { font-weight: 800; }
+.vt-rapid-include { min-width: 172px; font-weight: 900; border-width: 2px; }
 .vt-rapid-include.included { background: #15803d; border-color: #166534; color: #fff; }
 .vt-rapid-include.excluded { background: #b91c1c; border-color: #7f1d1d; color: #fff; }
 .vt-rapid-include:disabled { opacity: .58; cursor: not-allowed; }
-
-/* Narrow editor windows get a clean third row instead of horizontal clipping. */
-@media (max-width: 1180px) {
-  .viewport-toolbar .vt-issue-status {
-    flex: 1 1 100%;
-  }
-  .viewport-toolbar .vt-page-filter-widget {
-    margin-left: 0;
-  }
-}
-
-@media (max-width: 860px) {
-  .viewport-toolbar .vt-label,
-  .viewport-toolbar .vt-viewmode,
-  .viewport-toolbar .vt-issue-status {
-    flex: 1 1 100%;
-  }
-}
+@media (max-width: 1500px) { .viewport-toolbar .vt-label { flex-basis: min(100%, 520px); } .viewport-toolbar .vt-spacer { display: none; } }
