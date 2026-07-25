@@ -55,7 +55,11 @@ jobs:
           done
 
       - name: Reconstruct and apply V32.3 AI guide patch
+        id: ai_patch
+        continue-on-error: true
         run: |
+          set -o pipefail
+          exec > >(tee /tmp/v32-3-patch.log) 2>&1
           files=(
             .github/v32_3_validation/ai_patch_part_00.b64
             .github/v32_3_validation/ai_patch_part_01.b64
@@ -67,17 +71,36 @@ jobs:
             .github/v32_3_validation/ai_patch_chunk_13.b64
             .github/v32_3_validation/ai_patch_chunk_14.b64
           )
-          for file in "${files[@]}"; do wc -c "$file"; done
+          for file in "${files[@]}"; do wc -c "$file"; sha256sum "$file"; done
           cat "${files[@]}" | tr -d '\n\r' > /tmp/v32_3_ai_guide.b64
+          wc -c /tmp/v32_3_ai_guide.b64
+          sha256sum /tmp/v32_3_ai_guide.b64
           test "$(wc -c < /tmp/v32_3_ai_guide.b64)" = "28160"
           echo 'b1809b7f2e98ac18e9f580913e5874cbeca805eaac394e90acbb2ff568293d16  /tmp/v32_3_ai_guide.b64' | sha256sum -c -
           base64 --decode /tmp/v32_3_ai_guide.b64 > /tmp/v32_3_ai_guide.patch.gz
+          wc -c /tmp/v32_3_ai_guide.patch.gz
+          sha256sum /tmp/v32_3_ai_guide.patch.gz
           echo 'f7b4c6bc1a14f85cf0fde69cead0c36091194cf1b39bb250c2da84c009f5a809  /tmp/v32_3_ai_guide.patch.gz' | sha256sum -c -
           gzip -t /tmp/v32_3_ai_guide.patch.gz
           gzip -dc /tmp/v32_3_ai_guide.patch.gz > /tmp/v32_3_ai_guide.patch
+          wc -c /tmp/v32_3_ai_guide.patch
+          sha256sum /tmp/v32_3_ai_guide.patch
           echo '8f9c5e04142836a0841d1bf9abfe9dbb702a506c8c9a89cb97d621324751dd16  /tmp/v32_3_ai_guide.patch' | sha256sum -c -
           git apply --check /tmp/v32_3_ai_guide.patch
           git apply --whitespace=nowarn /tmp/v32_3_ai_guide.patch
+
+      - name: Upload AI patch diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v32-3-patch-diagnostic
+          path: /tmp/v32-3-patch.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce AI patch result
+        if: steps.ai_patch.outcome == 'failure'
+        run: exit 1
 
       - name: Set up Python
         uses: actions/setup-python@v5
