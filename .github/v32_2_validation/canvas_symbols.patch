@@ -1,0 +1,28 @@
+diff --git a/frontend/src/components/CanvasEditor.tsx b/frontend/src/components/CanvasEditor.tsx
+index 3080535..0ad35f8 100644
+--- a/frontend/src/components/CanvasEditor.tsx
++++ b/frontend/src/components/CanvasEditor.tsx
+@@ -1517,6 +1675,23 @@ export default function CanvasEditor({
+         c.setActiveObject(group);
+         c.requestRenderAll();
+       },
++      addSymbolLegendRows: (config: SymbolLegendInsertConfig) => {
++        const c = fabricRef.current;
++        if (!c) return;
++        const rows = config.rows.filter((row) => row.label.trim());
++        if (!rows.length) return;
++        const markerSize = Math.max(18, Math.min(42, config.markerSize ?? SYMBOL_SIZE_SMALL));
++        const rowHeight = Math.max(34, markerSize + 8);
++        const startX = CANVAS_W * 0.56;
++        const startY = CANVAS_H * 0.08;
++        const groups = rows.map((row, index) => makeSymbolLegendRow(row, markerSize, startX, startY + index * (rowHeight + 8)));
++        groups.forEach((group) => c.add(group));
++        const selection = new ActiveSelection(groups, { canvas: c });
++        c.setActiveObject(selection);
++        c.requestRenderAll();
++        onSelRef.current({ ...summarize(selection), name: `${groups.length} independent symbol rows` });
++        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
++      },
+       normalizeSymbolSize: () => {
+         const c = fabricRef.current;
+         if (!c) return;
