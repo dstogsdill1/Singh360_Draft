@@ -1,9 +1,14 @@
-name: Frontend Build
+name: V32.2 Controlled Validation
 
 on:
   pull_request:
     paths:
       - 'frontend/**'
+      - 'core/**'
+      - 'defaults/**'
+      - 'scripts/**'
+      - 'server.py'
+      - 'requirements.txt'
       - '.github/workflows/frontend-build.yml'
       - '.github/v32_2_validation/**'
   push:
@@ -16,16 +21,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Apply V32.2 validation patches
         run: |
-          cd ..
           patches=(
+            .github/v32_2_validation/core_legend_template_store.patch
+            .github/v32_2_validation/core_symbol_mapper.patch
+            .github/v32_2_validation/server_legend_templates.patch
+            .github/v32_2_validation/default_symbol_mapper_standard.patch
+            .github/v32_2_validation/smoke_symbol_mapper.patch
+            .github/v32_2_validation/smoke_symbol_mapper_api.patch
+            .github/v32_2_validation/frontend_symbol_palette.patch
             .github/v32_2_validation/frontend_src_model_types.patch
             .github/v32_2_validation/frontend_src_api_client.patch
             .github/v32_2_validation/canvas_core.patch
@@ -48,25 +56,146 @@ jobs:
             echo "Applying ${patch}"
             git apply "${patch}"
           done
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Backend compile, API, and symbol smoke tests
+        id: backend_validation
+        continue-on-error: true
+        run: |
+          set +e
+          python - <<'PY' > v32-python.log 2>&1
+          from __future__ import annotations
+
+          import py_compile
+          import shutil
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          for file_name in (
+              'server.py',
+              'core/legend_template_store.py',
+              'core/symbol_mapper.py',
+              'scripts/smoke_symbol_mapper.py',
+              'scripts/smoke_symbol_mapper_api.py',
+          ):
+              py_compile.compile(file_name, doraise=True)
+
+          import server
+          from core.legend_template_store import LegendTemplateStore
+
+          client = server.app.test_client()
+          health = client.get('/api/health')
+          assert health.status_code == 200, health.get_data(as_text=True)
+
+          temp_root = Path(tempfile.mkdtemp(prefix='s360_v32_2_legend_'))
+          original_store = server.legend_templates
+          try:
+              direct_store = LegendTemplateStore(temp_root / 'direct')
+              entry = direct_store.save_template(
+                  name='Validation Legend',
+                  category='legends',
+                  title='SYMBOLS KEY:',
+                  rows=[{'code': 'LI', 'label': 'REFRIGERANT LEAK INDICATOR AUDIO/VISUAL ALARM'}],
+                  columns=2,
+                  marker_size=42,
+                  frame=True,
+                  highlighted=False,
+              )
+              direct_payload = direct_store.get_template(entry['id'])
+              assert direct_payload is not None
+              assert direct_payload['columns'] == 2
+              assert direct_payload['markerSize'] == 42
+              assert direct_payload['frame'] is True
+              assert direct_payload['highlighted'] is False
+              assert direct_store.list_templates()[0]['rowCount'] == 1
+
+              server.legend_templates = LegendTemplateStore(temp_root / 'api')
+              valid = client.post('/api/lib/legend-templates', json={
+                  'name': 'Saved Leak Legend',
+                  'category': 'legends',
+                  'title': 'SYMBOLS KEY:',
+                  'columns': 2,
+                  'markerSize': 40,
+                  'frame': True,
+                  'highlighted': False,
+                  'rows': [{
+                      'code': 'LI',
+                      'glyph': 'LI',
+                      'label': 'REFRIGERANT LEAK INDICATOR AUDIO/VISUAL ALARM',
+                      'shape': 'circle',
+                      'color': '#e53935',
+                      'color2': '#ffd400',
+                      'pattern': 'split-vertical',
+                      'unexpected': 'must not persist',
+                  }],
+              })
+              assert valid.status_code == 200, valid.get_data(as_text=True)
+              template_id = valid.get_json()['template']['id']
+              fetched = client.get(f'/api/lib/legend-templates/{template_id}')
+              assert fetched.status_code == 200, fetched.get_data(as_text=True)
+              payload = fetched.get_json()['template']
+              assert payload['columns'] == 2
+              assert payload['markerSize'] == 40
+              assert payload['frame'] is True
+              assert payload['highlighted'] is False
+              assert payload['rows'][0]['pattern'] == 'split-vertical'
+              assert 'unexpected' not in payload['rows'][0]
+              bad = client.post('/api/lib/legend-templates', json={
+                  'name': 'Bad Legend',
+                  'rows': [{'code': 'LI'}],
+              })
+              assert bad.status_code == 400, bad.get_data(as_text=True)
+          finally:
+              server.legend_templates = original_store
+              shutil.rmtree(temp_root, ignore_errors=True)
+
+          subprocess.run([sys.executable, 'scripts/smoke_symbol_mapper.py'], check=True)
+          subprocess.run([sys.executable, 'scripts/smoke_symbol_mapper_api.py'], check=True)
+          print('V32.2 backend validation passed')
+          PY
+          code=$?
+          cat v32-python.log
+          exit ${code}
+      - name: Upload backend validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v32-python-log
+          path: v32-python.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Enforce backend result
+        if: steps.backend_validation.outcome == 'failure'
+        run: exit 1
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Install dependencies
+      - name: Install frontend dependencies
+        working-directory: frontend
         run: npm ci
-      - name: Typecheck and build
+      - name: Typecheck and Vite production build
         id: frontend_build
         continue-on-error: true
+        working-directory: frontend
         run: |
           set +e
           npm run build > ../v32-build.log 2>&1
           code=$?
-          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
           cat ../v32-build.log
           exit ${code}
-      - name: Upload build log
+      - name: Upload frontend build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -74,6 +203,6 @@ jobs:
           path: v32-build.log
           if-no-files-found: error
           retention-days: 3
-      - name: Enforce build result
+      - name: Enforce frontend result
         if: steps.frontend_build.outcome == 'failure'
         run: exit 1
