@@ -1,0 +1,19 @@
+diff --git a/scripts/smoke_workbook_ai_guide.py b/scripts/smoke_workbook_ai_guide.py
+index 3979d8b..75d4dc4 100644
+--- a/scripts/smoke_workbook_ai_guide.py
++++ b/scripts/smoke_workbook_ai_guide.py
+@@ -4,9 +4,14 @@ from copy import deepcopy
+ import json
+ from pathlib import Path
+ import shutil
++import sys
+ import tempfile
+ from typing import Any
+ 
++ROOT = Path(__file__).resolve().parents[1]
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
+ from openpyxl import Workbook, load_workbook
+ from openpyxl.styles import Alignment, Font, PatternFill, Side, Border
+ 
