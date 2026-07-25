@@ -10,7 +10,7 @@ on:
       - 'scripts/**'
       - '.github/workflows/v32-3-ai-guide-validation.yml'
       - '.github/v32_2_validation/**'
-      - '.github/v32_3_validation/**'
+      - '.github/v32_3_exact_validation/**'
 
 jobs:
   build:
@@ -49,58 +49,24 @@ jobs:
             .github/v32_2_validation/frontend_src_styles_app.patch
           )
           for patch in "${patches[@]}"; do
-            echo "Applying ${patch}"
-            git apply --check "${patch}"
-            git apply --whitespace=nowarn "${patch}"
+            git apply --check "$patch"
+            git apply --whitespace=nowarn "$patch"
           done
 
-      - name: Reconstruct and apply V32.3 AI guide patch
-        id: ai_patch
-        continue-on-error: true
+      - name: Apply exact V32.3 AI guide patch
         run: |
-          set -o pipefail
-          exec > >(tee /tmp/v32-3-patch.log) 2>&1
-          files=(
-            .github/v32_3_validation/ai_patch_part_00.b64
-            .github/v32_3_validation/ai_patch_part_01.b64
-            .github/v32_3_validation/ai_patch_part_02.b64
-            .github/v32_3_validation/ai_patch_chunk_09.b64
-            .github/v32_3_validation/ai_patch_chunk_10.b64
-            .github/v32_3_validation/ai_patch_chunk_11.b64
-            .github/v32_3_validation/ai_patch_chunk_12.b64
-            .github/v32_3_validation/ai_patch_chunk_13.b64
-            .github/v32_3_validation/ai_patch_chunk_14.b64
-          )
-          for file in "${files[@]}"; do wc -c "$file"; sha256sum "$file"; done
-          cat "${files[@]}" | tr -d '\n\r' > /tmp/v32_3_ai_guide.b64
-          wc -c /tmp/v32_3_ai_guide.b64
-          sha256sum /tmp/v32_3_ai_guide.b64
-          test "$(wc -c < /tmp/v32_3_ai_guide.b64)" = "28160"
-          echo 'b1809b7f2e98ac18e9f580913e5874cbeca805eaac394e90acbb2ff568293d16  /tmp/v32_3_ai_guide.b64' | sha256sum -c -
-          base64 --decode /tmp/v32_3_ai_guide.b64 > /tmp/v32_3_ai_guide.patch.gz
-          wc -c /tmp/v32_3_ai_guide.patch.gz
-          sha256sum /tmp/v32_3_ai_guide.patch.gz
-          echo 'f7b4c6bc1a14f85cf0fde69cead0c36091194cf1b39bb250c2da84c009f5a809  /tmp/v32_3_ai_guide.patch.gz' | sha256sum -c -
-          gzip -t /tmp/v32_3_ai_guide.patch.gz
-          gzip -dc /tmp/v32_3_ai_guide.patch.gz > /tmp/v32_3_ai_guide.patch
-          wc -c /tmp/v32_3_ai_guide.patch
-          sha256sum /tmp/v32_3_ai_guide.patch
-          echo '8f9c5e04142836a0841d1bf9abfe9dbb702a506c8c9a89cb97d621324751dd16  /tmp/v32_3_ai_guide.patch' | sha256sum -c -
-          git apply --check /tmp/v32_3_ai_guide.patch
-          git apply --whitespace=nowarn /tmp/v32_3_ai_guide.patch
-
-      - name: Upload AI patch diagnostic
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: v32-3-patch-diagnostic
-          path: /tmp/v32-3-patch.log
-          if-no-files-found: error
-          retention-days: 3
-
-      - name: Enforce AI patch result
-        if: steps.ai_patch.outcome == 'failure'
-        run: exit 1
+          files=(.github/v32_3_exact_validation/v32_3_exact_{00..06}.b64)
+          cat "${files[@]}" | tr -d '\n\r' > /tmp/v32_3_exact.b64
+          test "$(wc -c < /tmp/v32_3_exact.b64)" = "25916"
+          echo '7740f19118ea20324a6e503ca8c202b10bbfbd0b1ca9e5954adc04ed4c1bbd8d  /tmp/v32_3_exact.b64' | sha256sum -c -
+          base64 --decode /tmp/v32_3_exact.b64 > /tmp/v32_3_exact.patch.gz
+          echo '73d027ac02217aa543db99d7b797371fabb1f12b3b7f3f6a0d54a4003800ac81  /tmp/v32_3_exact.patch.gz' | sha256sum -c -
+          gzip -t /tmp/v32_3_exact.patch.gz
+          gzip -dc /tmp/v32_3_exact.patch.gz > /tmp/v32_3_exact.patch
+          echo 'f78d1587c1b4794ab69db3e012433fd45e4ba234753b6303272a84e312ba9512  /tmp/v32_3_exact.patch' | sha256sum -c -
+          git apply --check /tmp/v32_3_exact.patch
+          git apply --whitespace=nowarn /tmp/v32_3_exact.patch
+          git diff --check
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -114,29 +80,21 @@ jobs:
 
       - name: Backend compile and smoke tests
         run: |
-          python - <<'PY'
+          python - <<'PY2'
           import py_compile
-          files = (
-              'server.py',
-              'core/legend_template_store.py',
-              'core/symbol_mapper.py',
-              'core/workbook_guide.py',
-              'core/workbook_importer.py',
-              'core/workbook_link_manager.py',
-              'core/workbook_status_sync.py',
-              'core/workbook_quality_manager.py',
-              'scripts/smoke_symbol_mapper.py',
-              'scripts/smoke_symbol_mapper_api.py',
-              'scripts/smoke_workbook_ai_guide.py',
-          )
-          for file_name in files:
+          for file_name in (
+              'server.py', 'core/legend_template_store.py', 'core/symbol_mapper.py',
+              'core/workbook_guide.py', 'core/workbook_importer.py',
+              'core/workbook_link_manager.py', 'core/workbook_status_sync.py',
+              'core/workbook_quality_manager.py', 'scripts/smoke_symbol_mapper.py',
+              'scripts/smoke_symbol_mapper_api.py', 'scripts/smoke_workbook_ai_guide.py',
+          ):
               py_compile.compile(file_name, doraise=True)
           import server
-          client = server.app.test_client()
-          response = client.get('/api/health')
+          response = server.app.test_client().get('/api/health')
           assert response.status_code == 200, response.get_data(as_text=True)
           print('Backend compile/import/health passed')
-          PY
+          PY2
           python scripts/smoke_symbol_mapper.py
           python scripts/smoke_symbol_mapper_api.py
           python scripts/smoke_workbook_ai_guide.py
@@ -159,30 +117,23 @@ jobs:
       - name: Verify compiled feature tokens
         working-directory: frontend
         run: |
-          python - <<'PY'
+          python - <<'PY2'
           from pathlib import Path
           bundle = '\n'.join(path.read_text(encoding='utf-8', errors='ignore') for path in Path('dist/assets').glob('*') if path.suffix in {'.js', '.css'})
           required = [
-              'Insert selected symbols',
-              'Save legend to library',
-              'Crop Rotation',
-              'Image / PDF Border',
-              'Alignment Guide Vertical',
-              'Workbook Structure + AI Guide',
-              'Open workbook guide',
-              'Copy Workbook AI Prompt',
-              'Copy App Integration Prompt',
-              'workbook-guide',
-              '00_AI_GUIDE',
+              'Insert selected symbols', 'Save legend to library', 'Crop Rotation',
+              'Image / PDF Border', 'Alignment Guide Vertical',
+              'Workbook Structure + AI Guide', 'Open workbook guide',
+              'Copy Workbook AI Prompt', 'Copy App Integration Prompt',
+              'workbook-guide', '00_AI_GUIDE',
           ]
           missing = [token for token in required if token not in bundle]
           if missing:
               raise SystemExit(f'Missing compiled V32.3 tokens: {missing}')
           print(f'Verified {len(required)} compiled feature tokens')
-          PY
+          PY2
 
       - name: Upload compiled frontend
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: v32-3-frontend-dist
