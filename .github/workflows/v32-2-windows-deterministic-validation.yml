@@ -1,0 +1,163 @@
+name: V32.2 Windows Deterministic Validation
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'core/**'
+      - 'server.py'
+      - 'defaults/**'
+      - 'scripts/**'
+      - '.github/v32_2_validation/**'
+      - '.github/workflows/v32-2-windows-deterministic-validation.yml'
+
+jobs:
+  windows-deterministic:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Force CRLF on existing patch targets
+        shell: pwsh
+        run: |
+          @'
+          import json
+          import sys
+          from pathlib import Path
+
+          helper_dir = Path('.github/v32_2_validation').resolve()
+          sys.path.insert(0, str(helper_dir))
+          from apply_unified_patches import parse_patch
+
+          patch_paths = json.loads((helper_dir / 'patch-order.json').read_text(encoding='utf-8'))
+          converted = 0
+          for patch_name in patch_paths:
+              patch_path = Path(patch_name)
+              for file_patch in parse_patch(patch_path.read_text(encoding='utf-8-sig'), patch_path.name):
+                  target = Path(file_patch.target_path)
+                  if not target.exists() or not target.is_file():
+                      continue
+                  raw = target.read_bytes()
+                  bom = raw.startswith(b'\xef\xbb\xbf')
+                  payload = raw[3:] if bom else raw
+                  text = payload.decode('utf-8')
+                  normalized = text.replace('\r\n', '\n').replace('\r', '\n')
+                  converted_bytes = normalized.replace('\n', '\r\n').encode('utf-8')
+                  target.write_bytes((b'\xef\xbb\xbf' if bom else b'') + converted_bytes)
+                  converted += 1
+          print(f'Converted {converted} existing patch targets to CRLF')
+          '@ | python -
+
+      - name: Deterministic precheck
+        shell: pwsh
+        run: |
+          python .github/v32_2_validation/apply_unified_patches.py `
+            --repo . `
+            --patch-list .github/v32_2_validation/patch-order.json `
+            --report v32-windows-precheck.json
+
+      - name: Deterministic apply
+        shell: pwsh
+        run: |
+          python .github/v32_2_validation/apply_unified_patches.py `
+            --repo . `
+            --patch-list .github/v32_2_validation/patch-order.json `
+            --apply `
+            --report v32-windows-apply.json
+
+      - name: Verify idempotent second pass
+        shell: pwsh
+        run: |
+          python .github/v32_2_validation/apply_unified_patches.py `
+            --repo . `
+            --patch-list .github/v32_2_validation/patch-order.json `
+            --report v32-windows-second-pass.json
+          @'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('v32-windows-second-pass.json').read_text(encoding='utf-8'))
+          bad = [item for item in report if item['state'] != 'already-installed']
+          if bad:
+              raise SystemExit(f'Non-idempotent patch states: {bad}')
+          print(f'Verified idempotent second pass for {len(report)} patches')
+          '@ | python -
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Backend compile and symbol smoke tests
+        shell: pwsh
+        run: |
+          python -m py_compile server.py core/legend_template_store.py core/symbol_mapper.py scripts/smoke_symbol_mapper.py scripts/smoke_symbol_mapper_api.py
+          python scripts/smoke_symbol_mapper.py
+          python scripts/smoke_symbol_mapper_api.py
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript and Vite production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify compiled V32.2 feature tokens
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          bundle = '\n'.join(
+              path.read_text(encoding='utf-8', errors='ignore')
+              for path in Path('frontend/dist/assets').glob('*')
+              if path.suffix in {'.js', '.css'}
+          )
+          required = [
+              'Insert selected symbols',
+              'Save legend to library',
+              'Crop Rotation',
+              'Rotate Left',
+              'Rotate Right',
+              'Image / PDF Border',
+              'Shadow Style',
+              'singh360-active-page:',
+              'Alignment Guide Vertical',
+              'Alignment Guide Horizontal',
+              'imageBorderWidth',
+              'imageShadowStyle',
+              'Published page',
+              '.sheet-page-pill',
+              '.page-thumbnail-card.active-page',
+              '.libv2-legend-card',
+          ]
+          missing = [token for token in required if token not in bundle]
+          if missing:
+              raise SystemExit(f'Missing compiled V32.2 tokens: {missing}')
+          print(f'Verified {len(required)} compiled feature tokens')
+          '@ | python -
+
+      - name: Upload Windows validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v32-windows-deterministic-evidence
+          path: |
+            v32-windows-precheck.json
+            v32-windows-apply.json
+            v32-windows-second-pass.json
+            frontend/dist
+          if-no-files-found: error
+          retention-days: 3

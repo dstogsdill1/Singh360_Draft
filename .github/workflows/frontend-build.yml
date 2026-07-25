@@ -1,10 +1,15 @@
-name: Frontend Build
+name: V32.2 Controlled Validation
 
 on:
   pull_request:
     paths:
       - 'frontend/**'
+      - 'core/**'
+      - 'server.py'
+      - 'defaults/**'
+      - 'scripts/**'
       - '.github/workflows/frontend-build.yml'
+      - '.github/v32_2_validation/**'
   push:
     branches:
       - main
@@ -15,19 +20,213 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Apply V32.2 validation patches
+        run: |
+          patches=(
+            .github/v32_2_validation/core_legend_template_store.patch
+            .github/v32_2_validation/core_symbol_mapper.patch
+            .github/v32_2_validation/server_legend_templates.patch
+            .github/v32_2_validation/default_symbol_mapper_standard.patch
+            .github/v32_2_validation/smoke_symbol_mapper.patch
+            .github/v32_2_validation/smoke_symbol_mapper_api.patch
+            .github/v32_2_validation/frontend_symbol_palette.patch
+            .github/v32_2_validation/frontend_src_model_types.patch
+            .github/v32_2_validation/frontend_src_api_client.patch
+            .github/v32_2_validation/canvas_core.patch
+            .github/v32_2_validation/canvas_helpers.patch
+            .github/v32_2_validation/canvas_guide_names.patch
+            .github/v32_2_validation/canvas_guides.patch
+            .github/v32_2_validation/canvas_images.patch
+            .github/v32_2_validation/canvas_symbols.patch
+            .github/v32_2_validation/canvas_update.patch
+            .github/v32_2_validation/frontend_src_components_PropertiesPanel.patch
+            .github/v32_2_validation/frontend_src_components_PdfCropModal.patch
+            .github/v32_2_validation/frontend_src_components_SymbolLegendModal.patch
+            .github/v32_2_validation/frontend_src_components_LibraryPanelV2.patch
+            .github/v32_2_validation/frontend_src_components_SheetManager.patch
+            .github/v32_2_validation/frontend_src_components_PageManagerModal.patch
+            .github/v32_2_validation/frontend_src_components_ProjectDashboard.patch
+            .github/v32_2_validation/frontend_src_App.patch
+            .github/v32_2_validation/frontend_src_styles_app.patch
+          )
+          for patch in "${patches[@]}"; do
+            echo "Applying ${patch}"
+            git apply --check "${patch}"
+            git apply --whitespace=nowarn "${patch}"
+          done
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Backend compile, API, and symbol smoke tests
+        id: backend_tests
+        continue-on-error: true
+        run: |
+          set +e
+          python - <<'PY' > v32-backend.log 2>&1
+          from __future__ import annotations
+          import py_compile
+          import shutil
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+          for file_name in (
+              'server.py',
+              'core/legend_template_store.py',
+              'core/symbol_mapper.py',
+              'scripts/smoke_symbol_mapper.py',
+              'scripts/smoke_symbol_mapper_api.py',
+          ):
+              py_compile.compile(file_name, doraise=True)
+          import server
+          from core.legend_template_store import LegendTemplateStore
+          client = server.app.test_client()
+          health = client.get('/api/health')
+          assert health.status_code == 200, health.get_data(as_text=True)
+          temp_root = Path(tempfile.mkdtemp(prefix='s360_v32_2_legend_'))
+          original_store = server.legend_templates
+          try:
+              direct_store = LegendTemplateStore(temp_root / 'direct')
+              entry = direct_store.save_template(
+                  name='Validation Legend',
+                  category='legends',
+                  title='SYMBOLS KEY:',
+                  rows=[{'code': 'LI', 'label': 'REFRIGERANT LEAK INDICATOR AUDIO/VISUAL ALARM'}],
+                  columns=2,
+                  marker_size=42,
+                  frame=True,
+                  highlighted=False,
+              )
+              payload = direct_store.get_template(entry['id'])
+              assert payload
+              assert payload['columns'] == 2
+              assert payload['markerSize'] == 42
+              assert payload['frame'] is True
+              assert payload['highlighted'] is False
+              server.legend_templates = LegendTemplateStore(temp_root / 'api')
+              valid = client.post('/api/lib/legend-templates', json={
+                  'name': 'Saved Leak Legend',
+                  'category': 'legends',
+                  'title': 'SYMBOLS KEY:',
+                  'columns': 2,
+                  'markerSize': 40,
+                  'frame': True,
+                  'highlighted': False,
+                  'rows': [{
+                      'code': 'LI',
+                      'glyph': 'LI',
+                      'label': 'REFRIGERANT LEAK INDICATOR AUDIO/VISUAL ALARM',
+                      'shape': 'circle',
+                      'color': '#e53935',
+                      'color2': '#ffd400',
+                      'pattern': 'split-vertical',
+                      'unexpected': 'must not persist',
+                  }],
+              })
+              assert valid.status_code == 200, valid.get_data(as_text=True)
+              template_id = valid.get_json()['template']['id']
+              fetched = client.get(f'/api/lib/legend-templates/{template_id}')
+              assert fetched.status_code == 200
+              saved = fetched.get_json()['template']
+              assert saved['rows'][0]['pattern'] == 'split-vertical'
+              assert 'unexpected' not in saved['rows'][0]
+              bad = client.post('/api/lib/legend-templates', json={'name': 'Bad Legend', 'rows': [{'code': 'LI'}]})
+              assert bad.status_code == 400
+          finally:
+              server.legend_templates = original_store
+              shutil.rmtree(temp_root, ignore_errors=True)
+          subprocess.run([sys.executable, 'scripts/smoke_symbol_mapper.py'], check=True)
+          subprocess.run([sys.executable, 'scripts/smoke_symbol_mapper_api.py'], check=True)
+          print('V32.2 backend validation passed')
+          PY
+          code=$?
+          cat v32-backend.log
+          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
+          exit ${code}
+      - name: Upload backend validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v32-backend-log
+          path: v32-backend.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Enforce backend result
+        if: steps.backend_tests.outcome == 'failure'
+        run: exit 1
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Install dependencies
+      - name: Install frontend dependencies
+        working-directory: frontend
         run: npm ci
-      - name: Typecheck and build
-        run: npm run build
+      - name: Typecheck and Vite production build
+        id: frontend_build
+        continue-on-error: true
+        working-directory: frontend
+        run: |
+          set +e
+          npm run build > ../v32-build.log 2>&1
+          code=$?
+          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
+          cat ../v32-build.log
+          exit ${code}
+      - name: Verify compiled V32.2 feature tokens
+        working-directory: frontend
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          bundle = '\n'.join(path.read_text(encoding='utf-8', errors='ignore') for path in Path('dist/assets').glob('*') if path.suffix in {'.js', '.css'})
+          required = [
+              'Insert selected symbols',
+              'Save legend to library',
+              'Crop Rotation',
+              'Rotate Left',
+              'Rotate Right',
+              'Image / PDF Border',
+              'Shadow Style',
+              'singh360-active-page:',
+              'Alignment Guide Vertical',
+              'Alignment Guide Horizontal',
+              'imageBorderWidth',
+              'imageShadowStyle',
+              'Published page',
+              '.sheet-page-pill',
+              '.page-thumbnail-card.active-page',
+              '.libv2-legend-card',
+          ]
+          missing = [token for token in required if token not in bundle]
+          if missing:
+              raise SystemExit(f'Missing compiled V32.2 tokens: {missing}')
+          print(f'Verified {len(required)} compiled feature tokens')
+          PY
+      - name: Upload frontend build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v32-build-log
+          path: v32-build.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload compiled frontend bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v32-frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+          retention-days: 3
+      - name: Enforce frontend result
+        if: steps.frontend_build.outcome == 'failure'
+        run: exit 1

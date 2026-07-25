@@ -1,0 +1,122 @@
+diff --git a/frontend/src/components/SymbolLegendModal.tsx b/frontend/src/components/SymbolLegendModal.tsx
+index 4696c72..795c3af 100644
+--- a/frontend/src/components/SymbolLegendModal.tsx
++++ b/frontend/src/components/SymbolLegendModal.tsx
+@@ -1,6 +1,7 @@
+ import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type MouseEvent } from 'react';
+ import {
+   getSymbolMapperTemplate,
++  saveLegendTemplate,
+   saveSymbolMapperTemplate,
+   type SymbolMapperTemplateSymbol,
+ } from '../api/client';
+@@ -16,6 +17,7 @@ import {
+ 
+ interface Props {
+   onInsert: (config: SymbolLegendInsertConfig) => void;
++  onInsertSymbols: (config: SymbolLegendInsertConfig) => void;
+   onClose: () => void;
+   initialTemplateId?: string;
+ }
+@@ -77,8 +79,9 @@ function Marker({ row, size = 34 }: { row: BuilderRow; size?: number }) {
+   );
+ }
+ 
+-export default function SymbolLegendModal({ onInsert, onClose }: Props) {
++export default function SymbolLegendModal({ onInsert, onInsertSymbols, onClose }: Props) {
+   const [title, setTitle] = useState('SYMBOLS KEY:');
++  const [templateName, setTemplateName] = useState('Singh360 Symbol Legend');
+   const [rows, setRows] = useState<BuilderRow[]>([]);
+   const [activeId, setActiveId] = useState('');
+   const [dragId, setDragId] = useState<string | null>(null);
+@@ -204,12 +207,12 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
+     }
+   };
+ 
+-  const insert = () => {
++  const buildInsertConfig = (): SymbolLegendInsertConfig | null => {
+     if (!included.length) {
+       setError('Select at least one complete symbol row.');
+-      return;
++      return null;
+     }
+-    onInsert({
++    return {
+       title: title.trim() || 'SYMBOLS KEY:',
+       columns,
+       markerSize,
+@@ -227,10 +230,53 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
+         pattern: row.pattern,
+         highlighted: row.highlighted,
+       })),
+-    });
++    };
++  };
++
++  const insert = () => {
++    const config = buildInsertConfig();
++    if (!config) return;
++    onInsert(config);
++    onClose();
++  };
++
++  const insertSelectedSymbols = () => {
++    const config = buildInsertConfig();
++    if (!config) return;
++    onInsertSymbols(config);
+     onClose();
+   };
+ 
++  const saveToLibrary = async () => {
++    const config = buildInsertConfig();
++    if (!config) return;
++    const name = templateName.trim();
++    if (!name) {
++      setError('Enter a legend template name.');
++      return;
++    }
++    setSaving(true);
++    setError('');
++    try {
++      const saved = await saveLegendTemplate({
++        name,
++        category: 'legends',
++        title: config.title,
++        rows: config.rows,
++        columns: config.columns,
++        markerSize: config.markerSize,
++        frame: config.frame,
++        highlighted: config.highlighted,
++      });
++      setStatus(`Saved to Components · ${saved.name} · ${saved.rowCount ?? config.rows.length} symbols`);
++      window.dispatchEvent(new CustomEvent('singh360:legend-template-saved'));
++    } catch (err) {
++      setError(String(err));
++    } finally {
++      setSaving(false);
++    }
++  };
++
+   return (
+     <div className="modal-backdrop" onClick={onClose}>
+       <div className="modal symbol-legend-builder-modal" onClick={(event) => event.stopPropagation()}>
+@@ -247,6 +293,10 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
+             Legend title
+             <input value={title} onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)} />
+           </label>
++          <label>
++            Library name
++            <input value={templateName} onChange={(event: ChangeEvent<HTMLInputElement>) => setTemplateName(event.target.value)} />
++          </label>
+           <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, enabled: true })))}>Select all</button>
+           <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, enabled: false })))}>Select none</button>
+           <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, highlighted: true })))}>Highlight all</button>
+@@ -394,6 +444,8 @@ export default function SymbolLegendModal({ onInsert, onClose }: Props) {
+         <div className="modal-foot">
+           <span className="symbol-legend-builder-count">{included.length} symbol{included.length === 1 ? '' : 's'} selected</span>
+           <button className="btn" onClick={onClose}>Cancel</button>
++          <button className="btn" disabled={saving} onClick={() => void saveToLibrary()}>{saving ? 'Saving…' : 'Save legend to library'}</button>
++          <button className="btn" onClick={insertSelectedSymbols}>Insert selected symbols</button>
+           <button className="btn btn-primary" onClick={insert}>Insert legend</button>
+         </div>
+       </div>

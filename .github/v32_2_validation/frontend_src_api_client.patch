@@ -1,0 +1,43 @@
+diff --git a/frontend/src/api/client.ts b/frontend/src/api/client.ts
+index 8f553a4..5724823 100644
+--- a/frontend/src/api/client.ts
++++ b/frontend/src/api/client.ts
+@@ -1,4 +1,4 @@
+-import type { ProjectModel, PageModel } from '../model/types';
++import type { ProjectModel, PageModel, SymbolLegendInsertConfig, SymbolLegendInsertRow } from '../model/types';
+ 
+ export interface ProjectListItem {
+   id: string;
+@@ -334,12 +334,31 @@ export async function listLegendTemplates(): Promise<LegendTemplateEntry[]> {
+   return json.templates ?? [];
+ }
+ 
++export interface LegendTemplatePayload extends SymbolLegendInsertConfig {
++  id: string;
++  name: string;
++  category?: string;
++  updatedAt?: string;
++  rows: SymbolLegendInsertRow[];
++}
++
++export async function getLegendTemplate(templateId: string): Promise<LegendTemplatePayload> {
++  const res = await fetch(`/api/lib/legend-templates/${templateId}`);
++  if (!res.ok) throw new Error(await res.text());
++  const json = await res.json();
++  return json.template as LegendTemplatePayload;
++}
++
+ export async function saveLegendTemplate(payload: {
+   id?: string;
+   name: string;
+   category?: string;
+   title: string;
+-  rows: Record<string, unknown>[];
++  rows: SymbolLegendInsertRow[];
++  columns?: 1 | 2;
++  markerSize?: number;
++  frame?: boolean;
++  highlighted?: boolean;
+ }): Promise<LegendTemplateEntry> {
+   const res = await fetch('/api/lib/legend-templates', {
+     method: 'POST',

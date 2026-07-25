@@ -1,0 +1,24 @@
+diff --git a/frontend/src/components/CanvasEditor.tsx b/frontend/src/components/CanvasEditor.tsx
+index 3080535..f0af813 100644
+--- a/frontend/src/components/CanvasEditor.tsx
++++ b/frontend/src/components/CanvasEditor.tsx
+@@ -536,13 +536,17 @@ export default function CanvasEditor({
+ 
+     const addVGuide = (x: number) => {
+       const ln = new Line([x, 0, x, CANVAS_H], { stroke: '#e5006d', strokeWidth: 1, selectable: false, evented: false });
+-      (ln as unknown as Record<string, unknown>).excludeFromExport = true;
++      const guideRecord = ln as unknown as Record<string, unknown>;
++      guideRecord.excludeFromExport = true;
++      guideRecord.objName = 'Alignment Guide Vertical';
+       guidesRef.current.push(ln);
+       canvas.add(ln);
+     };
+     const addHGuide = (y: number) => {
+       const ln = new Line([0, y, CANVAS_W, y], { stroke: '#e5006d', strokeWidth: 1, selectable: false, evented: false });
+-      (ln as unknown as Record<string, unknown>).excludeFromExport = true;
++      const guideRecord = ln as unknown as Record<string, unknown>;
++      guideRecord.excludeFromExport = true;
++      guideRecord.objName = 'Alignment Guide Horizontal';
+       guidesRef.current.push(ln);
+       canvas.add(ln);
+     };

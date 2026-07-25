@@ -1,0 +1,61 @@
+diff --git a/frontend/src/components/PageManagerModal.tsx b/frontend/src/components/PageManagerModal.tsx
+index 0af4a9c..44c9eb6 100644
+--- a/frontend/src/components/PageManagerModal.tsx
++++ b/frontend/src/components/PageManagerModal.tsx
+@@ -1,4 +1,4 @@
+-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
++import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+ import type { PageModel, ProjectModel } from '../model/types';
+ 
+ interface Props {
+@@ -7,6 +7,7 @@ interface Props {
+   onClose: () => void;
+   onSave: (includedByPageId: Record<string, boolean>) => Promise<void>;
+   onOpenPage: (pageId: string) => void;
++  activePageId?: string;
+ }
+ 
+ 
+@@ -36,12 +37,14 @@ export default function PageManagerModal({
+   onClose,
+   onSave,
+   onOpenPage,
++  activePageId,
+ }: Props) {
+   const [query, setQuery] = useState('');
+   const [filter, setFilter] = useState<'all' | 'included' | 'excluded'>('all');
+   const [included, setIncluded] = useState<Record<string, boolean>>(
+     Object.fromEntries(project.pages.map((page) => [page.id, Boolean(page.include)])),
+   );
++  const cardRefs = useRef<Record<string, HTMLElement | null>>({});
+ 
+   useEffect(() => {
+     const closeOnEscape = (event: KeyboardEvent) => {
+@@ -75,6 +78,14 @@ export default function PageManagerModal({
+ 
+   const visiblePages = filteredPages;
+ 
++  useEffect(() => {
++    if (!activePageId || !visiblePages.some((page) => page.id === activePageId)) return;
++    const timer = window.setTimeout(() => {
++      cardRefs.current[activePageId]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
++    }, 0);
++    return () => window.clearTimeout(timer);
++  }, [activePageId, visiblePages]);
++
+   const includedCount = Object.values(included).filter(Boolean).length;
+   const excludedCount = project.pages.length - includedCount;
+ 
+@@ -140,7 +151,11 @@ export default function PageManagerModal({
+             const image = previewUrl(page);
+             const isIncluded = Boolean(included[page.id]);
+             return (
+-              <article key={page.id} className={`page-thumbnail-card readable ${isIncluded ? 'included' : 'excluded'}`}>
++              <article
++                key={page.id}
++                ref={(element) => { cardRefs.current[page.id] = element; }}
++                className={`page-thumbnail-card readable ${isIncluded ? 'included' : 'excluded'} ${page.id === activePageId ? 'active-page' : ''}`}
++              >
+                 <button type="button" className="page-thumb-preview readable" onClick={() => onOpenPage(page.id)}>
+                   {image ? (
+                     <img src={image} alt={`Preview of ${page.sheetTitle}`} />

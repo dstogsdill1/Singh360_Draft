@@ -1,0 +1,25 @@
+diff --git a/scripts/smoke_symbol_mapper.py b/scripts/smoke_symbol_mapper.py
+index 6088212..dc348d4 100644
+--- a/scripts/smoke_symbol_mapper.py
++++ b/scripts/smoke_symbol_mapper.py
+@@ -72,8 +72,10 @@ def main() -> int:
+         assert session["sourceSha256"] == source_hash
+         assert session["pageCount"] == 1
+         template = session.get("template") or {}
+-        assert len(template.get("symbols", [])) == 13, template
++        assert len(template.get("symbols", [])) == 14, template
+         assert len([item for item in template["symbols"] if item["code"] == "S"]) == 2, template
++        lsc = next(item for item in template["symbols"] if item["code"] == "LSC")
++        assert lsc["key"] == "LSC|CO2 REFRIGERANT LEAK SENSOR", lsc
+ 
+         saved = store.save_template({"symbols": [
+             {
+@@ -96,7 +98,7 @@ def main() -> int:
+             },
+         ]})
+         assert saved["added"] == 1 and saved["updated"] == 1, saved
+-        assert saved["total"] == 14, saved
++        assert saved["total"] == 15, saved
+         assert len([item for item in saved["template"]["symbols"] if item["code"] == "S"]) == 2, saved
+         assert list((tmp / "sessions" / "templates" / "history").glob("standard-*.json")), saved
+ 

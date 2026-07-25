@@ -1,0 +1,50 @@
+diff --git a/frontend/src/components/CanvasEditor.tsx b/frontend/src/components/CanvasEditor.tsx
+index 3080535..0ad35f8 100644
+--- a/frontend/src/components/CanvasEditor.tsx
++++ b/frontend/src/components/CanvasEditor.tsx
+@@ -1,6 +1,6 @@
+ import { useEffect, useRef } from 'react';
+-import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, filters, type FabricObject } from 'fabric';
+-import type { BusOptions, CanvasApi, CanvasSelection, ImageCropPlacement, ImageCropRect, ImageCropState, LineStyle, SymbolLegendInsertConfig } from '../model/types';
++import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, Shadow, filters, type FabricObject } from 'fabric';
++import type { BusOptions, CanvasApi, CanvasSelection, ImageCropPlacement, ImageCropRect, ImageCropState, LineStyle, PdfCropInsertMeta, SymbolLegendInsertConfig, SymbolLegendInsertRow } from '../model/types';
+ import { Connector } from './connector';
+ import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
+ import { BODY_W, BODY_H } from '../model/sheetGeometry';
+@@ -21,7 +21,7 @@ interface Props {
+ const CANVAS_W = BODY_W;
+ const CANVAS_H = BODY_H;
+ const SNAP = 16;
+-const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented', 'textBoxFill', 'textBoxFillOpacity', 'textBoxStroke', 'textBoxStrokeWidth', 'textBoxPadding', 'textBoxRadius'];
++const SER_PROPS = ['objName', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented', 'textBoxFill', 'textBoxFillOpacity', 'textBoxStroke', 'textBoxStrokeWidth', 'textBoxPadding', 'textBoxRadius', 'isLegendRow', 'legendCode', 'legendLabel', 'legendPartRole', 'legendGlyph', 'legendShape', 'legendColor', 'legendColor2', 'legendPattern', 'imageBorderColor', 'imageBorderWidth', 'imageShadowStyle', 'imageShadowColor', 'imageShadowOpacity', 'imageShadowBlur', 'imageShadowOffsetX', 'imageShadowOffsetY'];
+ 
+ // S360 POWERPOINT TEXT BOX FORMATTING V1
+ type S360PowerPointTextBox = Textbox & {
+@@ -109,7 +109,8 @@ function summarize(obj: FabricObject): CanvasSelection {
+   const isImage = obj.type === 'image';
+   const isGroup = obj.type === 'group';
+   const objectName = typeof anyObj.objName === 'string' ? anyObj.objName : '';
+-  const isLegend = isGroup && /legend|marker/i.test(objectName);
++  const isLegendRow = isGroup && anyObj.isLegendRow === true;
++  const isLegend = isGroup && (isLegendRow || /legend|marker/i.test(objectName));
+   const dashArr = anyObj.strokeDashArray as number[] | undefined | null;
+   const dash = !dashArr || dashArr.length === 0 ? 'solid'
+     : dashArr.length === 2 && dashArr[0] <= 3 ? 'dotted'
+@@ -143,6 +144,17 @@ function summarize(obj: FabricObject): CanvasSelection {
+     isImage,
+     isGroup,
+     isLegend,
++    isLegendRow,
++    legendCode: typeof anyObj.legendCode === 'string' ? anyObj.legendCode : undefined,
++    legendLabel: typeof anyObj.legendLabel === 'string' ? anyObj.legendLabel : undefined,
++    imageBorderColor: isImage ? String(anyObj.imageBorderColor || anyObj.stroke || '#000000') : undefined,
++    imageBorderWidth: isImage ? Number(anyObj.imageBorderWidth ?? anyObj.strokeWidth ?? 0) : undefined,
++    imageShadowStyle: isImage ? (String(anyObj.imageShadowStyle || 'none') as CanvasSelection['imageShadowStyle']) : undefined,
++    imageShadowColor: isImage ? String(anyObj.imageShadowColor || '#000000') : undefined,
++    imageShadowOpacity: isImage ? Number(anyObj.imageShadowOpacity ?? 0.28) : undefined,
++    imageShadowBlur: isImage ? Number(anyObj.imageShadowBlur ?? 14) : undefined,
++    imageShadowOffsetX: isImage ? Number(anyObj.imageShadowOffsetX ?? 8) : undefined,
++    imageShadowOffsetY: isImage ? Number(anyObj.imageShadowOffsetY ?? 8) : undefined,
+     pdfSource: typeof anyObj.pdfSource === 'string' ? (anyObj.pdfSource as string) : undefined,
+     pdfPage: typeof anyObj.pdfPage === 'number' ? (anyObj.pdfPage as number) : undefined,
+     pdfDpi: typeof anyObj.pdfDpi === 'number' ? (anyObj.pdfDpi as number) : undefined,

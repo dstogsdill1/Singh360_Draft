@@ -1,0 +1,58 @@
+diff --git a/frontend/src/components/CanvasEditor.tsx b/frontend/src/components/CanvasEditor.tsx
+index 3080535..0ad35f8 100644
+--- a/frontend/src/components/CanvasEditor.tsx
++++ b/frontend/src/components/CanvasEditor.tsx
+@@ -1044,14 +1182,24 @@ export default function CanvasEditor({
+             }
+           }
+           img.set({ left, top, scaleX: scale, scaleY: scale });
+-          (img as unknown as Record<string, unknown>).objName = name || 'image';
++          const imageRecord = img as unknown as Record<string, unknown>;
++          imageRecord.objName = name || 'image';
++          imageRecord.imageBorderColor = '#000000';
++          imageRecord.imageBorderWidth = 0;
++          imageRecord.imageShadowStyle = 'none';
++          imageRecord.imageShadowColor = '#000000';
++          imageRecord.imageShadowOpacity = 0.28;
++          imageRecord.imageShadowBlur = 14;
++          imageRecord.imageShadowOffsetX = 8;
++          imageRecord.imageShadowOffsetY = 8;
++          applyPersistedImageStyle(img);
+           styleForSelection(img);
+           c.add(img);
+           c.setActiveObject(img);
+           c.requestRenderAll();
+         });
+       },
+-      addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; opacity?: number; meta?: { pdfSource: string; pdfPage: number; pdfDpi: number; pdfCrop?: string } }) => {
++      addPdfCrop: (url: string, name: string, opts?: { underlay?: boolean; opacity?: number; meta?: PdfCropInsertMeta }) => {
+         const c = fabricRef.current;
+         if (!c) return;
+         return FabricImage.fromURL(url, { crossOrigin: 'anonymous' }).then((img) => {
+@@ -1065,15 +1213,25 @@ export default function CanvasEditor({
+           const scale = Math.min(1, maxW / iw, maxH / ih);
+           const left = (CANVAS_W - iw * scale) / 2;
+           const top = (CANVAS_H - ih * scale) / 2;
+-          img.set({ left, top, scaleX: scale, scaleY: scale });
++          const rotation = ((Number(opts?.meta?.rotation || 0) % 360) + 360) % 360;
++          img.set({ left, top, scaleX: scale, scaleY: scale, angle: rotation });
+           const anyImg = img as unknown as Record<string, unknown>;
+           anyImg.objName = name;
++          anyImg.imageBorderColor = '#000000';
++          anyImg.imageBorderWidth = 0;
++          anyImg.imageShadowStyle = 'none';
++          anyImg.imageShadowColor = '#000000';
++          anyImg.imageShadowOpacity = 0.28;
++          anyImg.imageShadowBlur = 14;
++          anyImg.imageShadowOffsetX = 8;
++          anyImg.imageShadowOffsetY = 8;
+           if (opts?.meta) {
+             anyImg.pdfSource = opts.meta.pdfSource;
+             anyImg.pdfPage = opts.meta.pdfPage;
+             anyImg.pdfDpi = opts.meta.pdfDpi;
+             if (opts.meta.pdfCrop) anyImg.pdfCrop = opts.meta.pdfCrop;
+           }
++          applyPersistedImageStyle(img);
+           styleForSelection(img);
+           if (underlay) {
+             img.set({ opacity: opts?.opacity ?? 1, lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, selectable: true });

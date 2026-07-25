@@ -1,0 +1,38 @@
+diff --git a/frontend/src/model/types.ts b/frontend/src/model/types.ts
+index 010edc5..8ca49e7 100644
+--- a/frontend/src/model/types.ts
++++ b/frontend/src/model/types.ts
+@@ -306,6 +306,17 @@ export interface CanvasSelection {
+   isImage?: boolean;
+   isGroup?: boolean;
+   isLegend?: boolean;
++  isLegendRow?: boolean;
++  legendCode?: string;
++  legendLabel?: string;
++  imageBorderColor?: string;
++  imageBorderWidth?: number;
++  imageShadowStyle?: 'none' | 'soft' | 'hard' | 'glow';
++  imageShadowColor?: string;
++  imageShadowOpacity?: number;
++  imageShadowBlur?: number;
++  imageShadowOffsetX?: number;
++  imageShadowOffsetY?: number;
+   pdfSource?: string;
+   pdfPage?: number;
+   pdfDpi?: number;
+@@ -345,6 +356,7 @@ export interface PdfCropInsertMeta {
+   pdfPage: number;
+   pdfDpi: number;
+   pdfCrop?: string; // "x0,y0,x1,y1" in PDF points
++  rotation?: number; // inserted-object rotation in degrees, normalized to 90-degree steps
+ }
+ 
+ export interface ImageCropRect {
+@@ -425,6 +437,7 @@ export interface CanvasApi {
+   addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
+   addLegend: (presetIds?: string[]) => void;
+   addSymbolLegend: (config: SymbolLegendInsertConfig) => void;
++  addSymbolLegendRows: (config: SymbolLegendInsertConfig) => void;
+   normalizeSymbolSize: () => void;
+   addPageTitle: (text: string) => void;
+   addSectionHeader: (text: string) => void;
