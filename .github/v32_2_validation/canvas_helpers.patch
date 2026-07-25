@@ -1,0 +1,147 @@
+diff --git a/frontend/src/components/CanvasEditor.tsx b/frontend/src/components/CanvasEditor.tsx
+index 3080535..0ad35f8 100644
+--- a/frontend/src/components/CanvasEditor.tsx
++++ b/frontend/src/components/CanvasEditor.tsx
+@@ -331,6 +343,133 @@ function applyBwIfRequested(img: FabricImage, url: string) {
+   img.applyFilters();
+ }
+ 
++function colorWithOpacity(color: string, opacity: number): string {
++  const alpha = Math.max(0, Math.min(1, Number(opacity)));
++  const hex = String(color || '#000000').trim();
++  const short = /^#([0-9a-f]{3})$/i.exec(hex);
++  const full = /^#([0-9a-f]{6})$/i.exec(hex);
++  const digits = full?.[1] || (short ? short[1].split('').map((part) => part + part).join('') : '000000');
++  const red = Number.parseInt(digits.slice(0, 2), 16);
++  const green = Number.parseInt(digits.slice(2, 4), 16);
++  const blue = Number.parseInt(digits.slice(4, 6), 16);
++  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
++}
++
++function applyPersistedImageStyle(object: FabricObject) {
++  if (object.type !== 'image') return;
++  const rec = object as unknown as Record<string, unknown>;
++  const borderColor = String(rec.imageBorderColor || rec.stroke || '#000000');
++  const borderWidth = Math.max(0, Number(rec.imageBorderWidth ?? rec.strokeWidth ?? 0));
++  rec.imageBorderColor = borderColor;
++  rec.imageBorderWidth = borderWidth;
++  object.set({ stroke: borderWidth > 0 ? borderColor : undefined, strokeWidth: borderWidth, strokeUniform: true });
++
++  const style = String(rec.imageShadowStyle || 'none') as CanvasSelection['imageShadowStyle'];
++  const shadowColor = String(rec.imageShadowColor || '#000000');
++  const shadowOpacity = Math.max(0, Math.min(1, Number(rec.imageShadowOpacity ?? 0.28)));
++  const requestedBlur = Math.max(0, Number(rec.imageShadowBlur ?? 14));
++  const requestedOffsetX = Number(rec.imageShadowOffsetX ?? 8);
++  const requestedOffsetY = Number(rec.imageShadowOffsetY ?? 8);
++  rec.imageShadowStyle = style;
++  rec.imageShadowColor = shadowColor;
++  rec.imageShadowOpacity = shadowOpacity;
++  rec.imageShadowBlur = requestedBlur;
++  rec.imageShadowOffsetX = requestedOffsetX;
++  rec.imageShadowOffsetY = requestedOffsetY;
++  if (!style || style === 'none') {
++    object.set('shadow', null);
++    return;
++  }
++  const blur = style === 'hard' ? 0 : style === 'glow' ? Math.max(4, requestedBlur) : requestedBlur;
++  const offsetX = style === 'glow' ? 0 : requestedOffsetX;
++  const offsetY = style === 'glow' ? 0 : requestedOffsetY;
++  object.set('shadow', new Shadow({
++    color: colorWithOpacity(shadowColor, shadowOpacity),
++    blur,
++    offsetX,
++    offsetY,
++  }));
++}
++
++function makeLegendMarkerParts(row: SymbolLegendInsertRow, markerSize: number, x = 0, y = 0): FabricObject[] {
++  const parts: FabricObject[] = [];
++  const highlighted = row.highlighted !== false;
++  const color1 = row.color || '#ffd400';
++  const color2 = row.color2 || color1;
++  const pattern = row.pattern || 'solid';
++  if (highlighted) {
++    if (pattern === 'split-vertical') {
++      parts.push(new Rect({ left: x, top: y, width: markerSize / 2, height: markerSize, fill: color1, opacity: 0.22, strokeWidth: 0 }));
++      parts.push(new Rect({ left: x + markerSize / 2, top: y, width: markerSize / 2, height: markerSize, fill: color2, opacity: 0.22, strokeWidth: 0 }));
++      parts.push(new Line([x, y, x, y + markerSize], { stroke: color1, strokeWidth: 2 }));
++      parts.push(new Line([x, y, x + markerSize / 2, y], { stroke: color1, strokeWidth: 2 }));
++      parts.push(new Line([x, y + markerSize, x + markerSize / 2, y + markerSize], { stroke: color1, strokeWidth: 2 }));
++      parts.push(new Line([x + markerSize, y, x + markerSize, y + markerSize], { stroke: color2, strokeWidth: 2 }));
++      parts.push(new Line([x + markerSize / 2, y, x + markerSize, y], { stroke: color2, strokeWidth: 2 }));
++      parts.push(new Line([x + markerSize / 2, y + markerSize, x + markerSize, y + markerSize], { stroke: color2, strokeWidth: 2 }));
++      parts.push(new Line([x + markerSize / 2, y + 1, x + markerSize / 2, y + markerSize - 1], { stroke: '#333', strokeWidth: 0.6, opacity: 0.65 }));
++    } else {
++      parts.push(new Rect({ left: x, top: y, width: markerSize, height: markerSize, fill: color1, opacity: 0.22, stroke: color1, strokeWidth: 2 }));
++    }
++  }
++  const code = String(row.code || row.acronym || '').trim().toUpperCase();
++  const shape = row.shape || (code === 'CC' ? 'square' : 'circle');
++  const symbolSize = markerSize * 0.72;
++  const symbolX = x + (markerSize - symbolSize) / 2;
++  const symbolY = y + (markerSize - symbolSize) / 2;
++  if (shape === 'circle') parts.push(new Circle({ left: symbolX, top: symbolY, radius: symbolSize / 2, fill: 'transparent', stroke: '#111', strokeWidth: 1 }));
++  if (shape === 'square') parts.push(new Rect({ left: symbolX, top: symbolY, width: symbolSize, height: symbolSize, fill: 'transparent', stroke: '#111', strokeWidth: 1 }));
++  const glyph = String(row.glyph || code).trim();
++  if (glyph) {
++    const glyphText = new Textbox(glyph, {
++      left: x,
++      top: y + markerSize * 0.29,
++      width: markerSize,
++      fontSize: glyph.length > 2 ? markerSize * 0.28 : markerSize * 0.36,
++      fontWeight: 'bold',
++      fontFamily: 'Arial',
++      fill: '#111',
++      textAlign: 'center',
++      editable: true,
++    });
++    (glyphText as unknown as Record<string, unknown>).legendPartRole = 'glyph';
++    parts.push(glyphText);
++  }
++  return parts;
++}
++
++function makeSymbolLegendRow(row: SymbolLegendInsertRow, markerSize: number, left: number, top: number): Group {
++  const code = String(row.code || row.acronym || '').trim().toUpperCase();
++  const label = String(row.label || '').trim();
++  const rowHeight = Math.max(34, markerSize + 8);
++  const parts = makeLegendMarkerParts(row, markerSize, 0, (rowHeight - markerSize) / 2);
++  const labelText = new Textbox(label, {
++    left: markerSize + 10,
++    top: (rowHeight - 16) / 2,
++    width: 330,
++    fontSize: 12,
++    fontFamily: 'Arial',
++    fill: '#111',
++    editable: true,
++    splitByGrapheme: false,
++  });
++  (labelText as unknown as Record<string, unknown>).legendPartRole = 'label';
++  parts.push(labelText);
++  const group = new Group(parts, { left, top, originX: 'left', originY: 'top', subTargetCheck: true });
++  const rec = group as unknown as Record<string, unknown>;
++  rec.objName = `Symbol ${code || 'Marker'} — ${label}`;
++  rec.isLegendRow = true;
++  rec.legendCode = code;
++  rec.legendLabel = label;
++  rec.legendGlyph = String(row.glyph || code);
++  rec.legendShape = row.shape || (code === 'CC' ? 'square' : 'circle');
++  rec.legendColor = row.color || '#ffd400';
++  rec.legendColor2 = row.color2 || row.color || '#ffd400';
++  rec.legendPattern = row.pattern || 'solid';
++  styleForSelection(group);
++  return group;
++}
++
+ export default function CanvasEditor({
+   serialized,
+   onSerializedChange,
+@@ -461,7 +600,7 @@ export default function CanvasEditor({
+         return obj;
+       });
+       void canvas.loadFromJSON({ version: '6', objects: liveObjects }).then(() => {
+-        canvas.getObjects().forEach((o) => styleForSelection(o));
++        canvas.getObjects().forEach((o) => { styleForSelection(o); applyPersistedImageStyle(o); });
+         canvas.renderAll();
+         historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
+         histIdxRef.current = 0;
