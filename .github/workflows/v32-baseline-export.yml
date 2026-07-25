@@ -1,0 +1,62 @@
+name: V32 Baseline Export
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/v32-baseline-export.yml'
+      - '.github/v32_2_validation/**'
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply validated V32.2 patches
+        run: |
+          patches=(
+            .github/v32_2_validation/core_legend_template_store.patch
+            .github/v32_2_validation/core_symbol_mapper.patch
+            .github/v32_2_validation/server_legend_templates.patch
+            .github/v32_2_validation/default_symbol_mapper_standard.patch
+            .github/v32_2_validation/smoke_symbol_mapper.patch
+            .github/v32_2_validation/smoke_symbol_mapper_api.patch
+            .github/v32_2_validation/frontend_symbol_palette.patch
+            .github/v32_2_validation/frontend_src_model_types.patch
+            .github/v32_2_validation/frontend_src_api_client.patch
+            .github/v32_2_validation/canvas_core.patch
+            .github/v32_2_validation/canvas_helpers.patch
+            .github/v32_2_validation/canvas_guide_names.patch
+            .github/v32_2_validation/canvas_guides.patch
+            .github/v32_2_validation/canvas_images.patch
+            .github/v32_2_validation/canvas_symbols.patch
+            .github/v32_2_validation/canvas_update.patch
+            .github/v32_2_validation/frontend_src_components_PropertiesPanel.patch
+            .github/v32_2_validation/frontend_src_components_PdfCropModal.patch
+            .github/v32_2_validation/frontend_src_components_SymbolLegendModal.patch
+            .github/v32_2_validation/frontend_src_components_LibraryPanelV2.patch
+            .github/v32_2_validation/frontend_src_components_SheetManager.patch
+            .github/v32_2_validation/frontend_src_components_PageManagerModal.patch
+            .github/v32_2_validation/frontend_src_components_ProjectDashboard.patch
+            .github/v32_2_validation/frontend_src_App.patch
+            .github/v32_2_validation/frontend_src_styles_app.patch
+          )
+          for patch in "${patches[@]}"; do git apply --whitespace=nowarn "$patch"; done
+      - name: Stage exact post-V32 target files
+        run: |
+          mkdir -p /tmp/v32-baseline/core /tmp/v32-baseline/frontend/src/api /tmp/v32-baseline/frontend/src/components /tmp/v32-baseline/frontend/src/styles
+          cp server.py /tmp/v32-baseline/server.py
+          cp core/workbook_importer.py /tmp/v32-baseline/core/
+          cp core/workbook_link_manager.py /tmp/v32-baseline/core/
+          cp core/workbook_status_sync.py /tmp/v32-baseline/core/
+          cp core/workbook_quality_manager.py /tmp/v32-baseline/core/
+          cp frontend/src/App.tsx /tmp/v32-baseline/frontend/src/
+          cp frontend/src/api/client.ts /tmp/v32-baseline/frontend/src/api/
+          cp frontend/src/components/ProjectDashboard.tsx /tmp/v32-baseline/frontend/src/components/
+          cp frontend/src/components/HelpCenter.tsx /tmp/v32-baseline/frontend/src/components/
+          cp frontend/src/styles/projectDashboard.css /tmp/v32-baseline/frontend/src/styles/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-post-v32-baseline
+          path: /tmp/v32-baseline
+          if-no-files-found: error
+          retention-days: 3

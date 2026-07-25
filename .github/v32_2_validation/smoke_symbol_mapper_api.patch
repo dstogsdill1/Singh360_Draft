@@ -1,0 +1,31 @@
+diff --git a/scripts/smoke_symbol_mapper_api.py b/scripts/smoke_symbol_mapper_api.py
+index 5c93c4a..74c7874 100644
+--- a/scripts/smoke_symbol_mapper_api.py
++++ b/scripts/smoke_symbol_mapper_api.py
+@@ -57,7 +57,7 @@ def main() -> int:
+         client = server.app.test_client()
+         standard = client.get("/api/symbol-mapper/template")
+         assert standard.status_code == 200, standard.get_data(as_text=True)
+-        assert len(standard.get_json()["template"]["symbols"]) == 13
++        assert len(standard.get_json()["template"]["symbols"]) == 14
+         updated_standard = client.put("/api/symbol-mapper/template", json={"symbols": [{
+             "code": "ZZ",
+             "label": "FUTURE TEST SYMBOL",
+@@ -68,7 +68,7 @@ def main() -> int:
+             "pattern": "solid",
+         }]})
+         assert updated_standard.status_code == 200, updated_standard.get_data(as_text=True)
+-        assert updated_standard.get_json()["total"] == 14
++        assert updated_standard.get_json()["total"] == 15
+ 
+         created = client.post(
+             "/api/symbol-mapper/sessions",
+@@ -78,7 +78,7 @@ def main() -> int:
+         assert created.status_code == 201, created.get_data(as_text=True)
+         session = created.get_json()
+         sid = session["id"]
+-        assert len(session["template"]["symbols"]) == 14
++        assert len(session["template"]["symbols"]) == 15
+         legend = session.get("legend") or {}
+         assert legend.get("found") is True, legend
+         assert [row["code"] for row in legend.get("rows", [])] == ["TS", "CC"], legend

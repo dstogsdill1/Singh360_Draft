@@ -1,0 +1,17 @@
+diff --git a/core/symbol_mapper.py b/core/symbol_mapper.py
+index c594e82..9d804ad 100644
+--- a/core/symbol_mapper.py
++++ b/core/symbol_mapper.py
+@@ -109,8 +109,11 @@ def _safe_filename(name: str) -> str:
+     return base or "drawing.pdf"
+ 
+ 
++_SUBSCRIPT_DIGITS = str.maketrans("₀₁₂₃₄₅₆₇₈₉", "0123456789")
++
++
+ def _template_text(value: Any) -> str:
+-    text = str(value or "").upper()
++    text = str(value or "").translate(_SUBSCRIPT_DIGITS).upper()
+     text = re.sub(r"[^A-Z0-9]+", " ", text)
+     return re.sub(r"\s+", " ", text).strip()
+ 

@@ -1,0 +1,26 @@
+diff --git a/core/legend_template_store.py b/core/legend_template_store.py
+index cd1baf4..3a78744 100644
+--- a/core/legend_template_store.py
++++ b/core/legend_template_store.py
+@@ -70,6 +70,10 @@ class LegendTemplateStore:
+         title: str,
+         rows: list[dict[str, Any]],
+         template_id: str | None = None,
++        columns: int = 1,
++        marker_size: int = 34,
++        frame: bool = False,
++        highlighted: bool = True,
+     ) -> dict[str, Any]:
+         self.ensure()
+         manifest = self._read_manifest()
+@@ -81,6 +85,10 @@ class LegendTemplateStore:
+             "category": category or "custom",
+             "title": title or "Symbol Legend",
+             "rows": deepcopy(rows),
++            "columns": 2 if columns == 2 else 1,
++            "markerSize": max(18, min(42, int(marker_size or 34))),
++            "frame": bool(frame),
++            "highlighted": bool(highlighted),
+             "layout": {
+                 "background": "#ffffff",
+                 "border": "#333333",

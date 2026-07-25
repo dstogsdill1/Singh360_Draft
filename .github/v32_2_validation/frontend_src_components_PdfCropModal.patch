@@ -1,0 +1,60 @@
+diff --git a/frontend/src/components/PdfCropModal.tsx b/frontend/src/components/PdfCropModal.tsx
+index 25ec5e1..ffdd86d 100644
+--- a/frontend/src/components/PdfCropModal.tsx
++++ b/frontend/src/components/PdfCropModal.tsx
+@@ -30,6 +30,7 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
+   const [dpi, setDpi] = useState<Dpi>(400);
+   const [autocrop, setAutocrop] = useState(false);
+   const [mode, setMode] = useState<InsertMode>('page');
++  const [rotation, setRotation] = useState(0);
+   const [loading, setLoading] = useState(false);
+   const [rendering, setRendering] = useState(false);
+   const [error, setError] = useState('');
+@@ -51,6 +52,7 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
+       setSelected(0);
+       setRect(null);
+       setPreviewUrl('');
++      setRotation(0);
+     } catch (e) {
+       setError(String(e));
+     } finally {
+@@ -120,12 +122,13 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
+         pdfPage: selected,
+         pdfDpi: dpi,
+         pdfCrop: cp ? `${cp.x0.toFixed(1)},${cp.y0.toFixed(1)},${cp.x1.toFixed(1)},${cp.y1.toFixed(1)}` : undefined,
++        rotation,
+       };
+       return { url: res.asset.url, meta };
+     }
+     // No crop drawn → render the whole page crisply.
+     const res = await renderPdfFullPage(projectId, { pdfFile, page: selected, dpi });
+-    return { url: res.asset.url, meta: { pdfSource: pdfFile, pdfPage: selected, pdfDpi: dpi } };
++    return { url: res.asset.url, meta: { pdfSource: pdfFile, pdfPage: selected, pdfDpi: dpi, rotation } };
+   };
+ 
+   const doRenderPreview = async () => {
+@@ -232,6 +235,15 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
+                     <option value={600}>600 DPI</option>
+                   </select>
+                 </div>
++                <div className="field">
++                  <label>Crop Rotation</label>
++                  <div className="pdfcrop-rotation-controls">
++                    <button type="button" onClick={() => setRotation((current) => (current + 270) % 360)} title="Rotate inserted PDF crop 90 degrees left">↶ Rotate Left</button>
++                    <strong>{rotation}°</strong>
++                    <button type="button" onClick={() => setRotation((current) => (current + 90) % 360)} title="Rotate inserted PDF crop 90 degrees right">Rotate Right ↷</button>
++                  </div>
++                  <p className="pdfcrop-disabled-hint">Draw the precision crop on the original page; rotation is applied to the inserted object.</p>
++                </div>
+                 <div className="field">
+                   <label title="Trim residual white margins from the rendered crop">
+                     <input type="checkbox" checked={autocrop} onChange={(e) => setAutocrop(e.target.checked)} /> Auto-crop whitespace
+@@ -249,7 +261,7 @@ export default function PdfCropModal({ projectId, onInsert, onCancel }: Props) {
+                 {previewUrl && (
+                   <div className="field pdfcrop-result">
+                     <label>Rendered crop preview</label>
+-                    <img src={previewUrl} alt="Rendered crop" />
++                    <img src={previewUrl} alt="Rendered crop" style={{ transform: `rotate(${rotation}deg)` }} />
+                   </div>
+                 )}
+               </div>

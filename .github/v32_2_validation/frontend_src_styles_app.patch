@@ -1,0 +1,73 @@
+diff --git a/frontend/src/styles/app.css b/frontend/src/styles/app.css
+index 6730a93..1ca5b35 100644
+--- a/frontend/src/styles/app.css
++++ b/frontend/src/styles/app.css
+@@ -1097,3 +1097,68 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
+   .export-page-list { max-height: 300px; }
+ }
+ /* S360 SELECTIVE EXPORT END */
++
++/* V32.2 targeted editor controls. Feature verification uses selectors and compiled behavior, not this comment. */
++.pdfcrop-rotation-controls {
++  display: grid;
++  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
++  gap: 8px;
++  align-items: center;
++}
++.pdfcrop-rotation-controls button { min-height: 34px; }
++.pdfcrop-rotation-controls strong { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
++.pdfcrop-result { overflow: hidden; }
++.pdfcrop-result img { transform-origin: center; transition: transform 160ms ease; }
++
++.sheet-page-pill {
++  flex: 0 0 auto;
++  min-width: 24px;
++  height: 24px;
++  padding: 0 7px;
++  border-radius: 999px;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  background: #0d3f78;
++  color: #fff;
++  border: 1px solid #082d57;
++  font-size: 11px;
++  line-height: 1;
++  font-weight: 800;
++  font-variant-numeric: tabular-nums;
++}
++.sheet-item.active .sheet-page-pill { background: #f59e0b; border-color: #b45309; color: #111827; }
++
++.page-thumbnail-card.active-page {
++  outline: 4px solid #2563eb;
++  outline-offset: 3px;
++  box-shadow: 0 0 0 2px #fff, 0 12px 30px rgba(37, 99, 235, 0.3);
++}
++.page-thumbnail-card.active-page .page-thumb-order::after {
++  content: " · ACTIVE PAGE";
++  color: #1d4ed8;
++  font-weight: 800;
++}
++
++.libv2-legend-card { border-color: #8b5cf6; }
++.libv2-legend-preview {
++  min-height: 112px;
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
++  background: linear-gradient(145deg, #f8f5ff, #ffffff);
++  color: #4c1d95;
++  border-bottom: 1px solid #ddd6fe;
++}
++.libv2-legend-preview strong { font-size: 14px; letter-spacing: .06em; }
++.libv2-legend-preview span { font-size: 12px; color: #6d28d9; }
++
++.image-style-properties h4 {
++  margin: 10px 0 6px;
++  font-size: 12px;
++  color: #334155;
++  text-transform: uppercase;
++  letter-spacing: .04em;
++}

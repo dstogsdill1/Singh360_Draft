@@ -1,0 +1,54 @@
+diff --git a/frontend/src/components/SheetManager.tsx b/frontend/src/components/SheetManager.tsx
+index 44cd1fa..728f9cd 100644
+--- a/frontend/src/components/SheetManager.tsx
++++ b/frontend/src/components/SheetManager.tsx
+@@ -1,4 +1,4 @@
+-import { useState, type DragEvent } from 'react';
++import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+ import type { PageModel } from '../model/types';
+ import { PAGE_ISSUE_STATUSES, normalizePageIssueStatus, pageStatusClass } from '../model/pageStatus';
+ import { PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
+@@ -17,6 +17,23 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate,
+   const [edit, setEdit] = useState<{ id: string; field: 'code' | 'title'; value: string } | null>(null);
+   const [dragId, setDragId] = useState<string | null>(null);
+   const [dragOverId, setDragOverId] = useState<string | null>(null);
++  const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
++
++  const publishedNumberById = useMemo(() => {
++    let published = 0;
++    const numbers: Record<string, number> = {};
++    for (const page of pages) {
++      if (!page.include) continue;
++      published += 1;
++      numbers[page.id] = published;
++    }
++    return numbers;
++  }, [pages]);
++
++  useEffect(() => {
++    if (!activePageId) return;
++    pageRefs.current[activePageId]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
++  }, [activePageId]);
+ 
+   const patch = (idx: number, p: Partial<PageModel>) => {
+     const clone = [...pages];
+@@ -80,6 +97,7 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate,
+         return (
+           <div
+             key={p.id}
++            ref={(element) => { pageRefs.current[p.id] = element; }}
+             className={`sheet-item ${p.id === activePageId ? 'active' : ''} ${isCont ? 'cont' : ''} ${dragOverId === p.id ? 'drag-over' : ''} ${pageStatusClass(p)}`}
+             onClick={() => onSelect(p.id)}
+             onDragOver={(event) => {
+@@ -102,6 +120,11 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate,
+             }}
+           >
+             <div className="sheet-item-head">
++              {p.include && (
++                <span className="sheet-page-pill" title={`Published page ${publishedNumberById[p.id]}`}>
++                  {publishedNumberById[p.id]}
++                </span>
++              )}
+               <button
+                 type="button"
+                 className={`sheet-drag-handle ${isCoverPage(p) || isSheetIndexPage(p) ? 'locked' : ''}`}

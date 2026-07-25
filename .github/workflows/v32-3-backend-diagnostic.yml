@@ -1,0 +1,80 @@
+name: V32.3 Backend Diagnostic
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/v32-3-backend-diagnostic.yml'
+      - '.github/v32_2_validation/**'
+      - '.github/v32_3_exact_validation/**'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply V32.2
+        run: |
+          patches=(
+            .github/v32_2_validation/core_legend_template_store.patch
+            .github/v32_2_validation/core_symbol_mapper.patch
+            .github/v32_2_validation/server_legend_templates.patch
+            .github/v32_2_validation/default_symbol_mapper_standard.patch
+            .github/v32_2_validation/smoke_symbol_mapper.patch
+            .github/v32_2_validation/smoke_symbol_mapper_api.patch
+            .github/v32_2_validation/frontend_symbol_palette.patch
+            .github/v32_2_validation/frontend_src_model_types.patch
+            .github/v32_2_validation/frontend_src_api_client.patch
+            .github/v32_2_validation/canvas_core.patch
+            .github/v32_2_validation/canvas_helpers.patch
+            .github/v32_2_validation/canvas_guide_names.patch
+            .github/v32_2_validation/canvas_guides.patch
+            .github/v32_2_validation/canvas_images.patch
+            .github/v32_2_validation/canvas_symbols.patch
+            .github/v32_2_validation/canvas_update.patch
+            .github/v32_2_validation/frontend_src_components_PropertiesPanel.patch
+            .github/v32_2_validation/frontend_src_components_PdfCropModal.patch
+            .github/v32_2_validation/frontend_src_components_SymbolLegendModal.patch
+            .github/v32_2_validation/frontend_src_components_LibraryPanelV2.patch
+            .github/v32_2_validation/frontend_src_components_SheetManager.patch
+            .github/v32_2_validation/frontend_src_components_PageManagerModal.patch
+            .github/v32_2_validation/frontend_src_components_ProjectDashboard.patch
+            .github/v32_2_validation/frontend_src_App.patch
+            .github/v32_2_validation/frontend_src_styles_app.patch
+          )
+          for patch in "${patches[@]}"; do git apply --whitespace=nowarn "$patch"; done
+      - name: Apply exact V32.3
+        run: |
+          files=(.github/v32_3_exact_validation/v32_3_exact_{00..06}.b64)
+          cat "${files[@]}" | tr -d '\n\r' | base64 --decode > /tmp/v32_3.patch.gz
+          gzip -dc /tmp/v32_3.patch.gz > /tmp/v32_3.patch
+          git apply --whitespace=nowarn /tmp/v32_3.patch
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: python -m pip install -r requirements.txt
+      - name: Run backend suite
+        id: backend
+        continue-on-error: true
+        run: |
+          set +e
+          {
+            python -m py_compile server.py core/legend_template_store.py core/symbol_mapper.py core/workbook_guide.py core/workbook_importer.py core/workbook_link_manager.py core/workbook_status_sync.py core/workbook_quality_manager.py scripts/smoke_symbol_mapper.py scripts/smoke_symbol_mapper_api.py scripts/smoke_workbook_ai_guide.py
+            python scripts/smoke_symbol_mapper.py
+            python scripts/smoke_symbol_mapper_api.py
+            python scripts/smoke_workbook_ai_guide.py
+          } > v32-3-backend.log 2>&1
+          code=$?
+          cat v32-3-backend.log
+          exit $code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v32-3-backend-diagnostic
+          path: v32-3-backend.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Enforce
+        if: steps.backend.outcome == 'failure'
+        run: exit 1
