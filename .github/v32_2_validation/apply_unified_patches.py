@@ -82,7 +82,7 @@ class VirtualFile:
     @classmethod
     def load(cls, path: Path) -> "VirtualFile":
         if not path.exists():
-            return cls(path, False, "\n", False, True, [])
+            return cls(path=path, existed=False, newline="\n", bom=False, trailing_newline=True, lines=[])
         raw = path.read_bytes()
         bom = raw.startswith(b"\xef\xbb\xbf")
         payload = raw[3:] if bom else raw
@@ -98,7 +98,7 @@ class VirtualFile:
         lines = normalized.split("\n")
         if trailing:
             lines.pop()
-        return cls(path, True, newline, bom, trailing, lines)
+        return cls(path=path, existed=True, newline=newline, bom=bom, trailing_newline=trailing, lines=lines)
 
     def encoded_bytes(self) -> bytes:
         text = "\n".join(self.lines)
@@ -187,7 +187,7 @@ def _find_all(haystack: Sequence[str], needle: Sequence[str]) -> list[int]:
     if not needle:
         return list(range(len(haystack) + 1))
     width = len(needle)
-    return [i for i in range(len(haystack) - width + 1) if list(haystack[i:i + width]) == list(needle)]
+    return [i for i in range(0, len(haystack) - width + 1) if list(haystack[i:i + width]) == list(needle)]
 
 
 def _choose_location(lines: Sequence[str], chunk: Sequence[str], expected: int, *, patch_name: str, target: str, state_name: str) -> int | None:
@@ -214,17 +214,42 @@ def apply_file_patch(vfile: VirtualFile, file_patch: FilePatch) -> str:
         old_lines = hunk.old_lines
         new_lines = hunk.new_lines
         expected_old = max(0, hunk.old_start - 1 + offset)
-        old_pos = _choose_location(vfile.lines, old_lines, expected_old, patch_name=file_patch.patch_name, target=target, state_name="pre-patch")
+        expected_new = max(0, hunk.new_start - 1 + offset)
+        has_additions = any(line.startswith("+") for line in hunk.body)
+
+        # Additions and replacements check the post-patch state first. An
+        # append-only hunk leaves its original context intact, so old-first
+        # matching would duplicate the added block on the second run.
+        if has_additions:
+            new_pos = _choose_location(
+                vfile.lines, new_lines, expected_new,
+                patch_name=file_patch.patch_name, target=target, state_name="post-patch",
+            )
+            if new_pos is not None:
+                offset += len(new_lines) - len(old_lines)
+                continue
+
+        old_pos = _choose_location(
+            vfile.lines, old_lines, expected_old,
+            patch_name=file_patch.patch_name, target=target, state_name="pre-patch",
+        )
         if old_pos is not None:
             vfile.lines[old_pos:old_pos + len(old_lines)] = new_lines
             offset += len(new_lines) - len(old_lines)
             changed_hunks += 1
             continue
-        expected_new = max(0, hunk.new_start - 1)
-        new_pos = _choose_location(vfile.lines, new_lines, expected_new, patch_name=file_patch.patch_name, target=target, state_name="post-patch")
-        if new_pos is not None:
-            offset += len(new_lines) - len(old_lines)
-            continue
+
+        # Pure deletions cannot use new-first matching because their post-patch
+        # chunk can be only generic context that also exists before deletion.
+        if not has_additions:
+            new_pos = _choose_location(
+                vfile.lines, new_lines, expected_new,
+                patch_name=file_patch.patch_name, target=target, state_name="post-patch",
+            )
+            if new_pos is not None:
+                offset += len(new_lines) - len(old_lines)
+                continue
+
         preview = "\n".join(old_lines[:4])
         raise PatchError(
             f"{file_patch.patch_name}: target {target} is neither clean pre-patch nor post-patch "
