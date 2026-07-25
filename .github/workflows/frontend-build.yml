@@ -5,6 +5,7 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-build.yml'
+      - '.github/v32_2_validation/**'
   push:
     branches:
       - main
@@ -21,6 +22,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Apply V32.2 validation patches
+        run: |
+          cd ..
+          patches=(
+            .github/v32_2_validation/frontend_src_model_types.patch
+            .github/v32_2_validation/frontend_src_api_client.patch
+            .github/v32_2_validation/canvas_core.patch
+            .github/v32_2_validation/canvas_helpers.patch
+            .github/v32_2_validation/canvas_guides.patch
+            .github/v32_2_validation/canvas_images.patch
+            .github/v32_2_validation/canvas_symbols.patch
+            .github/v32_2_validation/canvas_update.patch
+            .github/v32_2_validation/frontend_src_components_PropertiesPanel.patch
+            .github/v32_2_validation/frontend_src_components_PdfCropModal.patch
+            .github/v32_2_validation/frontend_src_components_SymbolLegendModal.patch
+            .github/v32_2_validation/frontend_src_components_LibraryPanelV2.patch
+            .github/v32_2_validation/frontend_src_components_SheetManager.patch
+            .github/v32_2_validation/frontend_src_components_PageManagerModal.patch
+            .github/v32_2_validation/frontend_src_components_ProjectDashboard.patch
+            .github/v32_2_validation/frontend_src_App.patch
+            .github/v32_2_validation/frontend_src_styles_app.patch
+          )
+          for patch in "${patches[@]}"; do
+            echo "Applying ${patch}"
+            git apply "${patch}"
+          done
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
