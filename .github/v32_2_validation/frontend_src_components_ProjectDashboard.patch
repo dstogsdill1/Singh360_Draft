@@ -1,0 +1,48 @@
+diff --git a/frontend/src/components/ProjectDashboard.tsx b/frontend/src/components/ProjectDashboard.tsx
+index 7e7de08..73d0eca 100644
+--- a/frontend/src/components/ProjectDashboard.tsx
++++ b/frontend/src/components/ProjectDashboard.tsx
+@@ -72,6 +72,7 @@ export default function ProjectDashboard({ project }: Props) {
+   const [message, setMessage] = useState('');
+   const [libraryOpen, setLibraryOpen] = useState(false);
+   const [pageManagerOpen, setPageManagerOpen] = useState(false);
++  const [pageManagerActivePageId, setPageManagerActivePageId] = useState('');
+   const [qualityOpen, setQualityOpen] = useState(false);
+   const [syncDecisionOpen, setSyncDecisionOpen] = useState(false);
+   const [deleteOpen, setDeleteOpen] = useState(false);
+@@ -285,6 +286,18 @@ export default function ProjectDashboard({ project }: Props) {
+     }
+   };
+ 
++  const openPageManager = () => {
++    if (!project) return;
++    let savedPageId = '';
++    try {
++      savedPageId = localStorage.getItem(`singh360-active-page:${project.id}`) || '';
++    } catch {
++      savedPageId = '';
++    }
++    setPageManagerActivePageId(project.pages.some((page) => page.id === savedPageId) ? savedPageId : (project.pages[0]?.id || ''));
++    setPageManagerOpen(true);
++  };
++
+   const openPage = (pageId: string) => {
+     if (!project) return;
+     try {
+@@ -473,7 +486,7 @@ export default function ProjectDashboard({ project }: Props) {
+                 <div className="card-head"><h2>Start Here</h2><span>The five tools used for normal drawing-package work</span></div>
+                 <div className="project-start-tools">
+                   <button type="button" className="primary" onClick={() => window.location.assign(actionUrl())}><b>Open Page Editor</b><span>Open the complete File / Home / Insert / Symbols / Draw editor</span></button>
+-                  <button type="button" onClick={() => setPageManagerOpen(true)}><b>Review Drawing Pages</b><span>Scroll through every page and choose what publishes</span></button>
++                  <button type="button" onClick={openPageManager}><b>Review Drawing Pages</b><span>Scroll through every page and choose what publishes</span></button>
+                   <button type="button" onClick={() => window.location.assign(actionUrl('symbol-mapper'))}><b>Run Symbol Mapper</b><span>Upload a drawing PDF, identify symbols, highlight, and count</span></button>
+                   <button type="button" onClick={() => window.location.assign(actionUrl('symbol-legend'))}><b>Symbol Maker / Legend Builder</b><span>Edit the Singh360 symbol standard and insert a legend</span></button>
+                   <button type="button" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}><b>Component Builder</b><span>Create, approve, edit, and maintain reusable components</span></button>
+@@ -586,6 +599,7 @@ export default function ProjectDashboard({ project }: Props) {
+           onClose={() => setPageManagerOpen(false)}
+           onSave={savePageSelection}
+           onOpenPage={openPage}
++          activePageId={pageManagerActivePageId}
+         />
+       )}
+       {qualityOpen && (
