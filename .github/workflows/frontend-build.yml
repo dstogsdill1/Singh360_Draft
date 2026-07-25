@@ -38,6 +38,7 @@ jobs:
             .github/v32_2_validation/frontend_src_api_client.patch
             .github/v32_2_validation/canvas_core.patch
             .github/v32_2_validation/canvas_helpers.patch
+            .github/v32_2_validation/canvas_guide_names.patch
             .github/v32_2_validation/canvas_guides.patch
             .github/v32_2_validation/canvas_images.patch
             .github/v32_2_validation/canvas_symbols.patch
@@ -195,12 +196,57 @@ jobs:
           code=$?
           cat ../v32-build.log
           exit ${code}
+      - name: Verify compiled V32.2 feature tokens
+        if: steps.frontend_build.outcome == 'success'
+        working-directory: frontend
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const assetsDir = path.join(process.cwd(), 'dist', 'assets');
+          const bundle = fs.readdirSync(assetsDir)
+            .filter((name) => name.endsWith('.js') || name.endsWith('.css'))
+            .map((name) => fs.readFileSync(path.join(assetsDir, name), 'utf8'))
+            .join('\n');
+          const required = [
+            'Insert selected symbols',
+            'Save legend to library',
+            'Crop Rotation',
+            'Rotate Left',
+            'Rotate Right',
+            'Image / PDF Border',
+            'Shadow Style',
+            'singh360-active-page:',
+            'Alignment Guide Vertical',
+            'Alignment Guide Horizontal',
+            'imageBorderWidth',
+            'imageShadowStyle',
+            'Published page',
+            '.sheet-page-pill',
+            '.page-thumbnail-card.active-page',
+            '.libv2-legend-card',
+          ];
+          const missing = required.filter((token) => !bundle.includes(token));
+          if (missing.length) {
+            console.error('Missing compiled V32.2 feature tokens:', missing);
+            process.exit(1);
+          }
+          console.log(`Verified ${required.length} compiled V32.2 feature tokens.`);
+          NODE
       - name: Upload frontend build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: v32-build-log
           path: v32-build.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload compiled frontend bundle
+        if: steps.frontend_build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: v32-frontend-dist
+          path: frontend/dist
           if-no-files-found: error
           retention-days: 3
       - name: Enforce frontend result
