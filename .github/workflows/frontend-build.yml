@@ -57,4 +57,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Typecheck and build
-        run: npm run build
+        id: frontend_build
+        continue-on-error: true
+        run: |
+          set +e
+          npm run build > ../v32-build.log 2>&1
+          code=$?
+          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
+          cat ../v32-build.log
+          exit ${code}
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v32-build-log
+          path: v32-build.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Enforce build result
+        if: steps.frontend_build.outcome == 'failure'
+        run: exit 1
