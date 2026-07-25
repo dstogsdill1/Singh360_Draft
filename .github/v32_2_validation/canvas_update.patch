@@ -1,0 +1,40 @@
+diff --git a/frontend/src/components/CanvasEditor.tsx b/frontend/src/components/CanvasEditor.tsx
+index 3080535..0ad35f8 100644
+--- a/frontend/src/components/CanvasEditor.tsx
++++ b/frontend/src/components/CanvasEditor.tsx
+@@ -1817,6 +1992,35 @@ export default function CanvasEditor({
+       });
+         if ((o.lockMovementX || o.lockScalingX || o.lockRotation) && patch.locked !== false) return;
+         const anyO = o as unknown as Record<string, unknown>;
++        const selectedObjects: FabricObject[] = o.type === 'activeselection' ? (o as ActiveSelection).getObjects() : [o];
++        selectedObjects.filter((item) => item.type === 'image').forEach((item) => {
++          const rec = item as unknown as Record<string, unknown>;
++          if (patch.imageBorderColor !== undefined) rec.imageBorderColor = patch.imageBorderColor;
++          if (patch.imageBorderWidth !== undefined) rec.imageBorderWidth = Math.max(0, patch.imageBorderWidth);
++          if (patch.imageShadowStyle !== undefined) rec.imageShadowStyle = patch.imageShadowStyle;
++          if (patch.imageShadowColor !== undefined) rec.imageShadowColor = patch.imageShadowColor;
++          if (patch.imageShadowOpacity !== undefined) rec.imageShadowOpacity = Math.max(0, Math.min(1, patch.imageShadowOpacity));
++          if (patch.imageShadowBlur !== undefined) rec.imageShadowBlur = Math.max(0, patch.imageShadowBlur);
++          if (patch.imageShadowOffsetX !== undefined) rec.imageShadowOffsetX = patch.imageShadowOffsetX;
++          if (patch.imageShadowOffsetY !== undefined) rec.imageShadowOffsetY = patch.imageShadowOffsetY;
++          applyPersistedImageStyle(item);
++          item.dirty = true;
++        });
++        if (anyO.isLegendRow === true && o.type === 'group') {
++          if (patch.legendCode !== undefined) {
++            const code = patch.legendCode.toUpperCase().slice(0, 16);
++            anyO.legendCode = code;
++            const glyphPart = (o as Group).getObjects().find((item) => (item as unknown as Record<string, unknown>).legendPartRole === 'glyph');
++            if (glyphPart && 'text' in glyphPart) glyphPart.set('text', code);
++          }
++          if (patch.legendLabel !== undefined) {
++            anyO.legendLabel = patch.legendLabel;
++            const labelPart = (o as Group).getObjects().find((item) => (item as unknown as Record<string, unknown>).legendPartRole === 'label');
++            if (labelPart && 'text' in labelPart) labelPart.set('text', patch.legendLabel);
++          }
++          anyO.objName = `Symbol ${String(anyO.legendCode || '')} — ${String(anyO.legendLabel || '')}`;
++          o.dirty = true;
++        }
+         if (patch.fill !== undefined) o.set('fill', patch.fill);
+         if (patch.stroke !== undefined) o.set('stroke', patch.stroke);
+         if (patch.strokeWidth !== undefined) o.set('strokeWidth', patch.strokeWidth);
