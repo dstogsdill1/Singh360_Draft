@@ -1,8 +1,8 @@
 diff --git a/frontend/src/components/CanvasEditor.tsx b/frontend/src/components/CanvasEditor.tsx
-index 3080535..0ad35f8 100644
+index 3080535..d47d4bd 100644
 --- a/frontend/src/components/CanvasEditor.tsx
 +++ b/frontend/src/components/CanvasEditor.tsx
-@@ -331,6 +343,133 @@ function applyBwIfRequested(img: FabricImage, url: string) {
+@@ -331,6 +343,132 @@ function applyBwIfRequested(img: FabricImage, url: string) {
    img.applyFilters();
  }
  
@@ -129,14 +129,13 @@ index 3080535..0ad35f8 100644
 +  rec.legendColor = row.color || '#ffd400';
 +  rec.legendColor2 = row.color2 || row.color || '#ffd400';
 +  rec.legendPattern = row.pattern || 'solid';
-+  styleForSelection(group);
 +  return group;
 +}
 +
  export default function CanvasEditor({
    serialized,
    onSerializedChange,
-@@ -461,7 +600,7 @@ export default function CanvasEditor({
+@@ -461,7 +599,7 @@ export default function CanvasEditor({
          return obj;
        });
        void canvas.loadFromJSON({ version: '6', objects: liveObjects }).then(() => {
