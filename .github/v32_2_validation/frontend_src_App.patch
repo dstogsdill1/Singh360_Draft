@@ -1,0 +1,42 @@
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 3f6c89f..1cb7d58 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -408,6 +408,15 @@ export default function App() {
+     return project.pages.find((p) => p.id === activePageId) ?? null;
+   }, [project, activePageId]);
+ 
++  useEffect(() => {
++    if (!project?.id || !activePageId) return;
++    try {
++      localStorage.setItem(`singh360-active-page:${project.id}`, activePageId);
++    } catch {
++      // Page navigation remains functional when storage is unavailable.
++    }
++  }, [project?.id, activePageId]);
++
+   // Auto-enable overlay edit mode only for pages whose *base* is not itself
+   // editable (pure image/canvas/underlay sheets, or pages that already carry
+   // annotations but have no editable table/text underneath). Pages with an
+@@ -2006,6 +2015,10 @@ export default function App() {
+               canInsert={canvasEnabled}
+               activePageType={activePage?.pageType}
+               onOpenLegendEditor={() => setSymbolLegendOpen(true)}
++              onInsertLegend={(config) => {
++                setOverlayMode(true);
++                canvasApiRef.current?.addSymbolLegend(config);
++              }}
+             />
+           </CollapsibleSection>
+         </>
+@@ -2281,6 +2294,10 @@ export default function App() {
+           setOverlayMode(true);
+           canvasApiRef.current?.addSymbolLegend(config);
+         }}
++        onInsertSymbols={(config: SymbolLegendInsertConfig) => {
++          setOverlayMode(true);
++          canvasApiRef.current?.addSymbolLegendRows(config);
++        }}
+       />
+     )}
+     {saveTemplateOpen && activePage && (
