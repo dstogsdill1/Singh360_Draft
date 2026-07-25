@@ -1,0 +1,90 @@
+diff --git a/frontend/src/components/CanvasEditor.tsx b/frontend/src/components/CanvasEditor.tsx
+index 3080535..0ad35f8 100644
+--- a/frontend/src/components/CanvasEditor.tsx
++++ b/frontend/src/components/CanvasEditor.tsx
+@@ -562,50 +701,49 @@ export default function CanvasEditor({
+         return;
+       }
+       clearGuides();
+-      const w = (t.width ?? 0) * (t.scaleX ?? 1);
+-      const h = (t.height ?? 0) * (t.scaleY ?? 1);
+-      const cx = (t.left ?? 0) + w / 2;
+-      const cy = (t.top ?? 0) + h / 2;
++      const movingBounds = t.getBoundingRect();
+       const TH = 8;
++      const movingXs = [movingBounds.left, movingBounds.left + movingBounds.width / 2, movingBounds.left + movingBounds.width];
++      const movingYs = [movingBounds.top, movingBounds.top + movingBounds.height / 2, movingBounds.top + movingBounds.height];
+ 
+-      // Candidate X/Y alignment lines: page center + other objects' centers/edges.
+-      const xs: number[] = [CANVAS_W / 2];
+-      const ys: number[] = [CANVAS_H / 2];
++      // Candidate alignment lines: all page edges/centers and every other object's edges/centers.
++      const xs: number[] = [0, CANVAS_W / 2, CANVAS_W];
++      const ys: number[] = [0, CANVAS_H / 2, CANVAS_H];
+       canvas.getObjects().forEach((o) => {
+         if (o === t || guidesRef.current.includes(o)) return;
+-        const ow = (o.width ?? 0) * (o.scaleX ?? 1);
+-        const oh = (o.height ?? 0) * (o.scaleY ?? 1);
+-        const ol = o.left ?? 0;
+-        const ot = o.top ?? 0;
+-        xs.push(ol + ow / 2, ol, ol + ow);
+-        ys.push(ot + oh / 2, ot, ot + oh);
++        if ((o as unknown as Record<string, unknown>).excludeFromExport === true) return;
++        const bounds = o.getBoundingRect();
++        xs.push(bounds.left, bounds.left + bounds.width / 2, bounds.left + bounds.width);
++        ys.push(bounds.top, bounds.top + bounds.height / 2, bounds.top + bounds.height);
+       });
+ 
+-      // Snap X: align this object's center to the closest candidate.
+-      let bestX: number | null = null;
+-      for (const x of xs) {
+-        if (Math.abs(cx - x) < TH) { bestX = x; break; }
+-      }
+-      if (bestX !== null) {
+-        t.set({ left: bestX - w / 2 });
+-        addVGuide(bestX);
+-      }
+-      let bestY: number | null = null;
+-      for (const y of ys) {
+-        if (Math.abs(cy - y) < TH) { bestY = y; break; }
+-      }
+-      if (bestY !== null) {
+-        t.set({ top: bestY - h / 2 });
+-        addHGuide(bestY);
+-      }
++      const nearestDelta = (moving: number[], candidates: number[]) => {
++        let best: { delta: number; guide: number; distance: number } | null = null;
++        for (const point of moving) {
++          for (const guide of candidates) {
++            const delta = guide - point;
++            const distance = Math.abs(delta);
++            if (distance <= TH && (!best || distance < best.distance)) best = { delta, guide, distance };
++          }
++        }
++        return best;
++      };
+ 
+-      // Grid snap (when Snap is on) — applied after alignment snap.
+-      if (snapRef.current && bestX === null && bestY === null) {
+-        t.set({
+-          left: Math.round((t.left ?? 0) / SNAP) * SNAP,
+-          top: Math.round((t.top ?? 0) / SNAP) * SNAP,
+-        });
++      const bestX = nearestDelta(movingXs, xs);
++      const bestY = nearestDelta(movingYs, ys);
++      if (bestX) {
++        t.set('left', (t.left ?? 0) + bestX.delta);
++        addVGuide(bestX.guide);
++      } else if (snapRef.current) {
++        t.set('left', Math.round((t.left ?? 0) / SNAP) * SNAP);
++      }
++      if (bestY) {
++        t.set('top', (t.top ?? 0) + bestY.delta);
++        addHGuide(bestY.guide);
++      } else if (snapRef.current) {
++        t.set('top', Math.round((t.top ?? 0) / SNAP) * SNAP);
+       }
++      t.setCoords();
+       canvas.requestRenderAll();
+     });
+     canvas.on('mouse:up', (opt) => {
