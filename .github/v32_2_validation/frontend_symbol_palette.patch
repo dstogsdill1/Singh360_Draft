@@ -1,0 +1,24 @@
+diff --git a/frontend/src/model/symbolPalette.ts b/frontend/src/model/symbolPalette.ts
+index 814955a..7bfdf5b 100644
+--- a/frontend/src/model/symbolPalette.ts
++++ b/frontend/src/model/symbolPalette.ts
+@@ -66,8 +66,18 @@ export function symbolMarkerStyle(
+   };
+ }
+ 
++const SUBSCRIPT_DIGITS: Record<string, string> = {
++  '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
++  '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
++};
++
+ export function normalizeSymbolTemplateText(value: string): string {
+-  return value.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
++  return value
++    .replace(/[₀-₉]/g, (digit) => SUBSCRIPT_DIGITS[digit] ?? digit)
++    .toUpperCase()
++    .replace(/[^A-Z0-9]+/g, ' ')
++    .replace(/\s+/g, ' ')
++    .trim();
+ }
+ 
+ export function symbolTemplateKey(code: string, label: string): string {
