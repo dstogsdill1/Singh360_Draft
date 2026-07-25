@@ -1,0 +1,160 @@
+name: V32.3 AI Guide Controlled Validation
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'core/**'
+      - 'server.py'
+      - 'defaults/**'
+      - 'scripts/**'
+      - '.github/workflows/v32-3-ai-guide-validation.yml'
+      - '.github/v32_2_validation/**'
+      - '.github/v32_3_validation/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply validated V32.2 patch set
+        run: |
+          patches=(
+            .github/v32_2_validation/core_legend_template_store.patch
+            .github/v32_2_validation/core_symbol_mapper.patch
+            .github/v32_2_validation/server_legend_templates.patch
+            .github/v32_2_validation/default_symbol_mapper_standard.patch
+            .github/v32_2_validation/smoke_symbol_mapper.patch
+            .github/v32_2_validation/smoke_symbol_mapper_api.patch
+            .github/v32_2_validation/frontend_symbol_palette.patch
+            .github/v32_2_validation/frontend_src_model_types.patch
+            .github/v32_2_validation/frontend_src_api_client.patch
+            .github/v32_2_validation/canvas_core.patch
+            .github/v32_2_validation/canvas_helpers.patch
+            .github/v32_2_validation/canvas_guide_names.patch
+            .github/v32_2_validation/canvas_guides.patch
+            .github/v32_2_validation/canvas_images.patch
+            .github/v32_2_validation/canvas_symbols.patch
+            .github/v32_2_validation/canvas_update.patch
+            .github/v32_2_validation/frontend_src_components_PropertiesPanel.patch
+            .github/v32_2_validation/frontend_src_components_PdfCropModal.patch
+            .github/v32_2_validation/frontend_src_components_SymbolLegendModal.patch
+            .github/v32_2_validation/frontend_src_components_LibraryPanelV2.patch
+            .github/v32_2_validation/frontend_src_components_SheetManager.patch
+            .github/v32_2_validation/frontend_src_components_PageManagerModal.patch
+            .github/v32_2_validation/frontend_src_components_ProjectDashboard.patch
+            .github/v32_2_validation/frontend_src_App.patch
+            .github/v32_2_validation/frontend_src_styles_app.patch
+          )
+          for patch in "${patches[@]}"; do
+            echo "Applying ${patch}"
+            git apply --check "${patch}"
+            git apply --whitespace=nowarn "${patch}"
+          done
+
+      - name: Reconstruct and apply V32.3 AI guide patch
+        run: |
+          cat \
+            .github/v32_3_validation/ai_patch_part_00.b64 \
+            .github/v32_3_validation/ai_patch_part_01.b64 \
+            .github/v32_3_validation/ai_patch_part_02.b64 \
+            .github/v32_3_validation/ai_patch_chunk_09.b64 \
+            .github/v32_3_validation/ai_patch_chunk_10.b64 \
+            .github/v32_3_validation/ai_patch_chunk_11.b64 \
+            .github/v32_3_validation/ai_patch_chunk_12.b64 \
+            .github/v32_3_validation/ai_patch_chunk_13.b64 \
+            .github/v32_3_validation/ai_patch_chunk_14.b64 \
+            | tr -d '\n\r' | base64 --decode > /tmp/v32_3_ai_guide.patch.gz
+          gzip -dc /tmp/v32_3_ai_guide.patch.gz > /tmp/v32_3_ai_guide.patch
+          git apply --check /tmp/v32_3_ai_guide.patch
+          git apply --whitespace=nowarn /tmp/v32_3_ai_guide.patch
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Backend compile and smoke tests
+        run: |
+          python - <<'PY'
+          import py_compile
+          files = (
+              'server.py',
+              'core/legend_template_store.py',
+              'core/symbol_mapper.py',
+              'core/workbook_guide.py',
+              'core/workbook_importer.py',
+              'core/workbook_link_manager.py',
+              'core/workbook_status_sync.py',
+              'core/workbook_quality_manager.py',
+              'scripts/smoke_symbol_mapper.py',
+              'scripts/smoke_symbol_mapper_api.py',
+              'scripts/smoke_workbook_ai_guide.py',
+          )
+          for file_name in files:
+              py_compile.compile(file_name, doraise=True)
+          import server
+          client = server.app.test_client()
+          response = client.get('/api/health')
+          assert response.status_code == 200, response.get_data(as_text=True)
+          print('Backend compile/import/health passed')
+          PY
+          python scripts/smoke_symbol_mapper.py
+          python scripts/smoke_symbol_mapper_api.py
+          python scripts/smoke_workbook_ai_guide.py
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript and Vite production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify compiled feature tokens
+        working-directory: frontend
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          bundle = '\n'.join(path.read_text(encoding='utf-8', errors='ignore') for path in Path('dist/assets').glob('*') if path.suffix in {'.js', '.css'})
+          required = [
+              'Insert selected symbols',
+              'Save legend to library',
+              'Crop Rotation',
+              'Image / PDF Border',
+              'Alignment Guide Vertical',
+              'Workbook Structure + AI Guide',
+              'Open workbook guide',
+              'Copy Workbook AI Prompt',
+              'Copy App Integration Prompt',
+              'workbook-guide',
+              '00_AI_GUIDE',
+          ]
+          missing = [token for token in required if token not in bundle]
+          if missing:
+              raise SystemExit(f'Missing compiled V32.3 tokens: {missing}')
+          print(f'Verified {len(required)} compiled feature tokens')
+          PY
+
+      - name: Upload compiled frontend
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v32-3-frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+          retention-days: 3
