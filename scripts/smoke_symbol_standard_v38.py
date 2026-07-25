@@ -10,12 +10,18 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-INSTALLER = REPO / "scripts" / "install_symbol_standard_v38.py"
 
 
 def run(*args: str) -> None:
     subprocess.run(
-        [sys.executable, str(INSTALLER), "--repo", str(REPO), *args],
+        [
+            sys.executable,
+            "-m",
+            "scripts.install_symbol_standard_v38",
+            "--repo",
+            str(REPO),
+            *args,
+        ],
         check=True,
         cwd=REPO,
     )
