@@ -67,6 +67,8 @@ const STATUS_OPTIONS = [
   { id: 'junk', label: 'Junk' },
 ];
 
+const REFRIGERATION_SYMBOL_COLLECTION = 'Refrigeration Controls Symbols';
+
 const COLLECTION_PRESETS = [
   'Controllers',
   'RDM / Network',
@@ -289,6 +291,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
   const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
+  const [collection, setCollection] = useState('all');
   const [rep, setRep] = useState<ViewRep>('source');
   const [showDashboard, setShowDashboard] = useState(false);
   const [showLegacyItems, setShowLegacyItems] = useState(true);
@@ -373,15 +376,37 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
     return Array.from(set).sort();
   }, [components]);
 
+  const refrigerationSymbolCount = useMemo(
+    () => components.filter(
+      (component) => !isRetired(component)
+        && collectionFor(component) === REFRIGERATION_SYMBOL_COLLECTION,
+    ).length,
+    [components],
+  );
+
   const visibleCards = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return components.filter((c) => {
+    const rows = components.filter((c) => {
       if (category !== 'all' && !categoriesFor(c).includes(category)) return false;
+      if (collection !== 'all' && collectionFor(c) !== collection) return false;
       if (isRetired(c)) return false;
       if (!q) return true;
       return componentSearchBlob(c, edits).includes(q);
     });
-  }, [components, query, category, edits]);
+
+    if (collection !== 'all') {
+      rows.sort((a, b) => {
+        const aOrder = Number(asAny(a).sortOrder || Number.MAX_SAFE_INTEGER);
+        const bOrder = Number(asAny(b).sortOrder || Number.MAX_SAFE_INTEGER);
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return displayNameFor(a).localeCompare(displayNameFor(b), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        });
+      });
+    }
+    return rows;
+  }, [components, query, category, collection, edits]);
 
   const dashboardRows = useMemo(() => {
     const q = builderQuery.trim().toLowerCase();
@@ -782,6 +807,31 @@ This is NOT saved until you click Save All Edits.`,
             <option value="all">All categories</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.label} ({c.count})</option>)}
           </select>
+          <select className="libv2-grow" title="Filter by collection" value={collection} onChange={(e) => setCollection(e.target.value)}>
+            <option value="all">All collections</option>
+            {collections.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </div>
+        <div className="libv2-row libv2-quick-filters">
+          <button
+            className={collection === REFRIGERATION_SYMBOL_COLLECTION ? 'active' : undefined}
+            style={collection === REFRIGERATION_SYMBOL_COLLECTION
+              ? { fontWeight: 800, background: '#e0f2fe', borderColor: '#0284c7' }
+              : undefined}
+            aria-pressed={collection === REFRIGERATION_SYMBOL_COLLECTION}
+            onClick={() => {
+              setCollection((current) => current === REFRIGERATION_SYMBOL_COLLECTION
+                ? 'all'
+                : REFRIGERATION_SYMBOL_COLLECTION);
+              setCategory('all');
+              setQuery('');
+            }}
+          >
+            Refrigeration Symbols ({refrigerationSymbolCount})
+          </button>
+          {collection !== 'all' && (
+            <button onClick={() => setCollection('all')}>Show All Components</button>
+          )}
         </div>
         <div className="libv2-row libv2-modes">
           {(['source', 'edge', 'bw'] as ViewRep[]).map((r) => (
