@@ -265,9 +265,10 @@ def _run_browser() -> dict[str, Any]:
         expect(saved_legend_card).to_be_visible()
         saved_legend_card.click()
         expect(page.get_by_role("heading", name="Build / Insert Symbol Legend")).to_be_visible(timeout=30000)
-        exact_preview_count = page.locator(".symbol-legend-built-marker.exact-canonical img").count()
-        if exact_preview_count < 15:
-            raise AssertionError(f"Saved legend must render all 15 exact canonical SVG previews; got {exact_preview_count}")
+        exact_previews = page.locator(
+            ".symbol-legend-live-preview .symbol-legend-built-marker.exact-canonical img"
+        )
+        expect(exact_previews).to_have_count(15, timeout=30000)
         page.screenshot(path=str(EVIDENCE_DIR / "09-saved-full-legend.png"), full_page=True)
 
         page.get_by_role("button", name="Insert legend", exact=True).click()
