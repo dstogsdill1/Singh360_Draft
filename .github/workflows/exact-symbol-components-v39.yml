@@ -67,9 +67,11 @@ jobs:
           name: exact-symbol-components-v39-${{ matrix.os }}
           path: |
             .validation/v39-report.json
-            .validation/v39-docs/library/v2/components/symbols_markers/*.svg
-            .validation/v39-docs/library/v2/symbols/symbols_markers/*.svg
-            .validation/v39-docs/library/v2/thumbnails/symbols_markers/*.svg
+            .validation/v39-docs/library/manifest.json
+            .validation/v39-docs/library/components/symbols_markers/*.svg
+            .validation/v39-docs/library/symbols/symbols_markers/*.svg
+            .validation/v39-docs/library/thumbnails/symbols_markers/*.svg
             .validation/v39-docs/library/legend_templates/*.json
+            .validation/v39-docs/symbol_mapper/templates/standard.json
           if-no-files-found: error
           retention-days: 7
