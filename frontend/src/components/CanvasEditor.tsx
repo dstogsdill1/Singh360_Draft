@@ -1267,6 +1267,7 @@ export default function CanvasEditor({
             originY: 'top',
           });
           (img as unknown as Record<string, unknown>).objName = name;
+(img as unknown as Record<string, unknown>).sourceUrl = assetUrl;
           if (meta?.category) (img as unknown as Record<string, unknown>).symCategory = meta.category;
           if (meta?.acronym) (img as unknown as Record<string, unknown>).symAcronym = meta.acronym;
           styleForSelection(img);
