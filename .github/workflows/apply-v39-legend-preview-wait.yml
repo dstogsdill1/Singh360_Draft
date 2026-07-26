@@ -1,0 +1,51 @@
+name: Apply V39 Saved Legend Preview Wait
+
+on:
+  push:
+    branches:
+      - repair/exact-symbol-component-library-v39-parity
+    paths:
+      - '.github/workflows/apply-v39-legend-preview-wait.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: repair/exact-symbol-component-library-v39-parity
+          fetch-depth: 0
+      - name: Apply uniquely bounded saved legend wait repair
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('scripts/smoke_symbol_library_browser_v39.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''        exact_preview_count = page.locator(".symbol-legend-built-marker.exact-canonical img").count()
+          if exact_preview_count < 15:
+              raise AssertionError(f"Saved legend must render all 15 exact canonical SVG previews; got {exact_preview_count}")
+          '''
+          new = '''        exact_previews = page.locator(
+              ".symbol-legend-live-preview .symbol-legend-built-marker.exact-canonical img"
+          )
+          expect(exact_previews).to_have_count(15, timeout=30000)
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one saved legend preview assertion, found {text.count(old)}')
+          updated = text.replace(old, new, 1)
+          compile(updated, str(path), 'exec')
+          path.write_text(updated, encoding='utf-8')
+      - name: Commit the controlled source repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/smoke_symbol_library_browser_v39.py
+          git diff --cached --check
+          git commit -m 'Wait for V39 saved legend SVG preview'
+          git push origin HEAD:repair/exact-symbol-component-library-v39-parity
