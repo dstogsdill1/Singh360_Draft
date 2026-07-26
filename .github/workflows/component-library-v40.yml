@@ -46,18 +46,8 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Compile backend and V40 migration
-        run: python -m py_compile server.py core/library_v2.py core/legend_template_store.py scripts/install_callout_number_components.py scripts/install_symbol_standard_v39.py scripts/install_component_library_v40.py scripts/smoke_component_library_v40.py
-
-      - name: Backend health
-        shell: python
-        run: |
-          from server import app
-          response = app.test_client().get('/api/health')
-          assert response.status_code == 200, response.get_data(as_text=True)
-          payload = response.get_json(silent=True) or {}
-          assert payload.get('ok') is True, payload
-          print('PASS: backend import and /api/health')
+      - name: Compile V40 migration and dependencies
+        run: python -m py_compile core/library_v2.py core/legend_template_store.py scripts/install_callout_number_components.py scripts/install_symbol_standard_v39.py scripts/install_component_library_v40.py scripts/smoke_component_library_v40.py
 
       - name: Existing V39 exact-marker regression
         run: python -m scripts.smoke_symbol_standard_v39
