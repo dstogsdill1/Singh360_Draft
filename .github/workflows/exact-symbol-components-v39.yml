@@ -5,7 +5,6 @@ on:
     paths:
       - 'scripts/install_symbol_standard_v38.py'
       - 'scripts/install_symbol_standard_v39.py'
-      - 'scripts/smoke_symbol_standard_v38.py'
       - 'scripts/smoke_symbol_standard_v39.py'
       - 'scripts/smoke_symbol_legend_v39_parity.py'
       - 'defaults/symbol_mapper_standard.json'
@@ -48,9 +47,12 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import sys
           import traceback
 
-          evidence = Path('.validation/backend-health.txt')
+          repository_root = Path.cwd().resolve()
+          sys.path.insert(0, str(repository_root))
+          evidence = repository_root / '.validation' / 'backend-health.txt'
           evidence.parent.mkdir(parents=True, exist_ok=True)
           try:
               from server import app
