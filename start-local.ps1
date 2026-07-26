@@ -34,7 +34,9 @@ function Invoke-NativeLogged([string]$File, [string[]]$Arguments) {
 }
 
 function Get-NativeText([string]$File, [string[]]$Arguments) {
-    $lines = @(& $File @Arguments)
+    $lines = @(
+        & $File @Arguments
+    )
     return [string]::Join("`n", [string[]]$lines).Trim()
 }
 
