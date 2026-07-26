@@ -1,0 +1,60 @@
+diff --git a/frontend/src/components/LibraryPanelV2.tsx b/frontend/src/components/LibraryPanelV2.tsx
+index bedad10..9a4496d 100644
+--- a/frontend/src/components/LibraryPanelV2.tsx
++++ b/frontend/src/components/LibraryPanelV2.tsx
+@@ -769,6 +769,21 @@ This is NOT saved until you click Save All Edits.`,
+     downloadText('singh360_component_library_edited_view.json', JSON.stringify({ components: merged }, null, 2));
+   };
+ 
++  const openSavedLegend = (templateId?: string) => {
++    try {
++      if (templateId) localStorage.setItem('singh360-symbol-legend-template-id', templateId);
++      else localStorage.removeItem('singh360-symbol-legend-template-id');
++    } catch {
++      // The modal still opens the live standard when browser storage is unavailable.
++    }
++    setShowDashboard(false);
++    onOpenLegendEditor?.();
++  };
++
++  const preferredLegendTemplate = legendTemplates.find((template) => template.id === 'singh360-refrigeration-symbols-standard')
++    || legendTemplates.find((template) => template.name === 'Singh360 Refrigeration Symbols')
++    || legendTemplates[0];
++
+   const runAdvanced = async (kind: 'thumbs' | 'clean' | 'migrate') => {
+     setLoading(true);
+     try {
+@@ -879,6 +894,24 @@ This is NOT saved until you click Save All Edits.`,
+         {!visibleCards.length && <div className="libv2-empty">No matching components.</div>}
+       </div>
+ 
++      {legendTemplates.length > 0 && (
++        <section className="libv2-saved-legends" aria-label="Saved symbol legends">
++          <div className="libv2-saved-legends-head">
++            <strong>Saved Symbol Legends</strong>
++            <span>Editable grouped legends; separate from individual symbol components.</span>
++          </div>
++          <div className="libv2-saved-legends-grid">
++            {legendTemplates.map((template) => (
++              <button key={template.id} className="libv2-saved-legend-card" onClick={() => openSavedLegend(template.id)}>
++                <strong>{template.name}</strong>
++                <span>{template.rowCount ?? 0} rows</span>
++                <em>Open / Insert</em>
++              </button>
++            ))}
++          </div>
++        </section>
++      )}
++
+       {showDashboard && (
+         <div className="libv2-modal-backdrop" onClick={() => setShowDashboard(false)}>
+           <div className="libv2-modal libv2-dashboard-modal" onClick={(e) => e.stopPropagation()}>
+@@ -888,7 +921,7 @@ This is NOT saved until you click Save All Edits.`,
+                 <span className="libv2-dashboard-sub">One-screen rename, categorize, approve, retire, and insert.</span>
+               </div>
+               <div className="libv2-dashboard-actions">
+-                <button onClick={() => { setShowDashboard(false); onOpenLegendEditor?.(); }} disabled={loading} title="Open saved editable legend templates">Legends ({legendTemplates.length})</button>
++                <button onClick={() => openSavedLegend(preferredLegendTemplate?.id)} disabled={loading} title="Open the saved editable refrigeration legend">Saved Legends ({legendTemplates.length})</button>
+                 <button onClick={() => void undoLastSavedLibraryChange()} disabled={!libraryHistory.length || loading}>Undo Last Save</button>
+                 <button onClick={() => void reloadFromDisk()} disabled={loading}>Reload / Discard</button>
+                 <button className="primary" onClick={() => void saveDirty()} disabled={!dirtyIds.length || loading}>Save All Edits ({dirtyIds.length})</button>
