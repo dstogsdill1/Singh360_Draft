@@ -149,17 +149,21 @@ def _project_objects(page: Page) -> list[dict[str, Any]]:
 
 
 def _wait_for_object_count(page: Page, expected: int, timeout_ms: int = 30000) -> list[dict[str, Any]]:
-    page.wait_for_function(
-        """async ({ projectId, expected }) => {
-          const response = await fetch(`/api/projects/${projectId}`, { cache: 'no-store' });
-          if (!response.ok) return false;
-          const project = await response.json();
-          return (project.pages?.[0]?.canvasObjects?.length ?? 0) >= expected;
-        }""",
-        arg={"projectId": PROJECT_ID, "expected": expected},
-        timeout=timeout_ms,
+    deadline = time.monotonic() + (timeout_ms / 1000)
+    last_objects: list[dict[str, Any]] = []
+    last_error = ""
+    while time.monotonic() < deadline:
+        try:
+            last_objects = _project_objects(page)
+            if len(last_objects) >= expected:
+                return last_objects
+        except Exception as exc:  # pragma: no cover - persistence diagnostic path
+            last_error = str(exc)
+        page.wait_for_timeout(250)
+    raise AssertionError(
+        f"Timed out waiting for {expected} persisted canvas objects; "
+        f"last count={len(last_objects)}; last error={last_error or 'none'}"
     )
-    return _project_objects(page)
 
 
 def _assert_editor_ready(page: Page) -> None:
