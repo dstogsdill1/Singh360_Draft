@@ -1,0 +1,71 @@
+name: Diagnose V39 Browser Object URLs
+
+on:
+  push:
+    branches:
+      - repair/exact-symbol-component-library-v39-parity
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: python -m pip install -r requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm run build
+      - name: Seed isolated V39 runtime
+        run: python -m scripts.install_symbol_standard_v39 --docs .docs --report .validation/browser-v39/runtime-migration-report.json
+      - name: Add runner-only persisted object diagnostics
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('scripts/smoke_symbol_library_browser_v39.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''        source_urls = [str(obj.get("sourceUrl") or obj.get("src") or "") for obj in objects]
+          required_fragments = ['''
+          new = '''        source_urls = [str(obj.get("sourceUrl") or obj.get("src") or "") for obj in objects]
+          (EVIDENCE_DIR / "persisted-direct-inserts.json").write_text(
+              json.dumps({"objects": objects, "sourceUrls": source_urls}, indent=2, ensure_ascii=False),
+              encoding="utf-8",
+          )
+          print("PERSISTED_DIRECT_INSERTS=" + json.dumps({"objects": objects, "sourceUrls": source_urls}, ensure_ascii=False))
+          required_fragments = ['''
+          if text.count(old) != 1:
+              raise SystemExit('diagnostic insertion anchor was not unique')
+          text = text.replace(old, new, 1)
+          old_failure = '''                raise AssertionError(f"Inserted project objects are missing canonical source SVG: {fragment}")'''
+          new_failure = '''                raise AssertionError(
+                      f"Inserted project objects are missing canonical source SVG: {fragment}; source_urls={source_urls!r}"
+                  )'''
+          if text.count(old_failure) != 1:
+              raise SystemExit('diagnostic failure anchor was not unique')
+          path.write_text(text.replace(old_failure, new_failure, 1), encoding='utf-8')
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Run diagnostic browser smoke
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .validation/browser-v39
+          python -m scripts.smoke_symbol_library_browser_v39 2>&1 | tee .validation/browser-v39/browser-output.log
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnose-v39-browser-object-urls
+          path: .validation/browser-v39
+          if-no-files-found: error
+          retention-days: 3
