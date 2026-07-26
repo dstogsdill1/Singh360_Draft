@@ -327,11 +327,29 @@ export interface LegendTemplateEntry {
   updatedAt?: string;
 }
 
+export interface LegendTemplatePayload extends LegendTemplateEntry {
+  title?: string;
+  rows: Record<string, unknown>[];
+  columns?: 1 | 2;
+  markerSize?: number;
+  frame?: boolean;
+  highlighted?: boolean;
+  rendererVersion?: string;
+  layout?: Record<string, unknown>;
+}
+
 export async function listLegendTemplates(): Promise<LegendTemplateEntry[]> {
   const res = await fetch('/api/lib/legend-templates');
   if (!res.ok) throw new Error(await res.text());
   const json = await res.json();
   return json.templates ?? [];
+}
+
+export async function getLegendTemplate(templateId: string): Promise<LegendTemplatePayload> {
+  const res = await fetch(`/api/lib/legend-templates/${encodeURIComponent(templateId)}`);
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  return json.template;
 }
 
 export async function saveLegendTemplate(payload: {
@@ -920,6 +938,15 @@ export interface LibV2Component {
   edgeVariantOptions?: string[];
   chosenVariant?: string;
   retired?: boolean;
+  collection?: string;
+  tags?: string[];
+  rendererVersion?: string;
+  sortOrder?: number;
+  source?: {
+    standardKey?: string;
+    rendererVersion?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface LibV2Category { id: string; label: string; count: number }
