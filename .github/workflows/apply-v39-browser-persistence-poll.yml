@@ -1,0 +1,72 @@
+name: Apply V39 Browser Persistence Poll
+
+on:
+  push:
+    branches:
+      - repair/exact-symbol-component-library-v39-parity
+    paths:
+      - '.github/workflows/apply-v39-browser-persistence-poll.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: repair/exact-symbol-component-library-v39-parity
+          fetch-depth: 0
+      - name: Apply uniquely bounded persistence wait repair
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('scripts/smoke_symbol_library_browser_v39.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''def _wait_for_object_count(page: Page, expected: int, timeout_ms: int = 30000) -> list[dict[str, Any]]:
+              page.wait_for_function(
+                  """async ({ projectId, expected }) => {
+                    const response = await fetch(`/api/projects/${projectId}`, { cache: 'no-store' });
+                    if (!response.ok) return false;
+                    const project = await response.json();
+                    return (project.pages?.[0]?.canvasObjects?.length ?? 0) >= expected;
+                  }""",
+                  arg={"projectId": PROJECT_ID, "expected": expected},
+                  timeout=timeout_ms,
+              )
+              return _project_objects(page)
+          '''
+          new = '''def _wait_for_object_count(page: Page, expected: int, timeout_ms: int = 30000) -> list[dict[str, Any]]:
+              deadline = time.monotonic() + (timeout_ms / 1000)
+              last_objects: list[dict[str, Any]] = []
+              last_error = ""
+              while time.monotonic() < deadline:
+                  try:
+                      last_objects = _project_objects(page)
+                      if len(last_objects) >= expected:
+                          return last_objects
+                  except Exception as exc:  # pragma: no cover - persistence diagnostic path
+                      last_error = str(exc)
+                  page.wait_for_timeout(250)
+              raise AssertionError(
+                  f"Timed out waiting for {expected} persisted canvas objects; "
+                  f"last count={len(last_objects)}; last error={last_error or 'none'}"
+              )
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one persistence wait function, found {text.count(old)}')
+          updated = text.replace(old, new, 1)
+          compile(updated, str(path), 'exec')
+          path.write_text(updated, encoding='utf-8')
+      - name: Commit the controlled source repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/smoke_symbol_library_browser_v39.py
+          git diff --cached --check
+          git commit -m 'Fix V39 browser autosave persistence polling'
+          git push origin HEAD:repair/exact-symbol-component-library-v39-parity
