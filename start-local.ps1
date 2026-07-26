@@ -28,7 +28,7 @@ function Invoke-NativeCaptured([string]$File, [string[]]$Arguments) {
     $info.Arguments = (($Arguments | ForEach-Object {
         '"' + ([string]$_).Replace('"', '\"') + '"'
     }) -join ' ')
-    $info.WorkingDirectory = $Root
+    $info.WorkingDirectory = (Get-Location).Path
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true
