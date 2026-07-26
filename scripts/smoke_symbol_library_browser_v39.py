@@ -171,7 +171,7 @@ def _assert_editor_ready(page: Page) -> None:
 
 
 def _open_components(page: Page) -> None:
-    components = page.get_by_role("button", name="Components", exact=True)
+    components = page.get_by_role("button", name=re.compile(r"Components$"))
     if components.count() == 0:
         navigation = page.get_by_role("button", name=re.compile(r"Navigate$"))
         expect(navigation).to_be_visible(timeout=30000)
