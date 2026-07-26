@@ -8,6 +8,7 @@ on:
       - 'scripts/smoke_symbol_standard_v39.py'
       - 'scripts/smoke_symbol_legend_v39_parity.py'
       - 'scripts/smoke_symbol_library_browser_v39.py'
+      - 'scripts/smoke_v39_builder_union.py'
       - 'defaults/symbol_mapper_standard.json'
       - 'core/library_v2.py'
       - 'core/legend_template_store.py'
@@ -17,7 +18,132 @@ on:
       - '.github/workflows/exact-symbol-components-v39.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
+  apply_canonical_union_fix:
+    if: github.event_name == 'pull_request' && github.head_ref == 'repair/exact-symbol-component-library-v39-parity'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Apply function-scoped canonical union repair
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('core/library_v2.py')
+          text = path.read_text(encoding='utf-8')
+          if 'def _canonical_standard_key(comp: dict) -> str:' in text:
+              print('Canonical union repair already installed.')
+              raise SystemExit(0)
+
+          read_anchor = '''    # ---- read ------------------------------------------------------------
+              def load(self, include_legacy: bool = False, include_retired: bool = False) -> dict:
+          '''
+          read_replacement = '''    # ---- read ------------------------------------------------------------
+              @staticmethod
+              def _canonical_standard_key(comp: dict) -> str:
+                  source = comp.get("source")
+                  if isinstance(source, dict):
+                      key = str(source.get("standardKey") or "").strip()
+                      if key:
+                          return key
+                  for tag in comp.get("tags") or []:
+                      value = str(tag or "")
+                      if value.startswith("singh360-symbol-key:"):
+                          return value.split(":", 1)[1].strip()
+                  return ""
+
+              def load(self, include_legacy: bool = False, include_retired: bool = False) -> dict:
+          '''
+          if text.count(read_anchor) != 1:
+              raise SystemExit(f'read anchor count was {text.count(read_anchor)}, expected 1')
+          text = text.replace(read_anchor, read_replacement, 1)
+
+          overlay_anchor = '''                if ov:
+                              for key in EDITABLE_FIELDS:
+                                  # Presence in an override is authoritative, even when cleared.
+                                  if key in ov:
+                                      merged[key] = ov[key]
+                              if ov.get("favorite"):
+                                  merged["favorite"] = True
+          '''
+          overlay_replacement = '''                if ov:
+                              if self._canonical_standard_key(ov):
+                                  # Stable Singh360 canonical metadata is authoritative over a stale
+                                  # Component Builder export with the same id. Preserve extra builder
+                                  # fields, but never let it erase renderer/source/sort identity.
+                                  merged.update(ov)
+                                  merged["origin"] = "manifest_canonical"
+                              else:
+                                  for key in EDITABLE_FIELDS:
+                                      # Presence in an override is authoritative, even when cleared.
+                                      if key in ov:
+                                          merged[key] = ov[key]
+                                  if ov.get("favorite"):
+                                      merged["favorite"] = True
+          '''
+          if text.count(overlay_anchor) != 1:
+              raise SystemExit(f'overlay anchor count was {text.count(overlay_anchor)}, expected 1')
+          text = text.replace(overlay_anchor, overlay_replacement, 1)
+
+          dedupe_anchor = '''            for c in legacy_candidates:
+                          if self._identity_keys(c) & approved_keys:
+                              stale_hidden += 1
+                              continue
+                          legacy_visible.append(c)
+          '''
+          dedupe_replacement = '''            for c in legacy_candidates:
+                          identity = self._identity_keys(c)
+                          if self._canonical_standard_key(c):
+                              # Canonical symbols intentionally share short codes (the two S rows).
+                              # Only exact stable id/hash collisions may hide one; weak name, part,
+                              # or alias collisions from a stale builder export must not suppress it.
+                              strong_identity = {
+                                  key for key in identity
+                                  if key.startswith("id:") or key.startswith("hash:")
+                              }
+                              duplicate = bool(strong_identity & approved_keys)
+                          else:
+                              duplicate = bool(identity & approved_keys)
+                          if duplicate:
+                              stale_hidden += 1
+                              continue
+                          legacy_visible.append(c)
+          '''
+          if text.count(dedupe_anchor) != 1:
+              raise SystemExit(f'dedupe anchor count was {text.count(dedupe_anchor)}, expected 1')
+          text = text.replace(dedupe_anchor, dedupe_replacement, 1)
+
+          compile(text, str(path), 'exec')
+          path.write_text(text, encoding='utf-8')
+
+      - name: Run focused union regression
+        run: |
+          python -m py_compile core/library_v2.py scripts/smoke_v39_builder_union.py
+          python -m scripts.smoke_v39_builder_union
+          git diff --check
+
+      - name: Commit repair when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- core/library_v2.py; then
+            echo 'No source change required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add core/library_v2.py
+          git commit -m 'Preserve canonical V39 symbols across builder export union'
+          git push origin HEAD:${{ github.head_ref }}
+
   validate:
     strategy:
       fail-fast: false
@@ -40,7 +166,7 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Compile backend and exact symbol migration
-        run: python -m py_compile server.py core/library_v2.py core/legend_template_store.py core/symbol_mapper.py scripts/install_symbol_standard_v38.py scripts/install_symbol_standard_v39.py scripts/smoke_symbol_standard_v38.py scripts/smoke_symbol_standard_v39.py scripts/smoke_symbol_legend_v39_parity.py scripts/smoke_symbol_library_browser_v39.py
+        run: python -m py_compile server.py core/library_v2.py core/legend_template_store.py core/symbol_mapper.py scripts/install_symbol_standard_v38.py scripts/install_symbol_standard_v39.py scripts/smoke_symbol_standard_v38.py scripts/smoke_symbol_standard_v39.py scripts/smoke_symbol_legend_v39_parity.py scripts/smoke_symbol_library_browser_v39.py scripts/smoke_v39_builder_union.py
 
       - name: Import backend and exercise health route
         id: backend_health
@@ -86,6 +212,9 @@ jobs:
 
       - name: Run isolated migration and geometry tests
         run: python -m scripts.smoke_symbol_standard_v39
+
+      - name: Verify builder export union preserves all canonical symbols
+        run: python -m scripts.smoke_v39_builder_union
 
       - name: Verify exact Component Library and Symbol Legend parity
         run: python -m scripts.smoke_symbol_legend_v39_parity
