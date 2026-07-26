@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - repair/exact-symbol-component-library-v39-parity
+  pull_request:
+    branches:
+      - repair/current-dashboard-live-v10
   workflow_dispatch:
 
 jobs:
