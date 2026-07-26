@@ -19,7 +19,7 @@ from openpyxl.workbook.properties import CalcProperties
 
 from core.page_identity import is_sheet_index_page
 
-HELP_VERSION = "2026.07.22-status-sync-1"
+HELP_VERSION = "2026.07.25-critical-sync-v44"
 SCHEMA_VERSION = "5.0"
 STATUS_LABELS = {
     "draft": "Draft",
@@ -485,6 +485,27 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
         }
         old_by_tab = {str(p.get("sheetTab") or "").strip().casefold(): p for p in old_pages if p.get("sheetTab")}
         old_by_code = {str(p.get("sheetCode") or "").strip().casefold(): p for p in old_pages if p.get("sheetCode")}
+
+        # S360 CRITICAL SYNC V44 — match generated continuations by the source
+        # worksheet plus continuation index. All continuations share one sheetTab,
+        # so tab-only matching can attach the wrong slice and duplicate pages.
+        def _continuation_key(page: dict[str, Any]) -> tuple[str, int]:
+            source = str(
+                page.get("sourceSheet")
+                or page.get("sheetTab")
+                or ""
+            ).strip().casefold()
+            try:
+                index = int(page.get("continuationIndex") or 0)
+            except Exception:
+                index = 0
+            return source, index
+
+        old_by_continuation = {
+            _continuation_key(p): p
+            for p in old_pages
+            if p.get("generatedContinuation") or p.get("continuationOf")
+        }
         old_ws_name_by_id = {
             str(w.get("id") or ""): str(w.get("name") or w.get("sourceSheet") or "")
             for w in old_worksheets
@@ -530,12 +551,18 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
 
             tab = str(page.get("sheetTab") or "").strip().casefold()
             code = str(page.get("sheetCode") or "").strip().casefold()
-            existing = (
-                old_by_id.get(str(page.get("id") or ""))
-                or old_by_pair.get((tab, code))
-                or old_by_tab.get(tab)
-                or old_by_code.get(code)
-            )
+            if page.get("generatedContinuation") or page.get("continuationOf"):
+                existing = (
+                    old_by_id.get(str(page.get("id") or ""))
+                    or old_by_continuation.get(_continuation_key(page))
+                )
+            else:
+                existing = (
+                    old_by_id.get(str(page.get("id") or ""))
+                    or old_by_pair.get((tab, code))
+                    or old_by_tab.get(tab)
+                    or old_by_code.get(code)
+                )
             if existing is not None and id(existing) not in used_old:
                 used_old.add(id(existing))
                 # Workbook Page IDs are stable base identities. Preserve an old
@@ -568,6 +595,25 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
             if id(existing) in used_old:
                 continue
             has_manual = any(existing.get(k) not in (None, "", [], {}) for k in app_owned_fields)
+            stale_generated = bool(
+                existing.get("generatedContinuation")
+                or existing.get("continuationOf")
+                or "__continuation_" in str(existing.get("id") or "")
+                or re.search(r"_c\d+(?:_\d+)?$", str(existing.get("id") or ""))
+            )
+            if stale_generated:
+                # S360 CRITICAL SYNC V44 — a continuation that did not match the
+                # freshly imported source is stale. Never append it as an
+                # independent page. Archive manual work instead of deleting it.
+                if has_manual:
+                    archived = deepcopy(existing)
+                    archived["archivedReason"] = (
+                        "Stale generated continuation replaced by a clean workbook rebuild."
+                    )
+                    archived["archivedAt"] = utcnow()
+                    archived_manual.append(archived)
+                continue
+
             app_only = (
                 not existing.get("linkedWorksheetId")
                 or str(existing.get("sourceMode") or "").strip().casefold() in {"app", "manual", "app-only"}

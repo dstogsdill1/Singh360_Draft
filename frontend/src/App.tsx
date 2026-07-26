@@ -483,6 +483,24 @@ export default function App() {
     await switchPageSafely(reviewPages[targetIndex].id);
   }, [reviewPages, switchPageSafely]);
 
+  // S360 CRITICAL SYNC V44 — the active page and every page navigator obey
+  // the same All / Included / Not Included filter.
+  const setPageFilterSafely = useCallback((filter: PageReviewFilter) => {
+    setPageFilter(filter);
+    const current = projectRef.current;
+    if (!current) return;
+    const visible = [...current.pages]
+      .sort((a, b) => a.order - b.order)
+      .filter((page) => (
+        filter === 'all'
+        || (filter === 'included' ? page.include : !page.include)
+      ));
+    const activeId = activePageRef.current?.id;
+    if (visible.length && !visible.some((page) => page.id === activeId)) {
+      void switchPageSafely(visible[0].id);
+    }
+  }, [switchPageSafely]);
+
   // Auto-enable overlay edit mode only for pages whose *base* is not itself
   // editable (pure image/canvas/underlay sheets, or pages that already carry
   // annotations but have no editable table/text underneath). Pages with an
@@ -1066,6 +1084,33 @@ export default function App() {
     const cur = projectRef.current;
     if (!cur) return;
     const numbered = withPageNumbers(pages);
+    const next: ProjectModel = { ...cur, pages: numbered };
+    setProjectSync(next);
+    await flushSave();
+  };
+
+  // S360 CRITICAL SYNC V44 — when a filter is active, edits/reorder operations
+  // update only the visible slots and merge them back into the complete project.
+  // Hidden pages are never discarded.
+  const updateFilteredPages = async (visiblePages: PageModel[]) => {
+    if (pageFilter === 'all') {
+      await updatePages(visiblePages);
+      return;
+    }
+    captureActivePageState();
+    const cur = projectRef.current;
+    if (!cur) return;
+    const visibleIds = new Set(reviewPages.map((page) => page.id));
+    if (visiblePages.length !== visibleIds.size) {
+      throw new Error('Filtered page update did not contain the complete visible set.');
+    }
+    const queue = [...visiblePages];
+    const merged = cur.pages.map((page) => (
+      visibleIds.has(page.id) ? (queue.shift() ?? page) : page
+    ));
+    const numbered = withPageNumbers(
+      merged.map((page, index) => ({ ...page, order: index + 1 })),
+    );
     const next: ProjectModel = { ...cur, pages: numbered };
     setProjectSync(next);
     await flushSave();
@@ -2074,7 +2119,7 @@ export default function App() {
       onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
       onSetLineStyle={(style) => setLineStyle(style)}
       pageFilter={pageFilter}
-      onSetPageFilter={setPageFilter}
+      onSetPageFilter={setPageFilterSafely}
     />
   );
 
@@ -2155,8 +2200,11 @@ export default function App() {
       ribbon={ribbon}
       left={
         <>
-          <CollapsibleSection title="Published Package" hint="Included drawing pages. Drag to reorder; right-click for page actions.">
-            <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void switchPageSafely(id); }} onUpdate={(p) => void updatePages(p)} onToggleInclude={toggleInclude} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
+          <CollapsibleSection
+            title={pageFilter === 'included' ? 'Included Drawing Pages' : pageFilter === 'excluded' ? 'Not Included Pages' : 'All Drawing Pages'}
+            hint="This list follows the active page filter. Drag to reorder; right-click for page actions."
+          >
+            <SheetManager pages={reviewPages} activePageId={activePageId} onSelect={(id) => { void switchPageSafely(id); }} onUpdate={(p) => { void updateFilteredPages(p); }} onToggleInclude={toggleInclude} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
           </CollapsibleSection>
           <CollapsibleSection title="Workbook Drafts" defaultOpen={false} hint="Original workbook tabs. Open a Draft or publish an excluded worksheet.">
             <WorkbookView
@@ -2180,7 +2228,7 @@ export default function App() {
       center={
         <DocumentView
           project={project}
-          pages={project.pages}
+          pages={reviewPages}
           activePage={activePage}
           worksheets={project.worksheets}
           selectedWorksheetId={selectedWorksheetId}
@@ -2214,7 +2262,7 @@ export default function App() {
           onSelectPage={(id) => {
             void switchPageSafely(id);
           }}
-          onReorderPages={(pages) => void updatePages(pages)}
+          onReorderPages={(pages) => { void updateFilteredPages(pages); }}
           onRenamePageTitle={onRenamePageTitle}
           onEditPageCode={(id, code) => patchPage(id, {
             sheetCode: code.trim(),

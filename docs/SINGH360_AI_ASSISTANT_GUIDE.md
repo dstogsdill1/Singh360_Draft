@@ -130,3 +130,12 @@ The app reports Workbook Missing. Use Browse to relocate it. The local project r
 ### What happens when Excel is open?
 
 Workbook writes are deferred. The project saves locally and shows Workbook Sync Pending.
+
+## V44 Safe Workbook and Drawing-Page Synchronization
+
+- Use only one authority at a time. Never edit Excel and Singh360 Draft simultaneously.
+- `00_INDEX` controls base pages only.
+- `00_DRAWING_PAGES` lists every actual drawing page and its physical Excel mirror tab.
+- Generated continuation mirror tabs are read-only and are ignored on workbook import.
+- All Pages, Included Only, and Not Included must filter the sidebar, bottom tabs, and Previous/Next navigation together.
+- See `docs/SINGH360_SAFE_WORKFLOW_V44.md`.

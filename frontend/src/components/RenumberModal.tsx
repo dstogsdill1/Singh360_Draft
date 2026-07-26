@@ -1,7 +1,7 @@
 import { useMemo, useState, type DragEvent } from 'react';
 import type { PageModel } from '../model/types';
 import { classifyPageFamily, generateEmsCodes } from '../model/emsNumbering';
-import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
+import { groupContinuationPages, isCoverPage, isSheetIndexPage } from '../model/packageIndex';
 
 interface Props {
   pages: PageModel[];
@@ -25,7 +25,7 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
   // classification/sequential guess unless the user explicitly picks one.
   const [scheme, setScheme] = useState<Scheme>('keep');
   const [prefix, setPrefix] = useState('EMS');
-  const [orderedPages, setOrderedPages] = useState<PageModel[]>(() => pages.map((page) => ({ ...page })));
+  const [orderedPages, setOrderedPages] = useState<PageModel[]>(() => groupContinuationPages(pages));
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
@@ -94,11 +94,11 @@ export default function RenumberModal({ pages, onApply, onCancel }: Props) {
   };
 
   const apply = () => {
-    const updated = orderedPages.map((p) => {
+    const updated = groupContinuationPages(orderedPages.map((p) => {
       const code = proposed.get(p.id);
       if (code === undefined) return p;
       return { ...p, sheetCode: code, displaySheetCode: code };
-    });
+    })).map((page, index) => ({ ...page, order: index + 1 }));
     onApply(updated);
   };
 

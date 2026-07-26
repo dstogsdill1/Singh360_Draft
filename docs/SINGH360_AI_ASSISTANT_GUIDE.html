@@ -17,4 +17,12 @@ h2{border-left:7px solid #f28c28;padding-left:10px}code,pre{background:#eef1f3;p
 <p><b>Use App Structure</b> updates 00_INDEX and tab order/colors but keeps worksheet data and app canvas drawings.</p></section>
 <section><h2>Workbook repair</h2><p>Safe Repair restores control sheets, index schema, Page IDs, tab order/colors, and registers new sheets as excluded. Strict Formatting additionally normalizes indexed table/schedule fonts and borders. Formula errors are reported, never guessed.</p></section>
 <section><h2>AI use</h2><p>Give the Markdown guide at <code>/api/docs/ai-guide</code> to ChatGPT or another LLM. It is the source-of-truth workflow document.</p></section>
-</main></body></html>
+</main><!-- S360 CRITICAL SYNC V44 -->
+<section style="max-width:1100px;margin:24px auto;padding:20px;border:2px solid #276FA8;border-radius:12px;background:#eef6ff;color:#111">
+  <h2>V44 Safe Workbook and Drawing-Page Synchronization</h2>
+  <p><strong>One authority at a time:</strong> never edit Excel and Singh360 Draft simultaneously.</p>
+  <p><code>00_INDEX</code> controls base pages. <code>00_DRAWING_PAGES</code> lists every actual page, including generated continuations and its physical Excel mirror tab.</p>
+  <p>Generated continuation tabs are read-only mirrors and are ignored when the workbook is imported again.</p>
+</section>
+
+</body></html>

@@ -138,7 +138,15 @@ def _configured_port() -> int:
 _SERVER_PORT = _configured_port()
 
 app = Flask(__name__, static_folder=None)
-app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 MB
+
+# S360 LARGE PROJECT SAVE V44J
+# Singh360 projects can legitimately exceed 64 MiB because project.json retains
+# manual canvas objects, embedded crops, image/PDF metadata, normalized workbook
+# grids, and generated drawing-page state. The editor posts the complete project
+# document for local autosave and SAVE + WRITE EXCEL. Keep a bounded desktop-app
+# ceiling while allowing the current production drawing package to save.
+_PROJECT_SAVE_LIMIT_BYTES = 1024 * 1024 * 1024  # 1 GiB
+app.config["MAX_CONTENT_LENGTH"] = _PROJECT_SAVE_LIMIT_BYTES
 
 
 _NO_CACHE_PATHS = {"/", "/app", "/component-catalog", "/component-catalog/"}

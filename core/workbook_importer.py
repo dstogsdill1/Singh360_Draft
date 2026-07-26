@@ -153,6 +153,17 @@ def _find_alias_index_sheets(workbook, winning_index: str | None) -> set[str]:
     }
 
 
+# S360 CRITICAL SYNC V44 — IGNORE DRAWING MIRRORS
+def _is_generated_drawing_mirror_sheet(ws: Any) -> bool:
+    title = str(getattr(ws, "title", "") or "").strip().casefold()
+    if title in {"00_help", "00_ai_guide", "00_drawing_pages"}:
+        return True
+    code_name = str(
+        getattr(getattr(ws, "sheet_properties", None), "codeName", "") or ""
+    ).upper()
+    return code_name.startswith("S360GEN_")
+
+
 def _header_map(header_row: list[str]) -> dict[str, int]:
     normed = [h.lower() for h in header_row]
     out: dict[str, int] = {}
@@ -2054,15 +2065,22 @@ def import_workbook(
         }
     )
 
+    # S360 CRITICAL SYNC V44 — generated drawing mirrors and instruction
+    # controls never become Workbook Drafts or duplicate base pages.
+    source_sheet_names = [
+        sheet_name
+        for sheet_name in wb.sheetnames
+        if not _is_generated_drawing_mirror_sheet(wb[sheet_name])
+    ]
     sheet_payloads = [
         _worksheet_payload(
             wb[sheet_name],
             wb_data[sheet_name] if wb_data is not None and sheet_name in wb_data.sheetnames else None,
         )
-        for sheet_name in wb.sheetnames
+        for sheet_name in source_sheet_names
     ]
     embedded_by_sheet: dict[str, list[dict[str, Any]]] = {}
-    for sheet_name in wb.sheetnames:
+    for sheet_name in source_sheet_names:
         embedded_by_sheet[sheet_name] = _extract_embedded_images(
             wb[sheet_name], assets_dir, asset_url_prefix or "", sheet_name
         )
@@ -2101,6 +2119,7 @@ def import_workbook(
     # regardless of any Include flag a hand-edited index might carry for them.
     metadata_sheet_name = _find_metadata_sheet(wb)
     never_output_sheets = _find_alias_index_sheets(wb, index_sheet_name)
+    never_output_sheets.update({"00_HELP", "00_AI_GUIDE", "00_DRAWING_PAGES"})
     if metadata_sheet_name:
         never_output_sheets.add(metadata_sheet_name)
 

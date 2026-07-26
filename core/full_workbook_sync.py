@@ -430,6 +430,7 @@ def synchronize_project_to_workbook(
         app_ids = {str(page.get("id") or "") for page in pages}
         app_rows: list[dict[str, Any]] = []
         app_sheet_objects: list[Any] = []
+        page_sheet_by_id: dict[str, Any] = {}
         used_sheet_objects: set[int] = set()
         used_row_numbers: set[int] = set()
 
@@ -500,6 +501,7 @@ def synchronize_project_to_workbook(
                 )
             )
             app_sheet_objects.append(matched_sheet)
+            page_sheet_by_id[page_id] = matched_sheet
             used_sheet_objects.add(id(matched_sheet))
 
         # Preserve unmatched workbook-only rows and sheets as excluded source rows.
@@ -529,6 +531,52 @@ def synchronize_project_to_workbook(
             sheet.sheet_properties.tabColor = TAB_COLORS["excluded"]
             next_order += 1
 
+        # S360 CRITICAL SYNC V44 — preserve every unmatched physical
+        # source worksheet as an excluded 00_INDEX row. Never delete it and never
+        # invent an engineering sheet code.
+        from core.drawing_page_mirror import is_generated_mirror_sheet
+
+        control_names = {
+            "00_PROJECT_META",
+            index_ws.title,
+            "00_HELP",
+            "00_AI_GUIDE",
+            "00_DRAWING_PAGES",
+        }
+        for sheet in list(wb.worksheets):
+            if (
+                sheet.title in control_names
+                or is_generated_mirror_sheet(sheet)
+                or id(sheet) in used_sheet_objects
+            ):
+                continue
+            preserved_rows.append(
+                {
+                    "Include": "NO",
+                    "Order": next_order,
+                    "Sheet Code": "",
+                    "Sheet Tab": str(sheet.title),
+                    "Page Title": str(sheet.title),
+                    "Family": "",
+                    "Page Type": "",
+                    "Notes": "Unmatched workbook source sheet preserved by Singh360.",
+                    "Render Profile": "",
+                    "Split Mode": "",
+                    "Page ID": "",
+                    "Parent Page ID": "",
+                    "Issue Status": "Draft",
+                    "Source Mode": "Workbook",
+                    "Sync Direction": "Workbook",
+                    "Last Sync UTC": stamp,
+                    "Workbook Hash": "",
+                    "App Hash": app_hash,
+                }
+            )
+            preserved_sheet_objects.append(sheet)
+            used_sheet_objects.add(id(sheet))
+            sheet.sheet_properties.tabColor = TAB_COLORS["excluded"]
+            next_order += 1
+
         manifest_rows = app_rows + preserved_rows
         template_row = header_row + 1
         max_col = max(headers.values())
@@ -552,8 +600,29 @@ def synchronize_project_to_workbook(
             for column in range(1, max_col + 1):
                 index_ws.cell(row_number, column).value = None
 
+        # S360 CRITICAL SYNC V44 — rebuild the physical Excel tab for every
+        # actual drawing page. 00_INDEX remains base-only; 00_DRAWING_PAGES is
+        # the complete base + continuation crosswalk.
+        from core.drawing_page_mirror import rebuild_drawing_page_mirrors
+
+        mirror_result = rebuild_drawing_page_mirrors(
+            wb,
+            project,
+            page_sheet_by_id,
+            project_id,
+            TAB_COLORS,
+        )
+        drawing_page_objects = list(mirror_result["pageSheets"])
+        drawing_page_ids = {id(sheet) for sheet in drawing_page_objects}
+
         controls: list[Any] = []
-        for control_name in ("00_PROJECT_META", index_ws.title, "00_HELP"):
+        for control_name in (
+            "00_PROJECT_META",
+            index_ws.title,
+            "00_HELP",
+            "00_AI_GUIDE",
+            "00_DRAWING_PAGES",
+        ):
             if control_name in wb.sheetnames:
                 sheet = wb[control_name]
                 if sheet not in controls:
@@ -566,10 +635,11 @@ def synchronize_project_to_workbook(
             for sheet in wb.worksheets
             if sheet not in controls
             and id(sheet) not in used_sheet_objects
+            and id(sheet) not in drawing_page_ids
         ]
         wb._sheets = (
             controls
-            + app_sheet_objects
+            + drawing_page_objects
             + preserved_sheet_objects
             + remaining
         )
@@ -625,6 +695,13 @@ def synchronize_project_to_workbook(
             preserved_rows
         )
         updated["workbookSync"]["lastFullMirrorBackup"] = str(backup_path)
+        updated["workbookSync"]["lastDrawingPageCount"] = int(
+            mirror_result.get("drawingPageCount") or 0
+        )
+        updated["workbookSync"]["lastGeneratedMirrorCount"] = int(
+            mirror_result.get("generatedMirrorCount") or 0
+        )
+        updated["workbookSync"]["drawingPageManifestSheet"] = "00_DRAWING_PAGES"
         return updated
     finally:
         try:

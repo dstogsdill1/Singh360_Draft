@@ -86,6 +86,75 @@ function stableOrder(pages: PageModel[]): PageModel[] {
     .map(({ page }) => ({ ...page }));
 }
 
+// S360 CRITICAL SYNC V44 — CONTINUATION GROUPING
+function continuationRank(page: PageModel): number {
+  const explicit = Number(page.continuationIndex ?? 0);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const code = currentCode(page);
+  const match = code.match(/([a-z]+)$/i);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  let total = 0;
+  for (const char of match[1].toLowerCase()) total = total * 26 + char.charCodeAt(0) - 96;
+  return total;
+}
+
+export function groupContinuationPages(input: PageModel[]): PageModel[] {
+  const ordered = stableOrder(input ?? []);
+  const baseByRoot = new Map<string, PageModel>();
+  for (const page of ordered) {
+    if (page.continuationOf || page.generatedContinuation) continue;
+    if (page.id) baseByRoot.set(page.id, page);
+    const groupId = page.pageGroupId || page.id;
+    if (groupId) baseByRoot.set(groupId, page);
+  }
+
+  const children = new Map<string, PageModel[]>();
+  const loose: PageModel[] = [];
+  for (const page of ordered) {
+    if (!page.continuationOf && !page.generatedContinuation) continue;
+    const root = page.continuationOf || page.pageGroupId || '';
+    const base = baseByRoot.get(root);
+    if (!base) {
+      loose.push(page);
+      continue;
+    }
+    const list = children.get(base.id) ?? [];
+    list.push(page);
+    children.set(base.id, list);
+  }
+
+  const result: PageModel[] = [];
+  const seen = new Set<string>();
+  for (const page of ordered) {
+    if (page.continuationOf || page.generatedContinuation) continue;
+    if (seen.has(page.id)) continue;
+    seen.add(page.id);
+    result.push({ ...page });
+    const groupId = page.pageGroupId || page.id;
+    const continuations = [...(children.get(page.id) ?? [])].sort((a, b) => (
+      continuationRank(a) - continuationRank(b)
+      || currentCode(a).localeCompare(currentCode(b), undefined, { numeric: true, sensitivity: 'base' })
+      || a.id.localeCompare(b.id)
+    ));
+    continuations.forEach((child, index) => {
+      seen.add(child.id);
+      result.push({
+        ...child,
+        pageGroupId: groupId,
+        continuationOf: page.id,
+        continuationIndex: index + 1,
+        generatedContinuation: true,
+      });
+    });
+  }
+
+  for (const page of loose) {
+    if (!seen.has(page.id)) result.push({ ...page });
+  }
+  return result.map((page, index) => ({ ...page, order: index + 1 }));
+}
+
+
 /**
  * Canonical package arrangement:
  *   1. Cover is the first included page.
@@ -99,7 +168,7 @@ function stableOrder(pages: PageModel[]): PageModel[] {
  * index row and column.
  */
 export function normalizePackagePages(input: PageModel[]): PageModel[] {
-  const ordered = stableOrder(input ?? []);
+  const ordered = groupContinuationPages(input ?? []);
   const cover = ordered.find(isCoverPage);
   const index = ordered.find(isSheetIndexPage);
   const reserved = new Set([cover?.id, index?.id].filter(Boolean) as string[]);
