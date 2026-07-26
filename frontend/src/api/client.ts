@@ -17,6 +17,132 @@ export async function listProjects(): Promise<ProjectListItem[]> {
   return json.projects ?? [];
 }
 
+export interface ProjectProfile {
+  id: string;
+  displayName: string;
+  description: string;
+  version: string;
+  styleProfile: string;
+  dataSheets: string[];
+  defaultIncludedFamilies: string[];
+  optionalFamilies: string[];
+}
+
+export interface WorkbookTemplateRecord {
+  templateId: string;
+  displayName: string;
+  version: string;
+  sha256: string;
+  active: boolean;
+  supportedProfiles: string[];
+}
+
+export interface WorkbookDocument {
+  revision: number;
+  updatedAt: string;
+  sheets: Array<{
+    id: string;
+    name: string;
+    cells: Record<string, { v?: unknown; f?: string }>;
+    styles: Record<string, Record<string, unknown>>;
+    merges: string[];
+    rowHeights: Record<string, number>;
+    columnWidths: Record<string, number>;
+    archived?: boolean;
+  }>;
+}
+
+async function jsonOrError<T>(res: Response): Promise<T> {
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || data.error || res.statusText);
+  return data as T;
+}
+
+export async function listProjectProfiles(): Promise<ProjectProfile[]> {
+  const data = await jsonOrError<{ profiles: ProjectProfile[] }>(await fetch('/api/project-template-profiles'));
+  return data.profiles;
+}
+
+export async function listWorkbookTemplates(): Promise<WorkbookTemplateRecord[]> {
+  const data = await jsonOrError<{ templates: WorkbookTemplateRecord[] }>(await fetch('/api/workbook-templates'));
+  return data.templates;
+}
+
+export async function createTemplateProject(body: {
+  profileId: string;
+  templateId: string;
+  metadata: Record<string, string>;
+}): Promise<{ id: string; project: ProjectModel }> {
+  return jsonOrError(await fetch('/api/projects/from-template', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }));
+}
+
+export interface SourceRecord {
+  id: string;
+  originalFileName: string;
+  storedFileName: string;
+  mediaType: string;
+  sourceType: string;
+  discipline: string;
+  size: number;
+  sha256: string;
+  dateAdded: string;
+  addedBy: string;
+  version: number;
+  status: string;
+  localProjectPath: string;
+  tags: string[];
+  notes: string;
+  supersedes?: string | null;
+  supersededBy?: string | null;
+}
+
+export async function listSources(projectId: string): Promise<{ sources: SourceRecord[]; conversionQueue: Record<string, unknown>[] }> {
+  return jsonOrError(await fetch(`/api/projects/${projectId}/sources`));
+}
+
+export async function uploadSources(projectId: string, files: File[], discipline = ''): Promise<SourceRecord[]> {
+  const form = new FormData();
+  files.forEach((file) => form.append('files', file));
+  form.append('discipline', discipline);
+  const data = await jsonOrError<{ sources: SourceRecord[] }>(await fetch(`/api/projects/${projectId}/sources`, { method: 'POST', body: form }));
+  return data.sources;
+}
+
+export async function archiveSource(projectId: string, sourceId: string): Promise<void> {
+  await jsonOrError(await fetch(`/api/projects/${projectId}/sources/${sourceId}/archive`, { method: 'POST' }));
+}
+
+export async function addConversionItem(projectId: string, sourceId: string): Promise<void> {
+  await jsonOrError(await fetch(`/api/projects/${projectId}/conversion-queue`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceId }),
+  }));
+}
+
+export async function getWorkbookDocument(projectId: string): Promise<WorkbookDocument> {
+  return jsonOrError(await fetch(`/api/projects/${projectId}/workbook`));
+}
+
+export async function putWorkbookDocument(projectId: string, document: WorkbookDocument, expectedRevision: number): Promise<WorkbookDocument> {
+  return jsonOrError(await fetch(`/api/projects/${projectId}/workbook`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectId, expectedRevision, document }),
+  }));
+}
+
+export async function previewDrawingCompile(projectId: string): Promise<{ operations: Array<Record<string, string>>; warnings: string[] }> {
+  return jsonOrError(await fetch(`/api/projects/${projectId}/compile/preview`, { method: 'POST' }));
+}
+
+export async function applyDrawingCompile(projectId: string): Promise<{ project: ProjectModel; backupPath: string }> {
+  return jsonOrError(await fetch(`/api/projects/${projectId}/compile/apply`, { method: 'POST' }));
+}
+
+export async function writeWorkbookExcel(projectId: string): Promise<{ workbookPath: string; backupPath: string; sha256: string }> {
+  return jsonOrError(await fetch(`/api/projects/${projectId}/workbook/write-excel`, { method: 'POST' }));
+}
+
 export async function getDuplicateFolders(id: string): Promise<{ canonicalFolder: string; duplicateFolders: string[] }> {
   const res = await fetch(`/api/projects/${id}/duplicate-folders`);
   if (!res.ok) throw new Error(await res.text());

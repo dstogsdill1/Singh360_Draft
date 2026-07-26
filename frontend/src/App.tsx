@@ -60,6 +60,9 @@ import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 import HelpCenter from './components/HelpCenter';
 import ProjectDashboard from './components/ProjectDashboard';
+import NewProjectWizard from './components/NewProjectWizard';
+import SourceLibraryPage from './components/SourceLibraryPage';
+import DataWorkspace from './workspace/DataWorkspace';
 
 function getUrlParams() {
   const params = new URLSearchParams(window.location.search);
@@ -68,6 +71,7 @@ function getUrlParams() {
     print: params.get('print') === '1',
     help: params.get('help') === '1',
     mode: params.get('mode') === 'editor' ? 'editor' : 'home',
+    platformView: params.get('view') || '',
     tool: params.get('tool') || '',
     requestedPageId: params.get('page') || '',
   };
@@ -95,7 +99,7 @@ function withPageNumbers(pages: PageModel[]): PageModel[] {
 }
 
 export default function App() {
-  const { projectId: initialProjectId, print: printMode, help: helpMode, mode: appMode, tool: initialTool, requestedPageId } = getUrlParams();
+  const { projectId: initialProjectId, print: printMode, help: helpMode, mode: appMode, platformView, tool: initialTool, requestedPageId } = getUrlParams();
 
   const [project, setProject] = useState<ProjectModel | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
@@ -2087,6 +2091,18 @@ export default function App() {
         }}
       />
     );
+  }
+
+  if (!printMode && platformView === 'new') {
+    return <NewProjectWizard />;
+  }
+
+  if (!printMode && platformView === 'sources' && project?.schemaVersion === 2) {
+    return <SourceLibraryPage project={project} />;
+  }
+
+  if (!printMode && platformView === 'data' && project?.schemaVersion === 2) {
+    return <DataWorkspace project={project} />;
   }
 
   // S360 PROJECT HOME DEFAULT ROUTE V1

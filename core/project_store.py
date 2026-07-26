@@ -14,16 +14,24 @@ from pathlib import Path
 from typing import Any
 
 _SUBFOLDERS = (
+    "data",
     "sources/workbook",
+    "sources/spreadsheets",
     "sources/csv",
     "sources/pdf",
+    "sources/images",
+    "sources/documents",
+    "sources/other",
     "sources/vsdx",
     "assets/images",
     "assets/images/excel",
     "assets/underlays",
     "assets/screenshots",
     "exports/pdf",
+    "exports/workbook",
     "exports/package",
+    "backups",
+    "debug",
     "debug/screenshots",
 )
 

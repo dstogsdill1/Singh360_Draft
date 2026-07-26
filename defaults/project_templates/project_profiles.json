@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "BASE_CORE",
+      "displayName": "Base Core",
+      "description": "Customer-neutral project administration and core drawing package.",
+      "extends": null,
+      "styleProfile": "singh360-standard-v1",
+      "sourceSlots": ["workbook", "spreadsheets", "pdf", "images", "csv", "documents", "other"],
+      "dataSheets": ["00_PROJECT_META", "00_TEMPLATE_PROFILE", "00_INDEX", "00_STYLE_GUIDE", "01_SOURCE_LIBRARY", "02_CONVERSION_QUEUE", "03_SCOPE_AND_PLAN", "04_PROJECT_DIRECTORY", "05_RESPONSIBILITY_MATRIX", "06_WORKFLOW_MILESTONES", "07_OPEN_ITEMS"],
+      "pageRecipes": ["cover", "sheet-index", "guidelines", "abbreviations", "project-directory", "project-scope", "workflow-milestones", "responsibility-matrix", "company-info"],
+      "defaultIncludedFamilies": ["Cover", "Sheet Index / TOC", "Guidelines", "Abbreviations / Symbol Key", "Project Directory", "Project Scope", "Workflow / Milestones", "Responsibility Matrix", "Company Info"],
+      "optionalFamilies": [],
+      "validationRules": {"requiredSheets": ["00_PROJECT_META", "00_INDEX"], "explicitPublishValue": "YES"},
+      "version": "1.0.0"
+    },
+    {
+      "id": "EMS_FULL",
+      "displayName": "EMS Full",
+      "description": "Full EMS controls drawing package for new or major projects.",
+      "extends": "BASE_CORE",
+      "styleProfile": "singh360-standard-v1",
+      "sourceSlots": [],
+      "dataSheets": ["10_CONTROLLERS", "11_NETWORK_PORTS", "12_PANELS", "13_PANEL_IO", "14_REFRIG_CIRCUITS", "15_RACKS", "16_HVAC_EQUIPMENT", "17_LIGHTING_OUTPUTS", "18_CABLE_SCHEDULE", "19_BILL_OF_MATERIALS", "20_COMMISSIONING"],
+      "pageRecipes": ["rdm-idf-network", "panel-summary", "panel-io", "refrigeration-circuit", "rack-io", "hvac-io", "lighting-output", "cable-schedule", "bill-of-materials", "commissioning"],
+      "defaultIncludedFamilies": ["RDM / IDF Network Table", "Panel / WICP Summary", "Panel / WICP I/O", "Refrigeration Circuit Schedule", "Rack I/O / Description", "HVAC Equipment / I/O", "Lighting Output Matrix", "Cable Pull / Termination Schedule", "Bill of Materials", "Commissioning / Point-to-Point"],
+      "optionalFamilies": [],
+      "validationRules": {},
+      "version": "1.0.0"
+    },
+    {
+      "id": "EMS_INSTALL",
+      "displayName": "EMS Install",
+      "description": "Installation and controls-integration package.",
+      "extends": "BASE_CORE",
+      "styleProfile": "singh360-standard-v1",
+      "sourceSlots": [],
+      "dataSheets": ["11_NETWORK_PORTS", "13_PANELS", "14_PANEL_IO", "19_CABLE_SCHEDULE", "20_BILL_OF_MATERIALS", "21_FIELD_INSTRUCTIONS", "22_COMMISSIONING"],
+      "pageRecipes": ["rdm-idf-network", "panel-summary", "panel-io", "cable-schedule", "bill-of-materials", "field-instructions", "commissioning"],
+      "defaultIncludedFamilies": ["RDM / IDF Network Table", "Panel / WICP Summary", "Panel / WICP I/O", "Cable Pull / Termination Schedule", "Bill of Materials", "Guidelines", "Commissioning / Point-to-Point"],
+      "optionalFamilies": ["Refrigeration Circuit Schedule", "HVAC Equipment / I/O", "Rack I/O / Description", "Lighting Output Matrix"],
+      "validationRules": {},
+      "version": "1.0.0"
+    },
+    {
+      "id": "EMS_RETROFIT",
+      "displayName": "EMS Retrofit",
+      "description": "Controls replacement, conversion, migration, and retrofit package.",
+      "extends": "BASE_CORE",
+      "styleProfile": "singh360-standard-v1",
+      "sourceSlots": [],
+      "dataSheets": ["10_EXISTING_NEW_STATUS", "11_MIGRATION_SCOPE", "12_NETWORK", "13_CONTROLLERS", "14_PANELS", "15_EQUIPMENT", "16_CONVERSION_REFERENCES", "17_COMMISSIONING_CLOSEOUT"],
+      "pageRecipes": ["project-scope", "rdm-idf-network", "panel-summary", "conversion-reference", "commissioning"],
+      "defaultIncludedFamilies": ["Project Scope", "RDM / IDF Network Table", "Panel / WICP Summary", "Company Info", "Commissioning / Point-to-Point"],
+      "optionalFamilies": [],
+      "validationRules": {},
+      "version": "1.0.0"
+    },
+    {
+      "id": "CX",
+      "displayName": "Commissioning",
+      "description": "Commissioning verification and closeout package without assumed design pages.",
+      "extends": "BASE_CORE",
+      "styleProfile": "singh360-standard-v1",
+      "sourceSlots": [],
+      "dataSheets": ["10_EQUIPMENT_REGISTER", "11_TEST_PROCEDURES", "12_POINT_TO_POINT_RESULTS", "13_FINDINGS_ISSUES", "14_CLOSEOUT", "15_VERIFICATION_SUMMARY"],
+      "pageRecipes": ["commissioning", "verification-summary"],
+      "defaultIncludedFamilies": ["Commissioning / Point-to-Point", "Company Info"],
+      "optionalFamilies": [],
+      "validationRules": {"forbidInventedData": true},
+      "version": "1.0.0"
+    },
+    {
+      "id": "RCX",
+      "displayName": "Retro-Commissioning",
+      "description": "Existing-condition analysis, measures, verification, and closeout package.",
+      "extends": "BASE_CORE",
+      "styleProfile": "singh360-standard-v1",
+      "sourceSlots": [],
+      "dataSheets": ["10_EXISTING_CONDITIONS", "11_TREND_POINT_REGISTER", "12_RECOMMENDED_MEASURES", "13_BASELINE_REFERENCE", "14_ISSUE_LOG", "15_IMPLEMENTATION_VERIFICATION", "16_CLOSEOUT"],
+      "pageRecipes": ["project-scope", "commissioning", "verification-summary"],
+      "defaultIncludedFamilies": ["Project Scope", "Commissioning / Point-to-Point", "Company Info"],
+      "optionalFamilies": [],
+      "validationRules": {"forbidInventedData": true},
+      "version": "1.0.0"
+    }
+  ]
+}

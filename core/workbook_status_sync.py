@@ -459,10 +459,15 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
         from core.workbook_importer import import_workbook
 
         try:
+            if hasattr(store, "assets_excel_dir"):
+                assets_dir = store.assets_excel_dir(project_id, project)
+            else:
+                assets_dir = store.dir_for(project_id, project) / "assets" / "images" / "excel"
+                assets_dir.mkdir(parents=True, exist_ok=True)
             imported = import_workbook(
                 path,
                 project_id=project_id,
-                assets_dir=store.assets_excel_dir(project_id, project),
+                assets_dir=assets_dir,
                 asset_url_prefix=f"/api/assets/{project_id}",
             )
         except PermissionError as exc:

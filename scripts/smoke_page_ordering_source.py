@@ -54,7 +54,7 @@ def main() -> int:
     )
     require(
         root / "frontend" / "src" / "components" / "SymbolLegendModal.tsx",
-        "Uses the same Singh360 Standard",
+        "exact same V39 SVG",
         "Save / update standard",
         "Highlight all",
         "No highlights",

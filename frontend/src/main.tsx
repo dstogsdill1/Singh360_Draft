@@ -9,6 +9,8 @@ import './styles/symbolMapper.css';
 import './styles/textBoxFormatting.css';
 import './styles/statusHelp.css';
 import './styles/projectDashboard.css';
+import './styles/templatePlatform.css';
+import '@univerjs/preset-sheets-core/lib/index.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

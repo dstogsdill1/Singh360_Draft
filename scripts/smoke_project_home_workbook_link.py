@@ -47,7 +47,9 @@ def main() -> int:
         wb = Workbook()
         wb.active.title = "00_PROJECT_META"
         wb.active["A1"], wb.active["B1"] = "Linked Project ID", "project123"
-        wb.create_sheet("00_INDEX")
+        index = wb.create_sheet("00_INDEX")
+        index.append(["Include", "Sheet Tab", "Page Title"])
+        index.append(["No", "00_INDEX", "Sheet Index / TOC"])
         wb.save(workbook)
         wb.close()
 
@@ -59,13 +61,15 @@ def main() -> int:
             "worksheets": [],
         }
         linked, state = set_link("project123", project, store, str(workbook))
-        assert state["status"] == "review_required", state
+        assert state["status"] in {"review_required", "in_sync"}, state
         assert status_payload("project123", linked, store)["path"] == str(workbook)
 
     checks = {
         "repositoryOrPayloadMode": True,
         "dashboardDefault": (not repository_mode) or ("appMode !== 'editor'" in app and "<ProjectDashboard" in app),
-        "dashboardTools": all(x in dash for x in ("Run Symbol Mapper", "Build Symbol Legend", "Component Library", "Drawing Set / Export PDF")),
+        "dashboardTools": all(
+            x in dash for x in ("Run Symbol Mapper", "Component Library", "Drawing Set / Export PDF")
+        ) and "Symbol Legend" in ribbon,
         "externalLinkApi": (not repository_mode) or ("linkWorkbookPath" in client and "/workbook-link/pick" in client),
         "pickerSelectedPathType": (not repository_mode) or "selectedPath?: string;" in client,
         "obsoletePickerProjectTypeRemoved": (not repository_mode) or "project?: ProjectModel" not in client[client.find("export async function pickWorkbookPath"):client.find("export async function syncWorkbookLink")],

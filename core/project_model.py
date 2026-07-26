@@ -133,6 +133,24 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
         merged["paginationLocked"] = bool(project["paginationLocked"])
     if "workbookSync" in project and isinstance(project["workbookSync"], dict):
         merged["workbookSync"] = project["workbookSync"]
+    # Schema-V2 template projects use the legacy worksheets/pages adapter in
+    # the drawing editor, but their platform identity and external document
+    # pointers must survive every ordinary project save.
+    if project.get("schemaVersion") == 2:
+        merged["schemaVersion"] = 2
+        for key in (
+            "projectProfileId",
+            "projectTemplateId",
+            "projectTemplateVersion",
+            "projectTemplateHash",
+            "workbookDocument",
+            "sourceLibrary",
+            "lastCompile",
+            "compileWarnings",
+            "createdAt",
+        ):
+            if key in project:
+                merged[key] = deepcopy(project[key])
 
     merged = sanitize_json(merged)
     merged["modified"] = utcnow_iso()

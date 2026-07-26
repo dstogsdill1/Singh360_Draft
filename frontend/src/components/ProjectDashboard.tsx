@@ -379,7 +379,8 @@ export default function ProjectDashboard({ project }: Props) {
         <aside className="project-list-card">
           <div className="card-head">
             <h2>Projects</h2>
-            <button type="button" onClick={confirmNewProject}>Create New Project</button>
+            <button type="button" className="primary" onClick={() => window.location.assign('/app?view=new')}>New Project</button>
+            <button type="button" onClick={confirmNewProject}>Import Workbook</button>
             <input
               ref={newWorkbookRef}
               type="file"
@@ -415,12 +416,23 @@ export default function ProjectDashboard({ project }: Props) {
               <h2>Open a saved project from the left</h2>
               <p>Click a project to open it. Create New Project is only for a different store or a genuinely different workbook.</p>
               <div className="welcome-actions">
-                <button type="button" className="primary large" onClick={confirmNewProject}>Create a Different Project</button>
+                <button type="button" className="primary large" onClick={() => window.location.assign('/app?view=new')}>Create New Project</button>
+                <button type="button" className="large" onClick={confirmNewProject}>Import Existing Workbook</button>
                 <button type="button" className="large" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}>Open Component Builder</button>
               </div>
             </section>
           ) : (
             <>
+              {project.schemaVersion === 2 && (
+                <nav className="project-workflow-nav">
+                  <button className="active">Home</button>
+                  <button onClick={() => window.location.assign(`/app?project=${project.id}&view=sources`)}>Sources</button>
+                  <button onClick={() => window.location.assign(`/app?project=${project.id}&view=data`)}>Data</button>
+                  <button onClick={() => window.location.assign(`/app?project=${project.id}&mode=editor`)}>Drawings</button>
+                  <button onClick={() => setPageManagerOpen(true)}>Review / QA</button>
+                  <button onClick={() => window.location.assign(actionUrl('export'))}>Export / Backup</button>
+                </nav>
+              )}
               <section className="project-summary-card">
                 <div>
                   <div className="eyebrow">ACTIVE PROJECT</div>

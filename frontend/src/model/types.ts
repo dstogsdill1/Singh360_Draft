@@ -243,6 +243,15 @@ export interface PageModel {
 
 export interface ProjectModel {
   id: string;
+  schemaVersion?: number;
+  projectProfileId?: string;
+  projectTemplateId?: string;
+  projectTemplateVersion?: string;
+  projectTemplateHash?: string;
+  workbookDocument?: { path: string; revision: number };
+  sourceLibrary?: { path: string; count?: number };
+  lastCompile?: Record<string, unknown> | null;
+  compileWarnings?: string[];
   metadata: {
     projectName: string;
     storeNumber?: string;
@@ -262,6 +271,10 @@ export interface ProjectModel {
     checkedBy?: string;
     issueDate?: string;
     revision?: string;
+    scopeSummary?: string;
+    drawingPrefix?: string;
+    subtype?: string;
+    backupFolder?: string;
     drawingPackageFileName?: string;
   };
   worksheets: Worksheet[];

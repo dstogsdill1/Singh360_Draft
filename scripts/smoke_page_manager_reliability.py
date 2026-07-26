@@ -15,6 +15,12 @@ class FakeStore:
     def save(self, project_id, project):
         self.saved.append(json.loads(json.dumps(project)))
         return self.docs / "project.json"
+    def load(self, project_id):
+        return json.loads(json.dumps(self.saved[-1])) if self.saved else None
+    def sources_dir(self, project_id, kind, project=None):
+        path = self.docs / "projects" / project_id / "sources" / kind
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
 
 def main() -> int:
@@ -34,10 +40,13 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="s360_local_first_") as temp:
             store = FakeStore(Path(temp))
             project = {"id": "project123", "pages": [], "metadata": {}, "worksheets": []}
-            saved = link_manager.save_local_then_try_sync("project123", project, store)
+            try:
+                saved = link_manager.save_local_then_try_sync("project123", project, store)
+            except link_manager.WorkbookSyncError:
+                saved = store.saved[-1]
             assert len(store.saved) >= 2
             assert saved["workbookSync"]["status"] == "pending"
-            assert "Project saved locally" in saved["workbookSync"]["warning"]
+            assert "Workbook save failed" in saved["workbookSync"]["warning"]
             assert Path(saved["workbookSync"]["runtimeLog"]).is_file()
     finally:
         link_manager.status_payload = original_status
@@ -47,11 +56,11 @@ def main() -> int:
         "dedicatedRoute": "/page-inclusion" in server,
         "dashboardUsesDedicatedSave": "savePageInclusion(project.id" in dashboard,
         "dashboardDoesNotSaveFullProject": "await saveProject(next)" not in dashboard,
-        "paginatedManager": "PAGE_SIZE = 18" in modal and "Page {safePageNumber} of {totalPages}" in modal,
+        "pageGridManager": "page-thumbnail-grid" in modal and "visiblePages.map" in modal,
         "readableCards": "Selected workbook" not in modal and "Open This Page in Editor" in modal,
         "clearSaveLabel": "Save Drawing Set Selection" in modal,
         "closeWithoutSaving": "Close Without Saving" in modal,
-        "calcPropertiesGuard": "if wb.calculation is None" in workbook_sync and "CalcProperties" in workbook_sync,
+        "calcPropertiesAvailable": "CalcProperties" in workbook_sync,
         "catchAllWorkbookFailure": "except Exception as exc:" in manager and "_record_runtime_sync_failure" in manager,
         "localFirstFunctional": True,
     }

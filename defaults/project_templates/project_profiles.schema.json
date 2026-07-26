@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "profiles"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "displayName", "description", "extends", "styleProfile", "sourceSlots", "dataSheets", "pageRecipes", "defaultIncludedFamilies", "optionalFamilies", "validationRules", "version"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]+$"},
+          "displayName": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
+          "extends": {"type": ["string", "null"]},
+          "styleProfile": {"type": "string"},
+          "sourceSlots": {"type": "array", "items": {"type": "string"}},
+          "dataSheets": {"type": "array", "items": {"type": "string"}},
+          "pageRecipes": {"type": "array", "items": {"type": "string"}},
+          "defaultIncludedFamilies": {"type": "array", "items": {"type": "string"}},
+          "optionalFamilies": {"type": "array", "items": {"type": "string"}},
+          "validationRules": {"type": "object"},
+          "version": {"type": "string"}
+        }
+      }
+    }
+  }
+}

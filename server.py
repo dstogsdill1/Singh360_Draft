@@ -54,6 +54,17 @@ from core.pdf_importer import import_pdf
 from core.project_model import ensure_project_shape, recalc_page_numbers
 from core.sheet_index_sync import sync_project_sheet_index
 from core.project_store import ProjectStore, slugify
+from core.project_data_compiler import apply_compile, preview_compile
+from core.project_template_service import ProjectTemplateService
+from core.template_platform import (
+    ProfileRegistry,
+    RevisionConflict,
+    SourceLibrary,
+    TemplatePlatformError,
+    TemplateRegistry,
+    WorkbookDocumentStore,
+    write_document_to_workbook,
+)
 from core.validation import validate_project
 from core.vector_pdf_export import (
     apply_vector_pdf_underlays,
@@ -138,7 +149,7 @@ def _configured_port() -> int:
 _SERVER_PORT = _configured_port()
 
 app = Flask(__name__, static_folder=None)
-app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 MB
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
 
 
 _NO_CACHE_PATHS = {"/", "/app", "/component-catalog", "/component-catalog/"}
@@ -185,6 +196,9 @@ def _project_path(project_id: str) -> Path:
 
 # Project package store (folder-per-project with legacy fallback).
 store = ProjectStore(DOCS_DIR)
+profile_registry = ProfileRegistry(HERE / "defaults" / "project_templates" / "project_profiles.json")
+template_registry = TemplateRegistry(DOCS_DIR)
+project_template_service = ProjectTemplateService(store, profile_registry, template_registry)
 
 
 def _load_doc(project_id: str) -> dict | None:
@@ -348,6 +362,215 @@ def list_projects():
     return jsonify({"projects": store.list_projects()})
 
 
+def _v2_project(project_id: str) -> tuple[dict, Path]:
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    if doc.get("schemaVersion") != 2:
+        raise TemplatePlatformError("This endpoint is available only for schema-V2 template projects.")
+    project_dir = store.find_dir(project_id)
+    if project_dir is None:
+        raise TemplatePlatformError("Project package folder is missing.")
+    return doc, project_dir
+
+
+@app.errorhandler(TemplatePlatformError)
+def handle_template_platform_error(exc: TemplatePlatformError):
+    return jsonify(_err(str(exc))), 400
+
+
+@app.get("/api/project-template-profiles")
+def list_project_template_profiles():
+    return jsonify({"profiles": profile_registry.list()})
+
+
+@app.get("/api/workbook-templates")
+def list_workbook_templates():
+    return jsonify({"templates": template_registry.list()})
+
+
+@app.post("/api/workbook-templates/validate-staged")
+def validate_staged_workbook_template():
+    body = request.get_json(force=True, silent=True) or {}
+    requested = str(body.get("path") or "Singh360_BASE_Project_Workbook_Template_V1.xlsx")
+    if Path(requested).name != requested:
+        return jsonify(_err("Staged template path must be a file name, not a path.")), 400
+    staged = DOCS_DIR / "template_staging" / requested
+    result = template_registry.validate(staged)
+    return jsonify({"ok": result["valid"], "validation": result}), 200 if result["valid"] else 400
+
+
+@app.post("/api/workbook-templates/register-staged")
+def register_staged_workbook_template():
+    body = request.get_json(force=True, silent=True) or {}
+    requested = str(body.get("fileName") or "Singh360_BASE_Project_Workbook_Template_V1.xlsx")
+    if Path(requested).name != requested:
+        return jsonify(_err("Staged template path must be a file name, not a path.")), 400
+    staged = DOCS_DIR / "template_staging" / requested
+    record = template_registry.register(staged, [profile["id"] for profile in profile_registry.list()])
+    return jsonify({"ok": True, "template": record}), 201
+
+
+@app.post("/api/projects/from-template")
+def create_project_from_template():
+    project = project_template_service.create(request.get_json(force=True, silent=True) or {})
+    return jsonify({"ok": True, "id": project["id"], "project": project}), 201
+
+
+@app.get("/api/projects/<project_id>/workbook")
+def get_workbook_document(project_id: str):
+    _, project_dir = _v2_project(project_id)
+    return jsonify(WorkbookDocumentStore(project_dir).load())
+
+
+@app.put("/api/projects/<project_id>/workbook")
+def put_workbook_document(project_id: str):
+    doc, project_dir = _v2_project(project_id)
+    body = request.get_json(force=True, silent=True) or {}
+    if body.get("projectId") != project_id:
+        return jsonify(_err("Workbook project ID does not match the route.")), 400
+    try:
+        saved = WorkbookDocumentStore(project_dir).save(int(body.get("expectedRevision", -1)), body.get("document") or {})
+    except RevisionConflict as exc:
+        return jsonify(_err(str(exc))), 409
+    doc["workbookDocument"]["revision"] = saved["revision"]
+    doc.setdefault("workbookSync", {}).update({"status": "app_changed", "pendingReason": "workbook_sync_pending"})
+    store.save(project_id, doc)
+    return jsonify(saved)
+
+
+@app.get("/api/projects/<project_id>/sources")
+def list_project_sources(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    if doc.get("schemaVersion") != 2:
+        return jsonify({"sources": doc.get("sources", [])})
+    _, project_dir = _v2_project(project_id)
+    return jsonify(SourceLibrary(project_dir).load())
+
+
+@app.post("/api/projects/<project_id>/sources")
+def upload_project_sources(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    if doc.get("schemaVersion") != 2:
+        return add_source_to_project(project_id)
+    _, project_dir = _v2_project(project_id)
+    uploads = request.files.getlist("files")
+    if not uploads:
+        return jsonify(_err("Select at least one source file.")), 400
+    metadata = {
+        "discipline": request.form.get("discipline", ""),
+        "addedBy": request.form.get("addedBy", ""),
+        "tags": [item.strip() for item in request.form.get("tags", "").split(",") if item.strip()],
+        "notes": request.form.get("notes", ""),
+    }
+    library = SourceLibrary(project_dir)
+    records = [library.upload(upload.stream, upload.filename or "", metadata) for upload in uploads]
+    doc["sourceLibrary"]["count"] = len(library.load()["sources"])
+    store.save(project_id, doc)
+    return jsonify({"ok": True, "sources": records}), 201
+
+
+@app.get("/api/projects/<project_id>/sources/<source_id>/content")
+def read_project_source(project_id: str, source_id: str):
+    _, project_dir = _v2_project(project_id)
+    source, path = SourceLibrary(project_dir).resolve(source_id)
+    return send_file(path, as_attachment=request.args.get("download") == "1", download_name=source["originalFileName"])
+
+
+@app.post("/api/projects/<project_id>/sources/<source_id>/archive")
+def archive_project_source(project_id: str, source_id: str):
+    _, project_dir = _v2_project(project_id)
+    return jsonify({"ok": True, "source": SourceLibrary(project_dir).archive(source_id)})
+
+
+@app.get("/api/projects/<project_id>/conversion-queue")
+def list_conversion_queue(project_id: str):
+    _, project_dir = _v2_project(project_id)
+    return jsonify({"items": SourceLibrary(project_dir).load().get("conversionQueue", [])})
+
+
+@app.post("/api/projects/<project_id>/conversion-queue")
+def add_conversion_queue_item(project_id: str):
+    _, project_dir = _v2_project(project_id)
+    body = request.get_json(force=True, silent=True) or {}
+    source_id = str(body.get("sourceId") or "")
+    library = SourceLibrary(project_dir)
+    library.resolve(source_id)
+    payload = library.load()
+    item = {"id": uuid.uuid4().hex[:16], "sourceId": source_id, "status": "queued", "notes": str(body.get("notes") or ""), "addedAt": _utcnow()}
+    payload.setdefault("conversionQueue", []).append(item)
+    from core.template_platform import atomic_json_write
+    atomic_json_write(library.manifest_path, payload)
+    return jsonify({"ok": True, "item": item}), 201
+
+
+@app.patch("/api/projects/<project_id>/conversion-queue/<item_id>")
+def update_conversion_queue_item(project_id: str, item_id: str):
+    _, project_dir = _v2_project(project_id)
+    if not re.fullmatch(r"[a-f0-9]{16}", item_id):
+        return jsonify(_err("Invalid conversion queue item ID.")), 400
+    body = request.get_json(force=True, silent=True) or {}
+    library = SourceLibrary(project_dir)
+    payload = library.load()
+    for item in payload.get("conversionQueue", []):
+        if item["id"] == item_id:
+            item.update({key: body[key] for key in ("status", "notes") if key in body})
+            from core.template_platform import atomic_json_write
+            atomic_json_write(library.manifest_path, payload)
+            return jsonify({"ok": True, "item": item})
+    abort(404)
+
+
+@app.post("/api/projects/<project_id>/compile/preview")
+def preview_project_compile(project_id: str):
+    doc, project_dir = _v2_project(project_id)
+    workbook = WorkbookDocumentStore(project_dir).load()
+    return jsonify(preview_compile(doc, workbook, profile_registry.get(doc["projectProfileId"])))
+
+
+@app.post("/api/projects/<project_id>/compile/apply")
+def apply_project_compile(project_id: str):
+    doc, project_dir = _v2_project(project_id)
+    workbook = WorkbookDocumentStore(project_dir).load()
+    backup_dir = project_dir / "backups" / f"pre_compile_{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S-%f')}"
+    backup_dir.mkdir(parents=True, exist_ok=False)
+    shutil.copy2(project_dir / "project.json", backup_dir / "project.json")
+    shutil.copy2(project_dir / "data" / "workbook.json", backup_dir / "workbook.json")
+    store.write_page_snapshots(project_dir, doc)
+    compiled, preview = apply_compile(doc, workbook, profile_registry.get(doc["projectProfileId"]))
+    store.save(project_id, compiled)
+    return jsonify({"ok": True, "project": compiled, "preview": preview, "backupPath": str(backup_dir)})
+
+
+@app.post("/api/projects/<project_id>/workbook/write-excel")
+def write_project_workbook_excel(project_id: str):
+    doc, project_dir = _v2_project(project_id)
+    workbook = WorkbookDocumentStore(project_dir).load()
+    source_path = Path(doc.get("workbookSync", {}).get("workbook", ""))
+    if not source_path.is_file() or project_dir.resolve() not in source_path.resolve().parents:
+        return jsonify(_err("The linked project workbook is missing or is outside this project package.")), 409
+    result = write_document_to_workbook(workbook, source_path, doc)
+    doc["workbookSync"].update({"status": "in_sync", "pendingReason": "", "lastSyncUtc": _utcnow(), "workbookHash": result["sha256"]})
+    store.save(project_id, doc)
+    return jsonify({"ok": True, **result})
+
+
+@app.post("/api/projects/<project_id>/backup/copy")
+def copy_project_backup(project_id: str):
+    doc, project_dir = _v2_project(project_id)
+    body = request.get_json(force=True, silent=True) or {}
+    destination = Path(str(body.get("destination") or "")).expanduser().resolve()
+    if not destination.is_dir():
+        return jsonify(_err("Backup destination must be an existing local synchronized folder.")), 400
+    target = destination / f"{store._display_name(doc, project_id)}_{project_id}_{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+    shutil.copytree(project_dir, target)
+    return jsonify({"ok": True, "backupPath": str(target)})
+
+
 @app.post("/api/workspace/reset")
 def workspace_reset():
     """Archive-first local cleanup. Never deletes; moves data to .docs/_archive/.
@@ -476,6 +699,8 @@ def get_project(project_id: str):
         abort(404)
     doc = ensure_project_shape(doc)
     doc = sync_project_sheet_index(doc)
+    if doc.get("schemaVersion") == 2:
+        return jsonify(doc)
     try:
         doc = maybe_pull_on_open(project_id, doc, store)
     except WorkbookSyncError as exc:
@@ -788,7 +1013,6 @@ def upsert_pages(project_id: str):
     return jsonify({"ok": True, "id": project_id, "pageCount": len(doc.get("pages", []))})
 
 
-@app.post("/api/projects/<project_id>/sources")
 def add_source_to_project(project_id: str):
     path = _project_path(project_id)
     if not path.is_file():

@@ -4,6 +4,19 @@ Singh360 Draft is the current Singh360 EMS drawing-package editor. It imports
 project workbooks, builds fixed 17 x 11 drawing sheets, supports editable canvas
 overlays and reusable components, and exports PDF drawing packages.
 
+## Template-driven projects
+
+Project Home supports schema-V2 projects created from a registered base workbook
+and a data-driven profile. These projects add a Source Library, full-screen Data
+Workspace, compile preview and Update Drawings workflow, revision-safe workbook
+persistence, and explicit SAVE + WRITE EXCEL mirroring without changing
+schema-V1 projects.
+
+See [Project Template Platform](docs/PROJECT_TEMPLATE_PLATFORM.md),
+[Project Source Library](docs/PROJECT_SOURCE_LIBRARY.md),
+[Data Workspace](docs/DATA_WORKSPACE.md), and
+[Project Profile Schema](docs/PROJECT_PROFILE_SCHEMA.md).
+
 ## Start locally
 
 ```powershell
