@@ -118,7 +118,11 @@ jobs:
 
       - name: Browser-level Component Library and saved legend smoke
         if: matrix.os == 'ubuntu-latest'
-        run: python -m scripts.smoke_symbol_library_browser_v39
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .validation/browser-v39
+          python -m scripts.smoke_symbol_library_browser_v39 2>&1 | tee .validation/browser-v39/browser-output.log
 
       - name: Upload V39 browser screenshots and persistence evidence
         if: always() && matrix.os == 'ubuntu-latest'
