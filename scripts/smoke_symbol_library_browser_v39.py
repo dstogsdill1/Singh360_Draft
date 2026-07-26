@@ -183,7 +183,10 @@ def _open_components(page: Page) -> None:
     expect(components).to_be_visible(timeout=30000)
     if components.get_attribute("aria-expanded") != "true":
         components.click()
-    filter_button = page.get_by_role("button", name=re.compile(r"^Refrigeration Symbols \(15\)$"))
+    filter_button = page.get_by_role(
+        "button",
+        name=re.compile(r"^(?:Refrigeration Symbols|Mapper Highlights) \(15\)$"),
+    )
     expect(filter_button).to_be_visible(timeout=30000)
     if filter_button.get_attribute("aria-pressed") != "true":
         filter_button.click()
