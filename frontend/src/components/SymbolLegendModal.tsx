@@ -49,7 +49,6 @@ type SavedLegendRow = Record<string, unknown>;
 const STANDARD_TEMPLATE_ID = '__symbol-mapper-standard__';
 const CANONICAL_RENDERER = 'singh360-map-marker-v39';
 const CANONICAL_KEY_TAG = 'singh360-symbol-key:';
-const PREFERRED_SAVED_LEGEND_ID = 'singh360-refrigeration-symbols-standard';
 const PENDING_TEMPLATE_STORAGE_KEY = 'singh360-symbol-legend-template-id';
 
 function inferredShape(code: string, saved?: string): LegendShape {
@@ -115,6 +114,7 @@ function rowFromSavedTemplate(
   const key = stringField(item, 'key') || stringField(item, 'name') || symbolTemplateKey(code, label);
   const choice = paletteChoiceById(stringField(item, 'paletteId') || undefined, index);
   const shape = inferredShape(code, stringField(item, 'shape'));
+  const rendererVersion = stringField(item, 'rendererVersion');
   return {
     id: `legend_saved_${index}_${key}`,
     key,
@@ -128,7 +128,7 @@ function rowFromSavedTemplate(
     color: stringField(item, 'color') || choice.color,
     color2: stringField(item, 'color2') || choice.color2,
     pattern: (stringField(item, 'pattern') || choice.pattern) as SymbolPalettePattern,
-    symbolUrl: assets.get(key),
+    symbolUrl: rendererVersion === CANONICAL_RENDERER ? assets.get(key) : undefined,
   };
 }
 
@@ -247,11 +247,9 @@ export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId
           pending = '';
         }
         const requested = initialTemplateId || pending;
-        const preferred = savedTemplates.find((entry) => entry.id === requested)
-          || savedTemplates.find((entry) => entry.id === PREFERRED_SAVED_LEGEND_ID);
         const templateId = requested && savedTemplates.some((entry) => entry.id === requested)
           ? requested
-          : preferred?.id || STANDARD_TEMPLATE_ID;
+          : STANDARD_TEMPLATE_ID;
         setSelectedTemplateId(templateId);
         await loadTemplate(templateId, canonicalAssets, template.symbols, template.name || 'Singh360 Standard');
       } catch (err) {
@@ -275,7 +273,7 @@ export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId
 
   const updateRow = (id: string, patch: Partial<BuilderRow>) => {
     const changesCanonicalGeometry = [
-      'key', 'code', 'glyph', 'label', 'shape', 'paletteId', 'color', 'color2', 'pattern', 'highlighted',
+      'key', 'code', 'glyph', 'label', 'shape', 'paletteId', 'color', 'color2', 'pattern',
     ].some((key) => Object.prototype.hasOwnProperty.call(patch, key));
     setRows((current) => current.map((row) => row.id === id ? {
       ...row,
@@ -333,6 +331,10 @@ export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId
   };
 
   const saveStandard = async () => {
+    if (selectedTemplateId !== STANDARD_TEMPLATE_ID) {
+      setError('Switch to Live Singh360 Standard before saving standard changes.');
+      return;
+    }
     if (!rows.length) return;
     setSaving(true);
     setError('');
@@ -387,9 +389,9 @@ export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId
         pattern: row.pattern,
         highlighted: row.highlighted,
         symbolUrl: row.highlighted ? row.symbolUrl : undefined,
-        category: row.symbolUrl ? 'symbols_markers' : undefined,
-        defaultWidth: row.symbolUrl ? 34 : undefined,
-        defaultHeight: row.symbolUrl ? 34 : undefined,
+        category: row.highlighted && row.symbolUrl ? 'symbols_markers' : undefined,
+        defaultWidth: row.highlighted && row.symbolUrl ? 34 : undefined,
+        defaultHeight: row.highlighted && row.symbolUrl ? 34 : undefined,
       })),
     });
     onClose();
@@ -429,7 +431,7 @@ export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId
           <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, enabled: true })))}>Select all</button>
           <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, enabled: false })))}>Select none</button>
           <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, highlighted: true })))}>Highlight all</button>
-          <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, highlighted: false, symbolUrl: undefined })))}>No highlights</button>
+          <button className="btn" onClick={() => setRows((current) => current.map((row) => ({ ...row, highlighted: false })))}>No highlights</button>
           <div className="symbol-legend-builder-layout-options">
             <label>
               Columns
@@ -449,7 +451,14 @@ export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId
             <label><input type="checkbox" checked={frame} onChange={(event) => setFrame(event.target.checked)} /> Frame</label>
           </div>
           <button className="btn" onClick={addRow}>+ Add symbol</button>
-          <button className="btn" disabled={saving || loading} onClick={() => void saveStandard()}>{saving ? 'Saving…' : 'Save / update standard'}</button>
+          <button
+            className="btn"
+            disabled={saving || loading || selectedTemplateId !== STANDARD_TEMPLATE_ID}
+            title={selectedTemplateId === STANDARD_TEMPLATE_ID
+              ? 'Save changes to the live Symbol Mapper standard'
+              : 'Saved legends insert independently; switch to Live Singh360 Standard to change the standard'}
+            onClick={() => void saveStandard()}
+          >{saving ? 'Saving…' : 'Save / update standard'}</button>
         </div>
 
         <div className="symbol-legend-builder-status">{status}</div>

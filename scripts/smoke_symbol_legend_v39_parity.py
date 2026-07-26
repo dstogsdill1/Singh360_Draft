@@ -28,7 +28,9 @@ def main() -> None:
     require(modal, '<img src={row.symbolUrl}', "exact builder preview image")
     require(modal, "symbolUrl: row.highlighted ? row.symbolUrl : undefined", "exact insert payload")
     require(modal, "getLegendTemplate", "saved legend loader")
-    require(modal, "PREFERRED_SAVED_LEGEND_ID", "stable saved legend selection")
+    require(modal, "rendererVersion === CANONICAL_RENDERER", "saved legend renderer gate")
+    require(modal, "Switch to Live Singh360 Standard before saving standard changes.", "saved legend isolation guard")
+    require(modal, "STANDARD_TEMPLATE_ID;", "live standard default")
 
     require(canvas, "addSymbolLegend: async", "async exact legend insertion")
     require(canvas, "FabricImage.fromURL(assetUrl", "Fabric exact SVG loading")

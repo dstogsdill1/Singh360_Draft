@@ -57,8 +57,10 @@ not redraw a second approximation of the highlight, source outline, or glyph. A 
 custom marker only when its geometry, color, glyph, label, or highlight setting is edited.
 
 The saved **Singh360 Refrigeration Symbols** legend is available as a separate saved-legend card
-in the Components panel. Individual component cards still insert one independent marker; saved
-legend cards open the grouped editable legend workflow.
+near the top of the Components panel. Individual component cards still insert one independent
+marker; saved legend cards open that grouped editable legend explicitly. The normal ribbon legend
+builder continues to open the live Singh360 Standard by default, and viewing a saved legend cannot
+silently overwrite the live Symbol Mapper standard.
 
 ## Runtime migration
 

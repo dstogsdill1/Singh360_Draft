@@ -866,6 +866,24 @@ This is NOT saved until you click Save All Edits.`,
         {loadError ? `Library error: ${loadError}` : loading ? 'Loading component library…' : `${visibleCards.length} shown · ${components.length} total · ${previewReady} previews ready`}
       </div>
 
+      {legendTemplates.length > 0 && (
+        <section className="libv2-saved-legends" aria-label="Saved symbol legends">
+          <div className="libv2-saved-legends-head">
+            <strong>Saved Symbol Legends</strong>
+            <span>Editable grouped legends; separate from individual symbol components.</span>
+          </div>
+          <div className="libv2-saved-legends-grid">
+            {legendTemplates.map((template) => (
+              <button key={template.id} className="libv2-saved-legend-card" onClick={() => openSavedLegend(template.id)}>
+                <strong>{template.name}</strong>
+                <span>{template.rowCount ?? 0} rows</span>
+                <em>Open / Insert</em>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="libv2-grid">
         {visibleCards.map((c) => {
           const canCurrent = !!(variantUrl(c, rep) || previewUrl(c, rep));
@@ -893,24 +911,6 @@ This is NOT saved until you click Save All Edits.`,
         })}
         {!visibleCards.length && <div className="libv2-empty">No matching components.</div>}
       </div>
-
-      {legendTemplates.length > 0 && (
-        <section className="libv2-saved-legends" aria-label="Saved symbol legends">
-          <div className="libv2-saved-legends-head">
-            <strong>Saved Symbol Legends</strong>
-            <span>Editable grouped legends; separate from individual symbol components.</span>
-          </div>
-          <div className="libv2-saved-legends-grid">
-            {legendTemplates.map((template) => (
-              <button key={template.id} className="libv2-saved-legend-card" onClick={() => openSavedLegend(template.id)}>
-                <strong>{template.name}</strong>
-                <span>{template.rowCount ?? 0} rows</span>
-                <em>Open / Insert</em>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
 
       {showDashboard && (
         <div className="libv2-modal-backdrop" onClick={() => setShowDashboard(false)}>
