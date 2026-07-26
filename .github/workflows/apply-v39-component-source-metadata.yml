@@ -28,14 +28,11 @@ jobs:
 
           path = Path('frontend/src/components/CanvasEditor.tsx')
           text = path.read_text(encoding='utf-8')
-          old = '''          (img as unknown as Record<string, unknown>).objName = name;
-          if (meta?.category) (img as unknown as Record<string, unknown>).symCategory = meta.category;'''
-          new = '''          const componentRecord = img as unknown as Record<string, unknown>;
-          componentRecord.objName = name;
-          componentRecord.sourceUrl = assetUrl;
-          if (meta?.category) componentRecord.symCategory = meta.category;'''
+          old = '          (img as unknown as Record<string, unknown>).objName = name;'
+          new = '''          (img as unknown as Record<string, unknown>).objName = name;
+          (img as unknown as Record<string, unknown>).sourceUrl = assetUrl;'''
           if text.count(old) != 1:
-              raise SystemExit(f'expected one direct component metadata block, found {text.count(old)}')
+              raise SystemExit(f'expected one direct component objName line, found {text.count(old)}')
           path.write_text(text.replace(old, new), encoding='utf-8')
 
       - name: Compile and push source fix
