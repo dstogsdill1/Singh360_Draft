@@ -128,7 +128,7 @@ function niceCategoryLabel(id: string): string {
 function displayNameFor(c: LibV2Component): string {
   const raw = (c.displayName || '').trim();
   if (!raw) return 'Component';
-  return raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return raw.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function sourceUrl(c: LibV2Component): string {
@@ -769,6 +769,21 @@ This is NOT saved until you click Save All Edits.`,
     downloadText('singh360_component_library_edited_view.json', JSON.stringify({ components: merged }, null, 2));
   };
 
+  const openSavedLegend = (templateId?: string) => {
+    try {
+      if (templateId) localStorage.setItem('singh360-symbol-legend-template-id', templateId);
+      else localStorage.removeItem('singh360-symbol-legend-template-id');
+    } catch {
+      // The modal still opens the live standard when browser storage is unavailable.
+    }
+    setShowDashboard(false);
+    onOpenLegendEditor?.();
+  };
+
+  const preferredLegendTemplate = legendTemplates.find((template) => template.id === 'singh360-refrigeration-symbols-standard')
+    || legendTemplates.find((template) => template.name === 'Singh360 Refrigeration Symbols')
+    || legendTemplates[0];
+
   const runAdvanced = async (kind: 'thumbs' | 'clean' | 'migrate') => {
     setLoading(true);
     try {
@@ -851,6 +866,24 @@ This is NOT saved until you click Save All Edits.`,
         {loadError ? `Library error: ${loadError}` : loading ? 'Loading component library…' : `${visibleCards.length} shown · ${components.length} total · ${previewReady} previews ready`}
       </div>
 
+      {legendTemplates.length > 0 && (
+        <section className="libv2-saved-legends" aria-label="Saved symbol legends">
+          <div className="libv2-saved-legends-head">
+            <strong>Saved Symbol Legends</strong>
+            <span>Editable grouped legends; separate from individual symbol components.</span>
+          </div>
+          <div className="libv2-saved-legends-grid">
+            {legendTemplates.map((template) => (
+              <button key={template.id} className="libv2-saved-legend-card" onClick={() => openSavedLegend(template.id)}>
+                <strong>{template.name}</strong>
+                <span>{template.rowCount ?? 0} rows</span>
+                <em>Open / Insert</em>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="libv2-grid">
         {visibleCards.map((c) => {
           const canCurrent = !!(variantUrl(c, rep) || previewUrl(c, rep));
@@ -888,7 +921,7 @@ This is NOT saved until you click Save All Edits.`,
                 <span className="libv2-dashboard-sub">One-screen rename, categorize, approve, retire, and insert.</span>
               </div>
               <div className="libv2-dashboard-actions">
-                <button onClick={() => { setShowDashboard(false); onOpenLegendEditor?.(); }} disabled={loading} title="Open saved editable legend templates">Legends ({legendTemplates.length})</button>
+                <button onClick={() => openSavedLegend(preferredLegendTemplate?.id)} disabled={loading} title="Open the saved editable refrigeration legend">Saved Legends ({legendTemplates.length})</button>
                 <button onClick={() => void undoLastSavedLibraryChange()} disabled={!libraryHistory.length || loading}>Undo Last Save</button>
                 <button onClick={() => void reloadFromDisk()} disabled={loading}>Reload / Discard</button>
                 <button className="primary" onClick={() => void saveDirty()} disabled={!dirtyIds.length || loading}>Save All Edits ({dirtyIds.length})</button>

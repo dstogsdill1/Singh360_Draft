@@ -542,3 +542,19 @@
   .sm-output-action-dock { padding: 9px 12px 10px; }
 }
 /* S360 SYMBOL MAPPER VISIBLE SAVE ACTIONS V39 END */
+
+
+/* S360 EXACT SYMBOL LEGEND V39 PARITY */
+.symbol-legend-built-marker.exact-canonical {
+  display: inline-grid;
+  place-items: center;
+  overflow: visible;
+  flex: 0 0 auto;
+}
+.symbol-legend-built-marker.exact-canonical img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}

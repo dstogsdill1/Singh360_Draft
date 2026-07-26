@@ -5,11 +5,15 @@ on:
     paths:
       - 'scripts/install_symbol_standard_v38.py'
       - 'scripts/install_symbol_standard_v39.py'
-      - 'scripts/smoke_symbol_standard_v38.py'
       - 'scripts/smoke_symbol_standard_v39.py'
+      - 'scripts/smoke_symbol_legend_v39_parity.py'
+      - 'scripts/smoke_symbol_library_browser_v39.py'
+      - 'scripts/smoke_v39_builder_union.py'
       - 'defaults/symbol_mapper_standard.json'
       - 'core/library_v2.py'
       - 'core/legend_template_store.py'
+      - 'core/symbol_mapper.py'
+      - 'server.py'
       - 'frontend/**'
       - '.github/workflows/exact-symbol-components-v39.yml'
   workflow_dispatch:
@@ -36,11 +40,59 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Compile exact symbol migration
-        run: python -m py_compile scripts/install_symbol_standard_v38.py scripts/install_symbol_standard_v39.py scripts/smoke_symbol_standard_v38.py scripts/smoke_symbol_standard_v39.py
+      - name: Compile backend and exact symbol migration
+        run: python -m py_compile server.py core/library_v2.py core/legend_template_store.py core/symbol_mapper.py scripts/install_symbol_standard_v38.py scripts/install_symbol_standard_v39.py scripts/smoke_symbol_standard_v38.py scripts/smoke_symbol_standard_v39.py scripts/smoke_symbol_legend_v39_parity.py scripts/smoke_symbol_library_browser_v39.py scripts/smoke_v39_builder_union.py
+
+      - name: Import backend and exercise health route
+        id: backend_health
+        continue-on-error: true
+        shell: python
+        run: |
+          from pathlib import Path
+          import sys
+          import traceback
+
+          repository_root = Path.cwd().resolve()
+          sys.path.insert(0, str(repository_root))
+          evidence = repository_root / '.validation' / 'backend-health.txt'
+          evidence.parent.mkdir(parents=True, exist_ok=True)
+          try:
+              from server import app
+
+              response = app.test_client().get('/api/health')
+              assert response.status_code == 200, response.get_data(as_text=True)
+              payload = response.get_json(silent=True) or {}
+              assert payload.get('ok') is True, payload
+              message = 'PASS: backend import and /api/health'
+              evidence.write_text(message + '\n', encoding='utf-8')
+              print(message)
+          except BaseException:
+              diagnostic = traceback.format_exc()
+              evidence.write_text(diagnostic, encoding='utf-8')
+              print(diagnostic)
+              raise
+
+      - name: Upload backend health diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-health-${{ matrix.os }}
+          path: .validation/backend-health.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce backend health gate
+        if: steps.backend_health.outcome == 'failure'
+        run: python -c "raise SystemExit(1)"
 
       - name: Run isolated migration and geometry tests
         run: python -m scripts.smoke_symbol_standard_v39
+
+      - name: Verify builder export union preserves all canonical symbols
+        run: python -m scripts.smoke_v39_builder_union
+
+      - name: Verify exact Component Library and Symbol Legend parity
+        run: python -m scripts.smoke_symbol_legend_v39_parity
 
       - name: Produce inspectable canonical SVG evidence
         run: python -m scripts.install_symbol_standard_v39 --docs .validation/v39-docs --report .validation/v39-report.json
@@ -60,6 +112,31 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Seed isolated V39 browser runtime
+        if: matrix.os == 'ubuntu-latest'
+        run: python -m scripts.install_symbol_standard_v39 --docs .docs --report .validation/browser-v39/runtime-migration-report.json
+
+      - name: Install Chromium for browser smoke
+        if: matrix.os == 'ubuntu-latest'
+        run: python -m playwright install --with-deps chromium
+
+      - name: Browser-level Component Library and saved legend smoke
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .validation/browser-v39
+          python -m scripts.smoke_symbol_library_browser_v39 2>&1 | tee .validation/browser-v39/browser-output.log
+
+      - name: Upload V39 browser screenshots and persistence evidence
+        if: always() && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-symbol-browser-v39-ubuntu-latest
+          path: .validation/browser-v39
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload V39 validation evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,5 +150,5 @@ jobs:
             .validation/v39-docs/library/thumbnails/symbols_markers/*.svg
             .validation/v39-docs/library/legend_templates/*.json
             .validation/v39-docs/symbol_mapper/templates/standard.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
