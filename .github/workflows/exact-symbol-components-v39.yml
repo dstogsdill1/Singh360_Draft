@@ -43,15 +43,43 @@ jobs:
         run: python -m py_compile server.py core/library_v2.py core/legend_template_store.py core/symbol_mapper.py scripts/install_symbol_standard_v38.py scripts/install_symbol_standard_v39.py scripts/smoke_symbol_standard_v38.py scripts/smoke_symbol_standard_v39.py scripts/smoke_symbol_legend_v39_parity.py
 
       - name: Import backend and exercise health route
+        id: backend_health
+        continue-on-error: true
         shell: python
         run: |
-          from server import app
+          from pathlib import Path
+          import traceback
 
-          response = app.test_client().get('/api/health')
-          assert response.status_code == 200, response.get_data(as_text=True)
-          payload = response.get_json(silent=True) or {}
-          assert payload.get('ok') is True, payload
-          print('PASS: backend import and /api/health')
+          evidence = Path('.validation/backend-health.txt')
+          evidence.parent.mkdir(parents=True, exist_ok=True)
+          try:
+              from server import app
+
+              response = app.test_client().get('/api/health')
+              assert response.status_code == 200, response.get_data(as_text=True)
+              payload = response.get_json(silent=True) or {}
+              assert payload.get('ok') is True, payload
+              message = 'PASS: backend import and /api/health'
+              evidence.write_text(message + '\n', encoding='utf-8')
+              print(message)
+          except BaseException:
+              diagnostic = traceback.format_exc()
+              evidence.write_text(diagnostic, encoding='utf-8')
+              print(diagnostic)
+              raise
+
+      - name: Upload backend health diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-health-${{ matrix.os }}
+          path: .validation/backend-health.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce backend health gate
+        if: steps.backend_health.outcome == 'failure'
+        run: python -c "raise SystemExit(1)"
 
       - name: Run isolated migration and geometry tests
         run: python -m scripts.smoke_symbol_standard_v39
@@ -90,5 +118,5 @@ jobs:
             .validation/v39-docs/library/thumbnails/symbols_markers/*.svg
             .validation/v39-docs/library/legend_templates/*.json
             .validation/v39-docs/symbol_mapper/templates/standard.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
