@@ -3,8 +3,8 @@
 
 The patch makes legacy standalone EEPR/EPR cards optional on a clean V39
 runtime and hardens curation so obsolete generated marker cards are retired,
-while the V39 mapper collection, callouts, safety signs, signage legend, real
-equipment, and unrelated user assets remain active.
+while the V39 mapper collection, V40 plan collection, callouts, safety signs,
+signage legend, real equipment, and unrelated user assets remain active.
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ NEW_RETIRE_BLOCK = '''def should_retire(component: dict[str, Any]) -> bool:
         return False
     if cid.startswith("callout-number-"):
         return False
-    if collection == MAPPER_COLLECTION:
+    if collection in {MAPPER_COLLECTION, PLAN_COLLECTION}:
         return False
     if name == "signage legend":
         return False
@@ -84,7 +84,7 @@ def verify(path: Path) -> dict[str, object]:
         "path": str(path),
         "optionalLegacyRegulators": True,
         "retireObsoleteGeneratedMarkers": True,
-        "preserveMapperCalloutsSignsAndEquipment": True,
+        "preserveMapperPlanCalloutsSignsAndEquipment": True,
     }
 
 
