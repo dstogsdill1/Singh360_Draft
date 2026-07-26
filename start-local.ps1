@@ -101,6 +101,7 @@ try {
             Write-Log "Building frontend for commit $commit."
             Push-Location (Join-Path $Root 'frontend')
             try {
+                $env:PATH = (Join-Path $Root 'frontend\node_modules\.bin') + ';' + $env:PATH
                 $npmCommand = '/d /c ""' + $npm + '" run build"'
                 $buildOutput = Invoke-NativeCaptured $env:ComSpec @() $npmCommand
                 if ($buildOutput) { $buildOutput | Tee-Object -FilePath $Log -Append | Out-Host }
