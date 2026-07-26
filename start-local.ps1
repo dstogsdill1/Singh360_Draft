@@ -59,8 +59,8 @@ try {
 
     $git = Get-Command git.exe -ErrorAction SilentlyContinue
     if ($git) {
-        $commit = ([string](& $git.Source rev-parse HEAD)).Trim()
-        $dirty = ([string](& $git.Source status --porcelain)).Trim()
+        $commit = (@(& $git.Source rev-parse HEAD) -join "`n").Trim()
+        $dirty = (@(& $git.Source status --porcelain) -join "`n").Trim()
         Write-Log "Current commit: $commit"
         if ((Invoke-NativeLogged $git.Source @('fetch', 'origin', '--prune')) -ne 0) {
             throw "Git fetch failed. Log: $Log"
@@ -68,12 +68,12 @@ try {
         if ($dirty) {
             Write-Log 'Working tree is dirty; fetched updates were not pulled over local work.'
         } else {
-            $upstream = ([string](& $git.Source rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null)).Trim()
+            $upstream = (@(& $git.Source rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null) -join "`n").Trim()
             if ($upstream) {
                 if ((Invoke-NativeLogged $git.Source @('pull', '--ff-only')) -ne 0) {
                     throw "Fast-forward pull failed. Log: $Log"
                 }
-                $commit = ([string](& $git.Source rev-parse HEAD)).Trim()
+                $commit = (@(& $git.Source rev-parse HEAD) -join "`n").Trim()
             }
         }
 
