@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Apply the scoped V40 optional legacy-regulator verification fix.
+"""Apply scoped V40 source fixes before validation and live migration.
 
-The direct-placement Plan Marker library always includes EEPR and EPR. Legacy
-standalone regulator cards are preserved and normalized when they already exist,
-but a clean V39 runtime does not contain those older cards and must not fail the
-V40 migration merely because they were never installed.
+The patch makes legacy standalone EEPR/EPR cards optional on a clean V39
+runtime and hardens curation so obsolete generated marker cards are retired,
+while the V39 mapper collection, callouts, safety signs, signage legend, real
+equipment, and unrelated user assets remain active.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-OLD_BLOCK = '''    for cid in KEEP_REGULATOR_IDS:
+OLD_REGULATOR_BLOCK = '''    for cid in KEEP_REGULATOR_IDS:
         if by_id.get(cid) is None:
             raise InstallError(f"Required regulator component is missing: {cid}")
     if by_id["s360_rdm_eepr_electronic"].get("shortName") != "EEPR":
@@ -23,7 +23,7 @@ OLD_BLOCK = '''    for cid in KEEP_REGULATOR_IDS:
         raise InstallError("Mechanical regulator is not normalized to EPR")
 '''
 
-NEW_BLOCK = '''    electronic = by_id.get("s360_rdm_eepr_electronic")
+NEW_REGULATOR_BLOCK = '''    electronic = by_id.get("s360_rdm_eepr_electronic")
     mechanical = by_id.get("s360_rdm_eepr_mechanical")
     if electronic is not None and electronic.get("shortName") != "EEPR":
         raise InstallError("Existing electronic regulator is not normalized to EEPR")
@@ -31,25 +31,92 @@ NEW_BLOCK = '''    electronic = by_id.get("s360_rdm_eepr_electronic")
         raise InstallError("Existing mechanical regulator is not normalized to EPR")
 '''
 
+OLD_RETIRE_BLOCK = '''def should_retire(component: dict[str, Any]) -> bool:
+    cid = str(component.get("id") or "").strip()
+    if cid in OBSOLETE_IDS or cid.startswith("callout_number_"):
+        return True
+    name = norm(component.get("displayName") or component.get("name") or component.get("defaultLabel"))
+    if LINE_CARD_RE.fullmatch(name):
+        return True
+    generated = cid.startswith("s360_") or str(component.get("assetKind") or "").startswith("singh360-") or str(component.get("collection") or "").startswith("RDM Standard")
+    return generated and name in EXACT_JUNK_NAMES
+'''
+
+NEW_RETIRE_BLOCK = '''def should_retire(component: dict[str, Any]) -> bool:
+    cid = str(component.get("id") or "").strip()
+    if cid in OBSOLETE_IDS or cid.startswith("callout_number_"):
+        return True
+    name = norm(component.get("displayName") or component.get("name") or component.get("defaultLabel"))
+    if LINE_CARD_RE.fullmatch(name):
+        return True
+    collection = str(component.get("collection") or "")
+    category = str(component.get("category") or "").lower()
+    if cid in KEEP_SIGN_IDS or cid in KEEP_REGULATOR_IDS:
+        return False
+    if cid.startswith("callout-number-"):
+        return False
+    if collection == MAPPER_COLLECTION:
+        return False
+    if name == "signage legend":
+        return False
+    generated = (
+        cid.startswith("s360_")
+        or str(component.get("assetKind") or "").startswith("singh360-")
+        or collection.startswith("RDM Standard")
+    )
+    if generated and category == "symbols_markers":
+        return True
+    return generated and name in EXACT_JUNK_NAMES
+'''
+
 
 def verify(path: Path) -> dict[str, object]:
     text = path.read_text(encoding="utf-8")
-    if NEW_BLOCK not in text:
-        raise RuntimeError("V40 optional legacy-regulator source fix is not installed.")
-    return {"ok": True, "path": str(path), "optionalLegacyRegulators": True}
+    missing: list[str] = []
+    if NEW_REGULATOR_BLOCK not in text:
+        missing.append("optional legacy regulator verification")
+    if NEW_RETIRE_BLOCK not in text:
+        missing.append("generated marker retirement rule")
+    if missing:
+        raise RuntimeError(f"V40 scoped source fixes are incomplete: {missing}")
+    return {
+        "ok": True,
+        "path": str(path),
+        "optionalLegacyRegulators": True,
+        "retireObsoleteGeneratedMarkers": True,
+        "preserveMapperCalloutsSignsAndEquipment": True,
+    }
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> tuple[str, bool]:
+    if new in text:
+        return text, False
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"V40 {label} anchor count was {count}, expected 1")
+    return text.replace(old, new, 1), True
 
 
 def apply(path: Path) -> dict[str, object]:
     text = path.read_text(encoding="utf-8")
     changed = False
-    if NEW_BLOCK not in text:
-        count = text.count(OLD_BLOCK)
-        if count != 1:
-            raise RuntimeError(f"V40 legacy-regulator anchor count was {count}, expected 1")
-        text = text.replace(OLD_BLOCK, NEW_BLOCK, 1)
+    text, did_change = replace_once(
+        text,
+        OLD_REGULATOR_BLOCK,
+        NEW_REGULATOR_BLOCK,
+        "legacy-regulator",
+    )
+    changed = changed or did_change
+    text, did_change = replace_once(
+        text,
+        OLD_RETIRE_BLOCK,
+        NEW_RETIRE_BLOCK,
+        "generated-marker-retirement",
+    )
+    changed = changed or did_change
+    if changed:
         compile(text, str(path), "exec")
         path.write_text(text, encoding="utf-8")
-        changed = True
     result = verify(path)
     result["changed"] = changed
     return result
