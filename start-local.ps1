@@ -22,17 +22,6 @@ function Write-Log([string]$Message) {
     $line | Tee-Object -FilePath $Log -Append | Write-Host
 }
 
-function Invoke-NativeLogged([string]$File, [string[]]$Arguments) {
-    $previous = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try {
-        & $File @Arguments 2>&1 | Tee-Object -FilePath $Log -Append | Out-Host
-        return $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $previous
-    }
-}
-
 function Invoke-NativeCaptured([string]$File, [string[]]$Arguments) {
     $info = New-Object System.Diagnostics.ProcessStartInfo
     $info.FileName = $File
@@ -53,7 +42,7 @@ function Invoke-NativeCaptured([string]$File, [string[]]$Arguments) {
     if ($process.ExitCode -ne 0) {
         throw "Native command failed ($($process.ExitCode)): $File $($info.Arguments) $stderr"
     }
-    return $stdout.Trim()
+    return ($stdout + $stderr).Trim()
 }
 
 function Get-Health {
@@ -85,17 +74,15 @@ try {
         $commit = Invoke-NativeCaptured $git.Source @('rev-parse', 'HEAD')
         $dirty = Invoke-NativeCaptured $git.Source @('status', '--porcelain')
         Write-Log "Current commit: $commit"
-        if ((Invoke-NativeLogged $git.Source @('fetch', 'origin', '--prune')) -ne 0) {
-            throw "Git fetch failed. Log: $Log"
-        }
+        $fetchOutput = Invoke-NativeCaptured $git.Source @('fetch', 'origin', '--prune')
+        if ($fetchOutput) { $fetchOutput | Tee-Object -FilePath $Log -Append | Out-Host }
         if ($dirty) {
             Write-Log 'Working tree is dirty; fetched updates were not pulled over local work.'
         } else {
             $upstream = Invoke-NativeCaptured $git.Source @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}')
             if ($upstream) {
-                if ((Invoke-NativeLogged $git.Source @('pull', '--ff-only')) -ne 0) {
-                    throw "Fast-forward pull failed. Log: $Log"
-                }
+                $pullOutput = Invoke-NativeCaptured $git.Source @('pull', '--ff-only')
+                if ($pullOutput) { $pullOutput | Tee-Object -FilePath $Log -Append | Out-Host }
                 $commit = Invoke-NativeCaptured $git.Source @('rev-parse', 'HEAD')
             }
         }
@@ -106,9 +93,8 @@ try {
             Write-Log "Building frontend for commit $commit."
             Push-Location (Join-Path $Root 'frontend')
             try {
-                if ((Invoke-NativeLogged $npm @('run', 'build')) -ne 0) {
-                    throw "Frontend build failed. Log: $Log"
-                }
+                $buildOutput = Invoke-NativeCaptured $npm @('run', 'build')
+                if ($buildOutput) { $buildOutput | Tee-Object -FilePath $Log -Append | Out-Host }
             } finally { Pop-Location }
             Set-Content -LiteralPath $BuildCommit -Value $commit -Encoding ASCII
         }
