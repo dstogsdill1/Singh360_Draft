@@ -1,7 +1,7 @@
 diff --git a/scripts/smoke_symbol_library_browser_v39.py b/scripts/smoke_symbol_library_browser_v39.py
 --- a/scripts/smoke_symbol_library_browser_v39.py
 +++ b/scripts/smoke_symbol_library_browser_v39.py
-@@ -218,8 +218,9 @@ def _run_browser() -> dict[str, Any]:
+@@ -216,5 +216,6 @@ def _run_browser() -> dict[str, Any]:
          page = context.new_page()
          page.on("pageerror", lambda error: page_errors.append(str(error)))
          page.goto(f"{BASE_URL}/app?project={PROJECT_ID}&mode=editor", wait_until="domcontentloaded", timeout=60000)
@@ -10,7 +10,7 @@ diff --git a/scripts/smoke_symbol_library_browser_v39.py b/scripts/smoke_symbol_
 +        expect(page.get_by_role("button", name="Drawing", exact=True)).to_be_visible(timeout=30000)
 +        expect(page.get_by_role("button", name="Included in Drawing Set", exact=True)).to_be_visible(timeout=30000)
 +        expect(page.get_by_role("button", name=re.compile(r"^1 T0\.1 V39 SYMBOL BROWSER SMOKE$"))).to_be_visible(timeout=30000)
-@@ -264,7 +265,7 @@ def _run_browser() -> dict[str, Any]:
+@@ -263,4 +264,4 @@ def _run_browser() -> dict[str, Any]:
  
          page.reload(wait_until="domcontentloaded", timeout=60000)
 -        expect(page.get_by_text("Published Package", exact=True)).to_be_visible(timeout=30000)
