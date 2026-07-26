@@ -156,7 +156,7 @@ def _wait_for_object_count(page: Page, expected: int, timeout_ms: int = 30000) -
           const project = await response.json();
           return (project.pages?.[0]?.canvasObjects?.length ?? 0) >= expected;
         }""",
-        {"projectId": PROJECT_ID, "expected": expected},
+        arg={"projectId": PROJECT_ID, "expected": expected},
         timeout=timeout_ms,
     )
     return _project_objects(page)
