@@ -1,0 +1,46 @@
+name: Apply Exact Symbol Display Name
+
+on:
+  pull_request:
+    branches:
+      - repair/current-dashboard-live-v10
+    paths:
+      - '.github/workflows/apply-exact-symbol-display-name.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-display-name:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Preserve meaningful component-name hyphens
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('frontend/src/components/LibraryPanelV2.tsx')
+          text = path.read_text(encoding='utf-8')
+          old = "return raw.replace(/[_-]+/g, ' ').replace(/\\s+/g, ' ').trim();"
+          new = "return raw.replace(/_+/g, ' ').replace(/\\s+/g, ' ').trim();"
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one displayNameFor normalization line, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+
+      - name: Commit exact display-name behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'Singh360 Controlled Repair'
+          git config user.email 'actions@users.noreply.github.com'
+          git add frontend/src/components/LibraryPanelV2.tsx
+          git commit -m 'Preserve approved hyphens in component display names'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
