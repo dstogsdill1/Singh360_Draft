@@ -1,0 +1,77 @@
+name: Exact Symbol Components V39
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/install_symbol_standard_v38.py'
+      - 'scripts/install_symbol_standard_v39.py'
+      - 'scripts/smoke_symbol_standard_v38.py'
+      - 'scripts/smoke_symbol_standard_v39.py'
+      - 'defaults/symbol_mapper_standard.json'
+      - 'core/library_v2.py'
+      - 'core/legend_template_store.py'
+      - 'frontend/**'
+      - '.github/workflows/exact-symbol-components-v39.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile exact symbol migration
+        run: python -m py_compile scripts/install_symbol_standard_v38.py scripts/install_symbol_standard_v39.py scripts/smoke_symbol_standard_v38.py scripts/smoke_symbol_standard_v39.py
+
+      - name: Run isolated migration and geometry tests
+        run: python -m scripts.smoke_symbol_standard_v39
+
+      - name: Produce inspectable canonical SVG evidence
+        run: python -m scripts.install_symbol_standard_v39 --docs .validation/v39-docs --report .validation/v39-report.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript and Vite production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload V39 validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-symbol-components-v39-${{ matrix.os }}
+          path: |
+            .validation/v39-report.json
+            .validation/v39-docs/library/manifest.json
+            .validation/v39-docs/library/components/symbols_markers/*.svg
+            .validation/v39-docs/library/symbols/symbols_markers/*.svg
+            .validation/v39-docs/library/thumbnails/symbols_markers/*.svg
+            .validation/v39-docs/library/legend_templates/*.json
+            .validation/v39-docs/symbol_mapper/templates/standard.json
+          if-no-files-found: error
+          retention-days: 7
