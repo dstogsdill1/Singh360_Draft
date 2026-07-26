@@ -128,7 +128,7 @@ function rowFromSavedTemplate(
     color: stringField(item, 'color') || choice.color,
     color2: stringField(item, 'color2') || choice.color2,
     pattern: (stringField(item, 'pattern') || choice.pattern) as SymbolPalettePattern,
-    symbolUrl: rendererVersion === CANONICAL_RENDERER ? assets.get(key) : undefined,
+    symbolUrl: stringField(item, 'symbolUrl') || (rendererVersion === CANONICAL_RENDERER ? assets.get(key) : undefined),
   };
 }
 
@@ -210,7 +210,7 @@ export default function SymbolLegendModal({ onInsert, onClose, initialTemplateId
       setColumns(template.columns === 2 ? 2 : 1);
       setMarkerSize(Math.max(26, Math.min(42, Number(template.markerSize || 34))));
       setFrame(Boolean(template.frame));
-      applyRows(next, `${template.name || 'Saved legend'} loaded · ${next.length} symbols · exact V39 assets linked`);
+      applyRows(next, `${template.name || 'Saved legend'} loaded · ${next.length} symbols · exact library assets linked`);
     } catch (err) {
       setRows([]);
       setStatus('The selected symbol legend could not be loaded.');

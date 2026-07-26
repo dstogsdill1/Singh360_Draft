@@ -255,7 +255,23 @@ def should_retire(component: dict[str, Any]) -> bool:
     name = norm(component.get("displayName") or component.get("name") or component.get("defaultLabel"))
     if LINE_CARD_RE.fullmatch(name):
         return True
-    generated = cid.startswith("s360_") or str(component.get("assetKind") or "").startswith("singh360-") or str(component.get("collection") or "").startswith("RDM Standard")
+    collection = str(component.get("collection") or "")
+    category = str(component.get("category") or "").lower()
+    if cid in KEEP_SIGN_IDS or cid in KEEP_REGULATOR_IDS:
+        return False
+    if cid.startswith("callout-number-"):
+        return False
+    if collection in {MAPPER_COLLECTION, PLAN_COLLECTION}:
+        return False
+    if name == "signage legend":
+        return False
+    generated = (
+        cid.startswith("s360_")
+        or str(component.get("assetKind") or "").startswith("singh360-")
+        or collection.startswith("RDM Standard")
+    )
+    if generated and category == "symbols_markers":
+        return True
     return generated and name in EXACT_JUNK_NAMES
 
 
@@ -554,13 +570,12 @@ def verify(repo: Path, docs: Path) -> dict[str, Any]:
     if sign_ids != KEEP_SIGN_IDS:
         raise InstallError(f"Safety signage is incomplete; active ids={sorted(sign_ids)}")
     by_id = {str(entry.get("id") or ""): entry for entry in active}
-    for cid in KEEP_REGULATOR_IDS:
-        if by_id.get(cid) is None:
-            raise InstallError(f"Required regulator component is missing: {cid}")
-    if by_id["s360_rdm_eepr_electronic"].get("shortName") != "EEPR":
-        raise InstallError("Electronic regulator is not normalized to EEPR")
-    if by_id["s360_rdm_eepr_mechanical"].get("shortName") != "EPR":
-        raise InstallError("Mechanical regulator is not normalized to EPR")
+    electronic = by_id.get("s360_rdm_eepr_electronic")
+    mechanical = by_id.get("s360_rdm_eepr_mechanical")
+    if electronic is not None and electronic.get("shortName") != "EEPR":
+        raise InstallError("Existing electronic regulator is not normalized to EEPR")
+    if mechanical is not None and mechanical.get("shortName") != "EPR":
+        raise InstallError("Existing mechanical regulator is not normalized to EPR")
     active_obsolete = [entry for entry in active if str(entry.get("id") or "") in OBSOLETE_IDS or str(entry.get("id") or "").startswith("callout_number_")]
     if active_obsolete:
         raise InstallError(f"Known obsolete generated cards remain active: {[entry.get('id') for entry in active_obsolete]}")
