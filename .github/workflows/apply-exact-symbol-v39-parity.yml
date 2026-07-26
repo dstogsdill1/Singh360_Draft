@@ -30,15 +30,16 @@ jobs:
           test "${#patches[@]}" -eq 9
           git apply --check "${patches[@]}"
 
-      - name: Apply exact scoped patch
+      - name: Apply exact scoped source patch
         shell: bash
         run: |
           set -euo pipefail
           mapfile -t patches < <(find patch/exact-symbol-v39-parity -maxdepth 1 -type f -name '*.patch' | sort)
           git apply "${patches[@]}"
-          rm -rf patch/exact-symbol-v39-parity
-          rm -f .github/workflows/pr-source-export.yml
-          rm -f .github/workflows/apply-exact-symbol-v39-parity.yml
+          # Workflow-file publication is handled separately through the GitHub connector.
+          # Keep this job limited to application source so the Actions token never needs
+          # permission to create, delete, or modify workflow definitions.
+          git restore .github/workflows/exact-symbol-components-v39.yml
 
       - name: Run focused source gates
         shell: bash
@@ -48,12 +49,20 @@ jobs:
           python -m scripts.smoke_symbol_legend_v39_parity
           git diff --check
 
-      - name: Commit exact implementation
+      - name: Commit exact implementation source
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Singh360 Controlled Repair'
           git config user.email 'actions@users.noreply.github.com'
-          git add -A
+          git add \
+            docs/CANONICAL_REFRIGERATION_SYMBOL_COMPONENTS.md \
+            frontend/src/api/client.ts \
+            frontend/src/components/CanvasEditor.tsx \
+            frontend/src/components/LibraryPanelV2.tsx \
+            frontend/src/components/SymbolLegendModal.tsx \
+            frontend/src/styles/libraryV2.css \
+            frontend/src/styles/symbolMapper.css \
+            scripts/smoke_symbol_legend_v39_parity.py
           git commit -m 'Use exact V39 assets in saved symbol legends'
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
