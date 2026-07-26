@@ -101,7 +101,8 @@ try {
             Write-Log "Building frontend for commit $commit."
             Push-Location (Join-Path $Root 'frontend')
             try {
-                $buildOutput = Invoke-NativeCaptured $env:ComSpec @() '/d /c npm run build'
+                $npmCommand = '/d /c ""' + $npm + '" run build"'
+                $buildOutput = Invoke-NativeCaptured $env:ComSpec @() $npmCommand
                 if ($buildOutput) { $buildOutput | Tee-Object -FilePath $Log -Append | Out-Host }
             } finally { Pop-Location }
             Set-Content -LiteralPath $BuildCommit -Value $commit -Encoding ASCII
