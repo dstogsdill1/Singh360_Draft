@@ -413,6 +413,67 @@ def _prepare_runtime_template(standard: dict[str, Any], runtime_template: Path) 
     return True, backup
 
 
+def _save_legend_template(
+    legend_store: LegendTemplateStore,
+    existing: dict[str, Any],
+    rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Write the stable legend while preserving user-edited layout metadata.
+
+    The live branch's LegendTemplateStore has the original narrow save
+    interface. Write through its established storage paths and manifest helpers
+    without changing that public API.
+    """
+    legend_store.ensure()
+    payload = dict(existing)
+    payload.update(
+        {
+            "id": LEGEND_TEMPLATE_ID,
+            "name": str(existing.get("name") or "Singh360 Refrigeration Symbols"),
+            "category": str(existing.get("category") or "refrigeration"),
+            "title": str(existing.get("title") or "SYMBOLS KEY:"),
+            "rows": rows,
+            "rendererVersion": RENDERER_VERSION,
+            "updatedAt": now(),
+        }
+    )
+    payload.setdefault(
+        "layout",
+        {
+            "background": "#ffffff",
+            "border": "#333333",
+            "fontSize": 9,
+            "rowHeight": 28,
+            "iconWidth": 32,
+        },
+    )
+    payload.setdefault("columns", 1)
+    payload.setdefault("markerSize", DEFAULT_MARKER_SIZE)
+    payload.setdefault("frame", False)
+    payload["highlighted"] = True
+
+    path = legend_store.root / f"{LEGEND_TEMPLATE_ID}.json"
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    manifest = legend_store._read_manifest()
+    entries = [
+        entry
+        for entry in (manifest.get("templates") or [])
+        if entry.get("id") != LEGEND_TEMPLATE_ID
+    ]
+    entry = {
+        "id": LEGEND_TEMPLATE_ID,
+        "name": payload["name"],
+        "category": payload["category"],
+        "rowCount": len(rows),
+        "updatedAt": payload["updatedAt"],
+    }
+    entries.insert(0, entry)
+    manifest["templates"] = entries
+    legend_store._write_manifest(manifest)
+    return entry
+
+
 def install(repo: Path, docs: Path) -> dict[str, Any]:
     standard = load_standard(repo)
     symbols = standard["symbols"]
@@ -584,17 +645,7 @@ def install(repo: Path, docs: Path) -> dict[str, Any]:
     ]
     legend_store = LegendTemplateStore(docs)
     existing_legend = legend_store.get_template(LEGEND_TEMPLATE_ID) or {}
-    legend_entry = legend_store.save_template(
-        name=str(existing_legend.get("name") or "Singh360 Refrigeration Symbols"),
-        category=str(existing_legend.get("category") or "refrigeration"),
-        title=str(existing_legend.get("title") or "SYMBOLS KEY:"),
-        rows=legend_rows,
-        template_id=LEGEND_TEMPLATE_ID,
-        columns=int(existing_legend.get("columns") or 1),
-        marker_size=int(existing_legend.get("markerSize") or DEFAULT_MARKER_SIZE),
-        frame=bool(existing_legend.get("frame", False)),
-        highlighted=True,
-    )
+    legend_entry = _save_legend_template(legend_store, existing_legend, legend_rows)
 
     result = {
         "ok": True,
