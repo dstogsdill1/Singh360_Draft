@@ -83,8 +83,30 @@ def main() -> int:
         )
         builder.setdefault("components", []).extend(
             [
-                {"id": "legacy-line-card", "displayName": "CAT6 Drop", "category": "symbols_markers", "sourcePath": ""},
-                {"id": "s360_rdm_electric_defrost", "displayName": "Electric Defrost Plan Marker", "category": "symbols_markers", "sourcePath": ""},
+                {
+                    "id": "legacy-line-card",
+                    "displayName": "CAT6 Drop",
+                    "category": "symbols_markers",
+                    "sourcePath": "",
+                },
+                {
+                    "id": "s360_rdm_electric_defrost",
+                    "displayName": "Electric Defrost Plan Marker",
+                    "category": "symbols_markers",
+                    "sourcePath": "",
+                },
+                {
+                    "id": "s360_rdm_eepr_electronic",
+                    "displayName": "Electronic EEPR Plan Marker",
+                    "category": "symbols_markers",
+                    "sourcePath": "",
+                },
+                {
+                    "id": "s360_rdm_eepr_mechanical",
+                    "displayName": "Mechanical EEPR Plan Marker",
+                    "category": "symbols_markers",
+                    "sourcePath": "",
+                },
             ]
         )
         builder_path.write_text(json.dumps(builder, indent=2), encoding="utf-8")
@@ -124,12 +146,18 @@ def main() -> int:
         assert len(mapper) == 15
         assert len(plan) == len(PLAN_MARKERS)
         assert all(component.get("rendererVersion") == PLAN_RENDERER for component in plan)
-        assert {component["id"] for component in plan} == {stable_plan_id(marker["key"]) for marker in PLAN_MARKERS}
+        assert {component["id"] for component in plan} == {
+            stable_plan_id(marker["key"]) for marker in PLAN_MARKERS
+        }
 
-        plan_legend = json.loads((docs / "library" / "legend_templates" / "singh360-plan-marker-legend.json").read_text(encoding="utf-8"))
+        plan_legend = json.loads(
+            (docs / "library" / "legend_templates" / "singh360-plan-marker-legend.json").read_text(encoding="utf-8")
+        )
         assert len(plan_legend["rows"]) == len(PLAN_MARKERS)
         assert all(row.get("symbolUrl") for row in plan_legend["rows"])
-        safety_legend = json.loads((docs / "library" / "legend_templates" / f"{SAFETY_LEGEND_ID}.json").read_text(encoding="utf-8"))
+        safety_legend = json.loads(
+            (docs / "library" / "legend_templates" / f"{SAFETY_LEGEND_ID}.json").read_text(encoding="utf-8")
+        )
         assert len(safety_legend["rows"]) == 3
 
         second = install(ROOT, docs)
