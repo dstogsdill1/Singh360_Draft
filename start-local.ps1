@@ -97,13 +97,16 @@ try {
 
         $built = if (Test-Path $BuildCommit) { (Get-Content $BuildCommit -First 1).Trim() } else { '' }
         if (-not (Test-Path (Join-Path $Root 'frontend\dist\index.html')) -or $built -ne $commit) {
-            $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
+            $tsc = Join-Path $Root 'frontend\node_modules\.bin\tsc.cmd'
+            $vite = Join-Path $Root 'frontend\node_modules\.bin\vite.cmd'
+            if (-not (Test-Path $tsc) -or -not (Test-Path $vite)) {
+                throw 'Frontend dependencies are missing. Run npm install in frontend.'
+            }
             Write-Log "Building frontend for commit $commit."
             Push-Location (Join-Path $Root 'frontend')
             try {
-                $env:PATH = (Join-Path $Root 'frontend\node_modules\.bin') + ';' + $env:PATH
-                $npmCommand = '/d /c ""' + $npm + '" run build"'
-                $buildOutput = Invoke-NativeCaptured $env:ComSpec @() $npmCommand
+                $buildCommand = '/d /c ""' + $tsc + '" -b && "' + $vite + '" build"'
+                $buildOutput = Invoke-NativeCaptured $env:ComSpec @() $buildCommand
                 if ($buildOutput) { $buildOutput | Tee-Object -FilePath $Log -Append | Out-Host }
             } finally { Pop-Location }
             Set-Content -LiteralPath $BuildCommit -Value $commit -Encoding ASCII
