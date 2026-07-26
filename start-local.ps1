@@ -33,13 +33,6 @@ function Invoke-NativeLogged([string]$File, [string[]]$Arguments) {
     }
 }
 
-function Get-NativeText([string]$File, [string[]]$Arguments) {
-    $lines = @(
-        & $File @Arguments
-    )
-    return [string]::Join("`n", [string[]]$lines).Trim()
-}
-
 function Get-Health {
     try {
         $reply = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/health" -TimeoutSec 3
@@ -66,8 +59,8 @@ try {
 
     $git = Get-Command git.exe -ErrorAction SilentlyContinue
     if ($git) {
-        $commit = Get-NativeText $git.Source @('rev-parse', 'HEAD')
-        $dirty = Get-NativeText $git.Source @('status', '--porcelain')
+        $commit = (& $git.Source rev-parse HEAD | Out-String).Trim()
+        $dirty = (& $git.Source status --porcelain | Out-String).Trim()
         Write-Log "Current commit: $commit"
         if ((Invoke-NativeLogged $git.Source @('fetch', 'origin', '--prune')) -ne 0) {
             throw "Git fetch failed. Log: $Log"
@@ -75,12 +68,12 @@ try {
         if ($dirty) {
             Write-Log 'Working tree is dirty; fetched updates were not pulled over local work.'
         } else {
-            $upstream = Get-NativeText $git.Source @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}')
+            $upstream = (& $git.Source rev-parse --abbrev-ref --symbolic-full-name '@{u}' | Out-String).Trim()
             if ($upstream) {
                 if ((Invoke-NativeLogged $git.Source @('pull', '--ff-only')) -ne 0) {
                     throw "Fast-forward pull failed. Log: $Log"
                 }
-                $commit = Get-NativeText $git.Source @('rev-parse', 'HEAD')
+                $commit = (& $git.Source rev-parse HEAD | Out-String).Trim()
             }
         }
 
