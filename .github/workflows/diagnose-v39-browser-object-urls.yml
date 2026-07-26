@@ -40,14 +40,16 @@ jobs:
           needle = '        required_fragments = ['
           if text.count(needle) != 1:
               raise SystemExit(f'diagnostic insertion anchor count was {text.count(needle)}, expected 1')
-          diagnostic = '''        (EVIDENCE_DIR / "persisted-direct-inserts.json").write_text(
-              json.dumps({"objects": objects, "sourceUrls": source_urls}, indent=2, ensure_ascii=False),
-              encoding="utf-8",
+          diagnostic = (
+              '        (EVIDENCE_DIR / "persisted-direct-inserts.json").write_text(\n'
+              '            json.dumps({"objects": objects, "sourceUrls": source_urls}, indent=2, ensure_ascii=False),\n'
+              '            encoding="utf-8",\n'
+              '        )\n'
+              '        print("PERSISTED_DIRECT_INSERTS=" + json.dumps({"objects": objects, "sourceUrls": source_urls}, ensure_ascii=False))\n'
           )
-          print("PERSISTED_DIRECT_INSERTS=" + json.dumps({"objects": objects, "sourceUrls": source_urls}, ensure_ascii=False))
-          '''
           text = text.replace(needle, diagnostic + needle, 1)
           path.write_text(text, encoding='utf-8')
+          compile(text, str(path), 'exec')
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
       - name: Run diagnostic browser smoke
