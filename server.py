@@ -7,6 +7,7 @@ packages.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import logging
 import os
@@ -55,6 +56,7 @@ from core.project_model import ensure_project_shape, recalc_page_numbers
 from core.sheet_index_sync import sync_project_sheet_index
 from core.project_store import ProjectStore, slugify
 from core.project_data_compiler import apply_compile, preview_compile
+from core.project_package_mirror import export_project_mirror
 from core.project_template_service import ProjectTemplateService
 from core.template_platform import (
     ProfileRegistry,
@@ -362,6 +364,11 @@ def list_projects():
     return jsonify({"projects": store.list_projects()})
 
 
+@app.get("/api/projects/archived")
+def list_archived_projects():
+    return jsonify({"projects": store.list_archived_projects()})
+
+
 def _v2_project(project_id: str) -> tuple[dict, Path]:
     doc = _load_doc(project_id)
     if doc is None:
@@ -466,9 +473,22 @@ def upload_project_sources(project_id: str):
         "addedBy": request.form.get("addedBy", ""),
         "tags": [item.strip() for item in request.form.get("tags", "").split(",") if item.strip()],
         "notes": request.form.get("notes", ""),
+        "virtualPath": request.form.get("virtualPath", ""),
     }
     library = SourceLibrary(project_dir)
-    records = [library.upload(upload.stream, upload.filename or "", metadata) for upload in uploads]
+    try:
+        relative_paths = json.loads(request.form.get("relativePaths", "[]"))
+    except json.JSONDecodeError:
+        relative_paths = []
+    records = []
+    for index, upload in enumerate(uploads):
+        item_metadata = dict(metadata)
+        if index < len(relative_paths):
+            relative = SourceLibrary.safe_virtual_path(str(relative_paths[index]))
+            item_metadata["virtualPath"] = str(Path(relative).parent).replace("\\", "/")
+            if item_metadata["virtualPath"] == ".":
+                item_metadata["virtualPath"] = ""
+        records.append(library.upload(upload.stream, upload.filename or "", item_metadata))
     doc["sourceLibrary"]["count"] = len(library.load()["sources"])
     store.save(project_id, doc)
     return jsonify({"ok": True, "sources": records}), 201
@@ -485,6 +505,42 @@ def read_project_source(project_id: str, source_id: str):
 def archive_project_source(project_id: str, source_id: str):
     _, project_dir = _v2_project(project_id)
     return jsonify({"ok": True, "source": SourceLibrary(project_dir).archive(source_id)})
+
+
+@app.post("/api/projects/<project_id>/sources/<source_id>/restore")
+def restore_project_source(project_id: str, source_id: str):
+    _, project_dir = _v2_project(project_id)
+    return jsonify({"ok": True, "source": SourceLibrary(project_dir).restore(source_id)})
+
+
+@app.get("/api/projects/<project_id>/sources/<source_id>/preview")
+def preview_project_source(project_id: str, source_id: str):
+    _, project_dir = _v2_project(project_id)
+    return jsonify(SourceLibrary(project_dir).preview(source_id))
+
+
+@app.post("/api/projects/<project_id>/source-folders")
+def create_project_source_folder(project_id: str):
+    _, project_dir = _v2_project(project_id)
+    body = request.get_json(force=True, silent=True) or {}
+    folder = SourceLibrary(project_dir).create_folder(str(body.get("path") or ""))
+    return jsonify({"ok": True, "folder": folder}), 201
+
+
+@app.post("/api/projects/<project_id>/sources/import-zip")
+def import_project_source_zip(project_id: str):
+    doc, project_dir = _v2_project(project_id)
+    upload = request.files.get("file")
+    if upload is None or not upload.filename:
+        return jsonify(_err("Choose a ZIP source package.")), 400
+    if Path(upload.filename).suffix.lower() != ".zip":
+        return jsonify(_err("Only ZIP source packages are supported.")), 400
+    result = SourceLibrary(project_dir).import_zip(
+        upload.stream, upload.filename, request.form.get("virtualPath", ""),
+    )
+    doc["sourceLibrary"]["count"] = len(SourceLibrary(project_dir).load()["sources"])
+    store.save(project_id, doc)
+    return jsonify({"ok": True, **result}), 201
 
 
 @app.get("/api/projects/<project_id>/conversion-queue")
@@ -569,6 +625,43 @@ def copy_project_backup(project_id: str):
     target = destination / f"{store._display_name(doc, project_id)}_{project_id}_{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
     shutil.copytree(project_dir, target)
     return jsonify({"ok": True, "backupPath": str(target)})
+
+
+@app.patch("/api/projects/<project_id>/settings/external-mirror")
+def update_external_mirror_settings(project_id: str):
+    doc, _ = _v2_project(project_id)
+    body = request.get_json(force=True, silent=True) or {}
+    path = str(body.get("path") or "").strip()
+    if path and not Path(path).expanduser().is_dir():
+        return jsonify(_err("External mirror folder is unavailable.")), 400
+    doc.setdefault("projectSettings", {})["externalMirrorPath"] = path
+    store.save(project_id, doc)
+    return jsonify({"ok": True, "path": path})
+
+
+@app.post("/api/projects/<project_id>/export/external-mirror")
+def export_external_project_mirror(project_id: str):
+    doc, project_dir = _v2_project(project_id)
+    body = request.get_json(force=True, silent=True) or {}
+    destination = str(
+        body.get("destination")
+        or doc.get("projectSettings", {}).get("externalMirrorPath")
+        or ""
+    ).strip()
+    if not destination:
+        return jsonify(_err("Choose an external mirror folder first.")), 400
+    result = export_project_mirror(
+        project_dir,
+        doc,
+        Path(destination),
+        DOCS_DIR / "migration_staging" / "Singh360_Google_Drive_Project_Folder_Template_V1.zip",
+    )
+    doc.setdefault("projectSettings", {}).update({
+        "externalMirrorPath": destination,
+        "lastExternalMirrorExport": result,
+    })
+    store.save(project_id, doc)
+    return jsonify({"ok": True, **result})
 
 
 @app.post("/api/workspace/reset")
@@ -722,6 +815,11 @@ def save_project(project_id: str):
     if data is None:
         return jsonify(_err("Request body must be valid JSON.")), 400
 
+    previous = _load_doc(project_id) or {}
+    if previous.get("schemaVersion") == 2:
+        for key in ("migration", "projectSettings", "sourceLibrary", "workbookDocument"):
+            if key in previous and key not in data:
+                data[key] = copy.deepcopy(previous[key])
     data["id"] = project_id
     data = ensure_project_shape(data)
     data = sync_project_sheet_index(data)
@@ -732,7 +830,6 @@ def save_project(project_id: str):
     else:
         data.pop("draftValidationWarnings", None)
 
-    previous = _load_doc(project_id) or {}
     previous_sync = (
         previous.get("workbookSync")
         if isinstance(previous.get("workbookSync"), dict)

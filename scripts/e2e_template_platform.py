@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import argparse
 import json
 import sys
 import tempfile
@@ -49,6 +50,9 @@ def make_fixtures(folder: Path) -> list[tuple[str, tuple[str, bytes, str]]]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--keep-project", action="store_true", help="Keep the temporary project visible for diagnostics.")
+    args = parser.parse_args()
     health = expect(requests.get(f"{BASE}/api/health")).json()
     templates = expect(requests.get(f"{BASE}/api/workbook-templates")).json()["templates"]
     template = next(item for item in templates if item["templateId"] == "SINGH360_BASE_V1" and item["active"])
@@ -146,6 +150,12 @@ def main() -> int:
     }
     report_path = project_dir / "debug" / "template_platform_e2e_report.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    evidence = ROOT / ".docs" / "test_evidence" / f"template_platform_e2e_{project_id}.json"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    if not args.keep_project:
+        archived = expect(requests.post(f"{BASE}/api/projects/{project_id}/archive")).json()
+        report["archivedTo"] = archived["archivedTo"]
     print(json.dumps(report, indent=2))
     return 0
 

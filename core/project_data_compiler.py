@@ -1,148 +1,231 @@
-"""Deterministic workbook-to-page compiler for schema-V2 projects."""
+"""Manifest-driven workbook-to-page compiler for schema-V2 projects."""
 from __future__ import annotations
 
 import copy
 import hashlib
+import re
 from datetime import datetime, timezone
 from typing import Any
 
-FAMILY_SHEET_MAP = {
-    "Cover": "00_PROJECT_META",
-    "Sheet Index / TOC": "00_INDEX",
-    "Guidelines": "00_STYLE_GUIDE",
-    "Abbreviations / Symbol Key": "00_STYLE_GUIDE",
-    "Project Directory": "04_PROJECT_DIRECTORY",
-    "Project Scope": "03_SCOPE_AND_PLAN",
-    "Workflow / Milestones": "06_WORKFLOW_MILESTONES",
-    "Responsibility Matrix": "05_RESPONSIBILITY_MATRIX",
-    "Bill of Materials": "19_BILL_OF_MATERIALS",
-    "RDM / IDF Network Table": "11_NETWORK_PORTS",
-    "Panel / WICP Summary": "12_PANELS",
-    "Panel / WICP I/O": "13_PANEL_IO",
-    "Refrigeration Circuit Schedule": "14_REFRIG_CIRCUITS",
-    "Rack I/O / Description": "15_RACKS",
-    "HVAC Equipment / I/O": "16_HVAC_EQUIPMENT",
-    "Lighting Output Matrix": "17_LIGHTING_OUTPUTS",
-    "Cable Pull / Termination Schedule": "18_CABLE_SCHEDULE",
-    "Commissioning / Point-to-Point": "20_COMMISSIONING",
-    "Company Info": "00_PROJECT_META",
-}
-PAGE_TYPE = {"Cover": "cover", "Sheet Index / TOC": "index"}
 
-
-def _stable_id(profile_id: str, family: str, entity_key: str = "base") -> str:
-    digest = hashlib.sha256(f"{profile_id}|{family}|{entity_key}".encode()).hexdigest()[:20]
-    return f"generated-{digest}"
+def _stable_id(profile_id: str, recipe: dict[str, Any]) -> str:
+    explicit = str(recipe.get("page id") or "").strip()
+    if explicit:
+        return explicit
+    key = "|".join([
+        profile_id,
+        str(recipe.get("sheet code") or ""),
+        str(recipe.get("sheet tab") or ""),
+        str(recipe.get("page title") or ""),
+    ])
+    return f"generated-{hashlib.sha256(key.encode()).hexdigest()[:20]}"
 
 
 def _sheet(document: dict[str, Any], name: str) -> dict[str, Any] | None:
-    return next((item for item in document.get("sheets", []) if item.get("name") == name and not item.get("archived")), None)
+    return next(
+        (item for item in document.get("sheets", []) if item.get("name") == name and not item.get("archived")),
+        None,
+    )
 
 
-def _rows(sheet: dict[str, Any] | None) -> list[list[str]]:
+def _rows(sheet: dict[str, Any] | None, limit: int = 5000) -> list[list[str]]:
     if not sheet:
         return []
-    cells = sheet.get("cells", {})
     occupied: list[tuple[int, int, str]] = []
-    for coord, payload in cells.items():
-        letters = "".join(ch for ch in coord if ch.isalpha())
-        digits = "".join(ch for ch in coord if ch.isdigit())
-        if not letters or not digits:
+    for coord, payload in sheet.get("cells", {}).items():
+        match = re.fullmatch(r"([A-Za-z]+)(\d+)", coord)
+        if not match:
             continue
-        col = 0
-        for char in letters.upper():
-            col = col * 26 + ord(char) - 64
+        column = 0
+        for char in match.group(1).upper():
+            column = column * 26 + ord(char) - 64
         value = payload.get("f") or payload.get("v") if isinstance(payload, dict) else payload
-        occupied.append((int(digits), col, "" if value is None else str(value)))
+        occupied.append((int(match.group(2)), column, "" if value is None else str(value)))
     if not occupied:
         return []
-    max_row = min(max(item[0] for item in occupied), 500)
-    max_col = min(max(item[1] for item in occupied), 30)
+    max_row = min(max(item[0] for item in occupied), limit)
+    max_col = min(max(item[1] for item in occupied), 50)
     grid = [["" for _ in range(max_col)] for _ in range(max_row)]
-    for row, col, value in occupied:
-        if row <= max_row and col <= max_col:
-            grid[row - 1][col - 1] = value
+    for row, column, value in occupied:
+        if row <= max_row and column <= max_col:
+            grid[row - 1][column - 1] = value
     while grid and not any(value.strip() for value in grid[-1]):
         grid.pop()
     return grid
 
 
-def build_generated_page(profile_id: str, family: str, sheet: dict[str, Any] | None, order: int) -> dict[str, Any]:
-    grid = _rows(sheet)
+def manifest_recipes(document: dict[str, Any]) -> list[dict[str, Any]]:
+    grid = _rows(_sheet(document, "00_INDEX"), limit=10000)
+    header_index = -1
+    headers: dict[str, int] = {}
+    for index, row in enumerate(grid[:75]):
+        found = {value.strip().casefold(): col for col, value in enumerate(row) if value.strip()}
+        if {"include", "sheet tab", "page title"}.issubset(found):
+            header_index, headers = index, found
+            break
+    if header_index < 0:
+        return []
+    recipes: list[dict[str, Any]] = []
+    for position, row in enumerate(grid[header_index + 1:], start=1):
+        recipe = {
+            name: row[column].strip() if column < len(row) else ""
+            for name, column in headers.items()
+        }
+        if not any(recipe.get(key) for key in ("sheet code", "sheet tab", "page title", "page id")):
+            continue
+        try:
+            recipe["order"] = int(float(recipe.get("order") or position))
+        except ValueError:
+            recipe["order"] = position
+        recipe["included"] = str(recipe.get("include") or "").upper() in {"YES", "Y", "TRUE", "1", "X"}
+        recipes.append(recipe)
+    return sorted(recipes, key=lambda item: int(item["order"]))
+
+
+def _generated_block(page_id: str, source: dict[str, Any] | None) -> list[dict[str, Any]]:
+    grid = _rows(source)
     headers = grid[1] if len(grid) > 1 else (grid[0] if grid else [])
     rows = grid[2:] if len(grid) > 2 else []
-    page_id = _stable_id(profile_id, family)
-    return {
-        "id": page_id, "order": order, "include": True, "issueStatus": "draft",
-        "sheetCode": "", "displaySheetCode": "", "sheetTitle": family,
-        "sheetTab": sheet.get("name", family[:31]) if sheet else family[:31],
-        "pageType": PAGE_TYPE.get(family, "data-grid"), "pageFamily": family,
-        "layoutProfile": "network_48_port" if family == "RDM / IDF Network Table" else "front_matter_table",
-        "template": "singh360-standard", "templateId": "generated-v1",
-        "sourceSheet": sheet.get("name") if sheet else None,
-        "blocks": [{
-            "id": f"{page_id}-generated", "type": "table", "styleRole": "generated",
-            "headers": headers, "rows": rows, "editable": False,
-        }],
-        "canvasObjects": [], "assets": [], "notes": "",
-        "generation": {"profileRecipeId": family, "entityKey": "base", "layerVersion": 1},
+    return [{
+        "id": f"{page_id}-generated",
+        "type": "table",
+        "styleRole": "generated",
+        "headers": headers,
+        "rows": rows,
+        "editable": False,
+    }]
+
+
+def _color_category(recipe: dict[str, Any]) -> str:
+    color = str(recipe.get("color") or "").casefold()
+    family = str(recipe.get("family") or "").casefold()
+    if not recipe.get("included"):
+        return "excluded-archived"
+    if "network" in family or color == "blue":
+        return "network-data"
+    if "lighting" in family or color == "orange":
+        return "lighting"
+    if "layout" in family or color == "purple" and str(recipe.get("source mode")).casefold() == "manual":
+        return "manual-hybrid"
+    if "field" in family:
+        return "field-instructions"
+    if "commission" in family or "closeout" in family or color == "green":
+        return "commissioning-closeout"
+    if str(recipe.get("page type") or "").casefold() == "sheet index":
+        return "page-manifest"
+    return "included-front-matter"
+
+
+def build_page(profile_id: str, recipe: dict[str, Any], source: dict[str, Any] | None) -> dict[str, Any]:
+    page_id = _stable_id(profile_id, recipe)
+    source_mode = str(recipe.get("source mode") or "canonical").casefold()
+    manual = source_mode == "manual" or str(recipe.get("render profile") or "").casefold() == "manual_hybrid"
+    result = {
+        "id": page_id,
+        "order": int(recipe["order"]) - 1,
+        "include": bool(recipe["included"]),
+        "issueStatus": str(recipe.get("issue status") or "draft").casefold(),
+        "sheetCode": recipe.get("sheet code", ""),
+        "displaySheetCode": recipe.get("sheet code", ""),
+        "sheetTitle": recipe.get("page title", ""),
+        "sheetTab": recipe.get("sheet tab", ""),
+        "pageType": recipe.get("page type", "data-grid"),
+        "pageFamily": recipe.get("page title") or recipe.get("family", ""),
+        "layoutProfile": recipe.get("render profile", "front_matter_table"),
+        "splitMode": recipe.get("split mode", "auto"),
+        "sourceMode": recipe.get("source mode", "canonical"),
+        "syncDirection": recipe.get("sync direction", "app_to_workbook"),
+        "colorCategory": _color_category(recipe),
+        "dataState": recipe.get("data state", ""),
+        "required": str(recipe.get("required") or "").upper() == "YES",
+        "template": "singh360-standard",
+        "templateId": "manifest-v2",
+        "sourceSheet": source.get("name") if source else recipe.get("sheet tab"),
+        "blocks": [] if manual else _generated_block(page_id, source),
+        "canvasObjects": [],
+        "assets": [],
+        "notes": recipe.get("notes", ""),
+        "protectedManual": manual,
     }
+    if not manual:
+        result["generation"] = {
+            "profileRecipeId": recipe.get("page id") or page_id,
+            "entityKey": "base",
+            "layerVersion": 2,
+        }
+    return result
 
 
 def preview_compile(project: dict[str, Any], document: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    recipes = manifest_recipes(document)
     existing = {page.get("id"): page for page in project.get("pages", [])}
     operations: list[dict[str, Any]] = []
     warnings: list[str] = []
-    families = profile.get("defaultIncludedFamilies", [])
-    for order, family in enumerate(families):
-        source_name = FAMILY_SHEET_MAP.get(family)
-        source = _sheet(document, source_name) if source_name else None
-        page_id = _stable_id(profile["id"], family)
-        if not source:
-            warnings.append(f"{family}: source worksheet {source_name or 'not configured'} is unavailable; page remains available but blank.")
-        operations.append({"action": "update" if page_id in existing else "add", "pageId": page_id, "family": family, "sourceSheet": source_name})
-    generated_ids = {item["pageId"] for item in operations}
+    for recipe in recipes:
+        page_id = _stable_id(profile["id"], recipe)
+        source_name = str(recipe.get("sheet tab") or "")
+        if str(recipe.get("source mode") or "").casefold() not in {"manual", "workbook"} and not _sheet(document, source_name):
+            warnings.append(f"{recipe.get('sheet code')}: source worksheet {source_name} is unavailable.")
+        operations.append({
+            "action": "update" if page_id in existing else "add",
+            "pageId": page_id,
+            "sheetCode": recipe.get("sheet code"),
+            "family": recipe.get("page title") or recipe.get("family"),
+            "sourceSheet": source_name,
+            "included": recipe["included"],
+        })
+    manifest_ids = {_stable_id(profile["id"], recipe) for recipe in recipes}
     for page in project.get("pages", []):
-        if page.get("generation") and page.get("id") not in generated_ids:
-            operations.append({"action": "exclude", "pageId": page["id"], "family": page.get("pageFamily", "")})
-        elif not page.get("generation"):
-            operations.append({"action": "unchanged", "pageId": page.get("id"), "family": page.get("pageFamily", "Manual")})
-    return {"projectId": project["id"], "operations": operations, "warnings": warnings, "previewedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        if page.get("id") not in manifest_ids:
+            operations.append({
+                "action": "unchanged" if not page.get("generation") else "exclude",
+                "pageId": page.get("id"),
+                "sheetCode": page.get("sheetCode", ""),
+            })
+    return {
+        "projectId": project["id"],
+        "operations": operations,
+        "warnings": warnings,
+        "previewedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
 
 
 def apply_compile(project: dict[str, Any], document: dict[str, Any], profile: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     preview = preview_compile(project, document, profile)
     existing = {page.get("id"): page for page in project.get("pages", [])}
-    generated: list[dict[str, Any]] = []
-    for order, family in enumerate(profile.get("defaultIncludedFamilies", [])):
-        source_name = FAMILY_SHEET_MAP.get(family)
-        new_page = build_generated_page(profile["id"], family, _sheet(document, source_name) if source_name else None, order)
-        old = existing.get(new_page["id"])
+    pages: list[dict[str, Any]] = []
+    manifest_ids: set[str] = set()
+    for recipe in manifest_recipes(document):
+        page_id = _stable_id(profile["id"], recipe)
+        manifest_ids.add(page_id)
+        source = _sheet(document, str(recipe.get("sheet tab") or ""))
+        fresh = build_page(profile["id"], recipe, source)
+        old = existing.get(page_id)
         if old:
-            # Generated blocks are authoritative; every manual/page-specific field survives.
             preserved = copy.deepcopy(old)
-            preserved["blocks"] = new_page["blocks"]
-            preserved["sourceSheet"] = new_page["sourceSheet"]
-            preserved["generation"] = new_page["generation"]
-            preserved["include"] = True
-            preserved["order"] = order
-            generated.append(preserved)
+            for key, value in fresh.items():
+                if key not in {"canvasObjects", "assets", "blocks", "notes"}:
+                    preserved[key] = value
+            if fresh.get("generation"):
+                preserved["blocks"] = fresh["blocks"]
+                preserved["generation"] = fresh["generation"]
+            pages.append(preserved)
         else:
-            generated.append(new_page)
-    generated_ids = {page["id"] for page in generated}
-    manual = [copy.deepcopy(page) for page in project.get("pages", []) if page.get("id") not in generated_ids and not page.get("generation")]
-    retired = [copy.deepcopy(page) for page in project.get("pages", []) if page.get("id") not in generated_ids and page.get("generation")]
-    for page in retired:
-        page["include"] = False
-    pages = generated + manual + retired
-    cover = next((page for page in pages if page.get("pageFamily") == "Cover"), None)
-    index = next((page for page in pages if page.get("pageFamily") == "Sheet Index / TOC"), None)
-    ordered = [item for item in (cover, index) if item]
-    ordered.extend(page for page in pages if page not in ordered)
-    for position, page in enumerate(ordered):
-        page["order"] = position
+            pages.append(fresh)
+    for page in project.get("pages", []):
+        if page.get("id") in manifest_ids:
+            continue
+        preserved = copy.deepcopy(page)
+        if preserved.get("generation"):
+            preserved["include"] = False
+        pages.append(preserved)
+    pages.sort(key=lambda item: int(item.get("order", 999999)))
     result = copy.deepcopy(project)
-    result["pages"] = ordered
-    result["lastCompile"] = {"appliedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "workbookRevision": document.get("revision"), "operations": preview["operations"]}
+    result["pages"] = pages
+    result["lastCompile"] = {
+        "appliedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "workbookRevision": document.get("revision"),
+        "operations": preview["operations"],
+    }
     result["compileWarnings"] = preview["warnings"]
     return result, preview

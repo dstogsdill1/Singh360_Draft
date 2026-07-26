@@ -5,6 +5,7 @@ import PageRenderer from './PageRenderer';
 import SheetFrame from './SheetFrame';
 import TitleBlock from './TitleBlock';
 import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
+import { colorFor } from '../model/colorTaxonomy';
 
 interface Props {
   project: ProjectModel;
@@ -414,6 +415,7 @@ export default function PageNavigator({
             return (
               <article
                 key={page.id}
+                style={{ borderLeftColor: colorFor(page.colorCategory, page.include), borderLeftWidth: 5 }}
                 className={[
                   'page-nav-card',
                   page.id === activePageId ? 'active' : '',
@@ -476,6 +478,7 @@ export default function PageNavigator({
                     {page.include ? 'Published' : 'Excluded'}
                   </span>
                   {page.generatedContinuation || page.continuationOf ? <span>Continuation</span> : null}
+                  {page.protectedManual ? <span title="Generated refresh preserves manual overlays">Protected manual</span> : null}
                   <span className={locked ? 'locked' : 'movable'}>
                     {locked ? 'Locked' : 'Right-click · drag reorder'}
                   </span>

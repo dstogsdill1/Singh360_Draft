@@ -17,6 +17,12 @@ export async function listProjects(): Promise<ProjectListItem[]> {
   return json.projects ?? [];
 }
 
+export async function listArchivedProjects(): Promise<ProjectListItem[]> {
+  const res = await fetch('/api/projects/archived');
+  const json = await res.json();
+  return json.projects ?? [];
+}
+
 export interface ProjectProfile {
   id: string;
   displayName: string;
@@ -49,6 +55,7 @@ export interface WorkbookDocument {
     rowHeights: Record<string, number>;
     columnWidths: Record<string, number>;
     archived?: boolean;
+    tabColor?: string | null;
   }>;
 }
 
@@ -91,6 +98,8 @@ export interface SourceRecord {
   addedBy: string;
   version: number;
   status: string;
+  virtualPath: string;
+  relativePath: string;
   localProjectPath: string;
   tags: string[];
   notes: string;
@@ -98,20 +107,43 @@ export interface SourceRecord {
   supersededBy?: string | null;
 }
 
-export async function listSources(projectId: string): Promise<{ sources: SourceRecord[]; conversionQueue: Record<string, unknown>[] }> {
+export async function listSources(projectId: string): Promise<{ sources: SourceRecord[]; folders: string[]; conversionQueue: Record<string, unknown>[] }> {
   return jsonOrError(await fetch(`/api/projects/${projectId}/sources`));
 }
 
-export async function uploadSources(projectId: string, files: File[], discipline = ''): Promise<SourceRecord[]> {
+export async function uploadSources(projectId: string, files: File[], discipline = '', virtualPath = ''): Promise<SourceRecord[]> {
   const form = new FormData();
   files.forEach((file) => form.append('files', file));
   form.append('discipline', discipline);
+  form.append('virtualPath', virtualPath);
+  form.append('relativePaths', JSON.stringify(files.map((file) => file.webkitRelativePath || file.name)));
   const data = await jsonOrError<{ sources: SourceRecord[] }>(await fetch(`/api/projects/${projectId}/sources`, { method: 'POST', body: form }));
   return data.sources;
 }
 
 export async function archiveSource(projectId: string, sourceId: string): Promise<void> {
   await jsonOrError(await fetch(`/api/projects/${projectId}/sources/${sourceId}/archive`, { method: 'POST' }));
+}
+
+export async function restoreSource(projectId: string, sourceId: string): Promise<void> {
+  await jsonOrError(await fetch(`/api/projects/${projectId}/sources/${sourceId}/restore`, { method: 'POST' }));
+}
+
+export async function previewSource(projectId: string, sourceId: string): Promise<Record<string, unknown>> {
+  return jsonOrError(await fetch(`/api/projects/${projectId}/sources/${sourceId}/preview`));
+}
+
+export async function createSourceFolder(projectId: string, path: string): Promise<void> {
+  await jsonOrError(await fetch(`/api/projects/${projectId}/source-folders`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }),
+  }));
+}
+
+export async function importSourceZip(projectId: string, file: File, virtualPath = ''): Promise<void> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('virtualPath', virtualPath);
+  await jsonOrError(await fetch(`/api/projects/${projectId}/sources/import-zip`, { method: 'POST', body: form }));
 }
 
 export async function addConversionItem(projectId: string, sourceId: string): Promise<void> {

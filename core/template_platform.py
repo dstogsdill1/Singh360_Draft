@@ -13,11 +13,13 @@ import re
 import shutil
 import tempfile
 import uuid
-from datetime import datetime, timezone
+import zipfile
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Any, BinaryIO
 
 from openpyxl import load_workbook
+from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from werkzeug.utils import secure_filename
 
@@ -32,6 +34,13 @@ SAFE_SOURCE_EXTENSIONS = {
 }
 MAX_SOURCE_BYTES = 100 * 1024 * 1024
 WORKBOOK_HISTORY_LIMIT = 20
+SOURCE_FOLDERS = [
+    "Drawings/CD Set", "Drawings/Bid Set", "Drawings/Construction Set",
+    "Drawings/Bulletins", "Drawings/As-Builts",
+    "Converted Schedules/Original Excel", "Converted Schedules/Cleaned Data",
+    "Survey Photos", "Reference Documents", "Manufacturer Data", "Drawing Assets",
+    "Manual Layouts", "Programming", "Commissioning", "Archive",
+]
 REQUIRED_BASE_SHEETS = {
     "00_PROJECT_META", "00_TEMPLATE_PROFILE", "00_INDEX", "00_STYLE_GUIDE",
     "01_SOURCE_LIBRARY", "02_CONVERSION_QUEUE", "03_SCOPE_AND_PLAN",
@@ -221,7 +230,8 @@ def workbook_to_document(path: Path) -> dict[str, Any]:
         for row in ws.iter_rows(min_row=1, max_row=max_row, max_col=max_col):
             for cell in row:
                 if cell.value is not None:
-                    cells[cell.coordinate] = {"v": cell.value}
+                    value = cell.value.isoformat() if isinstance(cell.value, (date, datetime, time)) else cell.value
+                    cells[cell.coordinate] = {"v": value}
                     if isinstance(cell.value, str) and cell.value.startswith("="):
                         cells[cell.coordinate] = {"f": cell.value}
                 style = _cell_style(cell)
@@ -230,6 +240,11 @@ def workbook_to_document(path: Path) -> dict[str, Any]:
         sheets.append({
             "id": uuid.uuid5(uuid.NAMESPACE_URL, f"singh360:{ws.title}").hex[:16],
             "name": ws.title, "cells": cells, "styles": styles,
+            "tabColor": (
+                f"#{ws.sheet_properties.tabColor.rgb[-6:]}"
+                if ws.sheet_properties.tabColor and ws.sheet_properties.tabColor.type == "rgb"
+                else None
+            ),
             "merges": [str(item) for item in ws.merged_cells.ranges],
             "rowHeights": {str(i): dim.height for i, dim in ws.row_dimensions.items() if dim.height},
             "columnWidths": {key: dim.width for key, dim in ws.column_dimensions.items() if dim.width},
@@ -277,17 +292,42 @@ class SourceLibrary:
 
     def load(self) -> dict[str, Any]:
         if not self.manifest_path.is_file():
-            return {"schemaVersion": 1, "sources": [], "conversionQueue": []}
-        return json.loads(self.manifest_path.read_text("utf-8"))
+            return {
+                "schemaVersion": 2, "folders": SOURCE_FOLDERS,
+                "sources": [], "conversionQueue": [], "importReports": [],
+            }
+        payload = json.loads(self.manifest_path.read_text("utf-8"))
+        payload["schemaVersion"] = 2
+        payload.setdefault("folders", SOURCE_FOLDERS)
+        payload.setdefault("importReports", [])
+        return payload
+
+    @staticmethod
+    def safe_virtual_path(value: str) -> str:
+        raw = str(value or "").replace("\\", "/").strip("/")
+        if not raw:
+            return ""
+        parts = [part.strip() for part in raw.split("/") if part.strip()]
+        if any(
+            part in {".", ".."}
+            or not re.fullmatch(r'[^<>:"|?*\x00-\x1f]+', part)
+            or part.endswith((".", " "))
+            for part in parts
+        ):
+            raise TemplatePlatformError("Source virtual path contains traversal or an absolute path.")
+        return "/".join(parts)
 
     def upload(self, stream: BinaryIO, original_name: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        if Path(str(original_name).replace("\\", "/")).name != str(original_name).replace("\\", "/").split("/")[-1]:
+            raise TemplatePlatformError("Source filename is unsafe.")
         safe_name = secure_filename(Path(original_name).name)
         suffix = Path(safe_name).suffix.lower()
         kind = SAFE_SOURCE_EXTENSIONS.get(suffix)
         if not safe_name or not kind:
             raise TemplatePlatformError(f"Unsupported or unsafe source file: {original_name}")
         source_id = uuid.uuid4().hex[:16]
-        destination_dir = self.project_dir / "sources" / kind
+        virtual_path = self.safe_virtual_path((metadata or {}).get("virtualPath", ""))
+        destination_dir = self.project_dir / "sources" / "library" / virtual_path
         destination_dir.mkdir(parents=True, exist_ok=True)
         destination = destination_dir / f"{source_id}__{safe_name}"
         digest = hashlib.sha256()
@@ -305,7 +345,10 @@ class SourceLibrary:
                 digest.update(chunk)
                 handle.write(chunk)
         payload = self.load()
-        existing_versions = [s for s in payload["sources"] if s.get("originalFileName") == original_name]
+        existing_versions = [
+            s for s in payload["sources"]
+            if s.get("originalFileName") == original_name and s.get("virtualPath", "") == virtual_path
+        ]
         record = {
             "id": source_id, "originalFileName": original_name, "storedFileName": destination.name,
             "mediaType": suffix.lstrip("."), "sourceType": kind,
@@ -313,6 +356,8 @@ class SourceLibrary:
             "sha256": digest.hexdigest(), "dateAdded": utcnow(),
             "addedBy": (metadata or {}).get("addedBy", ""),
             "version": len(existing_versions) + 1, "status": "active",
+            "virtualPath": virtual_path,
+            "relativePath": f"{virtual_path}/{safe_name}".strip("/"),
             "localProjectPath": str(destination.relative_to(self.project_dir)).replace("\\", "/"),
             "originalLocation": (metadata or {}).get("originalLocation", ""),
             "backupLocation": (metadata or {}).get("backupLocation", ""),
@@ -326,8 +371,61 @@ class SourceLibrary:
                     old["supersededBy"] = source_id
                     old["status"] = "superseded"
         payload["sources"].append(record)
+        if virtual_path and virtual_path not in payload["folders"]:
+            payload["folders"].append(virtual_path)
         atomic_json_write(self.manifest_path, payload)
         return record
+
+    def create_folder(self, virtual_path: str) -> str:
+        safe = self.safe_virtual_path(virtual_path)
+        if not safe:
+            raise TemplatePlatformError("Folder path is required.")
+        payload = self.load()
+        if safe not in payload["folders"]:
+            payload["folders"].append(safe)
+            payload["folders"].sort()
+            atomic_json_write(self.manifest_path, payload)
+        return safe
+
+    def import_zip(self, archive: BinaryIO, original_name: str, virtual_path: str = "") -> dict[str, Any]:
+        root = self.safe_virtual_path(virtual_path)
+        debug_dir = self.project_dir / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(suffix=".zip", dir=debug_dir)
+        os.close(fd)
+        temp = Path(temp_name)
+        imported: list[dict[str, Any]] = []
+        rejected: list[dict[str, str]] = []
+        try:
+            with temp.open("wb") as handle:
+                shutil.copyfileobj(archive, handle)
+            with zipfile.ZipFile(temp) as bundle:
+                for member in bundle.infolist():
+                    if member.is_dir():
+                        continue
+                    try:
+                        member_path = self.safe_virtual_path(member.filename)
+                        folder, name = str(Path(member_path).parent).replace("\\", "/"), Path(member_path).name
+                        if folder == ".":
+                            folder = ""
+                        target_folder = "/".join(part for part in (root, folder) if part)
+                        with bundle.open(member) as stream:
+                            imported.append(self.upload(stream, name, {
+                                "virtualPath": target_folder,
+                                "originalLocation": f"{original_name}:{member.filename}",
+                            }))
+                    except Exception as exc:
+                        rejected.append({"path": member.filename, "reason": str(exc)})
+            payload = self.load()
+            report = {
+                "id": uuid.uuid4().hex[:16], "archive": original_name,
+                "imported": len(imported), "rejected": rejected, "createdAt": utcnow(),
+            }
+            payload["importReports"].append(report)
+            atomic_json_write(self.manifest_path, payload)
+            return {"report": report, "sources": imported}
+        finally:
+            temp.unlink(missing_ok=True)
 
     def archive(self, source_id: str) -> dict[str, Any]:
         if not SOURCE_ID_RE.fullmatch(source_id):
@@ -340,6 +438,56 @@ class SourceLibrary:
                 atomic_json_write(self.manifest_path, payload)
                 return source
         raise TemplatePlatformError("Source not found.")
+
+    def restore(self, source_id: str) -> dict[str, Any]:
+        payload = self.load()
+        for source in payload["sources"]:
+            if source["id"] == source_id:
+                source["status"] = "active"
+                source.pop("archivedAt", None)
+                atomic_json_write(self.manifest_path, payload)
+                return source
+        raise TemplatePlatformError("Source not found.")
+
+    def preview(self, source_id: str) -> dict[str, Any]:
+        source, path = self.resolve(source_id)
+        result: dict[str, Any] = {
+            "source": source, "kind": source["sourceType"], "previewError": "",
+        }
+        try:
+            suffix = path.suffix.lower()
+            if suffix in {".xlsx", ".xlsm"}:
+                wb = load_workbook(path, read_only=True, data_only=False)
+                result["sheets"] = wb.sheetnames
+                ws = wb[wb.sheetnames[0]]
+                result["grid"] = [
+                    ["" if value is None else str(value) for value in row]
+                    for row in ws.iter_rows(max_row=50, max_col=20, values_only=True)
+                ]
+                wb.close()
+            elif suffix in {".csv", ".txt", ".rtf"}:
+                text = path.read_text("utf-8", errors="replace")[:100_000]
+                result["text"] = text
+                if suffix == ".csv":
+                    result["grid"] = [line.split(",")[:30] for line in text.splitlines()[:100]]
+            elif suffix == ".pdf":
+                import fitz
+                pdf = fitz.open(path)
+                result["pageCount"] = pdf.page_count
+                result["pageSizes"] = [
+                    {"width": page.rect.width, "height": page.rect.height}
+                    for page in list(pdf)[:25]
+                ]
+                pdf.close()
+            elif suffix in {".png", ".jpg", ".jpeg", ".webp"}:
+                from PIL import Image
+                with Image.open(path) as image:
+                    result["dimensions"] = {"width": image.width, "height": image.height}
+            else:
+                result["fallback"] = "metadata"
+        except Exception as exc:
+            result["previewError"] = f"{type(exc).__name__}: {exc}"
+        return result
 
     def resolve(self, source_id: str) -> tuple[dict[str, Any], Path]:
         if not SOURCE_ID_RE.fullmatch(source_id):
@@ -413,8 +561,14 @@ def write_document_to_workbook(document: dict[str, Any], workbook_path: Path, pr
             continue
         ws = wb[name] if name in wb.sheetnames else wb.create_sheet(name)
         desired_order.append(name)
-        for merged in list(ws.merged_cells.ranges):
-            ws.unmerge_cells(str(merged))
+        # Imported workbooks can contain overlapping merge metadata. Calling
+        # unmerge_cells range-by-range can then delete the same placeholder
+        # twice inside openpyxl. Reset the merge registry and placeholders as
+        # one operation before applying the document's canonical merge list.
+        ws.merged_cells.ranges.clear()
+        for key, cell in list(ws._cells.items()):
+            if isinstance(cell, MergedCell):
+                del ws._cells[key]
         for coord, payload in sheet.get("cells", {}).items():
             value = payload.get("f") or payload.get("v") if isinstance(payload, dict) else payload
             ws[coord] = value

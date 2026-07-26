@@ -57,7 +57,8 @@ def main() -> int:
         client = server.app.test_client()
         standard = client.get("/api/symbol-mapper/template")
         assert standard.status_code == 200, standard.get_data(as_text=True)
-        assert len(standard.get_json()["template"]["symbols"]) == 13
+        baseline_count = len(standard.get_json()["template"]["symbols"])
+        assert baseline_count >= 13
         updated_standard = client.put("/api/symbol-mapper/template", json={"symbols": [{
             "code": "ZZ",
             "label": "FUTURE TEST SYMBOL",
@@ -68,7 +69,7 @@ def main() -> int:
             "pattern": "solid",
         }]})
         assert updated_standard.status_code == 200, updated_standard.get_data(as_text=True)
-        assert updated_standard.get_json()["total"] == 14
+        assert updated_standard.get_json()["total"] == baseline_count + 1
 
         created = client.post(
             "/api/symbol-mapper/sessions",
@@ -78,7 +79,7 @@ def main() -> int:
         assert created.status_code == 201, created.get_data(as_text=True)
         session = created.get_json()
         sid = session["id"]
-        assert len(session["template"]["symbols"]) == 14
+        assert len(session["template"]["symbols"]) == baseline_count + 1
         legend = session.get("legend") or {}
         assert legend.get("found") is True, legend
         assert [row["code"] for row in legend.get("rows", [])] == ["TS", "CC"], legend

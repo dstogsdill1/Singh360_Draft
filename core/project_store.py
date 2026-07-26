@@ -535,3 +535,25 @@ class ProjectStore:
             )
         out.sort(key=lambda r: str(r.get("modified") or r.get("lastSavedAt") or ""), reverse=True)
         return out
+
+    def list_archived_projects(self) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        roots = [self.projects_dir / "_archive", self.docs / "_archive"]
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for project_json in root.rglob("project.json"):
+                try:
+                    data = json.loads(project_json.read_text("utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    continue
+                meta = data.get("metadata", {}) if isinstance(data.get("metadata"), dict) else {}
+                out.append({
+                    "id": data.get("id") or project_json.parent.name.rsplit("__", 1)[-1],
+                    "projectName": meta.get("projectName") or data.get("projectDisplayName") or "Untitled Project",
+                    "folder": str(project_json.parent),
+                    "archived": True,
+                    "schemaVersion": data.get("schemaVersion", 1),
+                    "pageCount": len(data.get("pages") or []),
+                })
+        return sorted(out, key=lambda item: item["projectName"].casefold())

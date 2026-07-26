@@ -13,7 +13,7 @@ from openpyxl import load_workbook
 from .project_store import ProjectStore, slugify
 from .template_platform import (
     ProfileRegistry, TemplatePlatformError, TemplateRegistry,
-    WorkbookDocumentStore, apply_standard_sheet_style, atomic_json_write,
+    SOURCE_FOLDERS, WorkbookDocumentStore, apply_standard_sheet_style, atomic_json_write,
     sha256_file, utcnow, workbook_to_document,
 )
 
@@ -24,10 +24,10 @@ class ProjectTemplateService:
         self.profiles = profiles
         self.templates = templates
 
-    def create(self, body: dict[str, Any]) -> dict[str, Any]:
+    def create(self, body: dict[str, Any], source_workbook: Path | None = None) -> dict[str, Any]:
         profile = self.profiles.get(str(body.get("profileId") or ""))
         template = self.templates.get(str(body.get("templateId") or ""))
-        if profile["id"] not in template.get("supportedProfiles", []):
+        if source_workbook is None and profile["id"] not in template.get("supportedProfiles", []):
             raise TemplatePlatformError(f"Template does not support profile {profile['id']}.")
         metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
         name = str(metadata.get("projectName") or "").strip()
@@ -39,13 +39,18 @@ class ProjectTemplateService:
             raise TemplatePlatformError("Generated project folder already exists; retry creation.")
         try:
             self.store.ensure_folders(project_dir)
-            source_template = Path(template["absoluteRuntimePath"])
+            source_template = Path(source_workbook) if source_workbook else Path(template["absoluteRuntimePath"])
+            if not source_template.is_file():
+                raise TemplatePlatformError(f"Project workbook was not found: {source_template}")
             workbook_path = project_dir / "sources" / "workbook" / source_template.name
             shutil.copy2(source_template, workbook_path)
             self._apply_profile(workbook_path, profile, metadata, project_id)
             document = workbook_to_document(workbook_path)
             WorkbookDocumentStore(project_dir).create(document)
-            source_manifest = {"schemaVersion": 1, "sources": [], "conversionQueue": []}
+            source_manifest = {
+                "schemaVersion": 2, "folders": SOURCE_FOLDERS,
+                "sources": [], "conversionQueue": [], "importReports": [],
+            }
             atomic_json_write(project_dir / "source_library.json", source_manifest)
             project = {
                 "id": project_id, "schemaVersion": 2, "metadata": metadata,
@@ -73,18 +78,14 @@ class ProjectTemplateService:
     def _apply_profile(self, workbook_path: Path, profile: dict[str, Any], metadata: dict[str, Any], project_id: str) -> None:
         wb = load_workbook(workbook_path)
         for name in profile["dataSheets"]:
-            ws = wb[name] if name in wb.sheetnames else wb.create_sheet(name)
-            if ws.max_row == 1 and ws.max_column == 1 and ws["A1"].value is None:
+            existed = name in wb.sheetnames
+            ws = wb[name] if existed else wb.create_sheet(name)
+            if not existed:
                 ws.append([name.replace("_", " ")])
                 ws.append(["Field", "Value", "Source / Notes"])
                 ws.append(["", "", ""])
-            apply_standard_sheet_style(ws)
+                apply_standard_sheet_style(ws)
         meta = wb["00_PROJECT_META"]
-        for merged in list(meta.merged_cells.ranges):
-            meta.unmerge_cells(str(merged))
-        meta.delete_rows(1, meta.max_row)
-        meta.append(["SINGH360 PROJECT METADATA", "", ""])
-        meta.append(["Field", "Value", "Source / Notes"])
         mapping = [("Project ID", project_id), ("Project Name", metadata.get("projectName", "")),
                    ("Store / Site Number", metadata.get("storeNumber", "")), ("Client", metadata.get("client", "")),
                    ("Location", metadata.get("location", "")), ("Address", metadata.get("address", "")),
@@ -92,26 +93,81 @@ class ProjectTemplateService:
                    ("Scope Summary", metadata.get("scopeSummary", "")), ("Drawing Prefix", metadata.get("drawingPrefix", "")),
                    ("Revision", metadata.get("revision", "")), ("Drawn By", metadata.get("drawnBy", "")),
                    ("Checked By", metadata.get("checkedBy", ""))]
-        for row in mapping:
-            meta.append([row[0], row[1], "User supplied"])
-        apply_standard_sheet_style(meta)
+        self._update_named_values(meta, mapping)
+
         index = wb["00_INDEX"]
-        for merged in list(index.merged_cells.ranges):
-            index.unmerge_cells(str(merged))
-        index.delete_rows(1, index.max_row)
-        index.append(["SINGH360 DRAWING INDEX", "", "", "", ""])
-        index.append(["Page ID", "Family", "Include", "Issue Status", "Sheet Title"])
-        for family in profile["defaultIncludedFamilies"]:
-            page_id = uuid.uuid5(uuid.NAMESPACE_URL, f"{profile['id']}|{family}|base").hex[:20]
-            index.append([f"generated-{page_id}", family, "YES", "DRAFT", family])
-        apply_standard_sheet_style(index)
+        headers = self._find_headers(index)
+        if headers:
+            profile_col = headers.get("template profile")
+            include_col = headers["include"]
+            family_col = headers.get("family")
+            for row in range(headers["_row"] + 1, index.max_row + 1):
+                if profile_col:
+                    index.cell(row, profile_col, profile["id"])
+                if family_col and not index.cell(row, include_col).value:
+                    family = str(index.cell(row, family_col).value or "")
+                    index.cell(
+                        row,
+                        include_col,
+                        "YES" if family in profile["defaultIncludedFamilies"] else "NO",
+                    )
+        else:
+            self._seed_index(index, profile)
+
         profile_ws = wb["00_TEMPLATE_PROFILE"]
-        for merged in list(profile_ws.merged_cells.ranges):
-            profile_ws.unmerge_cells(str(merged))
-        profile_ws.delete_rows(1, profile_ws.max_row)
-        profile_ws.append(["SINGH360 TEMPLATE PROFILE", "", ""])
-        profile_ws.append(["Profile ID", "Profile Version", "Style Profile"])
-        profile_ws.append([profile["id"], profile["version"], profile["styleProfile"]])
-        apply_standard_sheet_style(profile_ws)
+        self._update_named_values(profile_ws, [
+            ("Profile ID", profile["id"]),
+            ("Profile Version", profile["version"]),
+            ("Style Profile", profile["styleProfile"]),
+        ])
         wb.save(workbook_path)
         wb.close()
+
+    @staticmethod
+    def _update_named_values(ws: Any, mapping: list[tuple[str, Any]]) -> None:
+        labels = {str(label).strip().casefold(): value for label, value in mapping}
+        found: set[str] = set()
+        for row in ws.iter_rows():
+            for cell in row:
+                key = str(cell.value or "").strip().casefold()
+                if key in labels:
+                    ws.cell(cell.row, min(cell.column + 1, ws.max_column + 1), labels[key])
+                    found.add(key)
+                    break
+        for label, value in mapping:
+            if label.casefold() not in found:
+                ws.append([label, value, "User supplied"])
+
+    @staticmethod
+    def _find_headers(ws: Any) -> dict[str, int] | None:
+        for row_number in range(1, min(ws.max_row, 75) + 1):
+            found = {
+                str(ws.cell(row_number, column).value or "").strip().casefold(): column
+                for column in range(1, ws.max_column + 1)
+                if ws.cell(row_number, column).value not in (None, "")
+            }
+            if {"include", "sheet tab", "page title"}.issubset(found):
+                found["_row"] = row_number
+                return found
+        return None
+
+    @staticmethod
+    def _seed_index(ws: Any, profile: dict[str, Any]) -> None:
+        for merged in list(ws.merged_cells.ranges):
+            ws.unmerge_cells(str(merged))
+        ws.delete_rows(1, ws.max_row)
+        headers = [
+            "Include", "Order", "Sheet Code", "Sheet Tab", "Page Title", "Family",
+            "Page Type", "Notes", "Render Profile", "Split Mode", "Template Profile",
+            "Required", "Issue Status", "Page ID", "Source Mode", "Sync Direction",
+            "Color", "Data State",
+        ]
+        ws.append(headers)
+        for order, family in enumerate(profile["defaultIncludedFamilies"], start=1):
+            page_id = uuid.uuid5(uuid.NAMESPACE_URL, f"{profile['id']}|{family}|base").hex[:20]
+            ws.append([
+                "YES", order, "", "", family, family, "Table / Schedule", "",
+                "front_matter_table", "auto", profile["id"], "YES", "draft",
+                f"generated-{page_id}", "canonical", "app_to_workbook", "GOLD", "READY",
+            ])
+        apply_standard_sheet_style(ws)

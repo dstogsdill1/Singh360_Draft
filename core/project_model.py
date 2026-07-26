@@ -145,6 +145,8 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
             "projectTemplateHash",
             "workbookDocument",
             "sourceLibrary",
+            "migration",
+            "projectSettings",
             "lastCompile",
             "compileWarnings",
             "createdAt",

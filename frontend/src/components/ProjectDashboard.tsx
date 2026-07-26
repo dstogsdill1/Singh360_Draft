@@ -9,6 +9,7 @@ import {
   getWorkbookLinkStatus,
   getWorkbookQuality,
   linkWorkbookPath,
+  listArchivedProjects,
   listProjects,
   openLinkedWorkbook,
   pickWorkbookPath,
@@ -65,6 +66,8 @@ function downloadBlob(blob: Blob, filename: string) {
 
 export default function ProjectDashboard({ project }: Props) {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [archivedProjects, setArchivedProjects] = useState<ProjectListItem[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [link, setLink] = useState<WorkbookLinkStatus | null>(null);
   const [linkPath, setLinkPath] = useState('');
   const [quality, setQuality] = useState<WorkbookQualityReport | null>(null);
@@ -104,6 +107,12 @@ export default function ProjectDashboard({ project }: Props) {
     } catch {
       setLibraryHealth(null);
     }
+  };
+
+  const toggleArchived = async () => {
+    const next = !showArchived;
+    setShowArchived(next);
+    if (next) setArchivedProjects(await listArchivedProjects());
   };
 
   useEffect(() => {
@@ -378,9 +387,12 @@ export default function ProjectDashboard({ project }: Props) {
       <div className="project-home-layout">
         <aside className="project-list-card">
           <div className="card-head">
-            <h2>Projects</h2>
+            <h2>{showArchived ? 'Archived Projects' : 'Projects'}</h2>
             <button type="button" className="primary" onClick={() => window.location.assign('/app?view=new')}>New Project</button>
             <button type="button" onClick={confirmNewProject}>Import Workbook</button>
+            <button type="button" onClick={() => void toggleArchived()}>
+              {showArchived ? 'Active Projects' : 'Archived Projects'}
+            </button>
             <input
               ref={newWorkbookRef}
               type="file"
@@ -394,19 +406,25 @@ export default function ProjectDashboard({ project }: Props) {
             />
           </div>
           <div className="project-list">
-            {projects.map((item) => (
+            {(showArchived ? archivedProjects : projects).map((item) => (
               <button
                 type="button"
-                key={item.id}
+                key={`${item.id}-${item.folder || ''}`}
                 className={item.id === project?.id ? 'active' : ''}
-                onClick={() => window.location.assign(`/app?project=${item.id}&mode=editor`)}
+                disabled={showArchived}
+                title={showArchived ? item.folder : undefined}
+                onClick={() => {
+                  if (!showArchived) window.location.assign(`/app?project=${item.id}&mode=editor`);
+                }}
               >
                 <strong>{projectName(item)}</strong>
-                <span>{item.sourceWorkbook || 'No workbook name'}</span>
+                <span>{showArchived ? item.folder : item.sourceWorkbook || 'No workbook name'}</span>
                 <small>{item.lastSavedAt || item.modified || ''}</small>
               </button>
             ))}
-            {!projects.length && <p className="empty-note">No saved projects were found.</p>}
+            {!(showArchived ? archivedProjects : projects).length && (
+              <p className="empty-note">No {showArchived ? 'archived' : 'saved'} projects were found.</p>
+            )}
           </div>
         </aside>
 

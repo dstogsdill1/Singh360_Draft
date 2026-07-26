@@ -58,6 +58,49 @@
       "version": "1.0.0"
     },
     {
+      "id": "EMS_LIGHTING",
+      "displayName": "EMS Lighting / Dimming Integration",
+      "description": "Customer-neutral lighting, dimming, contactor-control, field-instruction, and commissioning package.",
+      "extends": "BASE_CORE",
+      "styleProfile": "singh360-standard-v1",
+      "sourceSlots": [],
+      "dataSheets": [
+        "10_CONTROLLERS", "11_NETWORK_PORTS", "12_PANELS", "13_PANEL_IO",
+        "17_LIGHTING_OUTPUTS", "18_CABLE_SCHEDULE", "19_BILL_OF_MATERIALS",
+        "20_COMMISSIONING", "21_LIGHTING_SCHEDULE", "22_LCP1_CONTACTOR_IO",
+        "23_LCP2_DIMMING_IO", "24_FIELD_INSTRUCTIONS", "25_EQUIPMENT_SUPPLY",
+        "26_HEB_RESPONSIBILITIES", "27_REVISION_LOG", "28_RDM_PARTS"
+      ],
+      "pageRecipes": [
+        "rdm-parts", "equipment-supply", "heb-responsibilities", "bill-of-materials",
+        "overall-layout", "rdm-idf-network", "cable-schedule", "lighting-output",
+        "lighting-schedule", "lcp1-contactor", "lcp2-dimming", "field-instructions",
+        "lcp1-schematic", "lcp2-schematic", "interior-location", "exterior-location",
+        "commissioning", "exception-log", "cutover-plan"
+      ],
+      "defaultIncludedFamilies": [
+        "Cover", "Sheet Index / TOC", "Guidelines", "Abbreviations / Symbol Key",
+        "Project Directory", "Project Scope", "Workflow / Milestones",
+        "Responsibility Matrix", "H-E-B Responsibilities Matrix",
+        "Equipment Supply Schedule", "RDM Parts Schedule", "Bill of Materials",
+        "EMS Controls Overall Layout", "RDM / IDF Network Table",
+        "Cable Pull / Termination Schedule", "Lighting Output Matrix",
+        "Lighting Schedule", "LCP-1 Contactor Panel", "LCP-2 Dimming Panel",
+        "EC / DC / EMS Field Instructions", "LCP-1 Wiring Schematic",
+        "LCP-2 Wiring Schematic", "Interior Device Location", "Singh360 Company Info"
+      ],
+      "optionalFamilies": [
+        "Revision / Issue Log", "Exterior Device Location", "Commissioning Checklist",
+        "Exception / Punch Log", "Cutover Plan"
+      ],
+      "validationRules": {
+        "requiredSheets": ["00_PROJECT_META", "00_INDEX", "21_LIGHTING_SCHEDULE", "22_LCP1_CONTACTOR_IO", "23_LCP2_DIMMING_IO", "28_RDM_PARTS"],
+        "explicitPublishValue": "YES",
+        "preserveManualLayers": true
+      },
+      "version": "1.0.0"
+    },
+    {
       "id": "CX",
       "displayName": "Commissioning",
       "description": "Commissioning verification and closeout package without assumed design pages.",

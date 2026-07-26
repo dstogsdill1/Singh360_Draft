@@ -189,6 +189,8 @@ export interface PageModel {
   sheetTab: string;
   pageType: PageType;
   pageFamily?: string;
+  colorCategory?: string;
+  protectedManual?: boolean;
   /** Export-visible placeholder note for a blank canvas/drawing/pdf-vector
    *  page with no image content (FINAL RELEASE CLEANUP 4H+SA38, Phase C).
    *  Set by the importer; blank/absent when the page has real image content

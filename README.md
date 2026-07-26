@@ -15,7 +15,8 @@ schema-V1 projects.
 See [Project Template Platform](docs/PROJECT_TEMPLATE_PLATFORM.md),
 [Project Source Library](docs/PROJECT_SOURCE_LIBRARY.md),
 [Data Workspace](docs/DATA_WORKSPACE.md), and
-[Project Profile Schema](docs/PROJECT_PROFILE_SCHEMA.md).
+[Project Profile Schema](docs/PROJECT_PROFILE_SCHEMA.md), and
+[Project Storage and Source Workflow](docs/PROJECT_STORAGE_AND_SOURCE_WORKFLOW.md).
 
 ## Start locally
 

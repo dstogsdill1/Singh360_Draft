@@ -46,10 +46,11 @@ export function toUniverWorkbook(document: WorkbookDocument, projectName: string
     Object.entries(sheet.columnWidths).forEach(([column, width]) => { columnData[columnIndex(column)] = { w: width * 7 }; });
     sheets[sheet.id] = {
       id: sheet.id, name: sheet.name, hidden: sheet.archived ? 1 : 0,
+      tabColor: sheet.tabColor || undefined,
       rowCount: Math.max(200, ...Object.keys(cellData).map(Number).map((value) => value + 20)),
       columnCount: 50, cellData, rowData, columnData,
       mergeData: sheet.merges.map(parseRange), showGridlines: 1,
-    };
+    } as Partial<IWorksheetData>;
   }
   return {
     id: `workbook-${projectId}`, name: projectName, appVersion: '0.10.10',
@@ -77,6 +78,7 @@ export function fromUniverWorkbook(snapshot: IWorkbookData, previous: WorkbookDo
       id, name: sheet.name || id, cells, styles,
       merges: (sheet.mergeData || []).map((range) => `${letters(range.startColumn)}${range.startRow + 1}:${letters(range.endColumn)}${range.endRow + 1}`),
       rowHeights, columnWidths, archived: Boolean(sheet.hidden),
+      tabColor: (sheet as { tabColor?: string }).tabColor || previous.sheets.find((item) => item.id === id)?.tabColor,
     };
   });
   return { ...previous, sheets };

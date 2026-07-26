@@ -51,7 +51,8 @@ class TemplatePlatformTests(unittest.TestCase):
         profile = self.profiles.get("EMS_FULL")
         self.assertIn("00_PROJECT_META", profile["dataSheets"])
         self.assertIn("11_NETWORK_PORTS", profile["dataSheets"])
-        self.assertEqual(len(self.profiles.list()), 6)
+        self.assertEqual(len(self.profiles.list()), 7)
+        self.assertEqual(self.profiles.get("EMS_LIGHTING")["extends"], "BASE_CORE")
 
     def test_template_validation_registration_and_copy(self) -> None:
         validation = self.templates.validate(self.staged)
@@ -112,7 +113,22 @@ class TemplatePlatformTests(unittest.TestCase):
 
     def test_compile_stable_ids_and_manual_preservation(self) -> None:
         profile = self.profiles.get("EMS_FULL")
-        workbook = {"revision": 1, "sheets": [{"id": "network", "name": "11_NETWORK_PORTS", "cells": {"A1": {"v": "NETWORK"}, "A2": {"v": "Port"}, "A3": {"v": "1"}}, "styles": {}, "merges": [], "rowHeights": {}, "columnWidths": {}}]}
+        index_cells = {}
+        headers = ["Include", "Order", "Sheet Code", "Sheet Tab", "Page Title", "Family", "Page Type", "Page ID", "Source Mode"]
+        for column, value in enumerate(headers, start=1):
+            index_cells[f"{chr(64 + column)}1"] = {"v": value}
+        rows = [
+            ["YES", 1, "EMS 1.0", "00_PROJECT_META", "Cover", "Front Matter", "Cover", "cover", "generated"],
+            ["YES", 2, "EMS 2.0", "00_INDEX", "Sheet Index / TOC", "Front Matter", "Sheet Index", "index", "generated"],
+            ["YES", 3, "EMS 13.0", "11_NETWORK_PORTS", "RDM / IDF Network Table", "Network / Data", "Network Table", "network", "canonical"],
+        ]
+        for row_number, row in enumerate(rows, start=2):
+            for column, value in enumerate(row, start=1):
+                index_cells[f"{chr(64 + column)}{row_number}"] = {"v": value}
+        workbook = {"revision": 1, "sheets": [
+            {"id": "index", "name": "00_INDEX", "cells": index_cells, "styles": {}, "merges": [], "rowHeights": {}, "columnWidths": {}},
+            {"id": "network", "name": "11_NETWORK_PORTS", "cells": {"A1": {"v": "NETWORK"}, "A2": {"v": "Port"}, "A3": {"v": "1"}}, "styles": {}, "merges": [], "rowHeights": {}, "columnWidths": {}},
+        ]}
         project = {"id": "1234567890abcdef", "pages": [], "projectProfileId": "EMS_FULL"}
         first, preview = apply_compile(project, workbook, profile)
         self.assertTrue(any(item["family"] == "RDM / IDF Network Table" for item in preview["operations"]))
@@ -120,7 +136,7 @@ class TemplatePlatformTests(unittest.TestCase):
         network["canvasObjects"] = [{"id": "manual-note", "type": "textbox", "text": "Keep me"}]
         network["assets"] = [{"id": "manual-image"}]
         network["underlay"] = {"source": "manual.pdf"}
-        workbook["sheets"][0]["cells"]["A3"] = {"v": "2"}
+        workbook["sheets"][1]["cells"]["A3"] = {"v": "2"}
         second, _ = apply_compile(first, workbook, profile)
         updated = next(page for page in second["pages"] if page["id"] == network["id"])
         self.assertEqual(updated["canvasObjects"], network["canvasObjects"])
