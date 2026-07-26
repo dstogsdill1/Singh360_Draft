@@ -11,6 +11,8 @@ on:
       - 'defaults/symbol_mapper_standard.json'
       - 'core/library_v2.py'
       - 'core/legend_template_store.py'
+      - 'core/symbol_mapper.py'
+      - 'server.py'
       - 'frontend/**'
       - '.github/workflows/exact-symbol-components-v39.yml'
   workflow_dispatch:
@@ -37,8 +39,19 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Compile exact symbol migration
-        run: python -m py_compile scripts/install_symbol_standard_v38.py scripts/install_symbol_standard_v39.py scripts/smoke_symbol_standard_v38.py scripts/smoke_symbol_standard_v39.py scripts/smoke_symbol_legend_v39_parity.py
+      - name: Compile backend and exact symbol migration
+        run: python -m py_compile server.py core/library_v2.py core/legend_template_store.py core/symbol_mapper.py scripts/install_symbol_standard_v38.py scripts/install_symbol_standard_v39.py scripts/smoke_symbol_standard_v38.py scripts/smoke_symbol_standard_v39.py scripts/smoke_symbol_legend_v39_parity.py
+
+      - name: Import backend and exercise health route
+        shell: python
+        run: |
+          from server import app
+
+          response = app.test_client().get('/api/health')
+          assert response.status_code == 200, response.get_data(as_text=True)
+          payload = response.get_json(silent=True) or {}
+          assert payload.get('ok') is True, payload
+          print('PASS: backend import and /api/health')
 
       - name: Run isolated migration and geometry tests
         run: python -m scripts.smoke_symbol_standard_v39
