@@ -948,6 +948,19 @@ class LibraryV2:
         }
 
     # ---- read ------------------------------------------------------------
+    @staticmethod
+    def _canonical_standard_key(comp: dict) -> str:
+        source = comp.get("source")
+        if isinstance(source, dict):
+            key = str(source.get("standardKey") or "").strip()
+            if key:
+                return key
+        for tag in comp.get("tags") or []:
+            value = str(tag or "")
+            if value.startswith("singh360-symbol-key:"):
+                return value.split(":", 1)[1].strip()
+        return ""
+
     def load(self, include_legacy: bool = False, include_retired: bool = False) -> dict:
         self.ensure()
         export = self._load_builder_export()
@@ -962,12 +975,19 @@ class LibraryV2:
                 merged = dict(c)
                 ov = override_by_id.get(c.get("id"))
                 if ov:
-                    for key in EDITABLE_FIELDS:
-                        # Presence in an override is authoritative, even when cleared.
-                        if key in ov:
-                            merged[key] = ov[key]
-                    if ov.get("favorite"):
-                        merged["favorite"] = True
+                    if self._canonical_standard_key(ov):
+                        # Stable Singh360 canonical metadata is authoritative over a stale
+                        # Component Builder export with the same id. Preserve extra builder
+                        # fields, but never let it erase renderer/source/sort identity.
+                        merged.update(ov)
+                        merged["origin"] = "manifest_canonical"
+                    else:
+                        for key in EDITABLE_FIELDS:
+                            # Presence in an override is authoritative, even when cleared.
+                            if key in ov:
+                                merged[key] = ov[key]
+                        if ov.get("favorite"):
+                            merged["favorite"] = True
                 payload = self._compose_component_payload(merged)
                 if payload.get("retired") and not include_retired:
                     continue
@@ -986,7 +1006,19 @@ class LibraryV2:
             stale_hidden = 0
             legacy_visible: list[dict] = []
             for c in legacy_candidates:
-                if self._identity_keys(c) & approved_keys:
+                identity = self._identity_keys(c)
+                if self._canonical_standard_key(c):
+                    # Canonical symbols intentionally share short codes (the two S rows).
+                    # Only exact stable id/hash collisions may hide one; weak name, part,
+                    # or alias collisions from a stale builder export must not suppress it.
+                    strong_identity = {
+                        key for key in identity
+                        if key.startswith("id:") or key.startswith("hash:")
+                    }
+                    duplicate = bool(strong_identity & approved_keys)
+                else:
+                    duplicate = bool(identity & approved_keys)
+                if duplicate:
                     stale_hidden += 1
                     continue
                 legacy_visible.append(c)
