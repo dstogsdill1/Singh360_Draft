@@ -22,12 +22,20 @@ function Write-Log([string]$Message) {
     $line | Tee-Object -FilePath $Log -Append | Write-Host
 }
 
-function Invoke-NativeCaptured([string]$File, [string[]]$Arguments) {
+function Invoke-NativeCaptured(
+    [string]$File,
+    [string[]]$Arguments,
+    [string]$RawArguments = ''
+) {
     $info = New-Object System.Diagnostics.ProcessStartInfo
     $info.FileName = $File
-    $info.Arguments = (($Arguments | ForEach-Object {
-        '"' + ([string]$_).Replace('"', '\"') + '"'
-    }) -join ' ')
+    $info.Arguments = if ($RawArguments) {
+        $RawArguments
+    } else {
+        (($Arguments | ForEach-Object {
+            '"' + ([string]$_).Replace('"', '\"') + '"'
+        }) -join ' ')
+    }
     $info.WorkingDirectory = (Get-Location).Path
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
@@ -93,7 +101,7 @@ try {
             Write-Log "Building frontend for commit $commit."
             Push-Location (Join-Path $Root 'frontend')
             try {
-                $buildOutput = Invoke-NativeCaptured $env:ComSpec @('/d', '/c', 'npm.cmd run build')
+                $buildOutput = Invoke-NativeCaptured $env:ComSpec @() '/d /c npm.cmd run build'
                 if ($buildOutput) { $buildOutput | Tee-Object -FilePath $Log -Append | Out-Host }
             } finally { Pop-Location }
             Set-Content -LiteralPath $BuildCommit -Value $commit -Encoding ASCII
