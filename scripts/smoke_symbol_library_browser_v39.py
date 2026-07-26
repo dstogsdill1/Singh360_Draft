@@ -241,7 +241,7 @@ def _run_browser() -> dict[str, Any]:
             expected_count += 1
             objects = _insert_component(page, display_name, screenshot_name, expected_count)
 
-        source_urls = [str(obj.get("sourceUrl") or "") for obj in objects]
+        source_urls = [str(obj.get("sourceUrl") or obj.get("src") or "") for obj in objects]
         required_fragments = [
             "__da__door-alarm.svg",
             "__ls__refrigerant-leak-detection-sensor.svg",
