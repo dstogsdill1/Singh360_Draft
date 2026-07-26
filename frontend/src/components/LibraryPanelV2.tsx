@@ -67,7 +67,8 @@ const STATUS_OPTIONS = [
   { id: 'junk', label: 'Junk' },
 ];
 
-const REFRIGERATION_SYMBOL_COLLECTION = 'Refrigeration Controls Symbols';
+const MAPPER_SYMBOL_COLLECTION = 'Refrigeration Controls Symbols';
+const PLAN_MARKER_COLLECTION = 'Singh360 Plan Markers';
 
 const COLLECTION_PRESETS = [
   'Controllers',
@@ -82,6 +83,10 @@ const COLLECTION_PRESETS = [
   'HVAC / BACnet',
   'Lighting',
   'Symbols / Markers',
+  'Refrigeration Controls Symbols',
+  'Singh360 Plan Markers',
+  'Safety Signage',
+  'Callout Numbers',
   'Needs Review',
 ];
 
@@ -376,10 +381,17 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
     return Array.from(set).sort();
   }, [components]);
 
-  const refrigerationSymbolCount = useMemo(
+  const mapperSymbolCount = useMemo(
     () => components.filter(
       (component) => !isRetired(component)
-        && collectionFor(component) === REFRIGERATION_SYMBOL_COLLECTION,
+        && collectionFor(component) === MAPPER_SYMBOL_COLLECTION,
+    ).length,
+    [components],
+  );
+  const planMarkerCount = useMemo(
+    () => components.filter(
+      (component) => !isRetired(component)
+        && collectionFor(component) === PLAN_MARKER_COLLECTION,
     ).length,
     [components],
   );
@@ -780,8 +792,8 @@ This is NOT saved until you click Save All Edits.`,
     onOpenLegendEditor?.();
   };
 
-  const preferredLegendTemplate = legendTemplates.find((template) => template.id === 'singh360-refrigeration-symbols-standard')
-    || legendTemplates.find((template) => template.name === 'Singh360 Refrigeration Symbols')
+  const preferredLegendTemplate = legendTemplates.find((template) => template.id === 'singh360-plan-marker-legend')
+    || legendTemplates.find((template) => template.id === 'singh360-refrigeration-symbols-standard')
     || legendTemplates[0];
 
   const runAdvanced = async (kind: 'thumbs' | 'clean' | 'migrate') => {
@@ -829,20 +841,28 @@ This is NOT saved until you click Save All Edits.`,
         </div>
         <div className="libv2-row libv2-quick-filters">
           <button
-            className={collection === REFRIGERATION_SYMBOL_COLLECTION ? 'active' : undefined}
-            style={collection === REFRIGERATION_SYMBOL_COLLECTION
-              ? { fontWeight: 800, background: '#e0f2fe', borderColor: '#0284c7' }
-              : undefined}
-            aria-pressed={collection === REFRIGERATION_SYMBOL_COLLECTION}
+            className={collection === MAPPER_SYMBOL_COLLECTION ? 'active' : undefined}
+            aria-pressed={collection === MAPPER_SYMBOL_COLLECTION}
+            title="Square highlighted symbols used by Symbol Mapper on existing drawings"
             onClick={() => {
-              setCollection((current) => current === REFRIGERATION_SYMBOL_COLLECTION
-                ? 'all'
-                : REFRIGERATION_SYMBOL_COLLECTION);
+              setCollection((current) => current === MAPPER_SYMBOL_COLLECTION ? 'all' : MAPPER_SYMBOL_COLLECTION);
               setCategory('all');
               setQuery('');
             }}
           >
-            Refrigeration Symbols ({refrigerationSymbolCount})
+            Mapper Highlights ({mapperSymbolCount})
+          </button>
+          <button
+            className={collection === PLAN_MARKER_COLLECTION ? 'active' : undefined}
+            aria-pressed={collection === PLAN_MARKER_COLLECTION}
+            title="Simple colored-ring markers for direct placement on plan and layout pages"
+            onClick={() => {
+              setCollection((current) => current === PLAN_MARKER_COLLECTION ? 'all' : PLAN_MARKER_COLLECTION);
+              setCategory('all');
+              setQuery('');
+            }}
+          >
+            Plan Markers ({planMarkerCount})
           </button>
           {collection !== 'all' && (
             <button onClick={() => setCollection('all')}>Show All Components</button>
