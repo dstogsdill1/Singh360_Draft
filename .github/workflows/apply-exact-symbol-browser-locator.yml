@@ -1,0 +1,42 @@
+name: Apply Exact Symbol Browser Locator
+
+on:
+  pull_request:
+    branches:
+      - repair/current-dashboard-live-v10
+    paths:
+      - '.github/workflows/apply-exact-symbol-browser-locator.yml'
+      - 'patch/exact-symbol-browser-locator.patch'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-browser-locator:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Apply stable editor locator patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check patch/exact-symbol-browser-locator.patch
+          git apply patch/exact-symbol-browser-locator.patch
+          python -m py_compile scripts/smoke_symbol_library_browser_v39.py
+          git diff --check
+
+      - name: Commit browser test source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Singh360 Controlled Repair'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/smoke_symbol_library_browser_v39.py
+          git commit -m 'Use stable editor locators in V39 browser smoke'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
