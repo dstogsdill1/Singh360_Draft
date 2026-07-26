@@ -128,7 +128,7 @@ function niceCategoryLabel(id: string): string {
 function displayNameFor(c: LibV2Component): string {
   const raw = (c.displayName || '').trim();
   if (!raw) return 'Component';
-  return raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return raw.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function sourceUrl(c: LibV2Component): string {
