@@ -33,6 +33,29 @@ function Invoke-NativeLogged([string]$File, [string[]]$Arguments) {
     }
 }
 
+function Invoke-NativeCaptured([string]$File, [string[]]$Arguments) {
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = $File
+    $info.Arguments = (($Arguments | ForEach-Object {
+        '"' + ([string]$_).Replace('"', '\"') + '"'
+    }) -join ' ')
+    $info.WorkingDirectory = $Root
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $info
+    [void]$process.Start()
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) {
+        throw "Native command failed ($($process.ExitCode)): $File $($info.Arguments) $stderr"
+    }
+    return $stdout.Trim()
+}
+
 function Get-Health {
     try {
         $reply = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/health" -TimeoutSec 3
@@ -59,10 +82,8 @@ try {
 
     $git = Get-Command git.exe -ErrorAction SilentlyContinue
     if ($git) {
-        $commitLines = @(git.exe rev-parse HEAD)
-        $dirtyLines = @(git.exe status --porcelain)
-        $commit = [string]::Join("`n", [string[]]$commitLines).Trim()
-        $dirty = [string]::Join("`n", [string[]]$dirtyLines).Trim()
+        $commit = Invoke-NativeCaptured $git.Source @('rev-parse', 'HEAD')
+        $dirty = Invoke-NativeCaptured $git.Source @('status', '--porcelain')
         Write-Log "Current commit: $commit"
         if ((Invoke-NativeLogged $git.Source @('fetch', 'origin', '--prune')) -ne 0) {
             throw "Git fetch failed. Log: $Log"
@@ -70,14 +91,12 @@ try {
         if ($dirty) {
             Write-Log 'Working tree is dirty; fetched updates were not pulled over local work.'
         } else {
-            $upstreamLines = @(git.exe rev-parse --abbrev-ref --symbolic-full-name '@{u}')
-            $upstream = [string]::Join("`n", [string[]]$upstreamLines).Trim()
+            $upstream = Invoke-NativeCaptured $git.Source @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}')
             if ($upstream) {
                 if ((Invoke-NativeLogged $git.Source @('pull', '--ff-only')) -ne 0) {
                     throw "Fast-forward pull failed. Log: $Log"
                 }
-                $commitLines = @(git.exe rev-parse HEAD)
-                $commit = [string]::Join("`n", [string[]]$commitLines).Trim()
+                $commit = Invoke-NativeCaptured $git.Source @('rev-parse', 'HEAD')
             }
         }
 
