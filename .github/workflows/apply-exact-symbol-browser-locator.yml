@@ -26,6 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The patch was validated against the exact current browser smoke source.
           git apply --check patch/exact-symbol-browser-locator.patch
           git apply patch/exact-symbol-browser-locator.patch
           python -m py_compile scripts/smoke_symbol_library_browser_v39.py
