@@ -76,7 +76,11 @@ def main() -> int:
         library._write_manifest(manifest)
 
         builder_path = docs / "library" / "component_builder_export.json"
-        builder = json.loads(builder_path.read_text(encoding="utf-8"))
+        builder = (
+            json.loads(builder_path.read_text(encoding="utf-8"))
+            if builder_path.is_file()
+            else {"version": "0.3", "components": []}
+        )
         builder.setdefault("components", []).extend(
             [
                 {"id": "legacy-line-card", "displayName": "CAT6 Drop", "category": "symbols_markers", "sourcePath": ""},
