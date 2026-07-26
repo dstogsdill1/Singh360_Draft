@@ -37,25 +37,17 @@ jobs:
           from pathlib import Path
           path = Path('scripts/smoke_symbol_library_browser_v39.py')
           text = path.read_text(encoding='utf-8')
-          old = '''        source_urls = [str(obj.get("sourceUrl") or obj.get("src") or "") for obj in objects]
-          required_fragments = ['''
-          new = '''        source_urls = [str(obj.get("sourceUrl") or obj.get("src") or "") for obj in objects]
-          (EVIDENCE_DIR / "persisted-direct-inserts.json").write_text(
+          needle = '        required_fragments = ['
+          if text.count(needle) != 1:
+              raise SystemExit(f'diagnostic insertion anchor count was {text.count(needle)}, expected 1')
+          diagnostic = '''        (EVIDENCE_DIR / "persisted-direct-inserts.json").write_text(
               json.dumps({"objects": objects, "sourceUrls": source_urls}, indent=2, ensure_ascii=False),
               encoding="utf-8",
           )
           print("PERSISTED_DIRECT_INSERTS=" + json.dumps({"objects": objects, "sourceUrls": source_urls}, ensure_ascii=False))
-          required_fragments = ['''
-          if text.count(old) != 1:
-              raise SystemExit('diagnostic insertion anchor was not unique')
-          text = text.replace(old, new, 1)
-          old_failure = '''                raise AssertionError(f"Inserted project objects are missing canonical source SVG: {fragment}")'''
-          new_failure = '''                raise AssertionError(
-                      f"Inserted project objects are missing canonical source SVG: {fragment}; source_urls={source_urls!r}"
-                  )'''
-          if text.count(old_failure) != 1:
-              raise SystemExit('diagnostic failure anchor was not unique')
-          path.write_text(text.replace(old_failure, new_failure, 1), encoding='utf-8')
+          '''
+          text = text.replace(needle, diagnostic + needle, 1)
+          path.write_text(text, encoding='utf-8')
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
       - name: Run diagnostic browser smoke
