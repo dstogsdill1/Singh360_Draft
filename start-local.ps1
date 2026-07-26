@@ -59,8 +59,10 @@ try {
 
     $git = Get-Command git.exe -ErrorAction SilentlyContinue
     if ($git) {
-        $commit = (git.exe rev-parse HEAD | Out-String).Trim()
-        $dirty = (git.exe status --porcelain | Out-String).Trim()
+        $commitLines = @(git.exe rev-parse HEAD)
+        $dirtyLines = @(git.exe status --porcelain)
+        $commit = [string]::Join("`n", [string[]]$commitLines).Trim()
+        $dirty = [string]::Join("`n", [string[]]$dirtyLines).Trim()
         Write-Log "Current commit: $commit"
         if ((Invoke-NativeLogged $git.Source @('fetch', 'origin', '--prune')) -ne 0) {
             throw "Git fetch failed. Log: $Log"
@@ -68,12 +70,14 @@ try {
         if ($dirty) {
             Write-Log 'Working tree is dirty; fetched updates were not pulled over local work.'
         } else {
-            $upstream = (git.exe rev-parse --abbrev-ref --symbolic-full-name '@{u}' | Out-String).Trim()
+            $upstreamLines = @(git.exe rev-parse --abbrev-ref --symbolic-full-name '@{u}')
+            $upstream = [string]::Join("`n", [string[]]$upstreamLines).Trim()
             if ($upstream) {
                 if ((Invoke-NativeLogged $git.Source @('pull', '--ff-only')) -ne 0) {
                     throw "Fast-forward pull failed. Log: $Log"
                 }
-                $commit = (git.exe rev-parse HEAD | Out-String).Trim()
+                $commitLines = @(git.exe rev-parse HEAD)
+                $commit = [string]::Join("`n", [string[]]$commitLines).Trim()
             }
         }
 
