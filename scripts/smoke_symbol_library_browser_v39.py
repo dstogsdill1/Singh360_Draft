@@ -173,9 +173,9 @@ def _assert_editor_ready(page: Page) -> None:
 def _open_components(page: Page) -> None:
     components = page.get_by_role("button", name="Components", exact=True)
     if components.count() == 0:
-        properties = page.get_by_role("button", name=re.compile(r"Properties$"))
-        expect(properties).to_be_visible(timeout=30000)
-        properties.click()
+        navigation = page.get_by_role("button", name=re.compile(r"Navigate$"))
+        expect(navigation).to_be_visible(timeout=30000)
+        navigation.click()
     expect(components).to_be_visible(timeout=30000)
     if components.get_attribute("aria-expanded") != "true":
         components.click()
