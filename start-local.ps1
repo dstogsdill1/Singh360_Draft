@@ -97,8 +97,8 @@ try {
 
         $built = if (Test-Path $BuildCommit) { (Get-Content $BuildCommit -First 1).Trim() } else { '' }
         if (-not (Test-Path (Join-Path $Root 'frontend\dist\index.html')) -or $built -ne $commit) {
-            $tsc = Join-Path $Root 'frontend\node_modules\.bin\tsc.cmd'
-            $vite = Join-Path $Root 'frontend\node_modules\.bin\vite.cmd'
+            $tsc = Join-Path $Root 'frontend\node_modules\typescript\bin\tsc'
+            $vite = Join-Path $Root 'frontend\node_modules\vite\bin\vite.js'
             $node = (Get-Command node.exe -ErrorAction Stop).Source
             if (-not (Test-Path $tsc) -or -not (Test-Path $vite)) {
                 throw 'Frontend dependencies are missing. Run npm install in frontend.'
@@ -106,9 +106,9 @@ try {
             Write-Log "Building frontend for commit $commit."
             Push-Location (Join-Path $Root 'frontend')
             try {
-                $env:PATH = (Split-Path $node -Parent) + ';' + $env:PATH
-                $buildCommand = '/d /c ""' + $tsc + '" -b && "' + $vite + '" build"'
-                $buildOutput = Invoke-NativeCaptured $env:ComSpec @() $buildCommand
+                $tscOutput = Invoke-NativeCaptured $node @($tsc, '-b')
+                $viteOutput = Invoke-NativeCaptured $node @($vite, 'build')
+                $buildOutput = @($tscOutput, $viteOutput) -join "`n"
                 if ($buildOutput) { $buildOutput | Tee-Object -FilePath $Log -Append | Out-Host }
             } finally { Pop-Location }
             Set-Content -LiteralPath $BuildCommit -Value $commit -Encoding ASCII
