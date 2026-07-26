@@ -162,6 +162,14 @@ def _wait_for_object_count(page: Page, expected: int, timeout_ms: int = 30000) -
     return _project_objects(page)
 
 
+def _assert_editor_ready(page: Page) -> None:
+    expect(page.get_by_role("button", name="Drawing", exact=True)).to_be_visible(timeout=30000)
+    expect(page.get_by_role("button", name="Included in Drawing Set", exact=True)).to_be_visible(timeout=30000)
+    expect(
+        page.get_by_role("button", name=re.compile(r"^1 T0\.1 V39 SYMBOL BROWSER SMOKE$"))
+    ).to_be_visible(timeout=30000)
+
+
 def _open_components(page: Page) -> None:
     components = page.get_by_role("button", name="Components", exact=True)
     expect(components).to_be_visible(timeout=30000)
@@ -216,8 +224,7 @@ def _run_browser() -> dict[str, Any]:
         page = context.new_page()
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.goto(f"{BASE_URL}/app?project={PROJECT_ID}&mode=editor", wait_until="domcontentloaded", timeout=60000)
-        expect(page.get_by_text("Published Package", exact=True)).to_be_visible(timeout=30000)
-        expect(page.get_by_text("V39 SYMBOL BROWSER SMOKE", exact=True).first).to_be_visible(timeout=30000)
+        _assert_editor_ready(page)
 
         _open_components(page)
         _assert_library(page)
@@ -262,7 +269,7 @@ def _run_browser() -> dict[str, Any]:
             raise AssertionError(f"Saved legend insertion must add one grouped object, got {len(objects)} total objects")
 
         page.reload(wait_until="domcontentloaded", timeout=60000)
-        expect(page.get_by_text("Published Package", exact=True)).to_be_visible(timeout=30000)
+        _assert_editor_ready(page)
         persisted = _wait_for_object_count(page, 8)
         page.screenshot(path=str(EVIDENCE_DIR / "11-after-reload-persistence.png"), full_page=True)
         if len(persisted) != 8:
