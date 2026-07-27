@@ -33,12 +33,21 @@ def main() -> int:
     for token in required_start:
         if token not in start:
             problems.append(f"start launcher is missing {token!r}")
+    for forbidden in ("code.exe", "code .", "vscode"):
+        if forbidden in start.casefold():
+            problems.append(f"start launcher must never launch VS Code ({forbidden!r})")
     if "if not exist node_modules call npm.cmd ci" not in start:
         problems.append("start launcher does not return from conditional npm ci")
+    if "singh360-draft.pid" not in start or "$listener" not in start:
+        problems.append("start launcher does not enforce a single recorded Singh360 server")
     if "?project=" in start or "ngrok" in start.casefold() or "829" in start:
         problems.append("start launcher is not generic Project Home")
     if "title Stop Singh360 Draft" not in stop or "$port=8766" not in stop:
         problems.append("stop launcher name or port is incorrect")
+    if "singh360-draft.pid" not in stop or "$isOurs" not in stop:
+        problems.append("stop launcher does not validate the Singh360 PID before stopping it")
+    if "Select-Object -ExpandProperty OwningProcess -Unique" in stop:
+        problems.append("stop launcher still stops an arbitrary listener by port alone")
 
     obsolete_root = sorted(
         path.name
