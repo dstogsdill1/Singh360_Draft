@@ -50,7 +50,9 @@ def _project() -> dict:
 def main() -> int:
     os.environ.setdefault("SINGH360_SKIP_SERVE", "1")
     import server  # noqa: E402
+    from tests.generated_fixtures import isolate_server_runtime
 
+    runtime = isolate_server_runtime(server)
     client = server.app.test_client()
     pid = "4b4b4b4b4b4b4b4b"
     problems: list[str] = []
@@ -86,7 +88,8 @@ def main() -> int:
             problems.append("export package missed cell highlight")
 
     print(f"reloadFills={fills} editedFills={fills2}")
-    client.delete(f"/api/projects/{pid}")
+    client.delete(f"/api/projects/{pid}?confirm=true")
+    runtime.cleanup()
     if problems:
         print("TABLE HIGHLIGHT EDITING PROBLEMS:")
         for p in problems:

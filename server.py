@@ -81,8 +81,8 @@ from core.workbook_link_manager import (
 HERE = Path(__file__).resolve().parent
 FRONTEND_DIST_DIR = HERE / "frontend" / "dist"
 COMPONENT_CATALOG_DIR = HERE / "tools" / "component_catalog"
-DOCS_DIR = HERE / ".docs"
-DOCS_DIR.mkdir(exist_ok=True)
+DOCS_DIR = Path(os.environ.get("SINGH360_DOCS_DIR") or (HERE / ".docs")).resolve()
+DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _ensure_minimal_runtime_workspace(docs: Path) -> None:
@@ -120,11 +120,11 @@ symbol_mapper_store = SymbolMapperStore(
 )
 
 PROJECT_ID_RE = re.compile(r"^[a-f0-9]{16}$")
-_DEFAULT_PORT = 8765
+_DEFAULT_PORT = 8766
 
 
 def _configured_port() -> int:
-    """Resolve the runtime port from SINGH360_PORT (default 8765)."""
+    """Resolve the runtime port from SINGH360_PORT (default 8766)."""
     raw = os.environ.get("SINGH360_PORT", "").strip()
     if not raw:
         return _DEFAULT_PORT
@@ -215,7 +215,7 @@ def _frontend_build_instructions_html() -> str:
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <title>Singh360 Modular Editor Build Required</title>
+        <title>Singh360 Draft — Build Required</title>
         <style>
             body { font-family: Arial, Helvetica, sans-serif; margin: 24px; background: #f5f7fa; color: #111; }
             .box { max-width: 920px; background: #fff; border: 2px solid #111; padding: 16px; }
@@ -321,19 +321,18 @@ def debug_routes():
     )
 
 
-@app.get("/static/title_block.png")
-def serve_title_block():
-    # Serve the master title block from the current repository root.
-    candidate = HERE / "title_block.png"
-    if candidate.is_file():
-        return send_file(candidate)
-    abort(404)
-
-
 @app.get("/static/LOGO-750px.png")
 def serve_firm_logo():
-    """Serve the Singh360 firm logo (Box 3 of the architectural title block)."""
-    path = HERE / "LOGO-750px.png"
+    """Serve the active tracked logo used by sheet and cover renderers."""
+    path = (
+        HERE
+        / "docs"
+        / "component-library"
+        / "assets"
+        / "logos"
+        / "singh360_logo"
+        / "real.png"
+    )
     if not path.is_file():
         abort(404)
     return send_file(path)
@@ -698,7 +697,7 @@ def workbook_quality_repair(project_id: str):
 
 @app.get("/api/docs/ai-guide")
 def ai_ready_guide_markdown():
-    path = HERE / "docs" / "SINGH360_AI_ASSISTANT_GUIDE.md"
+    path = HERE / "README.md"
     if not path.is_file():
         abort(404)
     return send_file(path, mimetype="text/markdown; charset=utf-8")
@@ -706,7 +705,7 @@ def ai_ready_guide_markdown():
 
 @app.get("/docs/ai-guide")
 def ai_ready_guide_html():
-    path = HERE / "docs" / "SINGH360_AI_ASSISTANT_GUIDE.md"
+    path = HERE / "README.md"
     if not path.is_file():
         abort(404)
     from html import escape

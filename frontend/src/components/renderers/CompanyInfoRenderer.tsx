@@ -30,7 +30,7 @@ export default function CompanyInfoRenderer({ block, project }: Props) {
 
   return (
     <div className="np-company-info">
-      <img src="/static/LOGO-750px.png" alt="Singh360" className="np-company-logo" />
+      <img src="/static/LOGO-750px.png" alt="Singh360 Draft" className="np-company-logo" />
       <div className="np-company-name">Singh360 Inc.</div>
       <div className="np-company-service">Engineering Services</div>
       <div className="np-company-details">

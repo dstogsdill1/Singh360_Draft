@@ -1,4 +1,4 @@
-/** Keep asset paths origin-relative so localhost export works after ngrok editing. */
+/** Keep asset paths origin-relative so local export works after external preview editing. */
 import type { PageModel, ProjectModel } from './types';
 
 const ASSET_PATH_RE = /^\/(?:api|static)\//;
@@ -49,7 +49,7 @@ function normalizePageBlocks(page: PageModel): PageModel {
   return { ...page, blocks, canvasObjects };
 }
 
-/** Rewrite any persisted ngrok/localhost absolute asset URLs to root-relative paths. */
+/** Rewrite persisted absolute local or preview asset URLs to root-relative paths. */
 export function normalizeProjectAssetUrls(project: ProjectModel): ProjectModel {
   const pages = project.pages.map(normalizePageBlocks);
   const changed = pages.some((p, i) => p !== project.pages[i]);

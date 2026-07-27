@@ -18,7 +18,7 @@ def main() -> int:
     ]
     long_desc = "INTERIOR DISPLAY LIGHTS AND EXTERIOR SECURITY WALL PACKS"
     rows = []
-    for i in range(18):
+    for i in range(60):
         rows.append([
             f"R{i + 1}", f"C{i + 1}", "HA-8,10,12,14,16,18,20,22", "4",
             long_desc if i % 2 == 0 else "PARKING LOT LIGHTING",
@@ -36,6 +36,8 @@ def main() -> int:
         "pageType": "data-grid",
         "pageFamily": "matrix",
         "templateId": "ansi-b-standard",
+        "splitMode": "auto_rows",
+        "allowContinuation": True,
         "blocks": [{"id": "b_lighting", "type": "matrix", "headers": headers, "rows": rows, "editable": True}],
         "canvasObjects": [],
         "notes": "",
@@ -44,7 +46,7 @@ def main() -> int:
     pages = compose_pages([page])
     problems: list[str] = []
     if len(pages) < 2:
-        problems.append(f"expected continuation pages for wrapped 18-row matrix, got {len(pages)} page(s)")
+        problems.append(f"expected continuation pages for wrapped 60-row matrix, got {len(pages)} page(s)")
     total_rows = sum(len((p.get("blocks") or [{}])[0].get("rows") or []) for p in pages)
     if total_rows != len(rows):
         problems.append(f"row count changed during split: {total_rows} != {len(rows)}")

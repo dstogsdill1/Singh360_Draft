@@ -29,7 +29,7 @@ export default function TitleBlock({ project, page }: Props) {
   return (
     <div className="sheet-title-block tb-v3">
       <div className="tb-cell tb-firm">
-        <img src="/static/LOGO-750px.png" alt="Singh360" className="tb-logo" />
+        <img src="/static/LOGO-750px.png" alt="Singh360 Draft" className="tb-logo" />
         <div className="tb-firm-name">SINGH360 INC.</div>
         <div className="tb-firm-meta">Engineering Services · singh360.com</div>
       </div>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,15 +13,20 @@ from core.workbook_importer import import_workbook
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
-        print('Usage: python scripts/smoke_import_workbook.py "C:\\path\\to\\workbook.xlsx"')
-        return 2
+    fixture_dir: tempfile.TemporaryDirectory[str] | None = None
+    if len(sys.argv) >= 2:
+        workbook = Path(sys.argv[1]).expanduser()
+    else:
+        from tests.generated_fixtures import write_workbook
 
-    workbook = Path(sys.argv[1]).expanduser()
+        fixture_dir = tempfile.TemporaryDirectory(prefix="singh360_import_fixture_")
+        workbook = write_workbook(Path(fixture_dir.name) / "sanitized.xlsx")
     print(f"workbook path: {workbook}")
 
     if not workbook.exists():
         print("ERROR: workbook not found")
+        if fixture_dir is not None:
+            fixture_dir.cleanup()
         return 2
 
     project = import_workbook(workbook, project_id="smokeimport000001")
@@ -45,7 +51,9 @@ def main() -> int:
             f"include={p.get('include', True)}"
         )
 
-    return 0
+    if fixture_dir is not None:
+        fixture_dir.cleanup()
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

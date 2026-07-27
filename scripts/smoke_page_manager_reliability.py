@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import core.workbook_link_manager as link_manager
 
@@ -15,6 +20,8 @@ class FakeStore:
     def save(self, project_id, project):
         self.saved.append(json.loads(json.dumps(project)))
         return self.docs / "project.json"
+    def load(self, project_id):
+        return json.loads(json.dumps(self.saved[-1])) if self.saved else None
 
 
 def main() -> int:
@@ -23,7 +30,7 @@ def main() -> int:
     modal = (root / "frontend/src/components/PageManagerModal.tsx").read_text(encoding="utf-8")
     client = (root / "frontend/src/api/client.ts").read_text(encoding="utf-8")
     server = (root / "server.py").read_text(encoding="utf-8")
-    workbook_sync = (root / "core/workbook_status_sync.py").read_text(encoding="utf-8")
+    full_workbook_sync = (root / "core/full_workbook_sync.py").read_text(encoding="utf-8")
     manager = (root / "core/workbook_link_manager.py").read_text(encoding="utf-8")
 
     original_status = link_manager.status_payload
@@ -34,10 +41,14 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="s360_local_first_") as temp:
             store = FakeStore(Path(temp))
             project = {"id": "project123", "pages": [], "metadata": {}, "worksheets": []}
-            saved = link_manager.save_local_then_try_sync("project123", project, store)
+            try:
+                link_manager.save_local_then_try_sync("project123", project, store)
+                raise AssertionError("missing authoritative workbook should block the write")
+            except link_manager.WorkbookSyncError:
+                saved = store.saved[-1]
             assert len(store.saved) >= 2
             assert saved["workbookSync"]["status"] == "pending"
-            assert "Project saved locally" in saved["workbookSync"]["warning"]
+            assert "Workbook save failed" in saved["workbookSync"]["warning"]
             assert Path(saved["workbookSync"]["runtimeLog"]).is_file()
     finally:
         link_manager.status_payload = original_status
@@ -47,11 +58,11 @@ def main() -> int:
         "dedicatedRoute": "/page-inclusion" in server,
         "dashboardUsesDedicatedSave": "savePageInclusion(project.id" in dashboard,
         "dashboardDoesNotSaveFullProject": "await saveProject(next)" not in dashboard,
-        "paginatedManager": "PAGE_SIZE = 18" in modal and "Page {safePageNumber} of {totalPages}" in modal,
+        "completeScrollableManager": "Showing all {filteredPages.length}" in modal and "page-manager-scroll" in modal,
         "readableCards": "Selected workbook" not in modal and "Open This Page in Editor" in modal,
         "clearSaveLabel": "Save Drawing Set Selection" in modal,
         "closeWithoutSaving": "Close Without Saving" in modal,
-        "calcPropertiesGuard": "if wb.calculation is None" in workbook_sync and "CalcProperties" in workbook_sync,
+        "calcPropertiesGuard": "if wb.calculation is None" in full_workbook_sync and "CalcProperties" in full_workbook_sync,
         "catchAllWorkbookFailure": "except Exception as exc:" in manager and "_record_runtime_sync_failure" in manager,
         "localFirstFunctional": True,
     }

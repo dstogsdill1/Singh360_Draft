@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
@@ -16,7 +21,6 @@ except ModuleNotFoundError as exc:
     if exc.name not in {"core.project_model", "core.page_normalizer", "core.page_composer", "core.workbook_importer"}:
         raise
     import re
-    import sys
     import types
     from openpyxl.utils import get_column_letter
 

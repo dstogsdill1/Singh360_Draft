@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-
-from core.vector_pdf_export import build_selected_export_document
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from core.vector_pdf_export import build_selected_export_document
 
 
 def main() -> int:
@@ -53,7 +56,7 @@ def main() -> int:
         "vectorUnderlay": "apply_vector_pdf_underlays" in server,
         "pdfStartsNearFullBody": "const maxW = CANVAS_W * 0.98;" in canvas and "const maxH = CANVAS_H * 0.98;" in canvas,
         "transparentPrintCanvas": "S360 VECTOR PDF EXPORT START" in sheet_css,
-        "cropUsesDisplayedImageBounds": "S360 PDF CROP IMAGE BOUNDS FIX" in pdf_modal and "page.widthPt / imageBox.width" in pdf_modal,
+        "cropUsesPdfPointMapping": "page.widthPt / page.previewWidth" in pdf_modal and "page.heightPt / page.previewHeight" in pdf_modal,
         "physicalPageIdentityMarker": "S360PID_${pageId}" in print_view,
         "livePdfPreviewOpaque": "S360 LIVE PDF OBJECT REPAIR V1" in canvas and "obj.opacity = 1" in canvas,
     }

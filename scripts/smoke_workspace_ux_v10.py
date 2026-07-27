@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 checks = {
-    "frontend/src/components/ProjectShell.tsx": ["singh360-panel-left-pinned", "Hover to open navigation"],
+    "frontend/src/components/ProjectShell.tsx": ["singh360-panel-left-pinned", "Hover for one second, or click to pin navigation open"],
     "frontend/src/components/PageNavigator.tsx": ["All Drawing Pages", "Show excluded/source-only"],
     "frontend/src/components/PageTabs.tsx": ["PageNavigator", "page-tabs-shell"],
     "frontend/src/components/WorkbookView.tsx": ["Workbook Drafts", "Publish"],

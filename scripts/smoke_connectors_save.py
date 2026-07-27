@@ -63,7 +63,7 @@ def main() -> int:
     with open(workbook, "rb") as fh:
         res = c.post(
             "/api/projects/new",
-            data={"file": (io.BytesIO(fh.read()), "S360.xlsx")},
+            data={"file": (io.BytesIO(fh.read()), "sanitized.xlsx")},
             content_type="multipart/form-data",
         )
     if res.status_code != 200:
@@ -90,7 +90,7 @@ def main() -> int:
               stylePreset="cat6", labelMiddle="CAT6"),
         _conn("Elbow Route", [(120, 220), (360, 220), (360, 400)], "elbow"),
         _conn("Polyline", [(80, 320), (200, 370), (340, 330), (460, 380)], "polyline"),
-        _image("PR0650 crop", "/api/assets/fake/fake.png"),
+        _image("Generic controller crop", "/api/assets/fake/fake.png"),
     ]
     target_index = 1
     empty_index = 2

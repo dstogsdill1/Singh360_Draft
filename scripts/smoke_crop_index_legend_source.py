@@ -52,7 +52,7 @@ def main() -> int:
     )
     require(
         root / "frontend" / "src" / "components" / "SymbolLegendModal.tsx",
-        "Uses the same Singh360 Standard",
+        "Live Singh360 Standard",
         "saveSymbolMapperTemplate",
         "No highlights",
         "Save / update standard",

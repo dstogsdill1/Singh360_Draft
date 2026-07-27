@@ -23,7 +23,8 @@ def main() -> int:
         "function insertMetaFor(c: LibV2Component)",
         "insertMetaFor(c));",
         "...insertMetaFor(c)",
-        "Image unavailable",
+        "Preview failed to load",
+        "No preview file",
     )
     need(
         "frontend/src/components/DocumentView.tsx",

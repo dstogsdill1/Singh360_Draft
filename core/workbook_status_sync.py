@@ -15,8 +15,6 @@ from typing import Any
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
-from openpyxl.workbook.properties import CalcProperties
-
 from core.page_identity import is_sheet_index_page
 
 HELP_VERSION = "2026.07.22-status-sync-1"

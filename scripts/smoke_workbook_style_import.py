@@ -1,7 +1,7 @@
-"""Smoke: workbook import preserves source cell fills into normalized table blocks.
+"""Smoke: workbook import preserves source cell fills in exact worksheet blocks.
 
 Builds a tiny .xlsx in-memory with a highlighted cell, imports it, and asserts a
-normalized table block carries the fill in cellFills. No customer files needed.
+renderable block carries the fill in its style map. No customer files needed.
 """
 from __future__ import annotations
 
@@ -38,22 +38,29 @@ def main() -> int:
 
     problems: list[str] = []
     pages = project.get("pages", [])
-    table_blocks = [b for p in pages for b in (p.get("blocks") or []) if b.get("type") in ("table", "matrix")]
+    table_blocks = [
+        b
+        for p in pages
+        for b in (p.get("blocks") or [])
+        if b.get("type") in ("table", "matrix", "excelRange")
+    ]
     if not table_blocks:
         problems.append("no table/matrix block produced from workbook")
-    fills = {}
+    fills: dict[str, str] = {}
     for b in table_blocks:
         if b.get("cellFills"):
-            fills = b["cellFills"]
-            break
+            fills.update(b["cellFills"])
+        for key, style in (b.get("styles") or {}).items():
+            if isinstance(style, dict) and style.get("fill"):
+                fills[key] = style["fill"]
     if not fills:
-        problems.append("cellFills not captured from source highlight")
+        problems.append("source fill not captured in block style data")
     else:
         has_yellow = any(str(v).upper().endswith("FFFF00") or str(v).upper() == "#FFFF00" for v in fills.values())
         if not has_yellow:
-            problems.append(f"expected a yellow fill in cellFills, got {fills}")
+            problems.append(f"expected a yellow fill in block styles, got {fills}")
 
-    print(f"tableBlocks={len(table_blocks)} cellFills={fills}")
+    print(f"renderableBlocks={len(table_blocks)} fills={fills}")
     if problems:
         print("WORKBOOK STYLE IMPORT PROBLEMS:")
         for p in problems:

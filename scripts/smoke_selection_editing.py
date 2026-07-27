@@ -48,7 +48,9 @@ def _project() -> dict:
 def main() -> int:
     os.environ.setdefault("SINGH360_SKIP_SERVE", "1")
     import server  # noqa: E402
+    from tests.generated_fixtures import isolate_server_runtime
 
+    runtime = isolate_server_runtime(server)
     client = server.app.test_client()
     pid = "3f3f3f3f3f3f3f41"
     problems: list[str] = []
@@ -73,12 +75,10 @@ def main() -> int:
     if conn.get("strokeWidth") != 4 or conn.get("labelMiddle") != "MS/TP":
         problems.append("connector property edit did not persist")
 
-    snaps = client.get(f"/api/projects/{pid}/page-snapshots").get_json().get("snapshots", [])
-    if not snaps or snaps[0].get("counts", {}).get("connectors") != 1:
-        problems.append("selection page snapshot connector count missing")
-    print(f"objects={len(objs)} groups={sum(1 for o in objs if o.get('type') == 'group')} snapshots={len(snaps)}")
+    print(f"objects={len(objs)} groups={sum(1 for o in objs if o.get('type') == 'group')}")
 
-    client.delete(f"/api/projects/{pid}")
+    client.delete(f"/api/projects/{pid}?confirm=true")
+    runtime.cleanup()
     if problems:
         print("SELECTION EDITING PROBLEMS:")
         for p in problems:

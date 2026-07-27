@@ -46,7 +46,9 @@ def main() -> int:
 
     import server
     from core.sheet_importer import preview_workbook_sheets, import_workbook_sheets
+    from tests.generated_fixtures import isolate_server_runtime
 
+    runtime = isolate_server_runtime(server)
     c = server.app.test_client()
 
     # --- 1. Create a minimal project ---
@@ -131,8 +133,9 @@ def main() -> int:
         print(f"pages: {old_count} -> {len(new_pages)} | imported: {new_page['id'] if new_page else 'MISSING'}")
 
         # --- Cleanup ---
-        c.delete(f"/api/projects/{pid}")
+        c.delete(f"/api/projects/{pid}?confirm=true")
 
+    runtime.cleanup()
     return _report(problems)
 
 

@@ -14,11 +14,16 @@ from core.heb_idf_switch_matrix import next_available_continuation_code, sheet_c
 from core.page_composer import continuation_code
 from core.page_identity import is_sheet_index_page
 from core.sheet_index_sync import sync_project_sheet_index
+from core.workbook_link_manager import maybe_pull_on_open, status_payload
 from core.workbook_status_sync import (
+    WorkbookSyncError,
     _normalize_continuation_identities,
+    file_hash,
+    project_hash,
     sync_project_from_workbook,
     sync_project_to_workbook,
 )
+from tests.generated_fixtures import write_workbook
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -245,6 +250,47 @@ class WorkbookAuthorityTests(unittest.TestCase):
                 result = sync_project_from_workbook("test", project, TempStore(root))
             self.assertEqual("stable-page-id", result["pages"][0]["id"])
             self.assertEqual(project["pages"][0]["canvasObjects"], result["pages"][0]["canvasObjects"])
+
+    def test_two_sided_changes_remain_a_blocking_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            workbook_path = write_workbook(root / "authority.xlsx")
+            store = TempStore(root)
+            project = {
+                "id": "authority-test",
+                "metadata": {"projectName": "Sanitized Regression Project"},
+                "pages": [{
+                    "id": "page-assets",
+                    "order": 1,
+                    "include": True,
+                    "sheetCode": "EMS 1.0",
+                    "displaySheetCode": "EMS 1.0",
+                    "sheetTab": "Assets",
+                    "sheetTitle": "Asset Schedule",
+                    "issueStatus": "draft",
+                    "canvasObjects": [],
+                }],
+                "worksheets": [],
+            }
+            project["workbookSync"] = {
+                "workbook": str(workbook_path),
+                "workbookHash": file_hash(workbook_path),
+                "appHash": project_hash(project),
+                "status": "in_sync",
+                "authority": "workbook",
+            }
+            self.assertEqual("in_sync", status_payload(project["id"], project, store)["status"])
+
+            changed_workbook = load_workbook(workbook_path)
+            changed_workbook["Assets"]["B2"] = "Workbook-side edit"
+            changed_workbook.save(workbook_path)
+            changed_workbook.close()
+            project["pages"][0]["notes"] = "Independent app-side edit"
+
+            state = status_payload(project["id"], project, store)
+            self.assertEqual("conflict", state["status"])
+            with self.assertRaises(WorkbookSyncError):
+                maybe_pull_on_open(project["id"], project, store)
 
 
 if __name__ == "__main__":

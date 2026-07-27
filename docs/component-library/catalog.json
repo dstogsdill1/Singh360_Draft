@@ -23,8 +23,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/alarm_door_annunciator_strobe/real.svg",
       "edge": "assets/alarms_safety/alarm_door_annunciator_strobe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_door_annunciator_strobe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_door_annunciator_strobe/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_door_annunciator_strobe/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_door_annunciator_strobe/edge.svg"
     },
     {
       "id": "alarm_door_open_da",
@@ -47,8 +47,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/alarm_door_open_da/real.png",
       "edge": "assets/alarms_safety/alarm_door_open_da/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_door_open_da/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_door_open_da/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_door_open_da/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_door_open_da/edge.png"
     },
     {
       "id": "alarm_entrapment_ea",
@@ -70,8 +70,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/alarm_entrapment_ea/real.png",
       "edge": "assets/alarms_safety/alarm_entrapment_ea/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_ea/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_ea/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_ea/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_ea/edge.svg"
     },
     {
       "id": "alarm_entrapment_strobe",
@@ -94,8 +94,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/alarm_entrapment_strobe/real.svg",
       "edge": "assets/alarms_safety/alarm_entrapment_strobe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_strobe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_strobe/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_strobe/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_strobe/edge.svg"
     },
     {
       "id": "alarm_entrapment_switch_es",
@@ -118,8 +118,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/alarm_entrapment_switch_es/real.png",
       "edge": "assets/alarms_safety/alarm_entrapment_switch_es/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_switch_es/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_switch_es/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_switch_es/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_entrapment_switch_es/edge.svg"
     },
     {
       "id": "alarm_leak_annunciator_strobe",
@@ -142,8 +142,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/alarm_leak_annunciator_strobe/real.svg",
       "edge": "assets/alarms_safety/alarm_leak_annunciator_strobe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_leak_annunciator_strobe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_leak_annunciator_strobe/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_leak_annunciator_strobe/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_leak_annunciator_strobe/edge.svg"
     },
     {
       "id": "alarm_red_strobe",
@@ -166,8 +166,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/alarm_red_strobe/real.svg",
       "edge": "assets/alarms_safety/alarm_red_strobe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_red_strobe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/alarm_red_strobe/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_red_strobe/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/alarm_red_strobe/edge.svg"
     },
     {
       "id": "bacnet_router_basrt_b",
@@ -191,8 +191,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/bacnet_router_basrt_b/real.svg",
       "edge": "assets/network_data/bacnet_router_basrt_b/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/bacnet_router_basrt_b/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/bacnet_router_basrt_b/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/bacnet_router_basrt_b/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/bacnet_router_basrt_b/edge.svg"
     },
     {
       "id": "callout_number_01",
@@ -218,8 +218,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_01/real.svg",
       "edge": "assets/symbols_markers/callout_number_01/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_01/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_01/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_01/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_01/edge.svg"
     },
     {
       "id": "callout_number_02",
@@ -245,8 +245,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_02/real.svg",
       "edge": "assets/symbols_markers/callout_number_02/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_02/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_02/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_02/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_02/edge.svg"
     },
     {
       "id": "callout_number_03",
@@ -272,8 +272,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_03/real.svg",
       "edge": "assets/symbols_markers/callout_number_03/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_03/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_03/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_03/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_03/edge.svg"
     },
     {
       "id": "callout_number_04",
@@ -299,8 +299,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_04/real.svg",
       "edge": "assets/symbols_markers/callout_number_04/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_04/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_04/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_04/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_04/edge.svg"
     },
     {
       "id": "callout_number_05",
@@ -326,8 +326,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_05/real.svg",
       "edge": "assets/symbols_markers/callout_number_05/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_05/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_05/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_05/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_05/edge.svg"
     },
     {
       "id": "callout_number_06",
@@ -353,8 +353,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_06/real.svg",
       "edge": "assets/symbols_markers/callout_number_06/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_06/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_06/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_06/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_06/edge.svg"
     },
     {
       "id": "callout_number_07",
@@ -380,8 +380,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_07/real.svg",
       "edge": "assets/symbols_markers/callout_number_07/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_07/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_07/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_07/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_07/edge.svg"
     },
     {
       "id": "callout_number_08",
@@ -407,8 +407,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_08/real.svg",
       "edge": "assets/symbols_markers/callout_number_08/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_08/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_08/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_08/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_08/edge.svg"
     },
     {
       "id": "callout_number_09",
@@ -434,8 +434,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_09/real.svg",
       "edge": "assets/symbols_markers/callout_number_09/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_09/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_09/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_09/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_09/edge.svg"
     },
     {
       "id": "callout_number_10",
@@ -461,8 +461,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_10/real.svg",
       "edge": "assets/symbols_markers/callout_number_10/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_10/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_10/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_10/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_10/edge.svg"
     },
     {
       "id": "callout_number_11",
@@ -488,8 +488,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_11/real.svg",
       "edge": "assets/symbols_markers/callout_number_11/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_11/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_11/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_11/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_11/edge.svg"
     },
     {
       "id": "callout_number_12",
@@ -515,8 +515,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/callout_number_12/real.svg",
       "edge": "assets/symbols_markers/callout_number_12/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_12/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/callout_number_12/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_12/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/callout_number_12/edge.svg"
     },
     {
       "id": "ccp_enclosure",
@@ -538,8 +538,8 @@
       "defaultHeight": 96,
       "real": "assets/panels_enclosures/ccp_enclosure/real.svg",
       "edge": "assets/panels_enclosures/ccp_enclosure/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/ccp_enclosure/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/ccp_enclosure/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/ccp_enclosure/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/ccp_enclosure/edge.svg"
     },
     {
       "id": "cd_controls_isolation_amplifier",
@@ -563,8 +563,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/cd_controls_isolation_amplifier/real.png",
       "edge": "assets/electrical_power/cd_controls_isolation_amplifier/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/cd_controls_isolation_amplifier/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/cd_controls_isolation_amplifier/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/cd_controls_isolation_amplifier/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/cd_controls_isolation_amplifier/edge.png"
     },
     {
       "id": "control_24vdc_power_supply",
@@ -587,8 +587,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/control_24vdc_power_supply/real.svg",
       "edge": "assets/electrical_power/control_24vdc_power_supply/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/control_24vdc_power_supply/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/control_24vdc_power_supply/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/control_24vdc_power_supply/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/control_24vdc_power_supply/edge.svg"
     },
     {
       "id": "control_contactor_1pole",
@@ -610,8 +610,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/control_contactor_1pole/real.svg",
       "edge": "assets/electrical_power/control_contactor_1pole/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/control_contactor_1pole/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/control_contactor_1pole/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/control_contactor_1pole/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/control_contactor_1pole/edge.svg"
     },
     {
       "id": "control_contactor_2pole",
@@ -633,8 +633,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/control_contactor_2pole/real.svg",
       "edge": "assets/electrical_power/control_contactor_2pole/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/control_contactor_2pole/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/control_contactor_2pole/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/control_contactor_2pole/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/control_contactor_2pole/edge.svg"
     },
     {
       "id": "control_contactor_3pole",
@@ -656,8 +656,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/control_contactor_3pole/real.svg",
       "edge": "assets/electrical_power/control_contactor_3pole/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/control_contactor_3pole/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/control_contactor_3pole/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/control_contactor_3pole/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/control_contactor_3pole/edge.svg"
     },
     {
       "id": "ct_rogowski_coil",
@@ -680,8 +680,8 @@
       "defaultHeight": 42,
       "real": "assets/custom/ct_rogowski_coil/real.svg",
       "edge": "assets/custom/ct_rogowski_coil/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/ct_rogowski_coil/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/ct_rogowski_coil/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/ct_rogowski_coil/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/ct_rogowski_coil/edge.svg"
     },
     {
       "id": "ct_split_core",
@@ -704,8 +704,8 @@
       "defaultHeight": 42,
       "real": "assets/custom/ct_split_core/real.svg",
       "edge": "assets/custom/ct_split_core/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/ct_split_core/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/ct_split_core/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/ct_split_core/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/ct_split_core/edge.svg"
     },
     {
       "id": "dent_powerscout_ps12",
@@ -734,8 +734,8 @@
       "defaultHeight": 92,
       "real": "assets/custom/dent_powerscout_ps12/real.jpg",
       "edge": "assets/custom/dent_powerscout_ps12/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/dent_powerscout_ps12/real.jpg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/dent_powerscout_ps12/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/dent_powerscout_ps12/real.jpg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/dent_powerscout_ps12/edge.png"
     },
     {
       "id": "dent_powerscout_ps24",
@@ -764,8 +764,8 @@
       "defaultHeight": 92,
       "real": "assets/custom/dent_powerscout_ps24/real.jpg",
       "edge": "assets/custom/dent_powerscout_ps24/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/dent_powerscout_ps24/real.jpg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/dent_powerscout_ps24/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/dent_powerscout_ps24/real.jpg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/dent_powerscout_ps24/edge.png"
     },
     {
       "id": "dent_powerscout_ps3",
@@ -794,8 +794,8 @@
       "defaultHeight": 92,
       "real": "assets/custom/dent_powerscout_ps3/real.png",
       "edge": "assets/custom/dent_powerscout_ps3/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/dent_powerscout_ps3/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/dent_powerscout_ps3/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/dent_powerscout_ps3/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/dent_powerscout_ps3/edge.png"
     },
     {
       "id": "dent_powerscout_ps48",
@@ -824,8 +824,8 @@
       "defaultHeight": 92,
       "real": "assets/custom/dent_powerscout_ps48/real.png",
       "edge": "assets/custom/dent_powerscout_ps48/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/dent_powerscout_ps48/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/dent_powerscout_ps48/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/dent_powerscout_ps48/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/dent_powerscout_ps48/edge.png"
     },
     {
       "id": "door_contact_switch",
@@ -848,8 +848,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/door_contact_switch/real.svg",
       "edge": "assets/alarms_safety/door_contact_switch/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/door_contact_switch/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/door_contact_switch/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/door_contact_switch/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/door_contact_switch/edge.svg"
     },
     {
       "id": "electrical_contactor_3_pole",
@@ -872,8 +872,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/electrical_contactor_3_pole/real.png",
       "edge": "assets/electrical_power/electrical_contactor_3_pole/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_contactor_3_pole/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_contactor_3_pole/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_contactor_3_pole/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_contactor_3_pole/edge.png"
     },
     {
       "id": "electrical_lighting_contactor_bank",
@@ -895,8 +895,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/electrical_lighting_contactor_bank/real.png",
       "edge": "assets/electrical_power/electrical_lighting_contactor_bank/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_lighting_contactor_bank/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_lighting_contactor_bank/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_lighting_contactor_bank/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_lighting_contactor_bank/edge.svg"
     },
     {
       "id": "entrapment_light_switch",
@@ -918,8 +918,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/entrapment_light_switch/real.svg",
       "edge": "assets/alarms_safety/entrapment_light_switch/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/entrapment_light_switch/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/entrapment_light_switch/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/entrapment_light_switch/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/entrapment_light_switch/edge.svg"
     },
     {
       "id": "entrapment_switch_box",
@@ -941,8 +941,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/entrapment_switch_box/real.svg",
       "edge": "assets/alarms_safety/entrapment_switch_box/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/entrapment_switch_box/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/entrapment_switch_box/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/entrapment_switch_box/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/entrapment_switch_box/edge.svg"
     },
     {
       "id": "generator_monitor",
@@ -964,8 +964,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/generator_monitor/real.svg",
       "edge": "assets/electrical_power/generator_monitor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/generator_monitor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/generator_monitor/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/generator_monitor/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/generator_monitor/edge.svg"
     },
     {
       "id": "generic_coldroom",
@@ -984,8 +984,8 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/generic_coldroom/real.png",
       "edge": "assets/refrigeration/generic_coldroom/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/generic_coldroom/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/generic_coldroom/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/generic_coldroom/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/generic_coldroom/edge.png"
     },
     {
       "id": "generic_condenser",
@@ -1004,8 +1004,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/generic_condenser/real.png",
       "edge": "assets/hvac/generic_condenser/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_condenser/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_condenser/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_condenser/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_condenser/edge.png"
     },
     {
       "id": "generic_condensing_unit",
@@ -1024,8 +1024,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/generic_condensing_unit/real.png",
       "edge": "assets/hvac/generic_condensing_unit/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_condensing_unit/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_condensing_unit/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_condensing_unit/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_condensing_unit/edge.png"
     },
     {
       "id": "generic_glycol_pump_skid",
@@ -1044,8 +1044,8 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/generic_glycol_pump_skid/real.png",
       "edge": "assets/refrigeration/generic_glycol_pump_skid/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/generic_glycol_pump_skid/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/generic_glycol_pump_skid/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/generic_glycol_pump_skid/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/generic_glycol_pump_skid/edge.png"
     },
     {
       "id": "generic_idf",
@@ -1064,8 +1064,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/generic_idf/real.png",
       "edge": "assets/network_data/generic_idf/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/generic_idf/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/generic_idf/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/generic_idf/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/generic_idf/edge.png"
     },
     {
       "id": "generic_mau",
@@ -1084,8 +1084,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/generic_mau/real.png",
       "edge": "assets/hvac/generic_mau/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_mau/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_mau/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_mau/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_mau/edge.png"
     },
     {
       "id": "generic_mdf",
@@ -1104,8 +1104,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/generic_mdf/real.png",
       "edge": "assets/network_data/generic_mdf/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/generic_mdf/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/generic_mdf/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/generic_mdf/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/generic_mdf/edge.png"
     },
     {
       "id": "generic_pacu_rtu_york",
@@ -1124,8 +1124,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/generic_pacu_rtu_york/real.png",
       "edge": "assets/hvac/generic_pacu_rtu_york/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_pacu_rtu_york/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_pacu_rtu_york/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_pacu_rtu_york/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_pacu_rtu_york/edge.png"
     },
     {
       "id": "generic_rack_rtu",
@@ -1144,8 +1144,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/generic_rack_rtu/real.png",
       "edge": "assets/hvac/generic_rack_rtu/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_rack_rtu/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/generic_rack_rtu/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_rack_rtu/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/generic_rack_rtu/edge.png"
     },
     {
       "id": "generic_rack_zero_zone",
@@ -1164,8 +1164,8 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/generic_rack_zero_zone/real.png",
       "edge": "assets/refrigeration/generic_rack_zero_zone/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/generic_rack_zero_zone/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/generic_rack_zero_zone/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/generic_rack_zero_zone/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/generic_rack_zero_zone/edge.png"
     },
     {
       "id": "generic-alarm-strobe",
@@ -1189,8 +1189,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/generic-alarm-strobe/real.png",
       "edge": "assets/alarms_safety/generic-alarm-strobe/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/generic-alarm-strobe/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/generic-alarm-strobe/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/generic-alarm-strobe/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/generic-alarm-strobe/edge.png"
     },
     {
       "id": "generic-din-rail",
@@ -1211,8 +1211,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/generic-din-rail/real.png",
       "edge": "assets/symbols_markers/generic-din-rail/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/generic-din-rail/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/generic-din-rail/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/generic-din-rail/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/generic-din-rail/edge.png"
     },
     {
       "id": "horn_silencer_button",
@@ -1234,8 +1234,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/horn_silencer_button/real.svg",
       "edge": "assets/alarms_safety/horn_silencer_button/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/horn_silencer_button/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/horn_silencer_button/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/horn_silencer_button/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/horn_silencer_button/edge.svg"
     },
     {
       "id": "hvac_bacnet_pacu_oau_loop",
@@ -1258,8 +1258,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/hvac_bacnet_pacu_oau_loop/real.png",
       "edge": "assets/hvac/hvac_bacnet_pacu_oau_loop/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_bacnet_pacu_oau_loop/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_bacnet_pacu_oau_loop/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_bacnet_pacu_oau_loop/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_bacnet_pacu_oau_loop/edge.svg"
     },
     {
       "id": "hvac_oau_unit",
@@ -1281,8 +1281,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/hvac_oau_unit/real.png",
       "edge": "assets/hvac/hvac_oau_unit/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_oau_unit/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_oau_unit/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_oau_unit/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_oau_unit/edge.svg"
     },
     {
       "id": "hvac_pacu_unit",
@@ -1304,8 +1304,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/hvac_pacu_unit/real.png",
       "edge": "assets/hvac/hvac_pacu_unit/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_pacu_unit/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_pacu_unit/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_pacu_unit/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_pacu_unit/edge.svg"
     },
     {
       "id": "idf_48_port_switch",
@@ -1328,8 +1328,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/idf_48_port_switch/real.svg",
       "edge": "assets/network_data/idf_48_port_switch/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/idf_48_port_switch/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/idf_48_port_switch/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/idf_48_port_switch/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/idf_48_port_switch/edge.svg"
     },
     {
       "id": "idf_switch_stack",
@@ -1352,8 +1352,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/idf_switch_stack/real.svg",
       "edge": "assets/network_data/idf_switch_stack/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/idf_switch_stack/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/idf_switch_stack/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/idf_switch_stack/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/idf_switch_stack/edge.svg"
     },
     {
       "id": "lcp_enclosure",
@@ -1376,8 +1376,8 @@
       "defaultHeight": 96,
       "real": "assets/panels_enclosures/lcp_enclosure/real.svg",
       "edge": "assets/panels_enclosures/lcp_enclosure/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/lcp_enclosure/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/lcp_enclosure/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/lcp_enclosure/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/lcp_enclosure/edge.svg"
     },
     {
       "id": "lighting_dimming_module",
@@ -1400,8 +1400,8 @@
       "defaultHeight": 44,
       "real": "assets/lighting/lighting_dimming_module/real.png",
       "edge": "assets/lighting/lighting_dimming_module/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/lighting/lighting_dimming_module/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/lighting/lighting_dimming_module/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/lighting/lighting_dimming_module/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/lighting/lighting_dimming_module/edge.png"
     },
     {
       "id": "lighting_dimming_zone_marker",
@@ -1424,8 +1424,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/lighting_dimming_zone_marker/real.png",
       "edge": "assets/symbols_markers/lighting_dimming_zone_marker/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/lighting_dimming_zone_marker/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/lighting_dimming_zone_marker/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/lighting_dimming_zone_marker/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/lighting_dimming_zone_marker/edge.svg"
     },
     {
       "id": "lighting_lcp1_controller_group",
@@ -1447,8 +1447,8 @@
       "defaultHeight": 44,
       "real": "assets/lighting/lighting_lcp1_controller_group/real.png",
       "edge": "assets/lighting/lighting_lcp1_controller_group/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/lighting/lighting_lcp1_controller_group/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/lighting/lighting_lcp1_controller_group/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/lighting/lighting_lcp1_controller_group/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/lighting/lighting_lcp1_controller_group/edge.svg"
     },
     {
       "id": "mdf_idf_rack",
@@ -1471,8 +1471,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/mdf_idf_rack/real.svg",
       "edge": "assets/network_data/mdf_idf_rack/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/mdf_idf_rack/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/mdf_idf_rack/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/mdf_idf_rack/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/mdf_idf_rack/edge.svg"
     },
     {
       "id": "network_mdf_rack",
@@ -1494,8 +1494,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/network_mdf_rack/real.png",
       "edge": "assets/network_data/network_mdf_rack/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/network_mdf_rack/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/network_mdf_rack/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/network_mdf_rack/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/network_mdf_rack/edge.svg"
     },
     {
       "id": "network_rdm_idf_48_port_switch",
@@ -1518,8 +1518,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/network_rdm_idf_48_port_switch/real.png",
       "edge": "assets/network_data/network_rdm_idf_48_port_switch/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/network_rdm_idf_48_port_switch/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/network_rdm_idf_48_port_switch/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/network_rdm_idf_48_port_switch/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/network_rdm_idf_48_port_switch/edge.svg"
     },
     {
       "id": "oau_unit",
@@ -1541,8 +1541,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/oau_unit/real.svg",
       "edge": "assets/hvac/oau_unit/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/oau_unit/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/oau_unit/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/oau_unit/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/oau_unit/edge.svg"
     },
     {
       "id": "pacu_unit",
@@ -1564,8 +1564,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/pacu_unit/real.svg",
       "edge": "assets/hvac/pacu_unit/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/pacu_unit/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/pacu_unit/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/pacu_unit/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/pacu_unit/edge.svg"
     },
     {
       "id": "panel_lcp_enclosure",
@@ -1587,8 +1587,8 @@
       "defaultHeight": 96,
       "real": "assets/panels_enclosures/panel_lcp_enclosure/real.png",
       "edge": "assets/panels_enclosures/panel_lcp_enclosure/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/panel_lcp_enclosure/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/panel_lcp_enclosure/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/panel_lcp_enclosure/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/panel_lcp_enclosure/edge.svg"
     },
     {
       "id": "pcp_enclosure",
@@ -1610,8 +1610,8 @@
       "defaultHeight": 96,
       "real": "assets/panels_enclosures/pcp_enclosure/real.svg",
       "edge": "assets/panels_enclosures/pcp_enclosure/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/pcp_enclosure/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/pcp_enclosure/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/pcp_enclosure/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/pcp_enclosure/edge.svg"
     },
     {
       "id": "rdm_data_manager",
@@ -1636,8 +1636,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/rdm_data_manager/real.svg",
       "edge": "assets/network_data/rdm_data_manager/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/rdm_data_manager/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/rdm_data_manager/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/rdm_data_manager/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/rdm_data_manager/edge.svg"
     },
     {
       "id": "rdm_mercury_switch",
@@ -1656,8 +1656,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm_mercury_switch/real.png",
       "edge": "assets/controllers/rdm_mercury_switch/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_mercury_switch/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_mercury_switch/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_mercury_switch/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_mercury_switch/edge.png"
     },
     {
       "id": "rdm_orbit_touchxl",
@@ -1681,8 +1681,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/rdm_orbit_touchxl/real.svg",
       "edge": "assets/network_data/rdm_orbit_touchxl/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/rdm_orbit_touchxl/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/rdm_orbit_touchxl/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/rdm_orbit_touchxl/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/rdm_orbit_touchxl/edge.svg"
     },
     {
       "id": "rdm_orbit_touchxl_console",
@@ -1705,8 +1705,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm_orbit_touchxl_console/real.png",
       "edge": "assets/controllers/rdm_orbit_touchxl_console/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_orbit_touchxl_console/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_orbit_touchxl_console/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_orbit_touchxl_console/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_orbit_touchxl_console/edge.png"
     },
     {
       "id": "rdm_pr0652_cct_controller",
@@ -1728,8 +1728,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm_pr0652_cct_controller/real.png",
       "edge": "assets/controllers/rdm_pr0652_cct_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0652_cct_controller/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0652_cct_controller/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0652_cct_controller/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0652_cct_controller/edge.svg"
     },
     {
       "id": "rdm_pr0653_top_row_connections",
@@ -1750,8 +1750,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0653_top_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0653_top_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0653_top_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0653_top_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0653_top_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0653_top_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0656_expansion_module",
@@ -1773,8 +1773,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0656_expansion_module/real.png",
       "edge": "assets/expansion_modules/rdm_pr0656_expansion_module/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0656_expansion_module/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0656_expansion_module/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0656_expansion_module/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0656_expansion_module/edge.svg"
     },
     {
       "id": "rdm_pr0660_bottom_row_connections",
@@ -1795,8 +1795,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0660_bottom_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0660_bottom_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_bottom_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_bottom_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_bottom_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_bottom_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0660_stepper_expansion_module",
@@ -1819,8 +1819,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0660_stepper_expansion_module/real.png",
       "edge": "assets/expansion_modules/rdm_pr0660_stepper_expansion_module/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_stepper_expansion_module/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_stepper_expansion_module/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_stepper_expansion_module/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_stepper_expansion_module/edge.png"
     },
     {
       "id": "rdm_pr0660_top_row_connections",
@@ -1841,8 +1841,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0660_top_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0660_top_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_top_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_top_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_top_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0660_top_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0660_top_row_controller",
@@ -1864,8 +1864,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm_pr0660_top_row_controller/real.svg",
       "edge": "assets/controllers/rdm_pr0660_top_row_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0660_top_row_controller/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0660_top_row_controller/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0660_top_row_controller/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0660_top_row_controller/edge.svg"
     },
     {
       "id": "rdm_pr0661_bottom_row_connections",
@@ -1886,8 +1886,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0661_bottom_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0661_bottom_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_bottom_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_bottom_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_bottom_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_bottom_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0661_io_expansion",
@@ -1909,8 +1909,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0661_io_expansion/real.png",
       "edge": "assets/expansion_modules/rdm_pr0661_io_expansion/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_io_expansion/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_io_expansion/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_io_expansion/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_io_expansion/edge.png"
     },
     {
       "id": "rdm_pr0661_io_expansion_module",
@@ -1932,8 +1932,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0661_io_expansion_module/real.png",
       "edge": "assets/expansion_modules/rdm_pr0661_io_expansion_module/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_io_expansion_module/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_io_expansion_module/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_io_expansion_module/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_io_expansion_module/edge.png"
     },
     {
       "id": "rdm_pr0661_top_row_connections",
@@ -1954,8 +1954,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0661_top_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0661_top_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_top_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_top_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_top_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0661_top_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0662_connections",
@@ -1976,8 +1976,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0662_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0662_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0662_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0662_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0662_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0662_connections/edge.png"
     },
     {
       "id": "rdm_pr0663_4_4_bottom_row_connections",
@@ -1998,8 +1998,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0663_4_4_bottom_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0663_4_4_bottom_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_4_4_bottom_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_4_4_bottom_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_4_4_bottom_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_4_4_bottom_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0663_4_4_top_row_connections",
@@ -2020,8 +2020,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0663_4_4_top_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0663_4_4_top_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_4_4_top_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_4_4_top_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_4_4_top_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_4_4_top_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0663_bottom_row_connections",
@@ -2042,8 +2042,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0663_bottom_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0663_bottom_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_bottom_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_bottom_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_bottom_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_bottom_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0663_expansion_module",
@@ -2066,8 +2066,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0663_expansion_module/real.svg",
       "edge": "assets/expansion_modules/rdm_pr0663_expansion_module/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_expansion_module/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_expansion_module/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_expansion_module/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_expansion_module/edge.svg"
     },
     {
       "id": "rdm_pr0663_mini_io_expansion",
@@ -2090,8 +2090,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0663_mini_io_expansion/real.png",
       "edge": "assets/expansion_modules/rdm_pr0663_mini_io_expansion/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_mini_io_expansion/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_mini_io_expansion/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_mini_io_expansion/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_mini_io_expansion/edge.png"
     },
     {
       "id": "rdm_pr0663_top_row_connections",
@@ -2112,8 +2112,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0663_top_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0663_top_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_top_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_top_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_top_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0663_top_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0681_mini_io_expansion",
@@ -2135,8 +2135,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0681_mini_io_expansion/real.png",
       "edge": "assets/expansion_modules/rdm_pr0681_mini_io_expansion/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_mini_io_expansion/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_mini_io_expansion/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_mini_io_expansion/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_mini_io_expansion/edge.png"
     },
     {
       "id": "rdm_pr0681_top_bottom_connections",
@@ -2157,8 +2157,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0681_top_bottom_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0681_top_bottom_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_top_bottom_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_top_bottom_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_top_bottom_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_top_bottom_connections/edge.png"
     },
     {
       "id": "rdm_pr0681_top_row_connections",
@@ -2179,8 +2179,8 @@
       "defaultHeight": 40,
       "real": "assets/expansion_modules/rdm_pr0681_top_row_connections/real.png",
       "edge": "assets/expansion_modules/rdm_pr0681_top_row_connections/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_top_row_connections/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_top_row_connections/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_top_row_connections/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/expansion_modules/rdm_pr0681_top_row_connections/edge.png"
     },
     {
       "id": "rdm_pr0685_3ec_case_controller",
@@ -2202,8 +2202,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm_pr0685_3ec_case_controller/real.png",
       "edge": "assets/controllers/rdm_pr0685_3ec_case_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0685_3ec_case_controller/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0685_3ec_case_controller/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0685_3ec_case_controller/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0685_3ec_case_controller/edge.svg"
     },
     {
       "id": "rdm_pr0685_case_controller",
@@ -2225,8 +2225,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm_pr0685_case_controller/real.svg",
       "edge": "assets/controllers/rdm_pr0685_case_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0685_case_controller/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0685_case_controller/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0685_case_controller/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0685_case_controller/edge.svg"
     },
     {
       "id": "rdm_pr0740_case_controller",
@@ -2248,8 +2248,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm_pr0740_case_controller/real.svg",
       "edge": "assets/controllers/rdm_pr0740_case_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0740_case_controller/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0740_case_controller/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0740_case_controller/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0740_case_controller/edge.svg"
     },
     {
       "id": "rdm_pr0751_evap_controller",
@@ -2272,8 +2272,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm_pr0751_evap_controller/real.svg",
       "edge": "assets/controllers/rdm_pr0751_evap_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0751_evap_controller/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0751_evap_controller/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0751_evap_controller/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0751_evap_controller/edge.svg"
     },
     {
       "id": "rdm_pr0751_ip_evap_controller",
@@ -2296,8 +2296,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm_pr0751_ip_evap_controller/real.png",
       "edge": "assets/controllers/rdm_pr0751_ip_evap_controller/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0751_ip_evap_controller/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm_pr0751_ip_evap_controller/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0751_ip_evap_controller/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm_pr0751_ip_evap_controller/edge.svg"
     },
     {
       "id": "rdm_rdm_bluetooth",
@@ -2316,8 +2316,8 @@
       "defaultHeight": 42,
       "real": "assets/custom/rdm_rdm_bluetooth/real.png",
       "edge": "assets/custom/rdm_rdm_bluetooth/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/rdm_rdm_bluetooth/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/rdm_rdm_bluetooth/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/rdm_rdm_bluetooth/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/rdm_rdm_bluetooth/edge.png"
     },
     {
       "id": "rdm_rdm_logo",
@@ -2336,8 +2336,8 @@
       "defaultHeight": 60,
       "real": "assets/logos/rdm_rdm_logo/real.png",
       "edge": "assets/logos/rdm_rdm_logo/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/logos/rdm_rdm_logo/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/logos/rdm_rdm_logo/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/logos/rdm_rdm_logo/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/logos/rdm_rdm_logo/edge.png"
     },
     {
       "id": "rdm-data-manager",
@@ -2360,8 +2360,8 @@
       "defaultHeight": 40,
       "real": "assets/network_data/rdm-data-manager/real.png",
       "edge": "assets/network_data/rdm-data-manager/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/rdm-data-manager/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/rdm-data-manager/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/rdm-data-manager/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/rdm-data-manager/edge.png"
     },
     {
       "id": "rdm-mercury",
@@ -2383,8 +2383,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm-mercury/real.png",
       "edge": "assets/controllers/rdm-mercury/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm-mercury/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm-mercury/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm-mercury/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm-mercury/edge.png"
     },
     {
       "id": "rdm-pr0680",
@@ -2407,8 +2407,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm-pr0680/real.png",
       "edge": "assets/controllers/rdm-pr0680/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm-pr0680/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm-pr0680/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm-pr0680/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm-pr0680/edge.png"
     },
     {
       "id": "rdm-touchxl",
@@ -2430,8 +2430,8 @@
       "defaultHeight": 42,
       "real": "assets/controllers/rdm-touchxl/real.png",
       "edge": "assets/controllers/rdm-touchxl/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm-touchxl/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/rdm-touchxl/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm-touchxl/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/rdm-touchxl/edge.png"
     },
     {
       "id": "refrigeration_co2_rack",
@@ -2453,8 +2453,8 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/refrigeration_co2_rack/real.png",
       "edge": "assets/refrigeration/refrigeration_co2_rack/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_co2_rack/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_co2_rack/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_co2_rack/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_co2_rack/edge.svg"
     },
     {
       "id": "refrigeration_rack_ra",
@@ -2476,8 +2476,8 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/refrigeration_rack_ra/real.png",
       "edge": "assets/refrigeration/refrigeration_rack_ra/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_ra/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_ra/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_ra/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_ra/edge.svg"
     },
     {
       "id": "refrigeration_rack_rb",
@@ -2499,8 +2499,8 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/refrigeration_rack_rb/real.png",
       "edge": "assets/refrigeration/refrigeration_rack_rb/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_rb/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_rb/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_rb/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_rb/edge.svg"
     },
     {
       "id": "refrigeration_rack_rc",
@@ -2522,8 +2522,8 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/refrigeration_rack_rc/real.png",
       "edge": "assets/refrigeration/refrigeration_rack_rc/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_rc/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_rc/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_rc/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_rack_rc/edge.svg"
     },
     {
       "id": "sensor_10k_temp_probe",
@@ -2546,8 +2546,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_10k_temp_probe/real.png",
       "edge": "assets/sensors_transducers/sensor_10k_temp_probe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_10k_temp_probe/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_10k_temp_probe/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_10k_temp_probe/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_10k_temp_probe/edge.svg"
     },
     {
       "id": "sensor_10k2_temp_probe",
@@ -2570,8 +2570,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_10k2_temp_probe/real.svg",
       "edge": "assets/sensors_transducers/sensor_10k2_temp_probe/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_10k2_temp_probe/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_10k2_temp_probe/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_10k2_temp_probe/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_10k2_temp_probe/edge.svg"
     },
     {
       "id": "sensor_clean_switch",
@@ -2593,8 +2593,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_clean_switch/real.png",
       "edge": "assets/sensors_transducers/sensor_clean_switch/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_clean_switch/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_clean_switch/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_clean_switch/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_clean_switch/edge.svg"
     },
     {
       "id": "sensor_co2_leak_transducer",
@@ -2619,8 +2619,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_co2_leak_transducer/real.svg",
       "edge": "assets/sensors_transducers/sensor_co2_leak_transducer/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_co2_leak_transducer/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_co2_leak_transducer/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_co2_leak_transducer/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_co2_leak_transducer/edge.svg"
     },
     {
       "id": "sensor_defrost_termination",
@@ -2642,8 +2642,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_defrost_termination/real.png",
       "edge": "assets/sensors_transducers/sensor_defrost_termination/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_defrost_termination/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_defrost_termination/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_defrost_termination/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_defrost_termination/edge.svg"
     },
     {
       "id": "sensor_hfc_leak_ls",
@@ -2668,8 +2668,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_hfc_leak_ls/real.png",
       "edge": "assets/sensors_transducers/sensor_hfc_leak_ls/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_hfc_leak_ls/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_hfc_leak_ls/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_hfc_leak_ls/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_hfc_leak_ls/edge.png"
     },
     {
       "id": "sensor_hfc_leak_transducer",
@@ -2694,8 +2694,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_hfc_leak_transducer/real.svg",
       "edge": "assets/sensors_transducers/sensor_hfc_leak_transducer/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_hfc_leak_transducer/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_hfc_leak_transducer/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_hfc_leak_transducer/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_hfc_leak_transducer/edge.svg"
     },
     {
       "id": "sensor_humidity_temp_rh",
@@ -2718,8 +2718,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_humidity_temp_rh/real.png",
       "edge": "assets/sensors_transducers/sensor_humidity_temp_rh/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_humidity_temp_rh/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_humidity_temp_rh/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_humidity_temp_rh/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_humidity_temp_rh/edge.svg"
     },
     {
       "id": "sensor_indoor_temp_rh",
@@ -2742,8 +2742,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_indoor_temp_rh/real.svg",
       "edge": "assets/sensors_transducers/sensor_indoor_temp_rh/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_indoor_temp_rh/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_indoor_temp_rh/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_indoor_temp_rh/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_indoor_temp_rh/edge.svg"
     },
     {
       "id": "sensor_light_level_oat",
@@ -2767,8 +2767,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_light_level_oat/real.svg",
       "edge": "assets/sensors_transducers/sensor_light_level_oat/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_light_level_oat/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_light_level_oat/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_light_level_oat/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_light_level_oat/edge.svg"
     },
     {
       "id": "sensor_pressure_transducer",
@@ -2791,8 +2791,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_pressure_transducer/real.png",
       "edge": "assets/sensors_transducers/sensor_pressure_transducer/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_pressure_transducer/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_pressure_transducer/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_pressure_transducer/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_pressure_transducer/edge.svg"
     },
     {
       "id": "sensor_zone_temp",
@@ -2815,8 +2815,8 @@
       "defaultHeight": 40,
       "real": "assets/sensors_transducers/sensor_zone_temp/real.svg",
       "edge": "assets/sensors_transducers/sensor_zone_temp/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_zone_temp/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/sensors_transducers/sensor_zone_temp/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_zone_temp/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/sensors_transducers/sensor_zone_temp/edge.svg"
     },
     {
       "id": "signage_legend_strip",
@@ -2840,8 +2840,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/signage_legend_strip/real.svg",
       "edge": "assets/symbols_markers/signage_legend_strip/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/signage_legend_strip/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/signage_legend_strip/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/signage_legend_strip/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/signage_legend_strip/edge.svg"
     },
     {
       "id": "sym_dm_data_manager_marker",
@@ -2864,8 +2864,8 @@
       "defaultHeight": 18,
       "real": "assets/network_data/sym_dm_data_manager_marker/real.svg",
       "edge": "assets/network_data/sym_dm_data_manager_marker/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/sym_dm_data_manager_marker/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/sym_dm_data_manager_marker/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/sym_dm_data_manager_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/sym_dm_data_manager_marker/edge.svg"
     },
     {
       "id": "sym_idf_network_marker",
@@ -2888,8 +2888,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/sym_idf_network_marker/real.svg",
       "edge": "assets/symbols_markers/sym_idf_network_marker/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_idf_network_marker/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_idf_network_marker/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_idf_network_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_idf_network_marker/edge.svg"
     },
     {
       "id": "sym_lcp_panel_marker",
@@ -2911,8 +2911,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/sym_lcp_panel_marker/real.svg",
       "edge": "assets/symbols_markers/sym_lcp_panel_marker/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_lcp_panel_marker/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_lcp_panel_marker/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_lcp_panel_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_lcp_panel_marker/edge.svg"
     },
     {
       "id": "sym_lt_light_level_sensor",
@@ -2936,8 +2936,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/sym_lt_light_level_sensor/real.svg",
       "edge": "assets/symbols_markers/sym_lt_light_level_sensor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_lt_light_level_sensor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_lt_light_level_sensor/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_lt_light_level_sensor/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_lt_light_level_sensor/edge.svg"
     },
     {
       "id": "sym_oat_outdoor_air_temp",
@@ -2960,8 +2960,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/sym_oat_outdoor_air_temp/real.svg",
       "edge": "assets/symbols_markers/sym_oat_outdoor_air_temp/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_oat_outdoor_air_temp/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_oat_outdoor_air_temp/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_oat_outdoor_air_temp/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_oat_outdoor_air_temp/edge.svg"
     },
     {
       "id": "sym_pm_power_monitor_marker",
@@ -2984,8 +2984,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/sym_pm_power_monitor_marker/real.svg",
       "edge": "assets/symbols_markers/sym_pm_power_monitor_marker/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_pm_power_monitor_marker/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_pm_power_monitor_marker/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_pm_power_monitor_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_pm_power_monitor_marker/edge.svg"
     },
     {
       "id": "sym_t_temp_input",
@@ -3008,8 +3008,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/sym_t_temp_input/real.svg",
       "edge": "assets/symbols_markers/sym_t_temp_input/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_t_temp_input/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_t_temp_input/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_t_temp_input/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_t_temp_input/edge.svg"
     },
     {
       "id": "sym_wicp_panel_marker",
@@ -3031,8 +3031,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/sym_wicp_panel_marker/real.svg",
       "edge": "assets/symbols_markers/sym_wicp_panel_marker/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_wicp_panel_marker/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sym_wicp_panel_marker/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_wicp_panel_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sym_wicp_panel_marker/edge.svg"
     },
     {
       "id": "ups_power",
@@ -3054,8 +3054,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/ups_power/real.svg",
       "edge": "assets/electrical_power/ups_power/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/ups_power/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/ups_power/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/ups_power/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/ups_power/edge.svg"
     },
     {
       "id": "valve_liquid_line_solenoid",
@@ -3078,8 +3078,8 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/valve_liquid_line_solenoid/real.svg",
       "edge": "assets/refrigeration/valve_liquid_line_solenoid/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/valve_liquid_line_solenoid/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/valve_liquid_line_solenoid/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/valve_liquid_line_solenoid/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/valve_liquid_line_solenoid/edge.svg"
     },
     {
       "id": "wicp_enclosure",
@@ -3102,8 +3102,8 @@
       "defaultHeight": 96,
       "real": "assets/panels_enclosures/wicp_enclosure/real.svg",
       "edge": "assets/panels_enclosures/wicp_enclosure/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/wicp_enclosure/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/panels_enclosures/wicp_enclosure/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/wicp_enclosure/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/panels_enclosures/wicp_enclosure/edge.svg"
     },
     {
       "id": "wicp_ds_door_switch",
@@ -3126,8 +3126,8 @@
       "defaultHeight": 42,
       "real": "assets/custom/wicp_ds_door_switch/real.svg",
       "edge": "assets/custom/wicp_ds_door_switch/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/wicp_ds_door_switch/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/wicp_ds_door_switch/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/wicp_ds_door_switch/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/wicp_ds_door_switch/edge.svg"
     },
     {
       "id": "wicp_et_entrapment_switch",
@@ -3150,8 +3150,8 @@
       "defaultHeight": 42,
       "real": "assets/custom/wicp_et_entrapment_switch/real.svg",
       "edge": "assets/custom/wicp_et_entrapment_switch/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/wicp_et_entrapment_switch/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/wicp_et_entrapment_switch/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/wicp_et_entrapment_switch/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/wicp_et_entrapment_switch/edge.svg"
     },
     {
       "id": "wicp_llsv_liquid_line_solenoid_valve",
@@ -3175,8 +3175,8 @@
       "defaultHeight": 42,
       "real": "assets/custom/wicp_llsv_liquid_line_solenoid_valve/real.svg",
       "edge": "assets/custom/wicp_llsv_liquid_line_solenoid_valve/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/wicp_llsv_liquid_line_solenoid_valve/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/custom/wicp_llsv_liquid_line_solenoid_valve/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/wicp_llsv_liquid_line_solenoid_valve/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/custom/wicp_llsv_liquid_line_solenoid_valve/edge.svg"
     },
     {
       "id": "sign_help_trapped_symbol",
@@ -3199,8 +3199,8 @@
       "defaultHeight": 42,
       "real": "assets/symbols_markers/sign_help_trapped_symbol/real.svg",
       "edge": "assets/symbols_markers/sign_help_trapped_symbol/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sign_help_trapped_symbol/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/sign_help_trapped_symbol/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sign_help_trapped_symbol/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/sign_help_trapped_symbol/edge.svg"
     },
     {
       "id": "signage_legend_safety_trapped_leak_help",
@@ -3225,8 +3225,8 @@
       "defaultHeight": 42,
       "real": "assets/symbols_markers/signage_legend_safety_trapped_leak_help/real.svg",
       "edge": "assets/symbols_markers/signage_legend_safety_trapped_leak_help/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/signage_legend_safety_trapped_leak_help/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/signage_legend_safety_trapped_leak_help/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/signage_legend_safety_trapped_leak_help/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/signage_legend_safety_trapped_leak_help/edge.svg"
     },
     {
       "id": "s360_rdm_li",
@@ -3253,8 +3253,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_li/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_li/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_li/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_li/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_li/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_li/edge.svg"
     },
     {
       "id": "s360_rdm_da",
@@ -3281,8 +3281,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_da/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_da/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_da/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_da/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_da/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_da/edge.svg"
     },
     {
       "id": "s360_rdm_ls",
@@ -3313,8 +3313,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_ls/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_ls/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ls/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ls/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ls/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ls/edge.svg"
     },
     {
       "id": "s360_rdm_es",
@@ -3340,8 +3340,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_es/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_es/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_es/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_es/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_es/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_es/edge.svg"
     },
     {
       "id": "s360_rdm_ea",
@@ -3368,8 +3368,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_ea/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_ea/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ea/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ea/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ea/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ea/edge.svg"
     },
     {
       "id": "s360_rdm_hs",
@@ -3396,8 +3396,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_hs/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_hs/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_hs/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_hs/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_hs/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_hs/edge.svg"
     },
     {
       "id": "s360_rdm_ts",
@@ -3425,8 +3425,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_ts/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_ts/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ts/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ts/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ts/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ts/edge.svg"
     },
     {
       "id": "s360_rdm_ds",
@@ -3453,8 +3453,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_ds/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_ds/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ds/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ds/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ds/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_ds/edge.svg"
     },
     {
       "id": "s360_rdm_dts",
@@ -3481,8 +3481,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_dts/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_dts/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_dts/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_dts/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_dts/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_dts/edge.svg"
     },
     {
       "id": "s360_rdm_sign_pti",
@@ -3509,8 +3509,8 @@
       "defaultHeight": 22,
       "real": "assets/symbols_markers/s360_rdm_sign_pti/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_sign_pti/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_pti/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_pti/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_pti/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_pti/edge.svg"
     },
     {
       "id": "s360_rdm_sign_li",
@@ -3537,8 +3537,8 @@
       "defaultHeight": 22,
       "real": "assets/symbols_markers/s360_rdm_sign_li/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_sign_li/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_li/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_li/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_li/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_li/edge.svg"
     },
     {
       "id": "s360_rdm_sign_help",
@@ -3566,8 +3566,8 @@
       "defaultHeight": 22,
       "real": "assets/symbols_markers/s360_rdm_sign_help/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_sign_help/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_help/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_help/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_help/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_sign_help/edge.svg"
     },
     {
       "id": "s360_rdm_eepr_electronic",
@@ -3595,8 +3595,8 @@
       "defaultHeight": 28,
       "real": "assets/refrigeration/s360_rdm_eepr_electronic/real.svg",
       "edge": "assets/refrigeration/s360_rdm_eepr_electronic/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_electronic/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_electronic/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_electronic/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_electronic/edge.svg"
     },
     {
       "id": "s360_rdm_eepr_mechanical",
@@ -3624,8 +3624,8 @@
       "defaultHeight": 28,
       "real": "assets/refrigeration/s360_rdm_eepr_mechanical/real.svg",
       "edge": "assets/refrigeration/s360_rdm_eepr_mechanical/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_mechanical/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_mechanical/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_mechanical/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eepr_mechanical/edge.svg"
     },
     {
       "id": "s360_rdm_electric_defrost",
@@ -3652,8 +3652,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_electric_defrost/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_electric_defrost/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_electric_defrost/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_electric_defrost/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_electric_defrost/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_electric_defrost/edge.svg"
     },
     {
       "id": "s360_rdm_liquid_solenoid_plan",
@@ -3679,8 +3679,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/s360_rdm_liquid_solenoid_plan/real.svg",
       "edge": "assets/symbols_markers/s360_rdm_liquid_solenoid_plan/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_liquid_solenoid_plan/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_liquid_solenoid_plan/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_liquid_solenoid_plan/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_rdm_liquid_solenoid_plan/edge.svg"
     },
     {
       "id": "s360_rdm_strobe_li_blue",
@@ -3706,8 +3706,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/s360_rdm_strobe_li_blue/real.svg",
       "edge": "assets/alarms_safety/s360_rdm_strobe_li_blue/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_li_blue/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_li_blue/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_li_blue/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_li_blue/edge.svg"
     },
     {
       "id": "s360_rdm_strobe_da_yellow",
@@ -3733,8 +3733,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/s360_rdm_strobe_da_yellow/real.svg",
       "edge": "assets/alarms_safety/s360_rdm_strobe_da_yellow/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_da_yellow/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_da_yellow/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_da_yellow/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_da_yellow/edge.svg"
     },
     {
       "id": "s360_rdm_strobe_ea_red",
@@ -3760,8 +3760,8 @@
       "defaultHeight": 44,
       "real": "assets/alarms_safety/s360_rdm_strobe_ea_red/real.svg",
       "edge": "assets/alarms_safety/s360_rdm_strobe_ea_red/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_ea_red/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_ea_red/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_ea_red/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/alarms_safety/s360_rdm_strobe_ea_red/edge.svg"
     },
     {
       "id": "s360_rdm_lls_open",
@@ -3787,8 +3787,8 @@
       "defaultHeight": 32,
       "real": "assets/refrigeration/s360_rdm_lls_open/real.svg",
       "edge": "assets/refrigeration/s360_rdm_lls_open/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_lls_open/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_lls_open/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_lls_open/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_lls_open/edge.svg"
     },
     {
       "id": "s360_rdm_lls_closed",
@@ -3814,8 +3814,8 @@
       "defaultHeight": 32,
       "real": "assets/refrigeration/s360_rdm_lls_closed/real.svg",
       "edge": "assets/refrigeration/s360_rdm_lls_closed/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_lls_closed/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_lls_closed/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_lls_closed/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_lls_closed/edge.svg"
     },
     {
       "id": "s360_rdm_eev",
@@ -3842,8 +3842,8 @@
       "defaultHeight": 32,
       "real": "assets/refrigeration/s360_rdm_eev/real.svg",
       "edge": "assets/refrigeration/s360_rdm_eev/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eev/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eev/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eev/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_rdm_eev/edge.svg"
     },
     {
       "id": "s360_std_anti_sweat_trim",
@@ -3871,8 +3871,8 @@
       "defaultHeight": 28,
       "real": "assets/refrigeration/s360_std_anti_sweat_trim/real.svg",
       "edge": "assets/refrigeration/s360_std_anti_sweat_trim/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_anti_sweat_trim/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_anti_sweat_trim/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_anti_sweat_trim/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_anti_sweat_trim/edge.svg"
     },
     {
       "id": "s360_std_evaporator_fan",
@@ -3898,8 +3898,8 @@
       "defaultHeight": 34,
       "real": "assets/refrigeration/s360_std_evaporator_fan/real.svg",
       "edge": "assets/refrigeration/s360_std_evaporator_fan/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_evaporator_fan/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_evaporator_fan/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_evaporator_fan/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_evaporator_fan/edge.svg"
     },
     {
       "id": "s360_std_condenser_fan",
@@ -3925,8 +3925,8 @@
       "defaultHeight": 34,
       "real": "assets/hvac/s360_std_condenser_fan/real.svg",
       "edge": "assets/hvac/s360_std_condenser_fan/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/s360_std_condenser_fan/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/s360_std_condenser_fan/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/s360_std_condenser_fan/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/s360_std_condenser_fan/edge.svg"
     },
     {
       "id": "s360_std_evaporator_coil",
@@ -3953,8 +3953,8 @@
       "defaultHeight": 28,
       "real": "assets/refrigeration/s360_std_evaporator_coil/real.svg",
       "edge": "assets/refrigeration/s360_std_evaporator_coil/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_evaporator_coil/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_evaporator_coil/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_evaporator_coil/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_evaporator_coil/edge.svg"
     },
     {
       "id": "s360_std_compressor",
@@ -3980,8 +3980,8 @@
       "defaultHeight": 34,
       "real": "assets/refrigeration/s360_std_compressor/real.svg",
       "edge": "assets/refrigeration/s360_std_compressor/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_compressor/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_compressor/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_compressor/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_compressor/edge.svg"
     },
     {
       "id": "s360_std_refrigeration_rack",
@@ -4011,8 +4011,8 @@
       "defaultHeight": 30,
       "real": "assets/refrigeration/s360_std_refrigeration_rack/real.svg",
       "edge": "assets/refrigeration/s360_std_refrigeration_rack/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_refrigeration_rack/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/s360_std_refrigeration_rack/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_refrigeration_rack/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/s360_std_refrigeration_rack/edge.svg"
     },
     {
       "id": "s360_std_rdm_idf_marker",
@@ -4039,8 +4039,8 @@
       "defaultHeight": 34,
       "real": "assets/symbols_markers/s360_std_rdm_idf_marker/real.svg",
       "edge": "assets/symbols_markers/s360_std_rdm_idf_marker/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_std_rdm_idf_marker/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_std_rdm_idf_marker/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_std_rdm_idf_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_std_rdm_idf_marker/edge.svg"
     },
     {
       "id": "s360_std_mdf_marker",
@@ -4068,8 +4068,8 @@
       "defaultHeight": 34,
       "real": "assets/symbols_markers/s360_std_mdf_marker/real.svg",
       "edge": "assets/symbols_markers/s360_std_mdf_marker/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_std_mdf_marker/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/s360_std_mdf_marker/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_std_mdf_marker/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/s360_std_mdf_marker/edge.svg"
     },
     {
       "id": "heb_logo",
@@ -4095,7 +4095,7 @@
       "defaultHeight": 62,
       "real": "assets/logos/heb_logo/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/logos/heb_logo/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/logos/heb_logo/real.png",
       "edgeRaw": ""
     },
     {
@@ -4122,7 +4122,7 @@
       "defaultHeight": 62,
       "real": "assets/logos/singh360_logo/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/logos/singh360_logo/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/logos/singh360_logo/real.png",
       "edgeRaw": ""
     },
     {
@@ -4149,7 +4149,7 @@
       "defaultHeight": 62,
       "real": "assets/logos/rdm_logo/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/logos/rdm_logo/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/logos/rdm_logo/real.png",
       "edgeRaw": ""
     },
     {
@@ -4169,7 +4169,7 @@
       "defaultHeight": 42,
       "real": "assets/controllers/controllers_15376f3636/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/controllers_15376f3636/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/controllers_15376f3636/real.png",
       "edgeRaw": ""
     },
     {
@@ -4189,7 +4189,7 @@
       "defaultHeight": 42,
       "real": "assets/controllers/controllers_c2d84cf54c/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/controllers_c2d84cf54c/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/controllers_c2d84cf54c/real.png",
       "edgeRaw": ""
     },
     {
@@ -4209,7 +4209,7 @@
       "defaultHeight": 42,
       "real": "assets/controllers/controllers_3965ac381f/real.svg",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/controllers_3965ac381f/real.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/controllers_3965ac381f/real.svg",
       "edgeRaw": ""
     },
     {
@@ -4229,7 +4229,7 @@
       "defaultHeight": 42,
       "real": "assets/controllers/controllers_bf6e23224a/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/controllers_bf6e23224a/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/controllers_bf6e23224a/real.png",
       "edgeRaw": ""
     },
     {
@@ -4249,7 +4249,7 @@
       "defaultHeight": 42,
       "real": "assets/controllers/controllers_b3dd7272f4/real.svg",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/controllers/controllers_b3dd7272f4/real.svg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/controllers/controllers_b3dd7272f4/real.svg",
       "edgeRaw": ""
     },
     {
@@ -4269,7 +4269,7 @@
       "defaultHeight": 64,
       "real": "assets/hvac/hvac_fa4b6c660e/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_fa4b6c660e/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_fa4b6c660e/real.png",
       "edgeRaw": ""
     },
     {
@@ -4289,7 +4289,7 @@
       "defaultHeight": 64,
       "real": "assets/hvac/hvac_b599ad8242/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_b599ad8242/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_b599ad8242/real.png",
       "edgeRaw": ""
     },
     {
@@ -4309,7 +4309,7 @@
       "defaultHeight": 64,
       "real": "assets/hvac/hvac_f49879e234/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_f49879e234/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_f49879e234/real.png",
       "edgeRaw": ""
     },
     {
@@ -4329,7 +4329,7 @@
       "defaultHeight": 60,
       "real": "assets/logos/logos_672af5074f/real.jpg",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/logos/logos_672af5074f/real.jpg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/logos/logos_672af5074f/real.jpg",
       "edgeRaw": ""
     },
     {
@@ -4350,7 +4350,7 @@
       "defaultHeight": 56,
       "real": "assets/network_data/refrigeration_edc036b96c/real.jpg",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/network_data/refrigeration_edc036b96c/real.jpg",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/network_data/refrigeration_edc036b96c/real.jpg",
       "edgeRaw": ""
     },
     {
@@ -4370,7 +4370,7 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/refrigeration_e568bd2258/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_e568bd2258/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_e568bd2258/real.png",
       "edgeRaw": ""
     },
     {
@@ -4390,7 +4390,7 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/refrigeration_357aa1d210/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_357aa1d210/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_357aa1d210/real.png",
       "edgeRaw": ""
     },
     {
@@ -4410,7 +4410,7 @@
       "defaultHeight": 56,
       "real": "assets/refrigeration/refrigeration_59037723d5/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/refrigeration/refrigeration_59037723d5/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/refrigeration/refrigeration_59037723d5/real.png",
       "edgeRaw": ""
     },
     {
@@ -4430,8 +4430,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/hvac_46f8be2deb/real.png",
       "edge": "assets/hvac/hvac_46f8be2deb/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_46f8be2deb/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_46f8be2deb/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_46f8be2deb/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_46f8be2deb/edge.png"
     },
     {
       "id": "hvac_c767ec30e7",
@@ -4450,8 +4450,8 @@
       "defaultHeight": 64,
       "real": "assets/hvac/hvac_c767ec30e7/real.png",
       "edge": "assets/hvac/hvac_c767ec30e7/edge.png",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_c767ec30e7/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/hvac/hvac_c767ec30e7/edge.png"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_c767ec30e7/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/hvac/hvac_c767ec30e7/edge.png"
     },
     {
       "id": "electrical_power_5ef0773845",
@@ -4472,8 +4472,8 @@
       "defaultHeight": 72,
       "real": "assets/electrical_power/electrical_power_5ef0773845/real.png",
       "edge": "assets/electrical_power/electrical_power_5ef0773845/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_power_5ef0773845/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_power_5ef0773845/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_power_5ef0773845/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_power_5ef0773845/edge.svg"
     },
     {
       "id": "electrical_power_3be42fee38",
@@ -4494,8 +4494,8 @@
       "defaultHeight": 72,
       "real": "assets/electrical_power/electrical_power_3be42fee38/real.png",
       "edge": "assets/electrical_power/electrical_power_3be42fee38/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_power_3be42fee38/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_power_3be42fee38/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_power_3be42fee38/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_power_3be42fee38/edge.svg"
     },
     {
       "id": "electrical_power_2a8fad2edb",
@@ -4514,8 +4514,8 @@
       "defaultHeight": 48,
       "real": "assets/electrical_power/electrical_power_2a8fad2edb/real.png",
       "edge": "assets/electrical_power/electrical_power_2a8fad2edb/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_power_2a8fad2edb/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/electrical_power/electrical_power_2a8fad2edb/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_power_2a8fad2edb/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/electrical_power/electrical_power_2a8fad2edb/edge.svg"
     },
     {
       "id": "signage_safety_51011bbb37",
@@ -4535,7 +4535,7 @@
       "defaultHeight": 180,
       "real": "assets/symbols_markers/signage_safety_51011bbb37/real.png",
       "edge": "",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/signage_safety_51011bbb37/real.png",
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/signage_safety_51011bbb37/real.png",
       "edgeRaw": ""
     },
     {
@@ -4555,8 +4555,8 @@
       "defaultHeight": 40,
       "real": "assets/symbols_markers/symbols_markers_964f42d000/real.png",
       "edge": "assets/symbols_markers/symbols_markers_964f42d000/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_964f42d000/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_964f42d000/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_964f42d000/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_964f42d000/edge.svg"
     },
     {
       "id": "symbols_markers_014e762bc2",
@@ -4575,8 +4575,8 @@
       "defaultHeight": 40,
       "real": "assets/symbols_markers/symbols_markers_014e762bc2/real.png",
       "edge": "assets/symbols_markers/symbols_markers_014e762bc2/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_014e762bc2/real.png",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_014e762bc2/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_014e762bc2/real.png",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_014e762bc2/edge.svg"
     },
     {
       "id": "symbols_markers_d644f03cfd",
@@ -4595,8 +4595,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/symbols_markers_d644f03cfd/real.svg",
       "edge": "assets/symbols_markers/symbols_markers_d644f03cfd/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_d644f03cfd/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_d644f03cfd/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_d644f03cfd/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_d644f03cfd/edge.svg"
     },
     {
       "id": "symbols_markers_9c448a579e",
@@ -4615,8 +4615,8 @@
       "defaultHeight": 18,
       "real": "assets/symbols_markers/symbols_markers_9c448a579e/real.svg",
       "edge": "assets/symbols_markers/symbols_markers_9c448a579e/edge.svg",
-      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_9c448a579e/real.svg",
-      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360-Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_9c448a579e/edge.svg"
+      "realRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_9c448a579e/real.svg",
+      "edgeRaw": "https://raw.githubusercontent.com/dstogsdill1/Singh360_Draft/main/docs/component-library/assets/symbols_markers/symbols_markers_9c448a579e/edge.svg"
     }
   ]
 }

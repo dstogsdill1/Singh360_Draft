@@ -8,8 +8,8 @@ def main() -> int:
     tabs = (root / "frontend/src/components/PageTabs.tsx").read_text(encoding="utf-8")
     css = (root / "frontend/src/styles/app.css").read_text(encoding="utf-8")
 
-    navigator = "<PageNavigator pages={pages} activePageId={activePageId} onSelect={onSelect} />"
-    assert tabs.count(navigator) >= 2
+    assert "const navigator = (" in tabs
+    assert tabs.count("{navigator}") >= 2
     assert 'className="page-tabs-controls page-tabs-controls-right"' in tabs
     assert tabs.count('title="Scroll tabs left"') >= 2
     assert tabs.count('title="Scroll tabs right"') >= 2

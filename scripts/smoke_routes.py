@@ -12,21 +12,38 @@ import server
 
 
 def main() -> int:
+    problems: list[str] = []
     dist_index = server.FRONTEND_DIST_DIR / "index.html"
     print(f"dist index exists: {dist_index.is_file()}")
+    if not dist_index.is_file():
+        problems.append("frontend build output is missing")
 
     client = server.app.test_client()
 
     r_root = client.get("/")
     print(f"GET /            -> status {r_root.status_code} | Location: {r_root.headers.get('Location', '(none)')}")
+    if r_root.status_code not in {301, 302, 307, 308} or not str(r_root.headers.get("Location") or "").endswith("/app"):
+        problems.append("GET / does not redirect to generic /app Project Home")
 
     r_app = client.get("/app")
-    body = r_app.get_data(as_text=True)[:200].replace("\n", " ")
+    app_text = r_app.get_data(as_text=True)
+    body = app_text[:200].replace("\n", " ")
     print(f"GET /app         -> status {r_app.status_code}")
     print(f"  first 200 chars: {body}")
+    if r_app.status_code != 200:
+        problems.append(f"GET /app returned {r_app.status_code}")
+    if "Singh360 Draft" not in app_text:
+        problems.append("GET /app does not contain the Singh360 Draft browser title")
 
     r_health = client.get("/api/health")
     print(f"GET /api/health  -> status {r_health.status_code}")
+    if r_health.status_code != 200 or (r_health.get_json() or {}).get("ok") is not True:
+        problems.append("/api/health is not healthy")
+
+    r_logo = client.get("/static/LOGO-750px.png")
+    print(f"GET /static/LOGO-750px.png -> status {r_logo.status_code}")
+    if r_logo.status_code != 200:
+        problems.append("active Singh360 Draft logo route is broken")
 
     r_debug = client.get("/api/debug/routes")
     print(f"GET /api/debug/routes -> status {r_debug.status_code}")
@@ -40,7 +57,19 @@ def main() -> int:
             "routeCount": len(data.get("urlMap", [])),
         }
         print(f"  debug summary: {json.dumps(summary)}")
+        if not data.get("distIndexExists"):
+            problems.append("debug route reports missing frontend build")
+        if data.get("configuredPort") != 8766:
+            problems.append(f"configured port is {data.get('configuredPort')}, expected 8766")
+    else:
+        problems.append("/api/debug/routes failed")
 
+    if problems:
+        print("ROUTE/HEALTH PROBLEMS:")
+        for problem in problems:
+            print(f"  - {problem}")
+        return 1
+    print("OK: routes, health, product title, and active logo passed.")
     return 0
 
 

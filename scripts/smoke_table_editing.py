@@ -1,4 +1,4 @@
-"""Smoke: normalized table row/column/cell edits persist in project JSON and snapshots."""
+"""Smoke: normalized table row/column/cell edits persist with a recoverable backup."""
 from __future__ import annotations
 
 import os
@@ -38,7 +38,9 @@ def _project() -> dict:
 def main() -> int:
     os.environ.setdefault("SINGH360_SKIP_SERVE", "1")
     import server  # noqa: E402
+    from tests.generated_fixtures import isolate_server_runtime
 
+    runtime = isolate_server_runtime(server)
     client = server.app.test_client()
     pid = "3f3f3f3f3f3f3f40"
     problems: list[str] = []
@@ -72,12 +74,13 @@ def main() -> int:
     if rb["rows"][0][1] != "":
         problems.append("clear cell failed")
 
-    snaps = client.get(f"/api/projects/{pid}/page-snapshots").get_json().get("snapshots", [])
-    if not snaps or snaps[0].get("counts", {}).get("tableCells", 0) < 9:
-        problems.append("table snapshot counts missing")
-    print(f"rows={len(rb['rows'])} cols={len(rb['headers'])} snapshots={len(snaps)}")
+    backups = client.get(f"/api/projects/{pid}/backups").get_json().get("backups", [])
+    if not backups:
+        problems.append("recoverable project backup missing")
+    print(f"rows={len(rb['rows'])} cols={len(rb['headers'])} backups={len(backups)}")
 
-    client.delete(f"/api/projects/{pid}")
+    client.delete(f"/api/projects/{pid}?confirm=true")
+    runtime.cleanup()
     if problems:
         print("TABLE EDITING PROBLEMS:")
         for p in problems:

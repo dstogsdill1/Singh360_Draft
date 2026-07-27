@@ -1,13 +1,10 @@
-"""scripts/smoke_library_v2.py — Milestone 4C runtime cleanup smoke tests.
+"""LibraryV2 lifecycle checks using only generated temporary components.
 
 Validates:
 - refresh scans only components/ and never creates .symbol.svg
 - legacy migration populates V2 when legacy files exist
 - rebuild thumbnails writes only to thumbnails/
 - fake symbols are archived + manifest refs cleared
-- runtime cleanup dry-run is non-mutating
-- runtime cleanup apply archives legacy folders
-- refresh does not recreate legacy folders
 """
 from __future__ import annotations
 
@@ -16,12 +13,9 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(SCRIPTS))
 
 from core.library_v2 import LibraryV2  # noqa: E402
-from cleanup_runtime_workspace import run_cleanup, LEGACY_REL_PATHS  # noqa: E402
 
 _FAILS: list[str] = []
 
@@ -55,8 +49,8 @@ def main() -> int:
     lib.ensure()
 
     # Seed source components.
-    _write_svg(lib.components / "controllers" / "PR0650.svg", "<rect width='40' height='40' fill='none'/>")
-    _write_png(lib.components / "logos" / "HEB.png")
+    _write_svg(lib.components / "controllers" / "Generic_Controller.svg", "<rect width='40' height='40' fill='none'/>")
+    _write_png(lib.components / "logos" / "Sanitized_Client.png")
 
     # --- refresh scans only components and does not generate symbols ---
     r1 = lib.refresh()
@@ -90,12 +84,12 @@ def main() -> int:
     check(before_comp_files == after_comp_files, "Rebuild Thumbnails does not create/delete component source files")
 
     # --- fake-symbol cleanup archives symbols + clears manifest refs ---
-    fake = lib.components / "controllers" / "PR0650.symbol.svg"
+    fake = lib.components / "controllers" / "Generic_Controller.symbol.svg"
     _write_svg(fake, "<rect width='40' height='40'/>")
     # force a stale symbol ref
     man = lib._read_manifest()  # noqa: SLF001
     for c in man["components"]:
-        if c.get("sourceFile", "").endswith("PR0650.svg"):
+        if c.get("sourceFile", "").endswith("Generic_Controller.svg"):
             c["symbolFile"] = lib._rel(fake)  # noqa: SLF001
     lib._write_manifest(man)  # noqa: SLF001
 
@@ -109,39 +103,6 @@ def main() -> int:
     check(len(refs) == 0, "Manifest symbolFile references cleared after fake-symbol cleanup")
     status_ok = all(c.get("symbolStatus") == "not_built" for c in d4["components"])
     check(status_ok, "Manifest components marked symbolStatus=not_built")
-
-    # --- runtime cleanup dry-run is non-mutating ---
-    # create legacy runtime folders to exercise cleanup
-    for rel in LEGACY_REL_PATHS:
-        p = docs / rel
-        p.mkdir(parents=True, exist_ok=True)
-        (p / "marker.txt").write_text("x", encoding="utf-8")
-    dry = run_cleanup(docs, apply=False)
-    still_exists = all((docs / rel).exists() for rel in LEGACY_REL_PATHS)
-    check(dry["dryRun"] and still_exists, "cleanup_runtime_workspace --dry-run does not mutate")
-
-    # --- runtime cleanup apply archives legacy folders ---
-    app_cleanup = run_cleanup(docs, apply=True)
-    moved = app_cleanup.get("moved", [])
-    check(len(moved) >= 1, f"cleanup_runtime_workspace --apply archives legacy runtime folders (moved={len(moved)})")
-    # minimal roots must exist after cleanup
-    required = [
-        docs / "projects",
-        docs / "exports",
-        docs / "archive",
-        docs / "library" / "components",
-        docs / "library" / "symbols",
-        docs / "library" / "thumbnails",
-        docs / "library" / "manifest.json",
-        docs / "library" / "aliases.json",
-        docs / "library" / "connector_styles.json",
-    ]
-    check(all(p.exists() for p in required), "Minimal runtime structure exists after cleanup apply")
-
-    # --- refresh must not recreate legacy folders ---
-    lib.refresh()
-    recreated = [rel for rel in LEGACY_REL_PATHS if (docs / rel).exists()]
-    check(not recreated, f"Refresh does not recreate legacy folders ({recreated})")
 
     print("\n" + ("ALL PASS" if not _FAILS else f"{len(_FAILS)} FAILED"))
     return 0 if not _FAILS else 1

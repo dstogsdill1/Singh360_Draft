@@ -36,7 +36,7 @@ export default function CoverPageRenderer({ block, project }: Props) {
   return (
     <div className="np-cover">
       <div className="np-cover-brand">
-        <img src="/static/LOGO-750px.png" alt="Singh360" className="np-cover-logo" />
+        <img src="/static/LOGO-750px.png" alt="Singh360 Draft" className="np-cover-logo" />
         <div className="np-cover-firm">SINGH360 INC.</div>
       </div>
       <div className="np-cover-title">{title}</div>

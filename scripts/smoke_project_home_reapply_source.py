@@ -9,7 +9,8 @@ def main() -> int:
     server = (root / "server.py").read_text(encoding="utf-8")
     checks = {
         "managerImport": "from core.workbook_link_manager import (" in server,
-        "localFirstSave": "save_local_then_try_sync(project_id, data, store)" in server,
+        "localFirstSave": "store.save(project_id, data)" in server and '"local_autosave"' in server,
+        "explicitWorkbookSync": "save_local_then_try_sync(project_id, doc, store)" in server,
         "openSync": "maybe_pull_on_open(project_id, doc, store)" in server,
         "noBlocking409": "Workbook synchronization failed." not in server,
         "routes": "/workbook-link" in server,

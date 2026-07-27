@@ -32,8 +32,8 @@ def _workbook(path: Path) -> None:
     rows = [
         ["1", "DM00", "Data Manager 00", "", "TBD", "RDM", "IDF-A", "SW1", "CAT6", "", ""],
         ["2", "DM01", "Data Manager 01", "", "TBD", "RDM", "IDF-A", "SW1", "CAT6", "", ""],
-        ["3", "LCP1", "Lighting Control Panel 1", "601", "TBD", "H-E-B", "IDF-A", "SW1", "CAT6", "Primary", "Tech"],
-        ["4", "LCP2", "Lighting Control Panel 2", "602", "TBD", "H-E-B", "IDF-A", "SW1", "CAT6", "Primary", "Tech"],
+        ["3", "LCP1", "Lighting Control Panel 1", "601", "TBD", "Sanitized Client", "IDF-A", "SW1", "CAT6", "Primary", "Tech"],
+        ["4", "LCP2", "Lighting Control Panel 2", "602", "TBD", "Sanitized Client", "IDF-A", "SW1", "CAT6", "Primary", "Tech"],
     ]
     for p in range(5, 49):
         rows.append([str(p), f"L{p}", f"Device-{p}", "", "TBD", "RDM Network", "A", "B", "CAT6", f"note-{p}", ""])

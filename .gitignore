@@ -78,10 +78,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Published Singh360 component catalog (generated intentionally)
-!docs/component-library/
-!docs/component-library/**
-
 # Local personal PowerPoint palette - keep in the working folder, never commit
 Singh360_Component_Library_Real*.pptx
 Singh360 Component Library Real*.pptx
@@ -89,9 +85,3 @@ Singh360 Component Library Real*.pptx
 # Published component catalog - intentionally committed for team access
 !docs/component-library/
 !docs/component-library/**
-
-engines/doc_templates/
-
-_repo_reset/
-
-_repo_reset_v2/

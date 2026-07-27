@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_OWNER = "dstogsdill1"
-REPO_NAME = "Singh360-Draft"
+REPO_NAME = "Singh360_Draft"
 REPO_BRANCH = "main"
 PUBLIC_ROOT = "docs/component-library"
 
@@ -181,10 +181,10 @@ def _public_catalog_html() -> str:
         return template.read_text(encoding="utf-8")
     return r'''<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Singh360 Published Component Library</title>
+<title>Singh360 Draft — Published Component Library</title>
 <style>
 body{margin:0;font:14px Arial;background:#f3f5f8;color:#111827}header{position:sticky;top:0;background:#0c1730;color:#fff;padding:14px 18px;z-index:5}h1{margin:0;font-size:20px}.tools{display:flex;gap:8px;padding:10px 18px;background:#fff;border-bottom:1px solid #ccd3df;position:sticky;top:51px;z-index:4}.tools input{flex:1;padding:8px}.tools select,.tools button{padding:8px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;padding:16px}.card{background:#fff;border:1px solid #d5dbe6;border-radius:8px;padding:9px}.img{height:135px;display:grid;place-items:center;background:#fafbfe;border:1px solid #e4e8ef}.img img{max-width:100%;max-height:100%;object-fit:contain}.name{font-weight:700;margin-top:7px}.meta{font-size:12px;color:#667085;margin:4px 0}.actions{display:flex;gap:5px;flex-wrap:wrap}.actions button,.actions a{font:12px Arial;padding:5px 7px;border:1px solid #aeb8c8;background:#fff;border-radius:4px;color:#111;text-decoration:none}.hidden{display:none}
-</style></head><body><header><h1>Singh360 Published Component Library</h1></header>
+</style></head><body><header><h1>Singh360 Draft — Published Component Library</h1></header>
 <div class="tools"><input id="q" placeholder="Search components"><select id="cat"><option value="all">All categories</option></select><select id="rep"><option value="real">Real</option><option value="edge">Edge</option></select></div><div id="grid" class="grid"></div>
 <script>
 let items=[];const $=s=>document.querySelector(s);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -364,7 +364,7 @@ def publish_active_library(lib: Any, repo_root: Path) -> dict[str, Any]:
     _write_json(target / "catalog.json", catalog)
     (target / "index.html").write_text(_public_catalog_html(), encoding="utf-8")
     (target / "README.md").write_text(
-        "# Singh360 Published Component Library\n\nGenerated from active local components.\n\n"
+        "# Singh360 Draft — Published Component Library\n\nGenerated from active local components.\n\n"
         f"GitHub Pages URL (after Pages is enabled from `/docs`):\n\n"
         f"https://{REPO_OWNER}.github.io/{REPO_NAME}/component-library/\n",
         encoding="utf-8",

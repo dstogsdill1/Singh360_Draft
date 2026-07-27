@@ -25,7 +25,9 @@ def main() -> int:
     os.environ.setdefault("SINGH360_SKIP_SERVE", "1")
     import server  # noqa: E402
     from core.sheet_importer import import_workbook_sheets
+    from tests.generated_fixtures import isolate_server_runtime
 
+    runtime = isolate_server_runtime(server)
     client = server.app.test_client()
     pid = "a1a1a1a1a1a1a1a1"
     page_id = "page_scope"
@@ -94,7 +96,8 @@ def main() -> int:
     if any(p.get("sheetCode") == "NEW" for p in reloaded["pages"]):
         problems.append("duplicate NEW page appeared")
 
-    client.delete(f"/api/projects/{pid}")
+    client.delete(f"/api/projects/{pid}?confirm=true")
+    runtime.cleanup()
 
     if problems:
         print("FAIL — import replace current page")

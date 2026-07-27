@@ -1,4 +1,4 @@
-"""Smoke: active page save persists objects, connectors, table edits, backups, snapshots.
+"""Smoke: active page save persists objects, connectors, table edits, and backups.
 
 Uses Flask test client and a synthetic project so no customer workbook is needed.
 """
@@ -66,7 +66,9 @@ def _project() -> dict:
 def main() -> int:
     os.environ.setdefault("SINGH360_SKIP_SERVE", "1")
     import server  # noqa: E402
+    from tests.generated_fixtures import isolate_server_runtime
 
+    runtime = isolate_server_runtime(server)
     client = server.app.test_client()
     pid = "3f3f3f3f3f3f3f3f"
     problems: list[str] = []
@@ -76,7 +78,7 @@ def main() -> int:
         print(res.get_data(as_text=True))
         return 1
 
-    # Second save forces a project backup and another page snapshot.
+    # Second save forces a recoverable project backup.
     proj = client.get(f"/api/projects/{pid}").get_json()
     proj["pages"][0]["blocks"][0]["rows"][0][1] = "99"
     proj["pages"][0]["canvasObjects"].append({"type": "circle", "left": 140, "top": 140, "radius": 20, "objName": "Component B"})
@@ -98,12 +100,9 @@ def main() -> int:
         problems.append("page switch isolation failed: objects leaked to page 2")
 
     backups = client.get(f"/api/projects/{pid}/backups").get_json().get("backups", [])
-    snaps = client.get(f"/api/projects/{pid}/page-snapshots").get_json().get("snapshots", [])
-    print(f"objects={len(objs)} connectors={len(conns)} backups={len(backups)} pageSnapshots={len(snaps)}")
+    print(f"objects={len(objs)} connectors={len(conns)} backups={len(backups)}")
     if not backups:
         problems.append("project backup missing")
-    if not any(s.get("pageId") == "p_save_a" and s.get("counts", {}).get("tableBlocks") == 1 for s in snaps):
-        problems.append("page snapshot/count metadata missing")
 
     pkg = client.post(f"/api/projects/{pid}/export/package")
     if pkg.status_code != 200:
@@ -114,7 +113,8 @@ def main() -> int:
         if exported["pages"][0]["blocks"][0]["rows"][0][1] != "99":
             problems.append("export package missed latest table edit")
 
-    client.delete(f"/api/projects/{pid}")
+    client.delete(f"/api/projects/{pid}?confirm=true")
+    runtime.cleanup()
     if problems:
         print("ACTIVE PAGE SAVE PROBLEMS:")
         for p in problems:
