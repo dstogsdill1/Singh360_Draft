@@ -45,22 +45,17 @@ def main() -> int:
     if not idx_renderer.exists():
         problems.append("GeneratedIndexRenderer.tsx is missing")
 
-    # 3. Python: loading a project and checking index page type via workbook_importer.
-    sample_wb = ROOT / "sample_data" / "assets.csv"
-    if not sample_wb.exists():
-        print("note: sample_data/assets.csv missing — skipping page-type check")
-    else:
-        try:
-            from core.project_model import classify_page_type
-            # Index detection.
-            it = classify_page_type("Sheet Index", "Sheet Index", "index")
-            if it != "index":
-                problems.append(f"classify_page_type('Sheet Index', 'Sheet Index', 'index') returned '{it}' (expected 'index')")
-            cover = classify_page_type("Cover", "Cover Sheet", "")
-            if cover != "cover":
-                problems.append(f"classify_page_type('Cover', ...) returned '{cover}' (expected 'cover')")
-        except Exception as exc:
-            problems.append(f"classify_page_type import failed: {exc}")
+    # 3. Deterministic classification needs no external fixture.
+    try:
+        from core.project_model import classify_page_type
+        it = classify_page_type("Sheet Index", "Sheet Index", "index")
+        if it != "index":
+            problems.append(f"classify_page_type('Sheet Index', 'Sheet Index', 'index') returned '{it}' (expected 'index')")
+        cover = classify_page_type("Cover", "Cover Sheet", "")
+        if cover != "cover":
+            problems.append(f"classify_page_type('Cover', ...) returned '{cover}' (expected 'cover')")
+    except Exception as exc:
+        problems.append(f"classify_page_type import failed: {exc}")
 
     # 4. NormalizedPage.tsx must import GeneratedIndexRenderer.
     norm_path = ROOT / "frontend" / "src" / "components" / "renderers" / "NormalizedPage.tsx"

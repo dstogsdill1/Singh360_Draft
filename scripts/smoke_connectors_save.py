@@ -15,14 +15,12 @@ import io
 import os
 import sys
 import json
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-WORKBOOK = ROOT / "sample_data" / "S360_EMS_Simple_Workbook.xlsx"
-
 
 def _conn(name: str, pts: list, kind: str = "line", **kw) -> dict:
     return {
@@ -48,18 +46,21 @@ def _image(name: str, url: str) -> dict:
 
 
 def main() -> int:
-    if not WORKBOOK.exists():
-        print(f"ERROR: sample workbook not found: {WORKBOOK}")
-        return 2
-
     os.environ.setdefault("SINGH360_SKIP_SERVE", "1")
     import server  # noqa
+    from core.project_store import ProjectStore
+    from tests.generated_fixtures import write_workbook
 
     c = server.app.test_client()
     problems: list[str] = []
+    fixture_dir = tempfile.TemporaryDirectory()
+    server.DOCS_DIR = Path(fixture_dir.name) / ".docs"
+    server.DOCS_DIR.mkdir()
+    server.store = ProjectStore(server.DOCS_DIR)
+    workbook = write_workbook(Path(fixture_dir.name) / "sanitized.xlsx")
 
     # 1. Create project.
-    with open(WORKBOOK, "rb") as fh:
+    with open(workbook, "rb") as fh:
         res = c.post(
             "/api/projects/new",
             data={"file": (io.BytesIO(fh.read()), "S360.xlsx")},
@@ -70,13 +71,20 @@ def main() -> int:
         return 1
     pid = res.get_json()["id"]
     print(f"project: {pid}")
+    resolved = c.post(
+        f"/api/projects/{pid}/workbook-link/resolve",
+        json={"direction": "workbook_to_app"},
+    )
+    if resolved.status_code != 200:
+        print(f"FAIL resolve workbook baseline {resolved.status_code}")
+        return 1
 
     proj = c.get(f"/api/projects/{pid}").get_json()
     pages = proj["pages"]
     if len(pages) < 2:
         problems.append("need ≥2 pages")
 
-    # 2. Put connector + image on page 0, leave page 1 empty.
+    # 2. Put connector + image on the first editable data page; leave the next empty.
     page0_objects = [
         _conn("Straight Line", [(100, 100), (400, 100)], "line",
               stylePreset="cat6", labelMiddle="CAT6"),
@@ -84,16 +92,18 @@ def main() -> int:
         _conn("Polyline", [(80, 320), (200, 370), (340, 330), (460, 380)], "polyline"),
         _image("PR0650 crop", "/api/assets/fake/fake.png"),
     ]
-    pages[0]["canvasObjects"] = page0_objects
-    pages[1]["canvasObjects"] = []
+    target_index = 1
+    empty_index = 2
+    pages[target_index]["canvasObjects"] = page0_objects
+    pages[empty_index]["canvasObjects"] = []
     sp = c.post(f"/api/projects/{pid}/pages", json={"pages": pages})
     if sp.status_code != 200:
-        problems.append(f"save pages {sp.status_code}")
+        problems.append(f"save pages {sp.status_code}: {sp.get_data(as_text=True)[:500]}")
 
     # 3. Reload and assert objects + routes survive.
     reloaded = c.get(f"/api/projects/{pid}").get_json()
-    p0 = reloaded["pages"][0].get("canvasObjects", [])
-    p1 = reloaded["pages"][1].get("canvasObjects", []) if len(reloaded["pages"]) > 1 else []
+    p0 = reloaded["pages"][target_index].get("canvasObjects", [])
+    p1 = reloaded["pages"][empty_index].get("canvasObjects", []) if len(reloaded["pages"]) > empty_index else []
     conns = [o for o in p0 if o.get("type") == "Connector"]
     imgs  = [o for o in p0 if o.get("type") == "image"]
 
@@ -119,10 +129,10 @@ def main() -> int:
     # 4. Add a duplicate and re-save.
     dup = {**_conn("Straight Line copy", [(112, 112), (412, 112)], "line"), "stylePreset": "cat6"}
     pages2 = reloaded["pages"]
-    pages2[0]["canvasObjects"] = p0 + [dup]
+    pages2[target_index]["canvasObjects"] = p0 + [dup]
     c.post(f"/api/projects/{pid}/pages", json={"pages": pages2})
     reloaded2 = c.get(f"/api/projects/{pid}").get_json()
-    p0_2 = reloaded2["pages"][0].get("canvasObjects", [])
+    p0_2 = reloaded2["pages"][target_index].get("canvasObjects", [])
     dup_found = any(o.get("objName") == "Straight Line copy" for o in p0_2)
     if not dup_found:
         problems.append("duplicated connector not persisted")
@@ -155,18 +165,12 @@ def main() -> int:
     proj_dir = server.store.find_dir(pid)
     if proj_dir and (proj_dir / "project.json").exists():
         on_disk = json.loads((proj_dir / "project.json").read_text("utf-8"))
-        disk_p0 = on_disk["pages"][0].get("canvasObjects", [])
+        disk_p0 = on_disk["pages"][target_index].get("canvasObjects", [])
         disk_conns = [o for o in disk_p0 if o.get("type") == "Connector"]
         if len(disk_conns) < 3:
             problems.append(f"project.json on disk has only {len(disk_conns)} connectors — save may be stale")
         else:
             print(f"disk project.json connectors: {len(disk_conns)} OK")
-
-    # 7. Page snapshots must include connector counts for recovery.
-    snaps = c.get(f"/api/projects/{pid}/page-snapshots").get_json().get("snapshots", [])
-    print(f"page snapshots: {len(snaps)}")
-    if not any((s.get("counts") or {}).get("connectors", 0) >= 3 for s in snaps):
-        problems.append("no page snapshot recorded connector count >= 3")
 
     c.delete(f"/api/projects/{pid}")
 

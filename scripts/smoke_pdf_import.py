@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import os
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -24,11 +25,15 @@ def main() -> int:
     os.environ.setdefault("SINGH360_SKIP_SERVE", "1")
     import server  # noqa: E402
 
-    workbook = ROOT / "sample_data" / "S360_EMS_Simple_Workbook.xlsx"
-    pdf_path = ROOT / "sample_data" / "Kyle_Specs.pdf"
-    if not workbook.exists() or not pdf_path.exists():
-        print("ERROR: missing sample workbook/PDF under sample_data/")
-        return 2
+    from core.project_store import ProjectStore
+    from tests.generated_fixtures import write_pdf, write_workbook
+
+    fixture_dir = tempfile.TemporaryDirectory()
+    server.DOCS_DIR = Path(fixture_dir.name) / ".docs"
+    server.DOCS_DIR.mkdir()
+    server.store = ProjectStore(server.DOCS_DIR)
+    workbook = write_workbook(Path(fixture_dir.name) / "sanitized.xlsx")
+    pdf_path = write_pdf(Path(fixture_dir.name) / "sanitized.pdf")
 
     c = server.app.test_client()
     problems: list[str] = []
@@ -37,7 +42,7 @@ def main() -> int:
     with open(workbook, "rb") as fh:
         created = c.post(
             "/api/projects/new",
-            data={"file": (io.BytesIO(fh.read()), "S360_EMS_Simple_Workbook.xlsx")},
+            data={"file": (io.BytesIO(fh.read()), "sanitized.xlsx")},
             content_type="multipart/form-data",
         )
     if created.status_code != 200:
@@ -45,12 +50,19 @@ def main() -> int:
         return 1
     pid = created.get_json()["id"]
     print(f"created project: {pid}")
+    resolved = c.post(
+        f"/api/projects/{pid}/workbook-link/resolve",
+        json={"direction": "workbook_to_app"},
+    )
+    if resolved.status_code != 200:
+        print(f"FAIL resolve workbook baseline: {resolved.status_code}")
+        return 1
 
     # 2) Upload PDF + preview pages.
     with open(pdf_path, "rb") as fh:
         up = c.post(
             f"/api/projects/{pid}/pdf/upload-preview",
-            data={"file": (io.BytesIO(fh.read()), "Kyle_Specs.pdf")},
+            data={"file": (io.BytesIO(fh.read()), "sanitized.pdf")},
             content_type="multipart/form-data",
         )
     if up.status_code != 200:
@@ -110,6 +122,7 @@ def main() -> int:
     if not pages_doc:
         problems.append("project has no pages")
     else:
+        target_index = 1 if len(pages_doc) > 1 else 0
         crop_obj = {
             "type": "image",
             "src": crop_asset_url,
@@ -124,13 +137,13 @@ def main() -> int:
             "pdfDpi": 600,
             "pdfCrop": "72,72,576,360",
         }
-        pages_doc[0].setdefault("canvasObjects", []).append(crop_obj)
+        pages_doc[target_index].setdefault("canvasObjects", []).append(crop_obj)
         sp = c.post(f"/api/projects/{pid}/pages", json={"pages": pages_doc})
         if sp.status_code != 200:
             problems.append(f"save pages with crop failed ({sp.status_code})")
         else:
             reloaded = c.get(f"/api/projects/{pid}").get_json()
-            objs = reloaded.get("pages", [])[0].get("canvasObjects", []) if reloaded.get("pages") else []
+            objs = reloaded.get("pages", [])[target_index].get("canvasObjects", []) if reloaded.get("pages") else []
             found = next((o for o in objs if o.get("objName") == "PDF Crop Leak Alarm Controller"), None)
             if not found:
                 problems.append("inserted crop object missing after reload")

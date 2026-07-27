@@ -7,7 +7,7 @@ overlays and reusable components, and exports PDF drawing packages.
 ## Start locally
 
 ```powershell
-cd "C:\Users\DarrinStogsdill\OneDrive - Homeland Development Services LLC\Desktop\Singh360_SmartDraw"
+cd "C:\Users\DarrinStogsdill\OneDrive - Homeland Development Services LLC\Desktop\Singh360 Draft"
 .\.venv\Scripts\Activate.ps1
 $env:SINGH360_PORT=8766
 python server.py
@@ -18,7 +18,7 @@ Open:
 - Drawing editor: `http://127.0.0.1:8766/app`
 - Component administration: `http://127.0.0.1:8766/component-catalog`
 - Public component catalog:
-  `https://dstogsdill1.github.io/Singh360_SmartDraw/component-library/`
+  `https://dstogsdill1.github.io/Singh360-Draft/component-library/`
 
 ## Folder roles
 
@@ -37,6 +37,15 @@ Do not merge or rename those folders.
 - `tools/component_catalog/` - editable local component catalog.
 - `docs/component-library/` - published GitHub Pages catalog.
 - `scripts/smoke_*.py` - active smoke tests.
+- `tests/generated_fixtures.py` - sanitized test workbook/PDF generators.
+
+## Launchers
+
+The repository intentionally has exactly two Windows launchers:
+
+- `START_SINGH360_DRAFT.bat` creates/checks the local environment, builds the
+  frontend, starts port 8766, and opens the editor.
+- `STOP_SINGH360_DRAFT.bat` stops the process listening on port 8766.
 
 ## Data safety
 

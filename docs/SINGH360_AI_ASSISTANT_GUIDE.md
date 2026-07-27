@@ -31,7 +31,7 @@ Workbook synchronization must never erase app canvas objects.
 
 ## Exact project workflow
 
-1. Start the local app with `START_SINGH360_LOCAL.bat`.
+1. Start the local app with `START_SINGH360_DRAFT.bat`.
 2. Project Home opens.
 3. Select the existing project, or create a new project from a new workbook.
 4. In **Linked Workbook**, browse to the real `.xlsx` or `.xlsm`.

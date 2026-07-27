@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_OWNER = "dstogsdill1"
-REPO_NAME = "Singh360_SmartDraw"
+REPO_NAME = "Singh360-Draft"
 REPO_BRANCH = "main"
 PUBLIC_ROOT = "docs/component-library"
 

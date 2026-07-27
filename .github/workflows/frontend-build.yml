@@ -1,4 +1,4 @@
-name: Frontend Build
+name: Singh360 Draft CI
 
 on:
   pull_request:

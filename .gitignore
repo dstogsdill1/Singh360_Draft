@@ -78,9 +78,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Allow synthetic demo inputs
-!sample_data/
-!sample_data/**
 # Published Singh360 component catalog (generated intentionally)
 !docs/component-library/
 !docs/component-library/**

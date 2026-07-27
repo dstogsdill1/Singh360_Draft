@@ -706,10 +706,19 @@ def ai_ready_guide_markdown():
 
 @app.get("/docs/ai-guide")
 def ai_ready_guide_html():
-    path = HERE / "docs" / "SINGH360_AI_ASSISTANT_GUIDE.html"
+    path = HERE / "docs" / "SINGH360_AI_ASSISTANT_GUIDE.md"
     if not path.is_file():
         abort(404)
-    return send_file(path, mimetype="text/html; charset=utf-8")
+    from html import escape
+    guide = escape(path.read_text(encoding="utf-8"))
+    return Response(
+        f"<!doctype html><html><head><title>Singh360 Draft Guide</title>"
+        f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<style>body{{font:16px/1.5 Arial,sans-serif;max-width:980px;margin:2rem auto;"
+        f"padding:0 1rem}}pre{{white-space:pre-wrap}}</style></head>"
+        f"<body><pre>{guide}</pre></body></html>",
+        mimetype="text/html",
+    )
 
 # S360 PAGE INCLUSION SAVE V1
 @app.post("/api/projects/<project_id>/page-inclusion")

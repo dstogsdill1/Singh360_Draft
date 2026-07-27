@@ -1,10 +1,8 @@
 """scripts/smoke_sheet_import.py — verify single worksheet import into an existing project.
 
 Flow tested:
-  1. Create a project from sample_data/assets.csv (reuse existing CSV path) — just need
-     *some* project doc with at least one page.
-  2. Load the sample Excel workbook if SINGH360_SA31_WORKBOOK is set; otherwise build a
-     minimal synthetic XLSX in a temp dir using openpyxl.
+  1. Create a sanitized in-memory project with at least one page.
+  2. Build a minimal sanitized XLSX in a temp directory using openpyxl.
   3. Preview workbook sheets (no project mutation).
   4. Import one sheet after the first page.
   5. Verify:
@@ -17,7 +15,6 @@ Flow tested:
 """
 from __future__ import annotations
 
-import os
 import sys
 import tempfile
 from pathlib import Path
@@ -45,7 +42,6 @@ def _make_synthetic_workbook(path: Path) -> None:
 
 
 def main() -> int:
-    wb_path_env = os.environ.get("SINGH360_SA31_WORKBOOK", "")
     problems: list[str] = []
 
     import server
@@ -54,21 +50,10 @@ def main() -> int:
     c = server.app.test_client()
 
     # --- 1. Create a minimal project ---
-    # POST a synthetic CSV to bootstrap (or use the new-project route with sample data).
-    sample_csv = ROOT / "sample_data" / "assets.csv"
-    if not sample_csv.exists():
-        problems.append("sample_data/assets.csv not found — cannot create test project")
-        return _report(problems)
-
     with tempfile.TemporaryDirectory() as tmp:
-        # Build the XLSX to import from (synthetic or real).
-        if wb_path_env and Path(wb_path_env).exists():
-            xlsx = Path(wb_path_env)
-            source_name = xlsx.name
-        else:
-            xlsx = Path(tmp) / "synthetic.xlsx"
-            _make_synthetic_workbook(xlsx)
-            source_name = "synthetic.xlsx"
+        xlsx = Path(tmp) / "sanitized.xlsx"
+        _make_synthetic_workbook(xlsx)
+        source_name = xlsx.name
 
         # Create a project with a CSV upload.
         pid = "b0b0b0b0b0b00001"
