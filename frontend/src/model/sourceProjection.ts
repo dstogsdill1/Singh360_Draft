@@ -1,5 +1,10 @@
 import type { PageBlock, PageModel, ProjectModel, Worksheet } from './types';
-import { applyCoverSourceTruth, buildExcelRangeBlock, splitExcelRangeBlock } from './excelRange';
+import {
+  applyCoverSourceTruth,
+  buildExcelRangeBlock,
+  sliceBlock,
+  splitExcelRangeBlock,
+} from './excelRange';
 import { isCoverWorksheet } from './metadataInference';
 import { rebuildSinglePageFromSource } from './pageRebuild';
 import { isIdfNetworkPage } from './idfNetworkTable';
@@ -42,14 +47,71 @@ function applySourceFirstSettings(full: PageBlock, page: PageModel, previous?: P
  * Stored normalized blocks are treated as a cache, never as the authority for
  * cell geometry. This is what makes Source -> Normalized deterministic.
  */
-export function projectPageFromWorksheet(page: PageModel, worksheet?: Worksheet): PageModel {
+function projectCanonicalBlock(
+  page: PageModel,
+  previous: PageBlock,
+  worksheet: Worksheet,
+): PageBlock {
+  let sourceBlock = buildExcelRangeBlock(worksheet, `${worksheet.id}_xr_render`);
+  if (previous.sourceFilter) {
+    const grid = sourceBlock.grid ?? [];
+    const headerRow = grid.length >= 4 && grid[3].some((value) => String(value ?? '').trim())
+      ? 3
+      : 0;
+    const headers = (grid[headerRow] ?? []).map((value) => String(value ?? '').trim().toLowerCase());
+    const filterColumn = previous.sourceFilter.column.trim().toLowerCase();
+    const filterValue = previous.sourceFilter.value.trim().toLowerCase();
+    const filterIndex = headers.findIndex((header) => header === filterColumn);
+    const rows = Array.from({ length: headerRow + 1 }, (_, index) => index);
+    for (let row = headerRow + 1; row < grid.length; row += 1) {
+      if (!(grid[row] ?? []).some((value) => String(value ?? '').trim())) continue;
+      const actual = String(grid[row]?.[filterIndex] ?? '').trim().toLowerCase();
+      const matches = filterColumn === 'system no.'
+        ? actual.startsWith(filterValue)
+        : actual === filterValue;
+      if (filterIndex >= 0 && matches) rows.push(row);
+    }
+    sourceBlock = sliceBlock(sourceBlock, rows, { keepId: sourceBlock.id });
+  }
+
+  const full = applySourceFirstSettings(sourceBlock, page, previous);
+  full.canonicalDataSource = previous.canonicalDataSource;
+  full.canonicalSourceSheet = previous.canonicalSourceSheet;
+  full.sourceFilter = previous.sourceFilter;
+  full.dataRowCount = Math.max(0, (full.grid?.length ?? 0) - (full.headerRowCount ?? 0));
+  const parts = splitExcelRangeBlock(full);
+  const partIndex = Math.max(0, page.continuationIndex ?? 0);
+  const selected = parts[partIndex] ?? parts[0] ?? full;
+  return { ...selected, id: previous.id };
+}
+
+export function projectPageFromWorksheet(
+  page: PageModel,
+  worksheet?: Worksheet,
+  worksheets: Worksheet[] = [],
+): PageModel {
   if (!worksheet) return page;
-  if (page.renderMode !== 'excel_exact' || isIdfNetworkPage(page)) {
+  const previous = (page.blocks ?? []).find((block) => block.type === 'excelRange');
+  if (page.renderMode !== 'excel_exact' || (isIdfNetworkPage(page) && !previous?.canonicalDataSource)) {
     return rebuildSinglePageFromSource(page, worksheet);
   }
 
-  const previous = (page.blocks ?? []).find((block) => block.type === 'excelRange');
   if (!previous) return rebuildSinglePageFromSource(page, worksheet);
+
+  const canonicalBlocks = (page.blocks ?? []).filter(
+    (block) => block.type === 'excelRange' && block.canonicalDataSource,
+  );
+  if (canonicalBlocks.length) {
+    return {
+      ...page,
+      blocks: (page.blocks ?? []).map((block) => {
+        if (block.type !== 'excelRange' || !block.canonicalDataSource) return block;
+        const source = worksheets.find((candidate) => candidate.id === block.sourceWorksheetId)
+          ?? worksheet;
+        return projectCanonicalBlock(page, block, source);
+      }),
+    };
+  }
 
   const full = applySourceFirstSettings(
     buildExcelRangeBlock(worksheet, `${worksheet.id}_xr_render`),
@@ -83,5 +145,5 @@ export function projectForWorksheetRender(
       page: projectedProject.pages.find((candidate) => candidate.id === page.id) ?? page,
     };
   }
-  return { project, page: projectPageFromWorksheet(page, worksheet) };
+  return { project, page: projectPageFromWorksheet(page, worksheet, project.worksheets) };
 }

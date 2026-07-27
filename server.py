@@ -2637,6 +2637,17 @@ def export_warnings_preview(project_id: str):
     })
 
 
+@app.get("/api/projects/<project_id>/preflight")
+def project_preflight(project_id: str):
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    from core.project_preflight import compute_project_preflight
+
+    issues = compute_project_preflight(ensure_project_shape(doc))
+    return jsonify({"ok": True, "issues": issues, "issueCount": len(issues)})
+
+
 def _write_export_only_project(export_doc: dict, temp_id: str):
     """Write a short-lived project clone without touching the live project."""
     temp_doc = ensure_project_shape(export_doc)
@@ -2681,6 +2692,18 @@ def export_pdf(project_id: str):
     pages = [page for page in selected_doc.get("pages", []) if page.get("include", True)]
     if not pages:
         return jsonify(_err("No pages were selected for export.")), 400
+    from core.export_qa import compute_export_warnings
+
+    preflight_warnings = compute_export_warnings(selected_doc)
+    if preflight_warnings and not bool(body.get("confirmPreflight")):
+        return jsonify({
+            **_err(
+                "Export preflight requires confirmation.",
+                "Correct the listed issues or explicitly confirm this export.",
+            ),
+            "warnings": preflight_warnings,
+            "confirmationRequired": True,
+        }), 409
 
     try:
         width_in = float(body.get("width", 17.0))
@@ -2924,6 +2947,19 @@ def export_package(project_id: str):
     # the revision value itself was not changed.
     doc = sync_project_sheet_index(ensure_project_shape(doc))
     store.save(project_id, doc)
+    body = request.get_json(silent=True) or {}
+    from core.export_qa import compute_export_warnings
+
+    preflight_warnings = compute_export_warnings(doc)
+    if preflight_warnings and not bool(body.get("confirmPreflight")):
+        return jsonify({
+            **_err(
+                "Package export preflight requires confirmation.",
+                "Correct the listed issues or explicitly confirm this package export.",
+            ),
+            "warnings": preflight_warnings,
+            "confirmationRequired": True,
+        }), 409
     pdir = store.dir_for(project_id, doc)
     store.ensure_folders(pdir)
 

@@ -1,9 +1,7 @@
-"""core/export_qa.py — PDF export QA warnings (non-blocking).
+"""core/export_qa.py — PDF/package export QA and contract preflight.
 
-Scans project page render diagnostics before export and returns a structured
-warning list. The export endpoint always generates the PDF unless the project
-is missing, has no pages, or the render engine fails — layout/index warnings
-are surfaced for user review with an optional override in the UI.
+Scans project page render diagnostics and workbook-contract issues.  Contract
+issues require an explicit user confirmation before an export endpoint runs.
 """
 from __future__ import annotations
 
@@ -157,11 +155,11 @@ def _index_codes_from_rendered_page(project: dict[str, Any]) -> set[str]:
     return codes
 
 
-def compute_export_warnings(project: dict[str, Any]) -> list[dict[str, str]]:
+def compute_export_warnings(project: dict[str, Any]) -> list[dict[str, Any]]:
     """Return export QA warnings: pageCode, pageTitle, issue, suggestedFix."""
     pages = [p for p in project.get("pages", []) if p.get("include", True)]
     diag_by_order = {d.get("outputOrder"): d for d in page_render_diagnostics(pages)}
-    warnings: list[dict[str, str]] = []
+    warnings: list[dict[str, Any]] = []
 
     for page in pages:
         code = (page.get("displaySheetCode") or page.get("sheetCode") or "").strip()
@@ -284,4 +282,19 @@ def compute_export_warnings(project: dict[str, Any]) -> list[dict[str, str]]:
                     }
                 )
 
+    from core.project_preflight import compute_project_preflight
+
+    seen = {
+        (str(item.get("code") or ""), str(item.get("pageCode") or ""), str(item.get("issue") or ""))
+        for item in warnings
+    }
+    for item in compute_project_preflight(project):
+        key = (
+            str(item.get("code") or ""),
+            str(item.get("pageCode") or ""),
+            str(item.get("issue") or ""),
+        )
+        if key not in seen:
+            warnings.append(item)
+            seen.add(key)
     return warnings

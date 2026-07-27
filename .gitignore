@@ -20,6 +20,8 @@ _inspect_*.py
 _probe_*.py
 _verify_*.py
 *.xlsx
+!runtime_templates/
+!runtime_templates/Singh360_BASE_Project_Workbook_Template_V1.xlsx
 
 # Customer / project source material
 input_docs/

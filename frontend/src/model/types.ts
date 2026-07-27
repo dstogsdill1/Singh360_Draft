@@ -61,6 +61,13 @@ export interface PageBlock {
   filename?: string;
   styleRole?: string;
   editable?: boolean;
+  /** Cover is bound to selected 00_PROJECT_META fields, not raw recipe rows. */
+  metadataBound?: boolean;
+  /** Published table comes from the canonical workbook data contract. */
+  canonicalDataSource?: boolean;
+  canonicalSourceSheet?: string;
+  dataRowCount?: number;
+  sourceFilter?: { column: string; value: string };
   url?: string;
   /** excelRange payload (exact worksheet range). */
   renderMode?: string;
@@ -254,6 +261,7 @@ export interface ProjectModel {
     createdDate?: string;
     sourceFile?: string;
     version?: string;
+    templateVersion?: string;
     status?: string;
     helpVersion?: string;
     editedBy?: string;

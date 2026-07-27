@@ -285,7 +285,7 @@ export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock 
 
 /** Slice a full block down to `rowIndices` (absolute rows of the full block),
  *  remapping styles/merges/srcRows. Mirrors _slice_excel_block. */
-function sliceBlock(
+export function sliceBlock(
   full: PageBlock,
   rowIndices: number[],
   opts: { keepId?: string; partIndex?: number },
@@ -503,6 +503,19 @@ function rowLine(row: string[]): string {
 }
 
 function refreshCoverBlockFromWorksheet(block: PageBlock, ws: Worksheet): PageBlock {
+  if (block.metadataBound) {
+    const metadata = inferMetadataFromWorksheet(ws);
+    const boundFields: Array<[string, string | undefined]> = [
+      ['Drawing Package', metadata.drawingPackageFileName],
+      ['Project Revision', metadata.revision],
+      ['Issue Date', metadata.issueDate],
+      ['Prepared For', metadata.client],
+    ];
+    const rows = boundFields
+      .filter(([, value]) => !!value?.trim())
+      .map(([label, value]) => [`${label}: ${String(value).trim()}`]);
+    return { ...block, rows };
+  }
   const grid = ws.grid ?? [];
   const lines = grid.map((r) => rowLine(r)).filter(Boolean);
   return {

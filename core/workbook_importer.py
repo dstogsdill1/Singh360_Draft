@@ -9,6 +9,11 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils.cell import column_index_from_string, get_column_letter, range_boundaries
 
+from core.ems_workbook_contract import (
+    canonical_sources_for_page,
+    header_row_index,
+    is_recipe_grid,
+)
 from core.metadata_inference import infer_metadata_from_labeled_grid
 from core.page_identity import is_sheet_index_page
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
@@ -144,12 +149,11 @@ def _find_alias_index_sheets(workbook, winning_index: str | None) -> set[str]:
     """Other index-like sheets that lost the Phase A preference (e.g.
     ``00_APP_INDEX`` when ``00_INDEX`` exists) — always excluded from output
     pages regardless of any Include flag."""
+    aliases = {"00APPINDEX", "APPINDEX"}
     return {
         name
         for name in workbook.sheetnames
-        if "INDEX" in _normalized_sheet_key(name)
-        and not _is_metadata_sheet_name(name)
-        and name != winning_index
+        if _normalized_sheet_key(name) in aliases and name != winning_index
     }
 
 
@@ -511,6 +515,103 @@ def _filter_index_payload_for_output(ws: dict[str, Any]) -> dict[str, Any]:
             merges.append(nm)
     out["mergedCells"] = merges
     return out
+
+
+def _filtered_canonical_payload(
+    ws: dict[str, Any],
+    *,
+    filter_column: str = "",
+    filter_value: str = "",
+) -> tuple[dict[str, Any], int]:
+    """Return title/note/header plus nonblank canonical data rows.
+
+    Page recipes often reserve hundreds of formatted rows.  Published tables
+    keep the four-row Singh360 style contract but omit unused trailing rows.
+    Optional IDF/rack bindings filter the data without mutating the workbook.
+    """
+    grid = ws.get("grid") or []
+    header_idx = header_row_index(grid)
+    if header_idx is None:
+        return dict(ws), 0
+
+    headers = [str(value or "").strip().casefold() for value in grid[header_idx]]
+    filter_idx = -1
+    if filter_column:
+        target = filter_column.strip().casefold()
+        filter_idx = next((i for i, value in enumerate(headers) if value == target), -1)
+
+    keep = list(range(header_idx + 1))
+    data_rows = 0
+    wanted = str(filter_value or "").strip().casefold()
+    for row_idx in range(header_idx + 1, len(grid)):
+        row = grid[row_idx]
+        if not any(str(value or "").strip() for value in row):
+            continue
+        if filter_idx >= 0 and wanted:
+            actual = str(row[filter_idx] if filter_idx < len(row) else "").strip().casefold()
+            if filter_column.strip().casefold() == "system no.":
+                if not actual.startswith(wanted):
+                    continue
+            elif actual != wanted:
+                continue
+        keep.append(row_idx)
+        data_rows += 1
+
+    row_map = {old: new for new, old in enumerate(keep)}
+    out = dict(ws)
+    out["grid"] = [list(grid[row_idx]) for row_idx in keep]
+    out["styles"] = _remap_a1_styles(ws.get("styles") or {}, row_map)
+    out["rowHeightsPx"] = [
+        (ws.get("rowHeightsPx") or [])[row_idx]
+        if row_idx < len(ws.get("rowHeightsPx") or [])
+        else _DEFAULT_ROW_PX
+        for row_idx in keep
+    ]
+    out["rowHeights"] = {
+        str(row_map[int(row) - 1] + 1): height
+        for row, height in (ws.get("rowHeights") or {}).items()
+        if str(row).isdigit() and int(row) - 1 in row_map
+    }
+    merges = []
+    for merged in ws.get("mergedCells") or []:
+        rows = range(merged.get("startRow", 0), merged.get("endRow", 0) + 1)
+        if all(row in row_map for row in rows):
+            mapped = dict(merged)
+            mapped_rows = [row_map[row] for row in rows]
+            mapped["startRow"], mapped["endRow"] = min(mapped_rows), max(mapped_rows)
+            merges.append(mapped)
+    out["mergedCells"] = merges
+    out["sourceRange"] = (
+        f"A1:{get_column_letter(max((len(row) for row in out['grid']), default=1))}"
+        f"{max(len(out['grid']), 1)}"
+    )
+    out["printArea"] = None
+    return out, data_rows
+
+
+def _cover_block(metadata: dict[str, Any], source_ws_id: str) -> dict[str, Any]:
+    """Build the cover from bound metadata only, never from recipe instructions."""
+    rows = []
+    for label, key in (
+        ("Drawing Package", "drawingPackageFileName"),
+        ("Project Revision", "revision"),
+        ("Issue Date", "issueDate"),
+        ("Prepared For", "client"),
+    ):
+        value = str(metadata.get(key) or "").strip()
+        if value:
+            rows.append([f"{label}: {value}"])
+    return {
+        "id": f"{source_ws_id}_cover",
+        "type": "cover",
+        "sourceWorksheetId": source_ws_id,
+        "sourceRange": "",
+        "text": str(metadata.get("projectName") or "Project Cover"),
+        "rows": rows,
+        "styleRole": "page-title",
+        "editable": True,
+        "metadataBound": True,
+    }
 
 
 def _safe_name(text: str) -> str:
@@ -2095,6 +2196,10 @@ def import_workbook(
     index_entries = _parse_index(wb, index_sheet_name)
     has_index = bool(index_sheet_name and index_entries)
     index_lookup = {e["sheetTab"].lower(): e for e in index_entries if e.get("sheetTab")}
+    worksheet_lookup = {
+        str(worksheet.get("name") or "").casefold(): worksheet
+        for worksheet in project["worksheets"]
+    }
 
     # Kyle/SA38 workbook import, Phase A rule 7: 00_INDEX, 00_APP_INDEX, and
     # 00_PROJECT_META are metadata/control sheets, never drawing/output pages —
@@ -2140,25 +2245,9 @@ def import_workbook(
         is_index_tab = has_index and ws["name"] == index_sheet_name
         if idx:
             include = idx["include"]
-        elif is_index_tab:
-            # Phase A fix: a Sheet Index / TOC almost never lists itself as a
-            # row inside its own table, so falling back to "not has_index"
-            # here (the rule for every other un-indexed sheet) silently
-            # dropped the index page from every export whenever the index
-            # didn't self-reference. The index sheet defaults to included
-            # unless it has an explicit self-row saying otherwise (handled
-            # by the `if idx:` branch above).
-            include = True
-            if not idx:
-                title = "Sheet Index / TOC"
-            project.setdefault("importWarnings", []).append(
-                {
-                    "sheetTab": ws["name"],
-                    "issue": "Sheet Index / TOC has no row for itself inside 00_INDEX; "
-                    "defaulted to included so it is not silently dropped from export.",
-                }
-            )
         else:
+            # 00_INDEX is the only publication authority.  An unlisted sheet,
+            # including 00_INDEX itself, never becomes an implicit output page.
             include = not has_index
         use_source = idx["useSource"] if idx else ""
 
@@ -2171,24 +2260,82 @@ def import_workbook(
         if _looks_company_info(ws["name"], title, use_source):
             family = "companyInfo"
 
-        use_exact = _should_use_excel_exact(page_type, family, ws)
+        sheet_code = _canonical_sheet_code(idx, ws["name"], order_cursor)
+        canonical_specs = (
+            canonical_sources_for_page(sheet_code, ws["name"], title)
+            if is_recipe_grid(ws.get("grid") or [])
+            else ()
+        )
+        canonical_payloads: list[tuple[dict[str, Any], Any, int]] = []
+        missing_canonical_sources: list[str] = []
+        for spec in canonical_specs:
+            source_ws = next(
+                (worksheet_lookup.get(name.casefold()) for name in spec.names if worksheet_lookup.get(name.casefold())),
+                None,
+            )
+            if source_ws is None:
+                missing_canonical_sources.append(spec.canonical_name)
+                continue
+            if spec.canonical_name == "00_INDEX":
+                filtered_ws = _filter_index_payload_for_output(source_ws)
+                header_idx = _find_index_header_row(filtered_ws.get("grid") or [])
+                data_rows = max(0, len(filtered_ws.get("grid") or []) - header_idx - 1)
+            else:
+                filtered_ws, data_rows = _filtered_canonical_payload(
+                    source_ws,
+                    filter_column=spec.filter_column,
+                    filter_value=spec.filter_value,
+                )
+            canonical_payloads.append((filtered_ws, spec, data_rows))
+
+        render_ws = canonical_payloads[0][0] if canonical_payloads else ws
+        use_exact = bool(canonical_specs) or _should_use_excel_exact(page_type, family, render_ws)
         split_settings = _split_settings_for_page(family, page_type, use_exact)
-        is_idf_network, idf_header_row = _is_idf_network_table(ws, family)
+        is_idf_network, idf_header_row = _is_idf_network_table(render_ws, family)
         layout_profile = _layout_profile_for(family, page_type, f"{ws['name']} {title} {use_source}".lower())
 
         # Cover keeps its own look; every other page gets the Singh360 profile.
         header_style = "source" if page_type == "cover" else DEFAULT_HEADER_STYLE
 
-        if family == "companyInfo":
+        if page_type == "cover":
+            exact_block = None
+            source_ws_id = meta_ws["id"] if meta_ws else ws["id"]
+            blocks = [_cover_block(project["metadata"], source_ws_id)]
+            use_exact = False
+        elif canonical_specs:
+            exact_block = None
+            blocks = []
+            for source_ws, spec, data_rows in canonical_payloads:
+                block = _excel_range_block(
+                    source_ws,
+                    f"{source_ws['id']}_{_safe_name(sheet_code)}_canonical",
+                    split_settings,
+                )
+                block["canonicalDataSource"] = True
+                block["canonicalSourceSheet"] = spec.canonical_name
+                block["dataRowCount"] = data_rows
+                if spec.filter_column:
+                    block["sourceFilter"] = {
+                        "column": spec.filter_column,
+                        "value": spec.filter_value,
+                    }
+                _apply_table_geometry(block, family, page_type, layout_profile)
+                apply_singh360_profile(block, header_style)
+                blocks.append(block)
+                if exact_block is None:
+                    exact_block = block
+            # Missing canonical data is deliberately visible to preflight, not
+            # replaced with the Field/Value/Notes recipe worksheet.
+        elif family == "companyInfo":
             exact_block = None
             blocks = [_company_info_block(ws, f"{ws['id']}_company")]
         elif is_idf_network and idf_header_row is not None:
             split_settings = {"splitMode": "none", "allowContinuation": False, "minScale": 1.0, "scaleMode": "fit_body"}
-            exact_block = _build_idf_network_block(ws, idf_header_row, f"{ws['id']}_idf")
+            exact_block = _build_idf_network_block(render_ws, idf_header_row, f"{render_ws['id']}_idf")
             use_exact = True
             blocks = [exact_block]
         elif use_exact:
-            render_ws = _filter_index_payload_for_output(ws) if is_sheet_index_page({"pageType": page_type}) else ws
+            render_ws = _filter_index_payload_for_output(ws) if is_sheet_index_page({"pageType": page_type}) else render_ws
             exact_block = _excel_range_block(render_ws, f"{ws['id']}_xr", split_settings)
             if family == "text" and layout_profile in ("front_matter_table", "instruction_table"):
                 _compact_text_instruction_block(exact_block)
@@ -2260,14 +2407,6 @@ def import_workbook(
                         }
                     )
 
-        # Sheet number precedence (FINAL SA31 POLISH 4I / 4G Phase A): the
-        # workbook/index "Sheet Code" column always wins — never bare Order
-        # values like "5.0". Fall back to a code embedded in the tab name,
-        # then ``EMS {order}`` so SHEET NO. never looks like physical order.
-        sheet_code = _canonical_sheet_code(idx, ws["name"], order_cursor)
-        if is_index_tab and not idx:
-            sheet_code = f"EMS {order_cursor}.0" if order_cursor > 1 else "EMS 2.0"
-
         has_image_block = any(b.get("type") in ("imagePlaceholder", "underlayPlaceholder") for b in blocks)
         blank_page_placeholder = (
             _blank_page_placeholder_message(ws["name"], title) if page_type == "canvas" and not has_image_block else ""
@@ -2301,9 +2440,13 @@ def import_workbook(
             "renderMode": "excel_exact" if use_exact else "normalized",
             "renderProfile": page_render_profile,
             "normalizedHeaderStyle": header_style,
-            "sourceSheet": ws.get("sourceSheet") or ws["name"],
-            "sourceRange": ws.get("sourceRange", "") if use_exact else "",
-            "printArea": ws.get("printArea") if use_exact else None,
+            "sourceSheet": (
+                render_ws.get("sourceSheet") or render_ws["name"]
+                if canonical_payloads
+                else ws.get("sourceSheet") or ws["name"]
+            ),
+            "sourceRange": render_ws.get("sourceRange", "") if use_exact else "",
+            "printArea": render_ws.get("printArea") if use_exact else None,
             "splitMode": split_settings.get("splitMode", "none"),
             "repeatRows": (exact_block.get("repeatRows", []) if exact_block else []),
             "minScale": split_settings.get("minScale", EXCEL_MIN_SCALE),
@@ -2313,7 +2456,20 @@ def import_workbook(
             "trimBlankColumns": split_settings.get("trimBlankColumns", True),
             "orientation": "landscape",
             "templateId": "ansi-b-standard",
-            "linkedWorksheetId": ws["id"],
+            "linkedWorksheetId": (
+                meta_ws["id"]
+                if page_type == "cover" and meta_ws
+                else render_ws["id"] if canonical_payloads else ws["id"]
+            ),
+            "recipeWorksheetId": ws["id"] if canonical_specs else None,
+            "requiredCanonicalSources": [spec.canonical_name for spec in canonical_specs],
+            "missingCanonicalSources": missing_canonical_sources,
+            "canonicalDataRowCount": sum(item[2] for item in canonical_payloads),
+            "recipeOnly": bool(
+                page_type == "data-grid"
+                and is_recipe_grid(ws.get("grid") or [])
+                and not canonical_specs
+            ),
             "blocks": blocks,
             "canvasObjects": [],
             "assets": [],
@@ -2384,6 +2540,8 @@ def import_workbook(
     project = sync_project_sheet_index(project)
     project["paginationLocked"] = True
     recalc_page_numbers(project)
+    from core.project_preflight import compute_project_preflight
+    project["preflightIssues"] = compute_project_preflight(project)
     try:
         log_render_diagnostics(project["pages"])
     except Exception:

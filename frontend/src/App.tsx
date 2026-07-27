@@ -1808,7 +1808,12 @@ export default function App() {
       return;
     }
     try {
-      const blob = await exportPdf(project.id, { width: pending.width, height: pending.height, pageIds: pending.pageIds });
+      const blob = await exportPdf(project.id, {
+        width: pending.width,
+        height: pending.height,
+        pageIds: pending.pageIds,
+        confirmPreflight: true,
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1828,7 +1833,19 @@ export default function App() {
     const ok = await captureAndSave();
     if (!ok) return;
     try {
-      const blob = await exportPackage(project.id);
+      const warnings = await fetchExportWarnings(project.id);
+      if (warnings.length) {
+        const summary = warnings
+          .slice(0, 12)
+          .map((warning) => `${warning.pageCode || 'Project'}: ${warning.issue}`)
+          .join('\n');
+        const suffix = warnings.length > 12 ? `\n…plus ${warnings.length - 12} more issue(s).` : '';
+        if (!window.confirm(
+          `Package preflight found ${warnings.length} issue(s):\n\n${summary}${suffix}\n\n`
+          + 'Cancel to correct them, or OK to explicitly confirm and export the package.',
+        )) return;
+      }
+      const blob = await exportPackage(project.id, warnings.length > 0);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -2415,7 +2432,7 @@ export default function App() {
     )}
     {exportOpen && (
       <ExportModal
-        currentRevision={project.metadata.revision || project.metadata.version || ''}
+        currentRevision={project.metadata.revision || ''}
         packageName={project.metadata.drawingPackageFileName || project.projectDisplayName || project.metadata.projectName || ''}
         pages={project.pages}
         onExport={(w, h, rev, pageIds) => void onExportPdfSized(w, h, rev, pageIds)}

@@ -1,4 +1,4 @@
-"""Smoke: export QA returns warnings but PDF export is not hard-blocked (Phase A)."""
+"""Smoke: export QA returns issues for the explicit-confirmation workflow."""
 from __future__ import annotations
 
 import sys
@@ -33,7 +33,7 @@ def main() -> None:
     if not warns:
         print("FAIL — expected at least one QA warning")
         raise SystemExit(1)
-    print(f"OK — export warnings non-blocking ({len(warns)} warning(s))")
+    print(f"OK — export preflight returned {len(warns)} issue(s) for explicit confirmation")
 
 
 if __name__ == "__main__":

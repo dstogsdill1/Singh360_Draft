@@ -80,6 +80,8 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
             "createdDate": created,
             "sourceFile": "",
             "version": "",
+            "templateVersion": "",
+            "revision": "",
             "status": "Draft",
             "purpose": "",
         },

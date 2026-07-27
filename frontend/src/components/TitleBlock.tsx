@@ -22,7 +22,7 @@ export default function TitleBlock({ project, page }: Props) {
   const pageLabel = page.pageNumber
     ? `Sheet ${page.pageNumber} of ${page.pageTotal ?? 0}`
     : `Sheet — of ${page.pageTotal ?? 0}`;
-  const projectName = m.drawingPackageFileName || project.projectDisplayName || m.projectName;
+  const projectName = m.projectName || project.projectDisplayName;
   const created = formatDateOnly(m.createdDate);
   const issued = formatDateOnly(m.issueDate || m.date);
 
@@ -55,7 +55,7 @@ export default function TitleBlock({ project, page }: Props) {
         <Field label="Checked By" value={m.checkedBy || m.editedBy} />
         <Field label="Created" value={created} />
         <div className="tb-field-pair">
-          <Field label="Rev" value={m.revision || m.version} />
+          <Field label="Rev" value={m.revision} />
           <Field label="Issued" value={issued} />
         </div>
       </div>

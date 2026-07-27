@@ -7,6 +7,7 @@ export type MetadataField =
   | 'drawingPackageFileName'
   | 'location'
   | 'revision'
+  | 'templateVersion'
   | 'issueDate'
   | 'drawnBy'
   | 'checkedBy'
@@ -23,8 +24,10 @@ export const METADATA_LABEL_MAP: Record<string, MetadataField> = {
   package: 'drawingPackageFileName',
   location: 'location',
   address: 'location',
+  'project revision': 'revision',
   revision: 'revision',
   rev: 'revision',
+  'template version': 'templateVersion',
   'issue date': 'issueDate',
   'drawn by': 'drawnBy',
   'checked by': 'checkedBy',

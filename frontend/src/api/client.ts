@@ -269,7 +269,7 @@ export async function fetchExportWarnings(projectId: string, pageIds: string[] =
 
 export async function exportPdf(
   projectId: string,
-  options?: { width: number; height: number; pageIds?: string[] },
+  options?: { width: number; height: number; pageIds?: string[]; confirmPreflight?: boolean },
 ): Promise<Blob> {
   const res = await fetch(`/api/projects/${projectId}/export/pdf`, {
     method: 'POST',
@@ -281,6 +281,9 @@ export async function exportPdf(
 }
 
 export interface ExportWarning {
+  code?: string;
+  severity?: string;
+  confirmationRequired?: boolean;
   pageCode: string;
   pageTitle: string;
   issue: string;
@@ -439,8 +442,12 @@ export async function renameProject(projectId: string, name: string): Promise<{ 
   return res.json();
 }
 
-export async function exportPackage(projectId: string): Promise<Blob> {
-  const res = await fetch(`/api/projects/${projectId}/export/package`, { method: 'POST' });
+export async function exportPackage(projectId: string, confirmPreflight = false): Promise<Blob> {
+  const res = await fetch(`/api/projects/${projectId}/export/package`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmPreflight }),
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.blob();
 }
