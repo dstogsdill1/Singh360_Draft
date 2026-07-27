@@ -24,11 +24,11 @@ def main() -> int:
 
     start = (ROOT / "START_SINGH360_DRAFT.bat").read_text(encoding="utf-8")
     stop = (ROOT / "STOP_SINGH360_DRAFT.bat").read_text(encoding="utf-8")
+    controller = (ROOT / "scripts" / "singh360_launcher.ps1").read_text(encoding="utf-8")
     required_start = (
         "title Singh360 Draft",
         'set "SINGH360_PORT=8766"',
-        "http://127.0.0.1:8766/app",
-        "call npm.cmd run build",
+        "singh360_launcher.ps1' -Action Start -Port 8766",
     )
     for token in required_start:
         if token not in start:
@@ -36,18 +36,38 @@ def main() -> int:
     for forbidden in ("code.exe", "code .", "vscode"):
         if forbidden in start.casefold():
             problems.append(f"start launcher must never launch VS Code ({forbidden!r})")
-    if "if not exist node_modules call npm.cmd ci" not in start:
-        problems.append("start launcher does not return from conditional npm ci")
-    if "singh360-draft.pid" not in start or "$listener" not in start:
-        problems.append("start launcher does not enforce a single recorded Singh360 server")
+    if "singh360_launcher.ps1' -Action Stop -Port 8766" not in stop:
+        problems.append("stop launcher does not use the shared ownership controller")
     if "?project=" in start or "ngrok" in start.casefold() or "829" in start:
         problems.append("start launcher is not generic Project Home")
-    if "title Stop Singh360 Draft" not in stop or "$port=8766" not in stop:
+    if "title Stop Singh360 Draft" not in stop:
         problems.append("stop launcher name or port is incorrect")
-    if "singh360-draft.pid" not in stop or "$isOurs" not in stop:
-        problems.append("stop launcher does not validate the Singh360 PID before stopping it")
     if "Select-Object -ExpandProperty OwningProcess -Unique" in stop:
         problems.append("stop launcher still stops an arbitrary listener by port alone")
+
+    required_controller = (
+        "Get-NetTCPConnection -LocalPort $Port -State Listen",
+        'http://127.0.0.1:$Port/app',
+        "Test-Singh360Process",
+        "Repair-LauncherState",
+        "Singh360 Draft is already running",
+        "Port $Port belongs to an unrelated process",
+        "Show-ProcessIdentity $listener",
+        "Clear-LauncherState",
+        "Test-FrontendBuildRequired",
+        "Frontend production build is current; skipping rebuild.",
+        "Vite size advisories are informational.",
+        "singh360-draft.browser.pid",
+        "System.Threading.Mutex",
+    )
+    for token in required_controller:
+        if token not in controller:
+            problems.append(f"launcher controller is missing {token!r}")
+    if "Stop-Process -Id $listenerPid" not in controller:
+        problems.append("stop controller does not stop the verified listener PID")
+    unrelated_section = controller.split("function Stop-Singh360", 1)[-1]
+    if "Test-Singh360Process $listener" not in unrelated_section:
+        problems.append("stop controller does not prove listener ownership from its command line")
 
     obsolete_root = sorted(
         path.name
