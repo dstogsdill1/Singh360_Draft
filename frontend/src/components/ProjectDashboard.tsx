@@ -182,9 +182,17 @@ export default function ProjectDashboard({ project }: Props) {
   };
 
   const createProject = async (file: File) => {
+    const projectRoot = window.prompt(
+      'Confirm the physical project root for Project Files (for example G:\\My Drive\\Working Files\\829_Mi_Tienda).',
+      '',
+    )?.trim();
+    if (!projectRoot) {
+      setMessage('Project creation cancelled. A physical project root is required.');
+      return;
+    }
     setBusy('Creating project');
     try {
-      const result = await createProjectFromWorkbook(file, projectProfile);
+      const result = await createProjectFromWorkbook(file, projectRoot, projectProfile);
       window.location.assign(`/app?project=${result.id}&mode=editor`);
     } catch (error) {
       setMessage(`Project creation failed: ${String(error)}`);

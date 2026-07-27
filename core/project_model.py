@@ -95,6 +95,9 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
         "projectDisplayName": "",
         "projectProfile": "ems",
         "projectFolder": "",
+        "projectRoot": "",
+        "linkedProjectRoot": "",
+        "projectFilesMode": "",
         "sourceWorkbookName": "",
         "modified": created,
         "importWarnings": [],
@@ -130,7 +133,13 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
         if isinstance(project.get(key), list):
             merged[key] = project[key]
     # Preserve string identity fields set by the project store / rename flow.
-    for key in ("projectDisplayName", "projectFolder"):
+    for key in (
+        "projectDisplayName",
+        "projectFolder",
+        "projectRoot",
+        "linkedProjectRoot",
+        "projectFilesMode",
+    ):
         if isinstance(project.get(key), str) and project[key]:
             merged[key] = project[key]
     if "paginationLocked" in project:

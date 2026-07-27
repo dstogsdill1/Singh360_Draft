@@ -165,7 +165,7 @@ export default function App() {
   const [templateLibOpen, setTemplateLibOpen] = useState(false);
   const [templateLibManageOnly, setTemplateLibManageOnly] = useState(false);
   const [symbolLegendOpen, setSymbolLegendOpen] = useState(initialTool === 'symbol-legend');
-  const [pdfCropOpen, setPdfCropOpen] = useState(false);
+  const [pdfCropOpen, setPdfCropOpen] = useState(initialTool === 'project-pdf');
   const [imageCropState, setImageCropState] = useState<ImageCropState | null>(null);
   const [symbolMapperOpen, setSymbolMapperOpen] = useState(initialTool === 'symbol-mapper');
   const [backupOpen, setBackupOpen] = useState(initialTool === 'backups');
@@ -824,6 +824,32 @@ export default function App() {
       console.error('drop image failed', err);
     }
   };
+
+  const initialProjectImageStarted = useRef(false);
+  useEffect(() => {
+    if (
+      initialTool !== 'project-image'
+      || !initialProjectFileId
+      || !project?.id
+      || !activePageId
+      || initialProjectImageStarted.current
+    ) return;
+    initialProjectImageStarted.current = true;
+    const timer = window.setTimeout(() => {
+      fetch(`/api/projects/${project.id}/project-files/${initialProjectFileId}/content`)
+        .then(async (response) => {
+          if (!response.ok) throw new Error(`Project image could not be opened (${response.status}).`);
+          const disposition = response.headers.get('content-disposition') || '';
+          const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+          const basic = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+          const name = encoded ? decodeURIComponent(encoded) : basic || 'project-image';
+          const blob = await response.blob();
+          await onDropImageFile(new File([blob], name, { type: blob.type }));
+        })
+        .catch((reason) => window.alert(String(reason)));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [activePageId, initialProjectFileId, initialTool, project?.id]);
 
   // Insert a library component (image asset) onto the ACTIVE page only.
   const onInsertComponent = (
@@ -2487,7 +2513,7 @@ export default function App() {
     {symbolMapperOpen && (
       <SymbolMapperModal
         onClose={() => setSymbolMapperOpen(false)}
-        initialFileUrl={initialProjectFileId
+        initialFileUrl={initialTool === 'project-pdf' && initialProjectFileId
           ? `/api/projects/${project.id}/project-files/${initialProjectFileId}/content`
           : undefined}
         onAddPage={(result, title, sheetCode, countPage) => addSymbolMapPage(result, title, sheetCode, countPage)}
@@ -2526,6 +2552,9 @@ export default function App() {
     {pdfCropOpen && (
       <PdfCropModal
         projectId={project.id}
+        initialFileUrl={initialProjectFileId
+          ? `/api/projects/${project.id}/project-files/${initialProjectFileId}/content`
+          : undefined}
         onInsert={(url, name, meta, mode) => {
           setOverlayMode(true);
           // Current-page placement is implemented now. "Create new page" is

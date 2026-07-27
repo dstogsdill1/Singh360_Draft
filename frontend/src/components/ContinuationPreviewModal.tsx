@@ -20,6 +20,7 @@ export default function ContinuationPreviewModal({ file, onImported, onCancel }:
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const [profile, setProfile] = useState<ProjectProfile>('ems');
+  const [projectRoot, setProjectRoot] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -36,7 +37,7 @@ export default function ContinuationPreviewModal({ file, onImported, onCancel }:
     setImporting(true);
     setError('');
     try {
-      const { id } = await createProjectFromWorkbook(file, profile);
+      const { id } = await createProjectFromWorkbook(file, projectRoot.trim(), profile);
       onImported(id);
     } catch (e) {
       setError(String(e));
@@ -70,6 +71,15 @@ export default function ContinuationPreviewModal({ file, onImported, onCancel }:
             >
               <option value="ems">Singh360 EMS Drawing Package</option>
             </select>
+          </label>
+          <label>
+            Physical project root
+            <input
+              value={projectRoot}
+              onChange={(event) => setProjectRoot(event.target.value)}
+              placeholder={'G:\\My Drive\\Working Files\\Project Folder'}
+              disabled={importing}
+            />
           </label>
 
           {loading && <p className="cp-status">Analyzing workbook…</p>}
@@ -120,7 +130,7 @@ export default function ContinuationPreviewModal({ file, onImported, onCancel }:
             type="button"
             className="btn-primary"
             onClick={() => void confirmImport()}
-            disabled={loading || importing || !!error || !summary}
+            disabled={loading || importing || !!error || !summary || !projectRoot.trim()}
           >
             {importing ? 'Importing…' : 'Import Workbook'}
           </button>

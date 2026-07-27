@@ -35,6 +35,11 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    """Read normal UTF-8 and Windows-authored UTF-8 BOM project JSON."""
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
 def slugify(name: str) -> str:
     """Windows-safe folder slug."""
     s = re.sub(r"[^A-Za-z0-9._ -]+", "", (name or "").strip())
@@ -125,7 +130,7 @@ class ProjectStore:
         p = self.read_path(project_id)
         if not p:
             return None
-        return json.loads(p.read_text("utf-8"))
+        return _read_json(p)
 
     def save(self, project_id: str, data: dict[str, Any]) -> Path:
         project_dir = self.dir_for(project_id, data)
@@ -367,7 +372,7 @@ class ProjectStore:
         out: list[dict[str, Any]] = []
         for p in sorted(root.glob("*/page_*.json"), key=lambda x: x.name, reverse=True):
             try:
-                payload = json.loads(p.read_text("utf-8"))
+                payload = _read_json(p)
                 stat = p.stat()
             except (json.JSONDecodeError, OSError):
                 continue
@@ -395,7 +400,7 @@ class ProjectStore:
         if not src.is_file():
             return None
         try:
-            payload = json.loads(src.read_text("utf-8"))
+            payload = _read_json(src)
             page = payload.get("page")
             data = self.load(project_id)
         except (json.JSONDecodeError, OSError):
@@ -484,7 +489,7 @@ class ProjectStore:
         if not src.is_file():
             return None
         try:
-            data = json.loads(src.read_text("utf-8"))
+            data = _read_json(src)
         except (json.JSONDecodeError, OSError):
             return None
         # Snapshot current, then write the restored copy through the normal path.
@@ -579,7 +584,7 @@ class ProjectStore:
             if not pj.is_file():
                 continue
             try:
-                data = json.loads(pj.read_text("utf-8"))
+                data = _read_json(pj)
             except (json.JSONDecodeError, OSError):
                 continue
             pid = d.name.rsplit("__", 1)[-1]
@@ -608,7 +613,7 @@ class ProjectStore:
             if p.stem in seen:
                 continue
             try:
-                data = json.loads(p.read_text("utf-8"))
+                data = _read_json(p)
             except (json.JSONDecodeError, OSError):
                 continue
             out.append(

@@ -34,6 +34,8 @@ def main() -> int:
     server.store = ProjectStore(server.DOCS_DIR)
     workbook = write_workbook(Path(fixture_dir.name) / "sanitized.xlsx")
     pdf_path = write_pdf(Path(fixture_dir.name) / "sanitized.pdf")
+    project_root = Path(fixture_dir.name) / "physical-project"
+    project_root.mkdir()
 
     c = server.app.test_client()
     problems: list[str] = []
@@ -42,7 +44,10 @@ def main() -> int:
     with open(workbook, "rb") as fh:
         created = c.post(
             "/api/projects/new",
-            data={"file": (io.BytesIO(fh.read()), "sanitized.xlsx")},
+            data={
+                "file": (io.BytesIO(fh.read()), "sanitized.xlsx"),
+                "projectRoot": str(project_root),
+            },
             content_type="multipart/form-data",
         )
     if created.status_code != 200:

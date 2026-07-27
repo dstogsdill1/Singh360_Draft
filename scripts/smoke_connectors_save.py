@@ -58,12 +58,17 @@ def main() -> int:
     server.DOCS_DIR.mkdir()
     server.store = ProjectStore(server.DOCS_DIR)
     workbook = write_workbook(Path(fixture_dir.name) / "sanitized.xlsx")
+    project_root = Path(fixture_dir.name) / "physical-project"
+    project_root.mkdir()
 
     # 1. Create project.
     with open(workbook, "rb") as fh:
         res = c.post(
             "/api/projects/new",
-            data={"file": (io.BytesIO(fh.read()), "sanitized.xlsx")},
+            data={
+                "file": (io.BytesIO(fh.read()), "sanitized.xlsx"),
+                "projectRoot": str(project_root),
+            },
             content_type="multipart/form-data",
         )
     if res.status_code != 200:
@@ -92,8 +97,8 @@ def main() -> int:
         _conn("Polyline", [(80, 320), (200, 370), (340, 330), (460, 380)], "polyline"),
         _image("Generic controller crop", "/api/assets/fake/fake.png"),
     ]
-    target_index = 1
-    empty_index = 2
+    target_index = 0
+    empty_index = 1
     pages[target_index]["canvasObjects"] = page0_objects
     pages[empty_index]["canvasObjects"] = []
     sp = c.post(f"/api/projects/{pid}/pages", json={"pages": pages})

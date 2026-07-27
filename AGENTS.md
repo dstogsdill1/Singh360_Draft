@@ -53,6 +53,9 @@ Do not reintroduce the retired SmartDraw VSON / Visio VSDX / RDM XML generator.
     mutate customer or sample files.
 15. Do not weaken workbook authority, baseline hashes, project identity checks,
     or two-sided conflict detection.
+16. For linked-root projects, Project Files is a direct validated view of the
+    physical project root. Never replace it with a synthetic folder list or
+    mirrored `.docs/sources` workspace.
 
 ## Shared workbook geometry contract
 

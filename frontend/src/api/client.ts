@@ -42,6 +42,7 @@ export interface ProjectFileRecord {
   size: number;
   sha256: string;
   dateAdded: string;
+  modifiedAt?: string;
   version: number;
   status: 'active' | 'superseded' | 'archived';
   virtualPath: string;
@@ -49,9 +50,15 @@ export interface ProjectFileRecord {
   localProjectPath: string;
   tags: string[];
   notes: string;
+  linked?: boolean;
+  physicalPath?: string;
 }
 
 export interface ProjectFilesPayload {
+  mode?: 'linked' | 'legacy';
+  linked?: boolean;
+  rootPath?: string;
+  rootName?: string;
   folders: string[];
   archivedFolders: Array<{ path: string; restorePath: string; archivedAt: string }>;
   files: ProjectFileRecord[];
@@ -94,6 +101,7 @@ export async function uploadProjectFiles(
   files.forEach((file) => form.append('files', file));
   form.append('virtualPath', virtualPath);
   form.append('relativePaths', JSON.stringify(files.map((file) => file.webkitRelativePath || file.name)));
+  form.append('modifiedTimes', JSON.stringify(files.map((file) => file.lastModified)));
   const data = await workspaceJson<{ files: ProjectFileRecord[] }>(
     await fetch(`/api/projects/${projectId}/project-files/upload`, { method: 'POST', body: form }),
   );
@@ -165,6 +173,31 @@ export async function sendProjectFileToData(projectId: string, fileId: string): 
     await fetch(`/api/projects/${projectId}/project-files/${fileId}/send-to-data`, { method: 'POST' }),
   );
   return data.workbook;
+}
+
+export async function openProjectFile(projectId: string, fileId: string): Promise<string> {
+  const data = await workspaceJson<{ path: string }>(
+    await fetch(`/api/projects/${projectId}/project-files/${fileId}/open`, { method: 'POST' }),
+  );
+  return data.path;
+}
+
+export async function revealProjectFile(projectId: string, fileId: string): Promise<string> {
+  const data = await workspaceJson<{ path: string }>(
+    await fetch(`/api/projects/${projectId}/project-files/${fileId}/reveal`, { method: 'POST' }),
+  );
+  return data.path;
+}
+
+export async function revealProjectFolder(projectId: string, path: string): Promise<string> {
+  const data = await workspaceJson<{ path: string }>(
+    await fetch(`/api/projects/${projectId}/project-folders/reveal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    }),
+  );
+  return data.path;
 }
 
 export async function getDataWorkspace(projectId: string): Promise<WorkbookDocument> {
@@ -273,11 +306,13 @@ export async function previewWorkbookContinuation(
 
 export async function createProjectFromWorkbook(
   file: File,
+  projectRoot: string,
   profile: ProjectProfile = 'ems',
 ): Promise<{ id: string; continuation?: ContinuationSummary }> {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('profile', profile);
+  fd.append('projectRoot', projectRoot);
   const res = await fetch('/api/projects/new', { method: 'POST', body: fd });
   if (!res.ok) throw await exactApiError(res);
   return res.json();

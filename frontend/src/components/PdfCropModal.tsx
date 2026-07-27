@@ -22,6 +22,7 @@ type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
 
 interface Props {
   projectId: string;
+  initialFileUrl?: string;
   onInsert: (
     url: string,
     name: string,
@@ -83,6 +84,7 @@ const cleanRect = (rect: Rect, page: PdfPreviewPage): Rect => {
 
 export default function PdfCropModal({
   projectId,
+  initialFileUrl,
   onInsert,
   onCancel,
 }: Props) {
@@ -104,6 +106,7 @@ export default function PdfCropModal({
   const viewportRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const interactionRef = useRef<Interaction | null>(null);
+  const initialLoadStarted = useRef(false);
 
   const page = pages.find((item) => item.page === selected) ?? pages[0];
 
@@ -131,6 +134,26 @@ export default function PdfCropModal({
       setLoading(false);
     }
   }, [projectId]);
+
+  useEffect(() => {
+    if (!initialFileUrl || initialLoadStarted.current) return;
+    initialLoadStarted.current = true;
+    setLoading(true);
+    fetch(initialFileUrl)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Project PDF could not be opened (${response.status}).`);
+        const disposition = response.headers.get('content-disposition') || '';
+        const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+        const basic = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+        const name = encoded ? decodeURIComponent(encoded) : basic || 'project.pdf';
+        const blob = await response.blob();
+        await onFilePick(new File([blob], name, { type: blob.type || 'application/pdf' }));
+      })
+      .catch((reason) => {
+        setError(String(reason));
+        setLoading(false);
+      });
+  }, [initialFileUrl, onFilePick]);
 
   const zoomCentered = useCallback((nextValue: number) => {
     const viewport = viewportRef.current;

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from openpyxl import Workbook, load_workbook
 
@@ -19,6 +20,8 @@ class ProjectImportTransactionTests(unittest.TestCase):
         self.runtime = isolate_server_runtime(server)
         self.client = server.app.test_client()
         self.source_root = tempfile.TemporaryDirectory(prefix="s360_import_source_")
+        self.project_root = Path(self.source_root.name) / "physical-project"
+        self.project_root.mkdir()
         self.source = write_workbook(
             Path(self.source_root.name) / "Sanitized_EMS_Workbook.xlsx"
         )
@@ -38,6 +41,7 @@ class ProjectImportTransactionTests(unittest.TestCase):
             "/api/projects/new",
             data={
                 "profile": "ems",
+                "projectRoot": str(self.project_root),
                 "file": (BytesIO(self.source_bytes), self.source.name),
             },
             content_type="multipart/form-data",
@@ -58,6 +62,13 @@ class ProjectImportTransactionTests(unittest.TestCase):
 
         self.assertEqual(project_id, project["id"])
         self.assertEqual("ems", project["projectProfile"])
+        self.assertEqual(str(self.project_root.resolve()), project["projectRoot"])
+        self.assertEqual(
+            str(self.project_root.resolve()), project["linkedProjectRoot"]
+        )
+        self.assertEqual(
+            "EXACT_LINKED_PROJECT_ROOT", project["projectFilesMode"]
+        )
         self.assertGreater(len(project["pages"]), 0)
         self.assertTrue(workbook_path.is_file())
         self.assertEqual(self.source.name, project["metadata"]["sourceFile"])
@@ -88,6 +99,7 @@ class ProjectImportTransactionTests(unittest.TestCase):
             "/api/projects/new",
             data={
                 "profile": "ems",
+                "projectRoot": str(self.project_root),
                 "file": (invalid_bytes, "invalid.xlsx"),
             },
             content_type="multipart/form-data",
@@ -146,6 +158,54 @@ class ProjectImportTransactionTests(unittest.TestCase):
         self.assertEqual(200, self.client.get(f"/api/projects/{project_id}").status_code)
         staging = server.DOCS_DIR / ".workbook_staging"
         self.assertFalse(staging.exists() and any(staging.iterdir()))
+
+    def test_linked_open_and_explorer_routes_use_resolved_physical_path(self) -> None:
+        physical_file = self.project_root / "route-proof.txt"
+        physical_file.write_text("sanitized route proof", encoding="utf-8")
+        created = self._create()
+        self.assertEqual(200, created.status_code, created.get_data(as_text=True))
+        project_id = created.get_json()["id"]
+        listing = self.client.get(
+            f"/api/projects/{project_id}/project-files"
+        )
+        self.assertEqual(200, listing.status_code)
+        record = next(
+            item
+            for item in listing.get_json()["files"]
+            if item["relativePath"] == "route-proof.txt"
+        )
+
+        with patch.object(server, "open_local_path") as opened:
+            response = self.client.post(
+                f"/api/projects/{project_id}/project-files/{record['id']}/open"
+            )
+        self.assertEqual(200, response.status_code)
+        opened.assert_called_once_with(physical_file.resolve())
+
+        with patch.object(server, "reveal_local_path") as revealed:
+            response = self.client.post(
+                f"/api/projects/{project_id}/project-files/{record['id']}/reveal"
+            )
+            folder_response = self.client.post(
+                f"/api/projects/{project_id}/project-folders/reveal",
+                json={"path": ""},
+            )
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(200, folder_response.status_code)
+        self.assertEqual(
+            (physical_file.resolve(),),
+            revealed.call_args_list[0].args,
+        )
+        self.assertEqual(
+            {"select": True}, revealed.call_args_list[0].kwargs
+        )
+        self.assertEqual(
+            (self.project_root.resolve(),),
+            revealed.call_args_list[1].args,
+        )
+        self.assertEqual(
+            {"select": False}, revealed.call_args_list[1].kwargs
+        )
 
     def test_existing_project_rejects_a_different_project_workbook(self) -> None:
         created = self._create()

@@ -288,6 +288,9 @@ export interface ProjectModel {
   /** Timestamp written by ProjectStore after a confirmed local save. */
   lastSavedAt?: string;
   projectFolder?: string;
+  projectRoot?: string;
+  linkedProjectRoot?: string;
+  projectFilesMode?: 'EXACT_LINKED_PROJECT_ROOT' | string;
   projectDisplayName?: string;
   projectProfile?: 'ems';
   sourceWorkbookName?: string;

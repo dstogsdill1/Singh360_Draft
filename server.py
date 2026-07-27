@@ -60,6 +60,8 @@ from core.project_workspace import (
     ProjectWorkspaceError,
     WorkbookDocumentStore,
     WorkbookRevisionConflict,
+    open_local_path,
+    reveal_local_path,
     safe_virtual_path,
 )
 from core.validation import validate_project
@@ -244,6 +246,20 @@ def _uploaded_workbook_name(filename: str | None) -> str:
     return name
 
 
+def _new_project_root() -> Path:
+    raw = str(request.form.get("projectRoot") or "").strip()
+    if not raw:
+        raise ValueError(
+            "Choose and confirm the physical project root before creating a project."
+        )
+    root = Path(raw).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"The physical project root was not found: {root}")
+    if root == Path(root.anchor):
+        raise ValueError("A drive root cannot be used as a project root.")
+    return root
+
+
 def _staging_dir(kind: str, token: str) -> Path:
     root = DOCS_DIR / f".{kind}_staging"
     root.mkdir(parents=True, exist_ok=True)
@@ -405,17 +421,20 @@ def _project_workspace(project_id: str) -> tuple[dict, Path]:
 
 @app.get("/api/projects/<project_id>/project-files")
 def list_project_files(project_id: str):
-    _, project_dir = _project_workspace(project_id)
-    return jsonify(ProjectFileLibrary(project_dir).load())
+    doc, project_dir = _project_workspace(project_id)
+    try:
+        return jsonify(ProjectFileLibrary(project_dir, doc).load())
+    except ProjectWorkspaceError as exc:
+        return jsonify(_err(str(exc))), 400
 
 
 @app.post("/api/projects/<project_id>/project-files/upload")
 def upload_project_files(project_id: str):
-    _, project_dir = _project_workspace(project_id)
+    doc, project_dir = _project_workspace(project_id)
     uploads = request.files.getlist("files")
     if not uploads:
         return jsonify(_err("Choose one or more project files.")), 400
-    library = ProjectFileLibrary(project_dir)
+    library = ProjectFileLibrary(project_dir, doc)
     destination = request.form.get("virtualPath", "")
     try:
         relative_paths = json.loads(request.form.get("relativePaths", "[]"))
@@ -423,6 +442,12 @@ def upload_project_files(project_id: str):
             relative_paths = []
     except json.JSONDecodeError:
         relative_paths = []
+    try:
+        modified_times = json.loads(request.form.get("modifiedTimes", "[]"))
+        if not isinstance(modified_times, list):
+            modified_times = []
+    except json.JSONDecodeError:
+        modified_times = []
     try:
         records = []
         for index, upload in enumerate(uploads):
@@ -446,6 +471,11 @@ def upload_project_files(project_id: str):
                     target,
                     {
                         "addedBy": request.form.get("addedBy", ""),
+                        "modifiedTimeMs": (
+                            modified_times[index]
+                            if index < len(modified_times)
+                            else None
+                        ),
                         "tags": [
                             item.strip()
                             for item in request.form.get("tags", "").split(",")
@@ -461,14 +491,14 @@ def upload_project_files(project_id: str):
 
 @app.post("/api/projects/<project_id>/project-files/import-zip")
 def import_project_files_zip(project_id: str):
-    _, project_dir = _project_workspace(project_id)
+    doc, project_dir = _project_workspace(project_id)
     upload = request.files.get("file")
     if upload is None or not upload.filename:
         return jsonify(_err("Choose a ZIP project package.")), 400
     if Path(upload.filename).suffix.casefold() != ".zip":
         return jsonify(_err("Only ZIP project packages are supported.")), 400
     try:
-        result = ProjectFileLibrary(project_dir).import_zip(
+        result = ProjectFileLibrary(project_dir, doc).import_zip(
             upload.stream,
             upload.filename,
             request.form.get("virtualPath", ""),
@@ -480,10 +510,10 @@ def import_project_files_zip(project_id: str):
 
 @app.post("/api/projects/<project_id>/project-folders")
 def create_project_folder(project_id: str):
-    _, project_dir = _project_workspace(project_id)
+    doc, project_dir = _project_workspace(project_id)
     body = request.get_json(force=True, silent=True) or {}
     try:
-        folder = ProjectFileLibrary(project_dir).create_folder(
+        folder = ProjectFileLibrary(project_dir, doc).create_folder(
             str(body.get("path") or "")
         )
         return jsonify({"ok": True, "folder": folder}), 201
@@ -493,10 +523,10 @@ def create_project_folder(project_id: str):
 
 @app.patch("/api/projects/<project_id>/project-folders")
 def update_project_folder(project_id: str):
-    _, project_dir = _project_workspace(project_id)
+    doc, project_dir = _project_workspace(project_id)
     body = request.get_json(force=True, silent=True) or {}
     action = str(body.get("action") or "")
-    library = ProjectFileLibrary(project_dir)
+    library = ProjectFileLibrary(project_dir, doc)
     try:
         if action == "rename":
             folder = library.rename_folder(
@@ -520,10 +550,10 @@ def update_project_folder(project_id: str):
 
 @app.patch("/api/projects/<project_id>/project-files/<file_id>")
 def update_project_file(project_id: str, file_id: str):
-    _, project_dir = _project_workspace(project_id)
+    doc, project_dir = _project_workspace(project_id)
     body = request.get_json(force=True, silent=True) or {}
     action = str(body.get("action") or "")
-    library = ProjectFileLibrary(project_dir)
+    library = ProjectFileLibrary(project_dir, doc)
     try:
         if action == "rename":
             record = library.rename_file(file_id, str(body.get("name") or ""))
@@ -544,9 +574,9 @@ def update_project_file(project_id: str, file_id: str):
 
 @app.get("/api/projects/<project_id>/project-files/<file_id>/content")
 def get_project_file_content(project_id: str, file_id: str):
-    _, project_dir = _project_workspace(project_id)
+    doc, project_dir = _project_workspace(project_id)
     try:
-        record, path = ProjectFileLibrary(project_dir).resolve(file_id)
+        record, path = ProjectFileLibrary(project_dir, doc).resolve(file_id)
         return send_file(
             path,
             download_name=str(record.get("originalFileName") or path.name),
@@ -558,9 +588,9 @@ def get_project_file_content(project_id: str, file_id: str):
 
 @app.get("/api/projects/<project_id>/project-files/<file_id>/preview")
 def preview_project_file(project_id: str, file_id: str):
-    _, project_dir = _project_workspace(project_id)
+    doc, project_dir = _project_workspace(project_id)
     try:
-        return jsonify(ProjectFileLibrary(project_dir).preview(file_id))
+        return jsonify(ProjectFileLibrary(project_dir, doc).preview(file_id))
     except ProjectWorkspaceError as exc:
         return jsonify(_err(str(exc))), 404
 
@@ -568,13 +598,52 @@ def preview_project_file(project_id: str, file_id: str):
 @app.post("/api/projects/<project_id>/project-files/<file_id>/send-to-data")
 def send_project_file_to_data(project_id: str, file_id: str):
     doc, project_dir = _project_workspace(project_id)
-    library = ProjectFileLibrary(project_dir)
+    library = ProjectFileLibrary(project_dir, doc)
     try:
         record, path = library.resolve(file_id)
         workbook = WorkbookDocumentStore(project_dir).import_file(
             doc, path, str(record.get("originalFileName") or path.name)
         )
         return jsonify({"ok": True, "workbook": workbook})
+    except ProjectWorkspaceError as exc:
+        return jsonify(_err(str(exc))), 400
+
+
+@app.post("/api/projects/<project_id>/project-files/<file_id>/open")
+def open_project_file(project_id: str, file_id: str):
+    doc, project_dir = _project_workspace(project_id)
+    try:
+        _, path = ProjectFileLibrary(project_dir, doc).resolve(file_id)
+        open_local_path(path)
+        return jsonify({"ok": True, "path": str(path)})
+    except ProjectWorkspaceError as exc:
+        return jsonify(_err(str(exc))), 400
+
+
+@app.post("/api/projects/<project_id>/project-files/<file_id>/reveal")
+def reveal_project_file(project_id: str, file_id: str):
+    doc, project_dir = _project_workspace(project_id)
+    try:
+        _, path = ProjectFileLibrary(project_dir, doc).resolve(file_id)
+        reveal_local_path(path, select=True)
+        return jsonify({"ok": True, "path": str(path)})
+    except ProjectWorkspaceError as exc:
+        return jsonify(_err(str(exc))), 400
+
+
+@app.post("/api/projects/<project_id>/project-folders/reveal")
+def reveal_project_folder(project_id: str):
+    doc, project_dir = _project_workspace(project_id)
+    body = request.get_json(force=True, silent=True) or {}
+    library = ProjectFileLibrary(project_dir, doc)
+    try:
+        if not hasattr(library, "resolve_folder"):
+            raise ProjectWorkspaceError(
+                "Show in Explorer is available after linking a physical project root."
+            )
+        path = library.resolve_folder(str(body.get("path") or ""))
+        reveal_local_path(path, select=False)
+        return jsonify({"ok": True, "path": str(path)})
     except ProjectWorkspaceError as exc:
         return jsonify(_err(str(exc))), 400
 
@@ -682,6 +751,7 @@ def new_project():
 
     try:
         profile = _project_profile()
+        project_root = _new_project_root()
         workbook_name = _uploaded_workbook_name(upload.filename)
         stage = _staging_dir("project", f"new-{project_id}-{uuid.uuid4().hex[:8]}")
         store.ensure_folders(stage)
@@ -704,6 +774,9 @@ def new_project():
                 "The workbook parsed successfully but generated zero drawing pages."
             )
         project_state["projectProfile"] = profile
+        project_state["projectRoot"] = str(project_root)
+        project_state["linkedProjectRoot"] = str(project_root)
+        project_state["projectFilesMode"] = "EXACT_LINKED_PROJECT_ROOT"
         project_state["sourceWorkbookName"] = workbook_name
         project_state["projectDisplayName"] = (
             project_state.get("metadata", {}).get("projectName")

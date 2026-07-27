@@ -11,8 +11,9 @@ Follow the root `AGENTS.md`.
   redesign a working feature when a focused repair is sufficient.
 - Preserve fixed 17 x 11 sheet geometry, project identity, components, sources,
   manual canvas objects, and export behavior.
-- Keep Project Files and Data Workspace project-local; G Drive is a secondary
-  mirror or backup, not the primary workspace.
+- For linked-root projects, render Project Files from the recursively
+  enumerated physical project root. Do not inject synthetic folders or present
+  `.docs/sources` as the visible file workspace.
 - Do not expose or invoke **SAVE + WRITE EXCEL** from a new workflow unless the
   user explicitly requests workbook writes.
 - Route Univer/Page Editor/PDF geometry through
