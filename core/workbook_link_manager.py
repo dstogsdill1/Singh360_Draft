@@ -10,6 +10,7 @@ import subprocess
 import threading
 import time
 import traceback
+import uuid
 from typing import Any
 
 from openpyxl import load_workbook
@@ -97,6 +98,128 @@ def workbook_metadata(path: Path) -> dict[str, Any]:
         }
     finally:
         wb.close()
+
+
+def claim_workbook_for_project(path: Path, project_id: str) -> dict[str, Any]:
+    """Assign a copied workbook to ``project_id`` without touching its source.
+
+    New projects receive their own workbook copy before this function runs.
+    The copy is saved through a sibling temporary file and atomically replaced,
+    so a failed openpyxl save cannot leave a corrupt authority workbook.
+    """
+    path = Path(path)
+    workbook_metadata(path)  # validates extension, readability, and control sheets
+    keep_vba = path.suffix.lower() == ".xlsm"
+    workbook = load_workbook(path, data_only=False, keep_vba=keep_vba)
+    temp_path = path.with_name(
+        f".{path.stem}.authority-{uuid.uuid4().hex[:8]}{path.suffix.lower()}"
+    )
+    saved = False
+    try:
+        sheet = workbook["00_PROJECT_META"]
+        linked_row = None
+        last_sync_row = None
+        last_status_row = None
+        for row_number in range(1, max(sheet.max_row, 30) + 1):
+            key = str(sheet.cell(row_number, 1).value or "").strip().casefold()
+            if key == "linked project id":
+                linked_row = row_number
+            elif key == "last sync utc":
+                last_sync_row = row_number
+            elif key == "last sync status":
+                last_status_row = row_number
+        next_row = max(sheet.max_row + 1, 17)
+        if linked_row is None:
+            linked_row = next_row
+            next_row += 1
+        if last_sync_row is None:
+            last_sync_row = next_row
+            next_row += 1
+        if last_status_row is None:
+            last_status_row = next_row
+
+        sheet.cell(linked_row, 1, "Linked Project ID")
+        sheet.cell(linked_row, 2, project_id)
+        sheet.cell(last_sync_row, 1, "Last Sync UTC")
+        sheet.cell(last_sync_row, 2, utcnow())
+        sheet.cell(last_status_row, 1, "Last Sync Status")
+        sheet.cell(last_status_row, 2, "Synchronized")
+        workbook.save(temp_path)
+        saved = True
+    finally:
+        workbook.close()
+        if not saved:
+            temp_path.unlink(missing_ok=True)
+    try:
+        os.replace(temp_path, path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+    metadata = workbook_metadata(path)
+    if metadata.get("projectId") != project_id:
+        raise WorkbookSyncError(
+            "The project workbook copy could not be assigned to the new project ID."
+        )
+    return metadata
+
+
+def initialize_internal_workbook_link(
+    project_id: str,
+    project: dict[str, Any],
+    path: Path,
+    *,
+    configured_path: Path | None = None,
+) -> dict[str, Any]:
+    """Attach a package-owned workbook and establish a clean authority baseline."""
+    path = Path(path)
+    authority_path = Path(configured_path) if configured_path is not None else path
+    metadata = workbook_metadata(path)
+    linked_id = str(metadata.get("projectId") or "")
+    if linked_id != project_id:
+        raise WorkbookSyncError(
+            f"The workbook is linked to project {linked_id or '(none)'}, not {project_id}."
+        )
+
+    project = dict(project)
+    project["sourceWorkbookName"] = authority_path.name
+    project_metadata = dict(project.get("metadata") or {})
+    project_metadata["sourceFile"] = authority_path.name
+    project["metadata"] = project_metadata
+    sources = [
+        source
+        for source in list(project.get("sources") or [])
+        if not (
+            isinstance(source, dict)
+            and str(source.get("type") or "").casefold() == "workbook"
+        )
+    ]
+    sources.append(
+        {
+            "id": f"src_{project_id}_xlsx",
+            "type": "workbook",
+            "name": authority_path.name,
+            "path": str(authority_path),
+        }
+    )
+    project["sources"] = sources
+    sync = {
+        **dict(project.get("workbookSync") or {}),
+        "mode": "internal-workbook-copy",
+        "workbook": str(authority_path),
+        "status": "in_sync",
+        "warning": "",
+        "pendingReason": "",
+        "runtimeLog": "",
+        "linkedAt": utcnow(),
+        "lastSyncUtc": utcnow(),
+        "workbookHash": file_hash(path),
+        "authority": "workbook",
+        "lastAuthorityAction": "project_import",
+        "syncEngineVersion": "V25",
+    }
+    project["workbookSync"] = sync
+    sync["appHash"] = project_hash(project)
+    return project
 
 
 def status_payload(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:
@@ -200,6 +323,16 @@ def _validate_workbook_project_name(project: dict[str, Any], meta: dict[str, Any
             f"Active project: {current_name}. Workbook project: {workbook_name}. "
             "Select the correct project on the left before confirming the workbook."
         )
+
+
+def validate_workbook_matches_project(
+    project: dict[str, Any],
+    path: Path,
+) -> dict[str, Any]:
+    """Validate required sheets and project-name identity before reimport."""
+    metadata = workbook_metadata(Path(path))
+    _validate_workbook_project_name(project, metadata)
+    return metadata
 
 
 def unlink(project_id: str, project: dict[str, Any], store: Any) -> dict[str, Any]:

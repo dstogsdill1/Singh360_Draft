@@ -65,8 +65,11 @@ from core.vsdx_importer import import_vsdx
 from core.workbook_importer import import_workbook
 from core.workbook_status_sync import WorkbookSyncError, sync_project_from_workbook, sync_project_to_workbook
 from core.workbook_link_manager import (
+    claim_workbook_for_project,
     choose_path_native as choose_workbook_path_native,
     configured_workbook_path,
+    initialize_internal_workbook_link,
+    internal_workbook_path,
     maybe_pull_on_open,
     open_workbook as open_linked_workbook,
     resolve as resolve_workbook_link,
@@ -76,6 +79,8 @@ from core.workbook_link_manager import (
     status_payload,
     sync_auto as sync_workbook_auto,
     unlink as unlink_workbook,
+    validate_workbook_matches_project,
+    workbook_metadata,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -186,6 +191,10 @@ def _project_path(project_id: str) -> Path:
 # Project package store (folder-per-project with legacy fallback).
 store = ProjectStore(DOCS_DIR)
 
+_PROJECT_PROFILES = {
+    "ems": "Singh360 EMS Drawing Package",
+}
+
 
 def _load_doc(project_id: str) -> dict | None:
     _safe_id(project_id)
@@ -203,6 +212,36 @@ def _err(message: str, detail: str = "") -> dict:
     if detail:
         payload["detail"] = detail
     return payload
+
+
+def _project_profile() -> str:
+    profile = str(request.form.get("profile") or "ems").strip().casefold()
+    if profile not in _PROJECT_PROFILES:
+        supported = ", ".join(sorted(_PROJECT_PROFILES))
+        raise ValueError(
+            f"Unsupported project profile {profile!r}. Supported profiles: {supported}."
+        )
+    return profile
+
+
+def _uploaded_workbook_name(filename: str | None) -> str:
+    raw = str(filename or "").strip()
+    name = re.split(r"[\\/]", raw)[-1].strip()
+    if not name:
+        raise ValueError("Empty filename — please select an .xlsx or .xlsm file.")
+    if not name.lower().endswith((".xlsx", ".xlsm")):
+        raise ValueError("Only .xlsx and .xlsm workbooks are supported.")
+    if name in {".", ".."} or any(char in name for char in '<>:"/\\|?*'):
+        raise ValueError("The workbook filename contains unsupported characters.")
+    return name
+
+
+def _staging_dir(kind: str, token: str) -> Path:
+    root = DOCS_DIR / f".{kind}_staging"
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / token
+    path.mkdir(parents=False, exist_ok=False)
+    return path
 
 
 # --------------------------------------------------------------------------
@@ -384,84 +423,115 @@ def preview_continuation():
     if "file" not in request.files:
         return jsonify(_err("No workbook file uploaded.")), 400
     upload = request.files["file"]
-    if not upload.filename:
-        return jsonify(_err("Empty filename — please select an .xlsx or .xlsm file.")), 400
-    if not upload.filename.lower().endswith((".xlsx", ".xlsm")):
-        return jsonify(_err("Only .xlsx and .xlsm workbooks are supported.")), 400
-
-    upload_suffix = Path(upload.filename).suffix.lower()
-    temp_path = DOCS_DIR / f"preview_{uuid.uuid4().hex[:16]}{upload_suffix}"
+    stage = None
     try:
+        profile = _project_profile()
+        workbook_name = _uploaded_workbook_name(upload.filename)
+        stage = _staging_dir("project", f"preview-{uuid.uuid4().hex[:16]}")
+        temp_path = stage / workbook_name
         upload.save(temp_path)
+        workbook_metadata(temp_path)
         # No assets_dir/url_prefix → embedded images are skipped (parse-only).
         project_state = import_workbook(temp_path, project_id="preview")
+        if not project_state.get("pages"):
+            raise ValueError(
+                "The workbook parsed successfully but generated zero drawing pages."
+            )
         summary = continuation_summary(project_state.get("pages", []))
-        summary["sourceWorkbookName"] = upload.filename
-        return jsonify({"ok": True, "continuation": summary})
+        summary["sourceWorkbookName"] = workbook_name
+        return jsonify({"ok": True, "profile": profile, "continuation": summary})
+    except (WorkbookSyncError, ValueError) as exc:
+        app.logger.warning("Continuation preview rejected: %s", exc)
+        return jsonify(_err("Workbook validation failed.", str(exc))), 400
     except Exception as exc:
-        app.logger.error("Continuation preview failed: %s", exc)
-        return jsonify(_err("Failed to preview workbook.", str(exc))), 500
+        app.logger.exception("Continuation preview failed")
+        return jsonify(_err("Workbook preview failed.", str(exc))), 500
     finally:
-        try:
-            if temp_path.exists():
-                temp_path.unlink()
-        except OSError:
-            pass
+        if stage is not None:
+            shutil.rmtree(stage, ignore_errors=True)
 
 
 @app.post("/api/projects/new")
 def new_project():
-    """Bootstrap a project from an uploaded Excel workbook."""
+    """Build and atomically publish a complete project package."""
     if "file" not in request.files:
         return jsonify(_err("No workbook file uploaded.")), 400
 
     upload = request.files["file"]
-    if not upload.filename:
-        return jsonify(_err("Empty filename — please select an .xlsx or .xlsm file.")), 400
-
-    if not upload.filename.lower().endswith((".xlsx", ".xlsm")):
-        return jsonify(_err("Only .xlsx and .xlsm workbooks are supported.")), 400
-
     project_id = uuid.uuid4().hex[:16]
-    upload_suffix = Path(upload.filename).suffix.lower()
-    temp_path = DOCS_DIR / f"temp_{project_id}{upload_suffix}"
+    stage = None
 
     try:
-        upload.save(temp_path)
-        app.logger.info("Parsing workbook for new project %s", project_id)
+        profile = _project_profile()
+        workbook_name = _uploaded_workbook_name(upload.filename)
+        stage = _staging_dir("project", f"new-{project_id}-{uuid.uuid4().hex[:8]}")
+        store.ensure_folders(stage)
+        staged_workbook = stage / "sources" / "workbook" / workbook_name
+        upload.save(staged_workbook)
 
-        project_state = import_workbook(temp_path, project_id=project_id, assets_dir=store.assets_excel_dir(project_id), asset_url_prefix=f"/api/assets/{project_id}")
-        project_state["sourceWorkbookName"] = upload.filename
-        project_state["projectDisplayName"] = project_state.get("metadata", {}).get("projectName") or Path(upload.filename).stem
+        # Validate before parsing, then assign only the package-owned copy to
+        # the newly generated project ID.
+        workbook_metadata(staged_workbook)
+        claim_workbook_for_project(staged_workbook, project_id)
+        app.logger.info("Parsing staged workbook for new project %s", project_id)
+        project_state = import_workbook(
+            staged_workbook,
+            project_id=project_id,
+            assets_dir=stage / "assets" / "images" / "excel",
+            asset_url_prefix=f"/api/assets/{project_id}",
+        )
+        if not project_state.get("pages"):
+            raise ValueError(
+                "The workbook parsed successfully but generated zero drawing pages."
+            )
+        project_state["projectProfile"] = profile
+        project_state["sourceWorkbookName"] = workbook_name
+        project_state["projectDisplayName"] = (
+            project_state.get("metadata", {}).get("projectName")
+            or Path(workbook_name).stem
+        )
         project_state = ensure_project_shape(project_state)
-
-        # Persist under the project folder, and keep a copy of the source workbook.
-        store.save(project_id, project_state)
-        try:
-            wb_copy = store.sources_dir(project_id, "workbook") / upload.filename
-            wb_copy.write_bytes(temp_path.read_bytes())
-        except OSError as exc:
-            app.logger.error("Could not copy source workbook for %s: %s", project_id, exc)
+        final_dir = store.projects_dir / (
+            f"{slugify(project_state['projectDisplayName'])}__{project_id}"
+        )
+        final_workbook = final_dir / "sources" / "workbook" / workbook_name
+        project_state = initialize_internal_workbook_link(
+            project_id,
+            project_state,
+            staged_workbook,
+            configured_path=final_workbook,
+        )
+        store.activate_staged_project(project_id, project_state, stage)
+        stage = None
 
         summary = continuation_summary(project_state.get("pages", []))
-        app.logger.info("Project %s created with %d pages.", project_id, len(project_state.get("pages", [])))
-        return jsonify({"ok": True, "id": project_id, "continuation": summary})
-
-    except FileNotFoundError as exc:
-        app.logger.error("Workbook not found during parse: %s", exc)
-        return jsonify(_err("Uploaded file could not be read.", str(exc))), 500
-
+        app.logger.info(
+            "Project %s created atomically with %d pages.",
+            project_id,
+            len(project_state.get("pages", [])),
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "id": project_id,
+                "profile": profile,
+                "continuation": summary,
+            }
+        )
+    except (WorkbookSyncError, ValueError) as exc:
+        app.logger.warning(
+            "Project %s creation rejected: %s",
+            project_id,
+            exc,
+        )
+        return jsonify(_err("Project creation failed.", str(exc))), 400
     except Exception as exc:
         tb = traceback.format_exc()
-        app.logger.error("workbook import failed for project %s:\n%s", project_id, tb)
-        return jsonify(_err("Failed to parse Excel workbook.", str(exc))), 500
-
+        app.logger.error("atomic workbook import failed for project %s:\n%s", project_id, tb)
+        return jsonify(_err("Project creation failed.", str(exc))), 500
     finally:
-        try:
-            if temp_path.exists():
-                temp_path.unlink()
-        except OSError as exc:
-            app.logger.error("Could not remove temp file %s: %s", temp_path, exc)
+        if stage is not None:
+            shutil.rmtree(stage, ignore_errors=True)
 
 
 @app.get("/api/projects/<project_id>")
@@ -1104,27 +1174,30 @@ def preview_reimport_workbook(project_id: str):
     if "file" not in request.files:
         return jsonify(_err("No workbook file uploaded.")), 400
     upload = request.files["file"]
-    if not (upload.filename or "").lower().endswith((".xlsx", ".xlsm")):
-        return jsonify(_err("Only .xlsx and .xlsm workbooks are supported.")), 400
-
-    tmp_dir = store.sources_dir(project_id, "tmp")
-    tmp_path = tmp_dir / f"reimport_preview_{uuid.uuid4().hex[:8]}_{upload.filename}"
+    stage = None
     try:
+        workbook_name = _uploaded_workbook_name(upload.filename)
+        stage = _staging_dir(
+            "workbook",
+            f"preview-{project_id}-{uuid.uuid4().hex[:8]}",
+        )
+        tmp_path = stage / workbook_name
         upload.save(tmp_path)
+        validate_workbook_matches_project(doc, tmp_path)
         from core.workbook_reimport import plan_reimport
         doc = ensure_project_shape(doc)
         plan = plan_reimport(doc, tmp_path)
+    except (WorkbookSyncError, ValueError) as exc:
+        app.logger.warning("reimport preview rejected for %s: %s", project_id, exc)
+        return jsonify(_err("Workbook update preview was rejected.", str(exc))), 400
     except Exception as exc:
         tb = traceback.format_exc()
         app.logger.error("reimport preview failed for %s:\n%s", project_id, tb)
-        return jsonify(_err("Could not preview workbook re-upload.", str(exc))), 400
+        return jsonify(_err("Could not preview workbook re-upload.", str(exc))), 500
     finally:
-        try:
-            if tmp_path.exists():
-                tmp_path.unlink()
-        except OSError:
-            pass
-    return jsonify({"ok": True, "plan": plan, "filename": upload.filename})
+        if stage is not None:
+            shutil.rmtree(stage, ignore_errors=True)
+    return jsonify({"ok": True, "plan": plan, "filename": workbook_name})
 
 
 @app.post("/api/projects/<project_id>/reimport")
@@ -1145,8 +1218,6 @@ def do_reimport_workbook(project_id: str):
     if "file" not in request.files:
         return jsonify(_err("No workbook file uploaded.")), 400
     upload = request.files["file"]
-    if not (upload.filename or "").lower().endswith((".xlsx", ".xlsm")):
-        return jsonify(_err("Only .xlsx and .xlsm workbooks are supported.")), 400
 
     import json as _json
     raw_ids = request.form.get("replacePageIds", "[]")
@@ -1157,26 +1228,75 @@ def do_reimport_workbook(project_id: str):
     except (ValueError, _json.JSONDecodeError) as exc:
         return jsonify(_err("Invalid replacePageIds.", str(exc))), 400
 
-    wb_dir = store.sources_dir(project_id, "workbook")
-    wb_path = wb_dir / upload.filename
+    stage = None
     try:
-        upload.save(wb_path)
+        workbook_name = _uploaded_workbook_name(upload.filename)
+        active_dir = store.find_dir(project_id)
+        if active_dir is None:
+            abort(404)
+        stage = _staging_dir(
+            "workbook",
+            f"apply-{project_id}-{uuid.uuid4().hex[:8]}",
+        )
+        shutil.copytree(active_dir, stage, dirs_exist_ok=True)
+        staged_workbook_dir = stage / "sources" / "workbook"
+        staged_workbook_dir.mkdir(parents=True, exist_ok=True)
+        staged_workbook = staged_workbook_dir / workbook_name
+        upload.save(staged_workbook)
+        validate_workbook_matches_project(doc, staged_workbook)
+        claim_workbook_for_project(staged_workbook, project_id)
+
         from core.workbook_reimport import apply_reimport
         doc = ensure_project_shape(doc)
         doc, summary = apply_reimport(
             doc,
-            wb_path,
+            staged_workbook,
             replace_page_ids=replace_page_ids,
-            source_filename=upload.filename,
+            source_filename=workbook_name,
+            project_id=project_id,
+            assets_dir=stage / "assets" / "images" / "excel",
+            asset_url_prefix=f"/api/assets/{project_id}",
         )
+        if not doc.get("pages"):
+            raise ValueError(
+                "The workbook parsed successfully but generated zero drawing pages."
+            )
+        for old_workbook in [
+            *staged_workbook_dir.glob("*.xlsx"),
+            *staged_workbook_dir.glob("*.xlsm"),
+        ]:
+            if old_workbook.resolve() == staged_workbook.resolve():
+                continue
+            backup_dir = stage / "backups" / "workbook_reimport"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            backup_name = (
+                datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")[:-3]
+                + "_"
+                + old_workbook.name
+            )
+            shutil.move(str(old_workbook), backup_dir / backup_name)
+
         recalc_page_numbers(doc)
-        # store.save() snapshots the pre-reimport project.json into backups/
-        # before overwriting, so a bad reimport is always recoverable.
-        store.save(project_id, doc)
+        doc = ensure_project_shape(doc)
+        final_workbook = active_dir / "sources" / "workbook" / workbook_name
+        doc = initialize_internal_workbook_link(
+            project_id,
+            doc,
+            staged_workbook,
+            configured_path=final_workbook,
+        )
+        store.replace_from_staging(project_id, doc, stage)
+        stage = None
+    except (WorkbookSyncError, ValueError) as exc:
+        app.logger.warning("workbook reimport rejected for %s: %s", project_id, exc)
+        return jsonify(_err("Workbook update was rejected.", str(exc))), 400
     except Exception as exc:
         tb = traceback.format_exc()
         app.logger.error("workbook reimport failed for %s:\n%s", project_id, tb)
         return jsonify(_err("Failed to re-import workbook.", str(exc))), 500
+    finally:
+        if stage is not None:
+            shutil.rmtree(stage, ignore_errors=True)
 
     return jsonify({"ok": True, "id": project_id, "summary": summary})
 

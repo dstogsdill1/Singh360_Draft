@@ -4,20 +4,17 @@ import { applyReimportWorkbook, previewReimportWorkbook, type ReimportPlan, type
 interface Props {
   projectId: string;
   file: File;
-  onStartNew: () => void;
   onApplied: (summary: ReimportSummary) => void;
   onCancel: () => void;
 }
 
 /**
- * A workbook was selected while a project is already open. The user—not the
- * application—chooses whether to create a separate project or update the
- * current project.
+ * A workbook selected inside an open project can only update that project ID.
+ * Separate projects are created deliberately from Project Home.
  */
 export default function ReimportWorkbookModal({
   projectId,
   file,
-  onStartNew,
   onApplied,
   onCancel,
 }: Props) {
@@ -69,27 +66,24 @@ export default function ReimportWorkbookModal({
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Workbook Upload — Choose What to Do</h2>
+          <h2>Update This Project from Workbook</h2>
           <button className="modal-x" onClick={onCancel} title="Close">×</button>
         </div>
 
         <div className="modal-body">
           <p className="cw-note">
-            <strong>{file.name}</strong> can become a completely separate project, or it can update
-            the project that is currently open. Nothing is merged unless you click <strong>Update
-            This Project</strong>.
+            <strong>{file.name}</strong> will update project <strong>{projectId}</strong>.
+            The project ID and folder stay the same, and manual drawing objects are preserved by default.
           </p>
 
           <div className="cp-totals" style={{ marginBottom: 12 }}>
-            <span><strong>Start New Project</strong> — separate project ID and folder</span>
-            <span>·</span>
-            <span><strong>Update This Project</strong> — merge source pages into the open project</span>
+            <span><strong>Update This Project</strong> — rebuild workbook-driven data in the open project</span>
           </div>
 
           {loading && <p className="cp-status">Comparing workbook to the current project…</p>}
           {error && (
             <p className="cp-error">
-              Update preview failed: {error}. You may still use <strong>Start New Project</strong>.
+              Update preview failed: {error}
             </p>
           )}
 
@@ -201,15 +195,6 @@ export default function ReimportWorkbookModal({
         <div className="modal-foot">
           <button type="button" className="btn" onClick={onCancel} disabled={applying}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={onStartNew}
-            disabled={applying}
-            title="Create a separate project. The open project is not changed."
-          >
-            Start New Project
           </button>
           <button
             type="button"

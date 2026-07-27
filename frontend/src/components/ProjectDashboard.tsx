@@ -18,6 +18,7 @@ import {
   savePageInclusion,
   unlinkWorkbook,
   type ProjectListItem,
+  type ProjectProfile,
   type WorkbookLinkStatus,
   type WorkbookQualityReport,
 } from '../api/client';
@@ -75,6 +76,7 @@ export default function ProjectDashboard({ project }: Props) {
   const [qualityOpen, setQualityOpen] = useState(false);
   const [syncDecisionOpen, setSyncDecisionOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [projectProfile, setProjectProfile] = useState<ProjectProfile>('ems');
   const [libraryHealth, setLibraryHealth] = useState<{ total: number; favorites: number; needsReview: number } | null>(null);
   const newWorkbookRef = useRef<HTMLInputElement | null>(null);
 
@@ -180,7 +182,7 @@ export default function ProjectDashboard({ project }: Props) {
   const createProject = async (file: File) => {
     setBusy('Creating project');
     try {
-      const result = await createProjectFromWorkbook(file);
+      const result = await createProjectFromWorkbook(file, projectProfile);
       window.location.assign(`/app?project=${result.id}&mode=editor`);
     } catch (error) {
       setMessage(`Project creation failed: ${String(error)}`);
@@ -379,6 +381,16 @@ export default function ProjectDashboard({ project }: Props) {
         <aside className="project-list-card">
           <div className="card-head">
             <h2>Projects</h2>
+            <label>
+              Profile
+              <select
+                value={projectProfile}
+                onChange={(event) => setProjectProfile(event.target.value as ProjectProfile)}
+                aria-label="New project profile"
+              >
+                <option value="ems">EMS Drawing Package</option>
+              </select>
+            </label>
             <button type="button" onClick={confirmNewProject}>Create New Project</button>
             <input
               ref={newWorkbookRef}

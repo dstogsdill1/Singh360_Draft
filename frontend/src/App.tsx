@@ -417,9 +417,9 @@ export default function App() {
     if (!initialProjectId) return;
     void getProject(initialProjectId).then((p) => {
       const normalized = normalizeProjectAssetUrls(p);
-      lastSavedJsonRef.current = JSON.stringify(normalized);
       resetSourceEditState();
-      setProjectSync(normalized);
+      const applied = setProjectSync(normalized);
+      lastSavedJsonRef.current = JSON.stringify(applied ?? normalized);
       // S360 PAGE MANAGER DEEP LINK V1
       let savedPageId = '';
       try {
@@ -1624,9 +1624,9 @@ export default function App() {
     if (!project) return;
     try {
       const p = await getProject(project.id);
-      lastSavedJsonRef.current = JSON.stringify(p);
       resetSourceEditState();
-      setProjectSync(p);
+      const applied = setProjectSync(p);
+      lastSavedJsonRef.current = JSON.stringify(applied ?? p);
       setSaveStatus('idle');
       setSelection(null);
     } catch (err) {
@@ -1650,9 +1650,9 @@ export default function App() {
   const finishWorkbookImport = async (id: string) => {
     setPendingWorkbookFile(null);
     const p = await getProject(id);
-    lastSavedJsonRef.current = JSON.stringify(p);
     resetSourceEditState();
-    setProjectSync(p);
+    const applied = setProjectSync(p);
+    lastSavedJsonRef.current = JSON.stringify(applied ?? p);
     setSaveStatus('idle');
     const firstPage = p.pages?.[0];
     setActivePageId(firstPage?.id ?? null);
@@ -1666,9 +1666,9 @@ export default function App() {
       const ok = await ensureSavedBeforeNavigation();
       if (!ok) return;
       const p = await getProject(id);
-      lastSavedJsonRef.current = JSON.stringify(p);
       resetSourceEditState();
-      setProjectSync(p);
+      const applied = setProjectSync(p);
+      lastSavedJsonRef.current = JSON.stringify(applied ?? p);
       setSaveStatus('idle');
       const firstPage = p.pages?.[0];
     setActivePageId(firstPage?.id ?? null);
@@ -1691,9 +1691,9 @@ export default function App() {
     if (!project) return;
     try {
       const p = await getProject(project.id);
-      lastSavedJsonRef.current = JSON.stringify(p);
       resetSourceEditState();
-      setProjectSync(p);
+      const applied = setProjectSync(p);
+      lastSavedJsonRef.current = JSON.stringify(applied ?? p);
       if (replacedPageId) {
         setActivePageId(replacedPageId);
       } else if (pageIds.length) {
@@ -1708,9 +1708,9 @@ export default function App() {
   // Restore a project (from a server backup or local recovery snapshot) into the
   // live editor and re-baseline the save manager so status is accurate.
   const applyRestoredProject = (p: ProjectModel) => {
-    lastSavedJsonRef.current = JSON.stringify(p);
     resetSourceEditState();
-    setProjectSync(p);
+    const applied = setProjectSync(p);
+    lastSavedJsonRef.current = JSON.stringify(applied ?? p);
     const firstPage = p.pages?.[0];
     setActivePageId(firstPage?.id ?? activePageId);
     setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? p.worksheets?.[0]?.id);
@@ -2403,11 +2403,6 @@ export default function App() {
       <ReimportWorkbookModal
         projectId={project.id}
         file={pendingReimportFile}
-        onStartNew={() => {
-          const nextFile = pendingReimportFile;
-          setPendingReimportFile(null);
-          if (nextFile) setPendingWorkbookFile(nextFile);
-        }}
         onApplied={() => void onReimportedWorkbook()}
         onCancel={() => setPendingReimportFile(null)}
       />

@@ -1,5 +1,16 @@
 import type { ProjectModel, PageModel } from '../model/types';
 
+async function exactApiError(response: Response): Promise<Error> {
+  const text = await response.text();
+  try {
+    const payload = JSON.parse(text) as { error?: string; detail?: string };
+    const message = [payload.error, payload.detail].filter(Boolean).join(' ');
+    return new Error(message || `${response.status} ${response.statusText}`);
+  } catch {
+    return new Error(text || `${response.status} ${response.statusText}`);
+  }
+}
+
 export interface ProjectListItem {
   id: string;
   projectName: string;
@@ -90,20 +101,30 @@ export interface ContinuationSummary {
   sourceWorkbookName?: string;
 }
 
-export async function previewWorkbookContinuation(file: File): Promise<ContinuationSummary> {
+export type ProjectProfile = 'ems';
+
+export async function previewWorkbookContinuation(
+  file: File,
+  profile: ProjectProfile = 'ems',
+): Promise<ContinuationSummary> {
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('profile', profile);
   const res = await fetch('/api/projects/preview-continuation', { method: 'POST', body: fd });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw await exactApiError(res);
   const json = await res.json();
   return json.continuation as ContinuationSummary;
 }
 
-export async function createProjectFromWorkbook(file: File): Promise<{ id: string; continuation?: ContinuationSummary }> {
+export async function createProjectFromWorkbook(
+  file: File,
+  profile: ProjectProfile = 'ems',
+): Promise<{ id: string; continuation?: ContinuationSummary }> {
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('profile', profile);
   const res = await fetch('/api/projects/new', { method: 'POST', body: fd });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw await exactApiError(res);
   return res.json();
 }
 
@@ -194,7 +215,7 @@ export async function previewReimportWorkbook(
   const fd = new FormData();
   fd.append('file', file);
   const res = await fetch(`/api/projects/${projectId}/reimport/preview`, { method: 'POST', body: fd });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw await exactApiError(res);
   return res.json();
 }
 
@@ -207,7 +228,7 @@ export async function applyReimportWorkbook(
   fd.append('file', file);
   fd.append('replacePageIds', JSON.stringify(replacePageIds));
   const res = await fetch(`/api/projects/${projectId}/reimport`, { method: 'POST', body: fd });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw await exactApiError(res);
   return res.json();
 }
 

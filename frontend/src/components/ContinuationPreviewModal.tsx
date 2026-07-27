@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { createProjectFromWorkbook, previewWorkbookContinuation, type ContinuationSummary } from '../api/client';
+import {
+  createProjectFromWorkbook,
+  previewWorkbookContinuation,
+  type ContinuationSummary,
+  type ProjectProfile,
+} from '../api/client';
 
 interface Props {
   file: File;
@@ -14,23 +19,24 @@ export default function ContinuationPreviewModal({ file, onImported, onCancel }:
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
+  const [profile, setProfile] = useState<ProjectProfile>('ems');
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setError('');
-    previewWorkbookContinuation(file)
+    previewWorkbookContinuation(file, profile)
       .then((s) => { if (alive) setSummary(s); })
       .catch((e) => { if (alive) setError(String(e)); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [file]);
+  }, [file, profile]);
 
   const confirmImport = async () => {
     setImporting(true);
     setError('');
     try {
-      const { id } = await createProjectFromWorkbook(file);
+      const { id } = await createProjectFromWorkbook(file, profile);
       onImported(id);
     } catch (e) {
       setError(String(e));
@@ -55,6 +61,16 @@ export default function ContinuationPreviewModal({ file, onImported, onCancel }:
             only when a table truly overflows the printable body after fit-to-width scaling.
           </p>
           <p className="cp-file"><strong>{file.name}</strong></p>
+          <label>
+            Project profile
+            <select
+              value={profile}
+              onChange={(event) => setProfile(event.target.value as ProjectProfile)}
+              disabled={loading || importing}
+            >
+              <option value="ems">Singh360 EMS Drawing Package</option>
+            </select>
+          </label>
 
           {loading && <p className="cp-status">Analyzing workbook…</p>}
           {error && <p className="cp-error">{error}</p>}

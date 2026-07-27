@@ -8,7 +8,10 @@ migrates them on the next save.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -138,9 +141,16 @@ class ProjectStore:
         # bad save or accidental change can always be recovered.
         self._backup_before_write(project_dir, target)
 
-        target.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        temp_target = target.with_name(
+            f".project-{uuid.uuid4().hex[:8]}.json.tmp"
         )
+        try:
+            temp_target.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            os.replace(temp_target, target)
+        finally:
+            temp_target.unlink(missing_ok=True)
         # S360 INCREMENTAL SAFETY V12
         # The complete prior project.json is already backed up above. Writing a
         # separate snapshot for every page on every autosave created hundreds
@@ -154,6 +164,94 @@ class ProjectStore:
         except OSError:
             pass
         return project_dir / "project.json"
+
+    def activate_staged_project(
+        self,
+        project_id: str,
+        data: dict[str, Any],
+        staging_dir: Path,
+    ) -> Path:
+        """Atomically publish a fully-built package into Project Home.
+
+        ``staging_dir`` must already contain every source and generated asset.
+        No folder matching the project ID is created under ``projects/`` until
+        the final rename succeeds.
+        """
+        staging_dir = Path(staging_dir).resolve()
+        docs_dir = self.docs.resolve()
+        if docs_dir not in staging_dir.parents:
+            raise ValueError("Project staging directory must be inside .docs.")
+        if self.find_dir(project_id) is not None:
+            raise FileExistsError(f"Project {project_id} already exists.")
+
+        display_name = self._display_name(data, project_id)
+        final_dir = self.projects_dir / f"{slugify(display_name)}__{project_id}"
+        if final_dir.exists():
+            raise FileExistsError(str(final_dir))
+
+        self.ensure_folders(staging_dir)
+        data["projectFolder"] = str(final_dir)
+        data["projectSlug"] = final_dir.name.split("__", 1)[0]
+        data["projectDisplayName"] = display_name
+        data["lastSavedAt"] = _utcnow()
+        project_json = staging_dir / "project.json"
+        temp_json = staging_dir / f".project-{uuid.uuid4().hex[:8]}.json.tmp"
+        try:
+            temp_json.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(temp_json, project_json)
+            staging_dir.rename(final_dir)
+        except Exception:
+            temp_json.unlink(missing_ok=True)
+            raise
+        return final_dir / "project.json"
+
+    def replace_from_staging(
+        self,
+        project_id: str,
+        data: dict[str, Any],
+        staging_dir: Path,
+    ) -> Path:
+        """Swap a fully prepared clone into an existing project ID."""
+        current_dir = self.find_dir(project_id)
+        if current_dir is None:
+            raise FileNotFoundError(project_id)
+        staging_dir = Path(staging_dir).resolve()
+        docs_dir = self.docs.resolve()
+        if docs_dir not in staging_dir.parents:
+            raise ValueError("Project staging directory must be inside .docs.")
+        if current_dir.resolve() == staging_dir:
+            raise ValueError("Staging directory cannot be the active project.")
+
+        self.ensure_folders(staging_dir)
+        data["projectFolder"] = str(current_dir)
+        data["projectSlug"] = current_dir.name.split("__", 1)[0]
+        data["projectDisplayName"] = self._display_name(data, project_id)
+        data["lastSavedAt"] = _utcnow()
+        target = staging_dir / "project.json"
+        self._backup_before_write(staging_dir, target)
+        temp_json = staging_dir / f".project-{uuid.uuid4().hex[:8]}.json.tmp"
+        rollback_dir = current_dir.with_name(
+            f".{current_dir.name}.rollback-{uuid.uuid4().hex[:8]}"
+        )
+        try:
+            temp_json.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(temp_json, target)
+            current_dir.rename(rollback_dir)
+            try:
+                staging_dir.rename(current_dir)
+            except Exception:
+                rollback_dir.rename(current_dir)
+                raise
+            shutil.rmtree(rollback_dir, ignore_errors=True)
+        finally:
+            temp_json.unlink(missing_ok=True)
+        return current_dir / "project.json"
 
     # ── backups / recovery ───────────────────────────────────────────────
     _MAX_BACKUPS = 20

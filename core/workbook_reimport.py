@@ -193,6 +193,9 @@ def apply_reimport(
     *,
     replace_page_ids: list[str] | None = None,
     source_filename: str | None = None,
+    project_id: str | None = None,
+    assets_dir: str | Path | None = None,
+    asset_url_prefix: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Apply a Phase E safe reimport. Returns ``(updated_project, summary)``.
 
@@ -202,7 +205,12 @@ def apply_reimport(
     """
     replace_ids = set(replace_page_ids or [])
     plan = plan_reimport(existing_project, new_workbook_path)
-    candidate = import_workbook(new_workbook_path, project_id="__reimport_apply__")
+    candidate = import_workbook(
+        new_workbook_path,
+        project_id=project_id or str(existing_project.get("id") or "__reimport_apply__"),
+        assets_dir=assets_dir,
+        asset_url_prefix=asset_url_prefix,
+    )
     candidate_pages_by_id = {p["id"]: p for p in candidate.get("pages", [])}
 
     pages = [dict(p) for p in existing_project.get("pages", [])]
@@ -290,6 +298,12 @@ def apply_reimport(
     updated_project = dict(existing_project)
     updated_project["pages"] = kept_pages
     updated_project["archivedPages"] = archived_pages
+    updated_project["worksheets"] = candidate.get("worksheets", [])
+    metadata = dict(existing_project.get("metadata") or {})
+    metadata.update(dict(candidate.get("metadata") or {}))
+    metadata["sourceFile"] = source_filename or Path(new_workbook_path).name
+    updated_project["metadata"] = metadata
+    updated_project["importWarnings"] = candidate.get("importWarnings", [])
     history_entry = {
         "sourceFile": source_filename or Path(new_workbook_path).name,
         "importedAt": _ts(),

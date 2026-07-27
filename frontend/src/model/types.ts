@@ -272,6 +272,7 @@ export interface ProjectModel {
   lastSavedAt?: string;
   projectFolder?: string;
   projectDisplayName?: string;
+  projectProfile?: 'ems';
   sourceWorkbookName?: string;
   paginationLocked?: boolean;
   workbookSync?: {
