@@ -68,6 +68,11 @@ _REBUILD_FIELDS = (
     "trimBlankRows",
     "trimBlankColumns",
     "linkedWorksheetId",
+    "recipeWorksheetId",
+    "requiredCanonicalSources",
+    "missingCanonicalSources",
+    "canonicalDataRowCount",
+    "recipeOnly",
     "blocks",
     "layoutWarnings",
 )
@@ -94,6 +99,22 @@ def is_manual_page(page: dict[str, Any]) -> bool:
     return False
 
 
+def _is_manual_layout_page(page: dict[str, Any]) -> bool:
+    """True when the page itself is manual, not merely its overlay layer.
+
+    A source-driven cover/table can safely regenerate its blocks while
+    preserving ``canvasObjects`` because those objects are excluded from
+    ``_REBUILD_FIELDS``. Canvas/underlay/hybrid pages remain whole-page
+    preserves.
+    """
+    if page.get("pageType") in _MANUAL_PAGE_TYPES:
+        return True
+    return any(
+        block.get("type") in ("imagePlaceholder", "underlayPlaceholder", "canvas")
+        for block in page.get("blocks") or []
+    )
+
+
 def _match_key_code(page: dict[str, Any]) -> str:
     code = (page.get("displaySheetCode") or page.get("sheetCode") or "").strip().lower()
     return code if code and code not in ("new", "tbd") else ""
@@ -104,7 +125,7 @@ def _match_key_title(page: dict[str, Any]) -> str:
 
 
 def _classify(page: dict[str, Any]) -> str:
-    return "manual" if is_manual_page(page) else "source"
+    return "manual" if _is_manual_layout_page(page) else "source"
 
 
 def plan_reimport(existing_project: dict[str, Any], new_workbook_path: str | Path) -> dict[str, Any]:

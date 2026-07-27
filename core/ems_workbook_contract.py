@@ -40,6 +40,7 @@ class CanonicalSource:
     names: tuple[str, ...]
     filter_column: str = ""
     filter_value: str = ""
+    view: str = ""
 
     @property
     def canonical_name(self) -> str:
@@ -76,23 +77,38 @@ def canonical_sources_for_page(
         return (FRONT_MATTER_SOURCES[code],)
     if code == "10.0" or "bill of materials" in text:
         return (CanonicalSource(("29_BOM", "19_BILL_OF_MATERIALS")),)
-    if code in {"12.1", "17.0", "23.0"}:
+    if code in {"12.1", "17.0"}:
         return (
             CanonicalSource(("24_REFRIG_CIRCUITS", "14_REFRIG_CIRCUITS")),
             CanonicalSource(("25_RACKS", "15_RACKS")),
+        )
+    if code == "23.0":
+        return (
+            CanonicalSource(
+                ("20_CONTROLLERS", "10_CONTROLLERS"),
+                view="case_controllers",
+            ),
         )
     if code in {"18.0", "19.0", "20.0"}:
         rack = {"18.0": "A", "19.0": "B", "20.0": "C"}[code]
         return (
             CanonicalSource(
-                ("24_REFRIG_CIRCUITS", "14_REFRIG_CIRCUITS"),
-                "System No.",
-                f"R{rack}",
+                ("23_PANEL_IO", "13_PANEL_IO"),
+                filter_value=rack,
+                view="rack_io",
             ),
-            CanonicalSource(("25_RACKS", "15_RACKS"), "Rack ID", f"R{rack}"),
         )
     if code == "13.0":
-        return (CanonicalSource(("21_NETWORK_PORTS", "11_NETWORK_PORTS")),)
+        return (
+            CanonicalSource(
+                ("21_NETWORK_PORTS", "11_NETWORK_PORTS"),
+                view="network_summary",
+            ),
+            CanonicalSource(
+                ("22_PANELS", "12_PANELS"),
+                view="wicp_count_summary",
+            ),
+        )
     if code in {"13.1", "13.2", "13.3"}:
         idf = code.rsplit(".", 1)[-1]
         return (
@@ -104,13 +120,32 @@ def canonical_sources_for_page(
         )
     if code == "14.0":
         return (CanonicalSource(("28_CABLE_PULLS", "18_CABLE_SCHEDULE")),)
-    if code in {"21.0", "22.0"}:
+    if code == "21.0":
         return (
-            CanonicalSource(("22_PANELS", "12_PANELS")),
-            CanonicalSource(("23_PANEL_IO", "13_PANEL_IO")),
+            CanonicalSource(
+                ("22_PANELS", "12_PANELS"),
+                view="wicp_count_summary",
+            ),
+        )
+    if code == "22.0":
+        return (
+            CanonicalSource(
+                ("23_PANEL_IO", "13_PANEL_IO"),
+                view="wicp_io",
+            ),
         )
     if code in {"24.0", "24.1", "24.2"}:
-        return (CanonicalSource(("26_LIGHTING_OUTPUTS", "17_LIGHTING_OUTPUTS")),)
+        view = {
+            "24.0": "lighting_matrix",
+            "24.1": "lighting_io",
+            "24.2": "lighting_dimming",
+        }[code]
+        return (
+            CanonicalSource(
+                ("26_LIGHTING_OUTPUTS", "17_LIGHTING_OUTPUTS"),
+                view=view,
+            ),
+        )
     if code == "25.0":
         return (CanonicalSource(("27_HVAC_EQUIPMENT", "16_HVAC_EQUIPMENT")),)
     if code == "26.0":

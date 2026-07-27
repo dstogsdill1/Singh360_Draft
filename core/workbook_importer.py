@@ -589,6 +589,405 @@ def _filtered_canonical_payload(
     return out, data_rows
 
 
+def _header_column(headers: list[str], *aliases: str) -> int:
+    normalized = {
+        " ".join(str(header or "").split()).strip().casefold(): index
+        for index, header in enumerate(headers)
+    }
+    for alias in aliases:
+        index = normalized.get(alias.casefold())
+        if index is not None:
+            return index
+    return -1
+
+
+def _row_value(row: list[Any], headers: list[str], *aliases: str) -> str:
+    index = _header_column(headers, *aliases)
+    if index < 0 or index >= len(row):
+        return ""
+    return str(row[index] or "").strip()
+
+
+def _canonical_table_rows(ws: dict[str, Any]) -> tuple[int | None, list[str], list[list[Any]]]:
+    grid = ws.get("grid") or []
+    header_idx = header_row_index(grid)
+    if header_idx is None:
+        return None, [], []
+    headers = [str(value or "").strip() for value in grid[header_idx]]
+    rows = [
+        list(row)
+        for row in grid[header_idx + 1 :]
+        if any(str(value or "").strip() for value in row)
+    ]
+    return header_idx, headers, rows
+
+
+def _unique_join(values: list[str], *, keep_tbd: bool = True) -> str:
+    out: list[str] = []
+    for raw in values:
+        value = " ".join(str(raw or "").split()).strip()
+        if not value or value in {"-"}:
+            continue
+        if not keep_tbd and value.casefold() in {"tbd", "verify"}:
+            continue
+        if value.casefold() not in {item.casefold() for item in out}:
+            out.append(value)
+    return ", ".join(out)
+
+
+def _project_canonical_payload(
+    ws: dict[str, Any],
+    *,
+    title: str,
+    subtitle: str,
+    headers: list[str],
+    rows: list[list[Any]],
+    source_columns: list[int | None] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Build a styled publish-only projection without mutating its source."""
+    source_header_idx = header_row_index(ws.get("grid") or []) or 3
+    source_columns = list(source_columns or [None] * len(headers))
+    while len(source_columns) < len(headers):
+        source_columns.append(None)
+
+    width_px = list(ws.get("colWidthsPx") or [])
+    projected_widths = [
+        (
+            width_px[source_index]
+            if source_index is not None and 0 <= source_index < len(width_px)
+            else max(76, min(220, 16 + len(header) * 8))
+        )
+        for header, source_index in zip(headers, source_columns)
+    ]
+
+    source_styles = ws.get("styles") or {}
+    projected_styles: dict[str, Any] = {}
+
+    def source_style(row_index: int, column_index: int | None) -> dict[str, Any] | None:
+        candidates = [column_index, 0] if column_index is not None else [0]
+        for candidate in candidates:
+            if candidate is None or candidate < 0:
+                continue
+            key = f"{get_column_letter(candidate + 1)}{row_index + 1}"
+            style = source_styles.get(key)
+            if style:
+                return deepcopy(style)
+        return None
+
+    role_rows = {
+        0: 0,
+        1: 1,
+        2: 2,
+        3: source_header_idx,
+    }
+    for new_row, old_row in role_rows.items():
+        for new_col, source_col in enumerate(source_columns):
+            style = source_style(old_row, source_col)
+            if style:
+                projected_styles[f"{get_column_letter(new_col + 1)}{new_row + 1}"] = style
+    for new_row in range(4, 4 + len(rows)):
+        for new_col, source_col in enumerate(source_columns):
+            style = source_style(source_header_idx + 1, source_col)
+            if style:
+                projected_styles[f"{get_column_letter(new_col + 1)}{new_row + 1}"] = style
+
+    grid = [
+        [title, *([""] * max(0, len(headers) - 1))],
+        [subtitle, *([""] * max(0, len(headers) - 1))],
+        [""] * max(1, len(headers)),
+        list(headers),
+        *[
+            [str(value or "").strip() for value in row[: len(headers)]]
+            + [""] * max(0, len(headers) - len(row))
+            for row in rows
+        ],
+    ]
+    row_heights_px = [28, 22, 10, 24, *([22] * len(rows))]
+    out = {
+        **dict(ws),
+        "grid": grid,
+        "formulas": [[""] * len(headers) for _ in grid],
+        "styles": projected_styles,
+        "mergedCells": [],
+        "rowHeights": {},
+        "columnWidths": projected_widths,
+        "colWidthsPx": projected_widths,
+        "rowHeightsPx": row_heights_px,
+        "sourceRange": (
+            f"A1:{get_column_letter(max(1, len(headers)))}{max(1, len(grid))}"
+        ),
+        "printArea": None,
+    }
+    return out, len(rows)
+
+
+def _rack_row_matches(row: list[Any], headers: list[str], rack: str) -> bool:
+    letter = str(rack or "").strip().upper()
+    if letter not in {"A", "B", "C"}:
+        return False
+    fields = [
+        _row_value(row, headers, "Panel ID"),
+        _row_value(row, headers, "I/O Group"),
+        _row_value(row, headers, "Device / Case"),
+        _row_value(row, headers, "Description"),
+    ]
+    for field in fields:
+        compact = re.sub(r"[^A-Z0-9]+", "", field.upper())
+        if compact in {letter, f"R{letter}", f"RACK{letter}"}:
+            return True
+        if compact.startswith(f"RACK{letter}"):
+            return True
+        if compact.startswith(f"R{letter}") and not compact.startswith("RACK"):
+            return True
+    return False
+
+
+def _canonical_view_payload(
+    ws: dict[str, Any],
+    *,
+    view: str,
+    filter_value: str = "",
+) -> tuple[dict[str, Any], int]:
+    """Project one canonical table into its page-specific output view."""
+    _header_idx, source_headers, source_rows = _canonical_table_rows(ws)
+    if not source_headers:
+        return dict(ws), 0
+
+    def columns(*names: str) -> list[int | None]:
+        return [
+            (index if index >= 0 else None)
+            for index in (_header_column(source_headers, name) for name in names)
+        ]
+
+    def selected(row: list[Any], names: list[str]) -> list[str]:
+        return [_row_value(row, source_headers, name) for name in names]
+
+    if view == "network_summary":
+        grouped: dict[tuple[str, str], list[list[Any]]] = {}
+        for row in source_rows:
+            key = (
+                _row_value(row, source_headers, "IDF"),
+                _row_value(row, source_headers, "Switch"),
+            )
+            grouped.setdefault(key, []).append(row)
+        rows: list[list[Any]] = []
+        def summary_sort_key(item: tuple[tuple[str, str], list[list[Any]]]) -> tuple[Any, ...]:
+            return tuple(
+                (0, int(value)) if str(value).isdigit() else (1, str(value).casefold())
+                for value in item[0]
+            )
+
+        for (idf, switch), items in sorted(grouped.items(), key=summary_sort_key):
+            spare = 0
+            for item in items:
+                marker = " ".join(
+                    (
+                        _row_value(item, source_headers, "Label"),
+                        _row_value(item, source_headers, "Device / Drop"),
+                    )
+                ).casefold()
+                if not marker.strip() or "spare" in marker or "placeholder" in marker:
+                    spare += 1
+            rows.append(
+                [
+                    idf,
+                    switch,
+                    len(items),
+                    len(items) - spare,
+                    spare,
+                    _unique_join(
+                        [_row_value(item, source_headers, "Network") for item in items]
+                    ),
+                    _unique_join(
+                        [_row_value(item, source_headers, "Status") for item in items]
+                    ),
+                ]
+            )
+        return _project_canonical_payload(
+            ws,
+            title="NETWORK / WICP SUMMARY",
+            subtitle="Port totals summarized by IDF and switch; detailed ports remain on EMS 13.1–13.3.",
+            headers=["IDF", "Switch", "Port Count", "Assigned", "Spare / TBD", "Network", "Status"],
+            rows=rows,
+            source_columns=columns("IDF", "Switch", "Port", "Label", "Label", "Network", "Status"),
+        )
+
+    if view == "wicp_count_summary":
+        wicp_rows = [
+            row
+            for row in source_rows
+            if (
+                _row_value(row, source_headers, "Panel Type").casefold() == "wicp"
+                or _row_value(row, source_headers, "Panel ID").casefold().startswith("wicp")
+            )
+        ]
+        rows = []
+        if wicp_rows:
+            rows.append(
+                [
+                    "WICP",
+                    len(wicp_rows),
+                    _unique_join(
+                        [_row_value(row, source_headers, "Panel ID") for row in wicp_rows]
+                    ),
+                    _unique_join(
+                        [_row_value(row, source_headers, "Location") for row in wicp_rows],
+                        keep_tbd=False,
+                    )
+                    or "TBD",
+                    _unique_join(
+                        [_row_value(row, source_headers, "Status") for row in wicp_rows]
+                    ),
+                ]
+            )
+        return _project_canonical_payload(
+            ws,
+            title="WICP COUNT SUMMARY",
+            subtitle="Panel/count data from 22_PANELS only.",
+            headers=["Panel Type", "Count", "Panel IDs", "Location", "Status"],
+            rows=rows,
+            source_columns=columns("Panel Type", "Panel ID", "Panel ID", "Location", "Status"),
+        )
+
+    if view in {"rack_io", "wicp_io"}:
+        if view == "rack_io":
+            filtered = [
+                row for row in source_rows if _rack_row_matches(row, source_headers, filter_value)
+            ]
+            title = f"RACK {filter_value.upper()} I/O SCHEDULE"
+            subtitle = f"I/O rows from 23_PANEL_IO filtered to Rack {filter_value.upper()}."
+        else:
+            filtered = [
+                row
+                for row in source_rows
+                if _row_value(row, source_headers, "Panel ID").casefold().startswith("wicp")
+            ]
+            title = "WICP I/O SCHEDULE"
+            subtitle = "I/O rows from 23_PANEL_IO only."
+        names = [
+            "Panel ID",
+            "Controller ID",
+            "I/O Group",
+            "Point No.",
+            "Point Type",
+            "Point Label",
+            "Description",
+            "Device / Case",
+            "Cable / Terminal",
+            "Status",
+        ]
+        return _project_canonical_payload(
+            ws,
+            title=title,
+            subtitle=subtitle,
+            headers=names,
+            rows=[selected(row, names) for row in filtered],
+            source_columns=columns(*names),
+        )
+
+    if view == "case_controllers":
+        filtered = []
+        for row in source_rows:
+            marker = " ".join(
+                (
+                    _row_value(row, source_headers, "Controller ID"),
+                    _row_value(row, source_headers, "Controller Label"),
+                    _row_value(row, source_headers, "Controller Type"),
+                    _row_value(row, source_headers, "Panel / Location"),
+                )
+            ).casefold()
+            controller_id = _row_value(row, source_headers, "Controller ID").upper()
+            if "case" in marker or "refrig" in marker or controller_id.startswith("CC"):
+                filtered.append(row)
+        names = [
+            "Controller ID",
+            "Controller Label",
+            "Controller Type",
+            "Panel / Location",
+            "Network / IDF",
+            "IP Address",
+            "Source ID",
+            "Status",
+            "Notes",
+        ]
+        return _project_canonical_payload(
+            ws,
+            title="CASE CONTROLLER SCHEDULE",
+            subtitle="Case-controller records from 20_CONTROLLERS only.",
+            headers=names,
+            rows=[selected(row, names) for row in filtered],
+            source_columns=columns(*names),
+        )
+
+    lighting_views = {
+        "lighting_matrix": (
+            "LIGHTING OUTPUT MATRIX",
+            "All lighting outputs organized by zone, area, schedule, and point.",
+            [
+                "Output / Zone",
+                "Description",
+                "Area / Fixture Group",
+                "Schedule / Time",
+                "Output Type",
+                "Panel",
+                "Point",
+                "Status",
+            ],
+        ),
+        "lighting_io": (
+            "LIGHTING TDB I/O SCHEDULE",
+            "Controller, panel, and point view from 26_LIGHTING_OUTPUTS.",
+            [
+                "Controller ID",
+                "Panel",
+                "Point",
+                "Output Type",
+                "Output / Zone",
+                "Description",
+                "Source ID",
+                "Status",
+            ],
+        ),
+        "lighting_dimming": (
+            "LIGHTING CONTROL / DIMMING SCHEDULE",
+            "Dimming and analog-control outputs from 26_LIGHTING_OUTPUTS.",
+            [
+                "Output / Zone",
+                "Output Type",
+                "Description",
+                "Area / Fixture Group",
+                "Schedule / Time",
+                "Controller ID",
+                "Panel",
+                "Point",
+                "Status",
+                "Notes",
+            ],
+        ),
+    }
+    if view in lighting_views:
+        title, subtitle, names = lighting_views[view]
+        filtered = source_rows
+        if view == "lighting_dimming":
+            filtered = []
+            for row in source_rows:
+                output_type = _row_value(row, source_headers, "Output Type").casefold()
+                output = _row_value(row, source_headers, "Output / Zone").upper()
+                point = _row_value(row, source_headers, "Point").upper()
+                if "dimm" in output_type or output.startswith("D") or point.startswith(("AI", "AO")):
+                    filtered.append(row)
+        return _project_canonical_payload(
+            ws,
+            title=title,
+            subtitle=subtitle,
+            headers=names,
+            rows=[selected(row, names) for row in filtered],
+            source_columns=columns(*names),
+        )
+
+    return _filtered_canonical_payload(ws)
+
+
 def _cover_block(metadata: dict[str, Any], source_ws_id: str) -> dict[str, Any]:
     """Build the cover from bound metadata only, never from recipe instructions."""
     rows = []
@@ -612,6 +1011,242 @@ def _cover_block(metadata: dict[str, Any], source_ws_id: str) -> dict[str, Any]:
         "editable": True,
         "metadataBound": True,
     }
+
+
+def _grid_header_index(ws: dict[str, Any] | None, required: set[str]) -> int | None:
+    if not ws:
+        return None
+    wanted = {value.casefold() for value in required}
+    for index, row in enumerate((ws.get("grid") or [])[:30]):
+        present = {
+            " ".join(str(value or "").split()).strip().casefold()
+            for value in row
+            if str(value or "").strip()
+        }
+        if wanted.issubset(present):
+            return index
+    return None
+
+
+def _append_virtual_canonical_worksheet(
+    project: dict[str, Any],
+    *,
+    name: str,
+    headers: list[str],
+    rows: list[list[Any]],
+    derived_from: list[str],
+) -> None:
+    donor = next(
+        (
+            worksheet
+            for worksheet in project.get("worksheets") or []
+            if header_row_index(worksheet.get("grid") or []) is not None
+            and not is_recipe_grid(worksheet.get("grid") or [])
+        ),
+        None,
+    )
+    if donor is None:
+        return
+    payload, _count = _project_canonical_payload(
+        donor,
+        title=name.replace("_", " "),
+        subtitle=(
+            "Dedicated canonical app table derived from existing workbook authority; "
+            "unknown project values remain blank, TBD, or VERIFY."
+        ),
+        headers=headers,
+        rows=rows,
+    )
+    worksheet_id = f"ws_virtual_{re.sub(r'[^a-z0-9]+', '_', name.casefold()).strip('_')}"
+    payload.update(
+        {
+            "id": worksheet_id,
+            "name": name,
+            "sourceId": donor.get("sourceId", ""),
+            "visible": True,
+            "classHint": "canonical-derived",
+            "sourceSheet": name,
+            "embeddedImages": [],
+            "virtualCanonicalSource": True,
+            "provenance": {
+                "sheet": name,
+                "derivedFrom": list(derived_from),
+                "authority": "existing workbook values",
+            },
+        }
+    )
+    project.setdefault("worksheets", []).append(payload)
+
+
+def _ensure_front_matter_canonical_sources(project: dict[str, Any]) -> None:
+    """Restore missing front-matter tables in app data without writing Excel."""
+    worksheets = {
+        str(item.get("name") or "").casefold(): item
+        for item in project.get("worksheets") or []
+    }
+    aliases = {
+        "32_GUIDELINES": ("32_guidelines", "92_guidelines"),
+        "33_ABBREVIATIONS": ("33_abbreviations", "93_abbreviations"),
+        "34_PROJECT_DIRECTORY": ("34_project_directory", "04_project_directory"),
+        "36_WORKFLOW_MILESTONES": ("36_workflow_milestones", "06_workflow_milestones"),
+        "37_RESPONSIBILITY_MATRIX": ("37_responsibility_matrix", "05_responsibility_matrix"),
+    }
+
+    def missing(name: str) -> bool:
+        return not any(alias in worksheets for alias in aliases[name])
+
+    help_ws = worksheets.get("00_help")
+    help_header = _grid_header_index(help_ws, {"Step", "Workflow", "What goes here", "Rule"})
+    if missing("32_GUIDELINES") and help_ws is not None and help_header is not None:
+        help_headers = [str(value or "").strip() for value in help_ws["grid"][help_header]]
+        rows = []
+        for row in help_ws["grid"][help_header + 1 :]:
+            if not any(str(value or "").strip() for value in row):
+                continue
+            rows.append(
+                [
+                    _row_value(row, help_headers, "Step"),
+                    _row_value(row, help_headers, "Workflow"),
+                    _row_value(row, help_headers, "What goes here"),
+                    "",
+                    _row_value(row, help_headers, "Rule"),
+                ]
+            )
+        if rows:
+            _append_virtual_canonical_worksheet(
+                project,
+                name="32_GUIDELINES",
+                headers=["Guideline ID", "Topic", "Requirement", "Status", "Notes"],
+                rows=rows,
+                derived_from=["00_HELP"],
+            )
+
+    if missing("33_ABBREVIATIONS"):
+        _append_virtual_canonical_worksheet(
+            project,
+            name="33_ABBREVIATIONS",
+            headers=["Abbreviation", "Meaning", "Symbol / Tag", "Notes"],
+            rows=[
+                ["EMS", "Energy Management System", "EMS", ""],
+                ["IDF", "Intermediate Distribution Frame", "IDF", ""],
+                ["I/O", "Input / Output", "I/O", ""],
+                ["HVAC", "Heating, Ventilation, and Air Conditioning", "HVAC", ""],
+                ["BOM", "Bill of Materials", "BOM", ""],
+                ["LCP", "Lighting Control Panel", "LCP", ""],
+                ["WICP", "VERIFY project-specific expansion", "WICP", "Panel tag used by this package."],
+            ],
+            derived_from=["canonical workbook terminology"],
+        )
+
+    meta_ws = worksheets.get("00_project_meta")
+    metadata_values: dict[str, str] = {}
+    if meta_ws:
+        for row in meta_ws.get("grid") or []:
+            if not row:
+                continue
+            key = " ".join(str(row[0] or "").split()).strip().casefold()
+            if key:
+                metadata_values[key] = (
+                    " ".join(str(row[1] or "").split()).strip() if len(row) > 1 else ""
+                )
+    if missing("34_PROJECT_DIRECTORY"):
+        organization = (
+            metadata_values.get("store / customer")
+            or str((project.get("metadata") or {}).get("client") or "").strip()
+            or metadata_values.get("project name")
+        )
+        rows = (
+            [[
+                organization,
+                "Store / Customer",
+                "",
+                "",
+                "",
+                metadata_values.get("location", ""),
+            ]]
+            if organization
+            else []
+        )
+        if rows:
+            _append_virtual_canonical_worksheet(
+                project,
+                name="34_PROJECT_DIRECTORY",
+                headers=["Organization", "Role", "Contact", "Phone", "Email", "Notes"],
+                rows=rows,
+                derived_from=["00_PROJECT_META"],
+            )
+
+    scope_ws = worksheets.get("03_scope_and_plan")
+    scope_header = _grid_header_index(scope_ws, {"Phase", "Task", "Output", "Status", "Notes"})
+    scope_headers: list[str] = []
+    scope_rows: list[list[Any]] = []
+    if scope_ws is not None and scope_header is not None:
+        scope_headers = [str(value or "").strip() for value in scope_ws["grid"][scope_header]]
+        scope_rows = [
+            list(row)
+            for row in scope_ws["grid"][scope_header + 1 :]
+            if any(str(value or "").strip() for value in row)
+        ]
+
+    if missing("36_WORKFLOW_MILESTONES") and scope_rows:
+        _append_virtual_canonical_worksheet(
+            project,
+            name="36_WORKFLOW_MILESTONES",
+            headers=["Milestone", "Owner", "Target", "Status", "Evidence / Notes"],
+            rows=[
+                [
+                    _row_value(row, scope_headers, "Phase"),
+                    "",
+                    _row_value(row, scope_headers, "Output"),
+                    _row_value(row, scope_headers, "Status"),
+                    " — ".join(
+                        value
+                        for value in (
+                            _row_value(row, scope_headers, "Task"),
+                            _row_value(row, scope_headers, "Notes"),
+                        )
+                        if value
+                    ),
+                ]
+                for row in scope_rows
+            ],
+            derived_from=["03_SCOPE_AND_PLAN"],
+        )
+
+    if missing("37_RESPONSIBILITY_MATRIX") and scope_rows:
+        _append_virtual_canonical_worksheet(
+            project,
+            name="37_RESPONSIBILITY_MATRIX",
+            headers=[
+                "Scope Item",
+                "Singh360",
+                "Controls Contractor",
+                "Electrical",
+                "Refrigeration",
+                "Owner / GC",
+                "Notes",
+            ],
+            rows=[
+                [
+                    _row_value(row, scope_headers, "Task"),
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    " — ".join(
+                        value
+                        for value in (
+                            _row_value(row, scope_headers, "Phase"),
+                            _row_value(row, scope_headers, "Notes"),
+                        )
+                        if value
+                    ),
+                ]
+                for row in scope_rows
+            ],
+            derived_from=["03_SCOPE_AND_PLAN"],
+        )
 
 
 def _safe_name(text: str) -> str:
@@ -2196,10 +2831,6 @@ def import_workbook(
     index_entries = _parse_index(wb, index_sheet_name)
     has_index = bool(index_sheet_name and index_entries)
     index_lookup = {e["sheetTab"].lower(): e for e in index_entries if e.get("sheetTab")}
-    worksheet_lookup = {
-        str(worksheet.get("name") or "").casefold(): worksheet
-        for worksheet in project["worksheets"]
-    }
 
     # Kyle/SA38 workbook import, Phase A rule 7: 00_INDEX, 00_APP_INDEX, and
     # 00_PROJECT_META are metadata/control sheets, never drawing/output pages —
@@ -2233,6 +2864,12 @@ def import_workbook(
     for field, value in inferred_metadata.items():
         if value and not project["metadata"].get(field):
             project["metadata"][field] = value
+
+    _ensure_front_matter_canonical_sources(project)
+    worksheet_lookup = {
+        str(worksheet.get("name") or "").casefold(): worksheet
+        for worksheet in project["worksheets"]
+    }
 
     pages = []
     order_cursor = 1
@@ -2280,6 +2917,12 @@ def import_workbook(
                 filtered_ws = _filter_index_payload_for_output(source_ws)
                 header_idx = _find_index_header_row(filtered_ws.get("grid") or [])
                 data_rows = max(0, len(filtered_ws.get("grid") or []) - header_idx - 1)
+            elif spec.view:
+                filtered_ws, data_rows = _canonical_view_payload(
+                    source_ws,
+                    view=spec.view,
+                    filter_value=spec.filter_value,
+                )
             else:
                 filtered_ws, data_rows = _filtered_canonical_payload(
                     source_ws,
@@ -2314,6 +2957,11 @@ def import_workbook(
                 block["canonicalDataSource"] = True
                 block["canonicalSourceSheet"] = spec.canonical_name
                 block["dataRowCount"] = data_rows
+                if spec.view:
+                    block["canonicalView"] = spec.view
+                    block["canonicalViewFilter"] = spec.filter_value
+                    block["headerRowCount"] = 4
+                    block["repeatRows"] = [0, 1, 2, 3]
                 if spec.filter_column:
                     block["sourceFilter"] = {
                         "column": spec.filter_column,

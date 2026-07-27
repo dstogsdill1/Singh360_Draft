@@ -70,6 +70,13 @@ const normalizeIssueDate = (value: string): string => {
   return value;
 };
 
+export const projectRevisionForOutput = (value: unknown): string => {
+  const text = cleanValue(value);
+  return /\b(template(?:\s+version)?|orange\s+header\s+locked)\b/i.test(text)
+    ? 'TBD'
+    : text;
+};
+
 export function inferMetadataFromGrid(grid: string[][]): Partial<Record<MetadataField, string>> {
   const out: Partial<Record<MetadataField, string>> = {};
 
@@ -83,6 +90,7 @@ export function inferMetadataFromGrid(grid: string[][]): Partial<Record<Metadata
         let value = cleanValue(row[cursor]);
         if (!value) continue;
         if (field === 'issueDate') value = normalizeIssueDate(value);
+        if (field === 'revision') value = projectRevisionForOutput(value);
         out[field] = value;
         break;
       }

@@ -137,11 +137,21 @@ def compute_project_preflight(project: dict[str, Any]) -> list[dict[str, Any]]:
         )
 
     revision = str((project.get("metadata") or {}).get("revision") or "").strip()
-    if revision and re.search(r"\b(template|template version|orange header locked)\b", revision, re.IGNORECASE):
+    source_revision = (
+        metadata_values.get("project revision", "")
+        or metadata_values.get("revision", "")
+        or metadata_values.get("rev", "")
+    ).strip()
+    invalid_revision = source_revision or revision
+    if invalid_revision and re.search(
+        r"\b(template|template version|orange header locked)\b",
+        invalid_revision,
+        re.IGNORECASE,
+    ):
         issues.append(
             _issue(
                 "template_text_in_project_revision",
-                f"Project Revision contains template-version text: {revision!r}.",
+                f"Project Revision contains template-version text: {invalid_revision!r}.",
                 "Set Project Revision to the issued drawing revision; keep Template Version separate.",
             )
         )

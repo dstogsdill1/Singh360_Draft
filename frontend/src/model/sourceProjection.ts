@@ -8,6 +8,7 @@ import {
 import { isCoverWorksheet } from './metadataInference';
 import { rebuildSinglePageFromSource } from './pageRebuild';
 import { isIdfNetworkPage } from './idfNetworkTable';
+import { applyCanonicalView } from './canonicalViews';
 
 function validRows(rows: number[] | undefined, rowCount: number): number[] {
   if (!rows?.length) return [];
@@ -53,7 +54,13 @@ function projectCanonicalBlock(
   worksheet: Worksheet,
 ): PageBlock {
   let sourceBlock = buildExcelRangeBlock(worksheet, `${worksheet.id}_xr_render`);
-  if (previous.sourceFilter) {
+  if (previous.canonicalView) {
+    sourceBlock = applyCanonicalView(
+      sourceBlock,
+      previous.canonicalView,
+      previous.canonicalViewFilter,
+    );
+  } else if (previous.sourceFilter) {
     const grid = sourceBlock.grid ?? [];
     const headerRow = grid.length >= 4 && grid[3].some((value) => String(value ?? '').trim())
       ? 3
@@ -77,8 +84,12 @@ function projectCanonicalBlock(
   const full = applySourceFirstSettings(sourceBlock, page, previous);
   full.canonicalDataSource = previous.canonicalDataSource;
   full.canonicalSourceSheet = previous.canonicalSourceSheet;
+  full.canonicalView = previous.canonicalView;
+  full.canonicalViewFilter = previous.canonicalViewFilter;
   full.sourceFilter = previous.sourceFilter;
-  full.dataRowCount = Math.max(0, (full.grid?.length ?? 0) - (full.headerRowCount ?? 0));
+  full.dataRowCount = previous.canonicalView
+    ? Math.max(0, (full.grid?.length ?? 0) - 4)
+    : Math.max(0, (full.grid?.length ?? 0) - (full.headerRowCount ?? 0));
   const parts = splitExcelRangeBlock(full);
   const partIndex = Math.max(0, page.continuationIndex ?? 0);
   const selected = parts[partIndex] ?? parts[0] ?? full;

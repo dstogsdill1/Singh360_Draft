@@ -35,6 +35,10 @@ METADATA_LABEL_MAP: dict[str, str] = {
 _ONLY_PUNCTUATION = re.compile(r"^[\s:;,.|/\\\-–—_•·]+$")
 _ISO_MIDNIGHT = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T]00:00:00(?:\.0+)?$")
 _US_MIDNIGHT = re.compile(r"^(\d{1,2}/\d{1,2}/\d{4})[ T]00:00:00(?:\.0+)?$")
+_TEMPLATE_REVISION_TEXT = re.compile(
+    r"\b(template(?:\s+version)?|orange\s+header\s+locked)\b",
+    re.IGNORECASE,
+)
 
 
 def _as_text(value: Any) -> str:
@@ -78,6 +82,19 @@ def _normalize_issue_date(value: str) -> str:
     return value
 
 
+def project_revision_for_output(value: Any) -> str:
+    """Return a drawing revision without leaking template-version text.
+
+    The source value remains visible to workbook preflight.  Published cover
+    and title-block metadata use ``TBD`` until an issued project revision is
+    supplied, rather than treating a template/style version as the revision.
+    """
+    text = _value(value)
+    if text and _TEMPLATE_REVISION_TEXT.search(text):
+        return "TBD"
+    return text
+
+
 def infer_metadata_from_labeled_grid(ws: dict[str, Any] | None) -> dict[str, str]:
     """Find the first real value after a recognized label.
 
@@ -102,6 +119,8 @@ def infer_metadata_from_labeled_grid(ws: dict[str, Any] | None) -> dict[str, str
                     continue
                 if field == "issueDate":
                     candidate = _normalize_issue_date(candidate)
+                elif field == "revision":
+                    candidate = project_revision_for_output(candidate)
                 out[field] = candidate
                 break
 

@@ -66,6 +66,8 @@ export interface PageBlock {
   /** Published table comes from the canonical workbook data contract. */
   canonicalDataSource?: boolean;
   canonicalSourceSheet?: string;
+  canonicalView?: string;
+  canonicalViewFilter?: string;
   dataRowCount?: number;
   sourceFilter?: { column: string; value: string };
   url?: string;
