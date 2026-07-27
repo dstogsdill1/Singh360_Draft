@@ -20,8 +20,31 @@ _inspect_*.py
 _probe_*.py
 _verify_*.py
 *.xlsx
-!runtime_templates/
-!runtime_templates/Singh360_BASE_Project_Workbook_Template_V1.xlsx
+!defaults/runtime_templates/
+!defaults/runtime_templates/Singh360_BASE_Project_Workbook_Template_V1.xlsx
+
+# Root-level backup, archive, and presentation artifacts
+/.docs_backup*
+/.local_backups
+/*backup*
+/*archive*
+/debug_exports*
+/screenshots*
+/test_projects*
+/runtime_artifacts*
+/exports*
+/tmp/
+/temp/
+/.tmp/
+/*.bak
+/*.orig
+/*.tmp
+/*.pid
+/*.zip
+/*.pdf
+/*.png
+/*.jpg
+/*.jpeg
 
 # Customer / project source material
 input_docs/

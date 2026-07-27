@@ -163,7 +163,12 @@ class EmsWorkbookContractTests(unittest.TestCase):
         self.assertIn("EMS 12.0", summary["preserved"])
 
     def test_tracked_runtime_template_is_clean_and_styled(self) -> None:
-        template = Path(__file__).resolve().parents[1] / "runtime_templates" / "Singh360_BASE_Project_Workbook_Template_V1.xlsx"
+        template = (
+            Path(__file__).resolve().parents[1]
+            / "defaults"
+            / "runtime_templates"
+            / "Singh360_BASE_Project_Workbook_Template_V1.xlsx"
+        )
         workbook = load_workbook(template)
         try:
             for required in (

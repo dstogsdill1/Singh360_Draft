@@ -1,0 +1,51 @@
+{
+  "files.exclude": {
+    "**/.git": true,
+    "**/.docs": true,
+    "**/.venv": true,
+    "**/.vscode": true,
+    "**/__pycache__": true,
+    "**/*pycache*": true,
+    "**/.pytest_cache": true,
+    "**/node_modules": true,
+    "frontend/dist": true,
+    "**/.docs_backup*": true,
+    "**/.local_backups": true,
+    "**/*_backup_*": true,
+    "**/*_archive_*": true,
+    "**/debug_exports": true,
+    "**/screenshots": true,
+    "**/test_projects": true,
+    "**/runtime_artifacts": true,
+    "**/*.log": true,
+    "**/*.zip": true,
+    "**/.gitignore": true
+  },
+  "search.exclude": {
+    "**/.docs": true,
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/*pycache*": true,
+    "**/.pytest_cache": true,
+    "**/node_modules": true,
+    "frontend/dist": true,
+    "**/.docs_backup*": true,
+    "**/.local_backups": true,
+    "**/*_backup_*": true,
+    "**/*_archive_*": true,
+    "**/debug_exports": true,
+    "**/screenshots": true,
+    "**/test_projects": true,
+    "**/runtime_artifacts": true,
+    "**/*.log": true,
+    "**/*.zip": true
+  },
+  "files.watcherExclude": {
+    "**/.docs/**": true,
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/node_modules/**": true,
+    "**/frontend/dist/**": true
+  }
+}

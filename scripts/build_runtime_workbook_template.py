@@ -14,7 +14,7 @@ from openpyxl.utils import get_column_letter
 
 ROOT = Path(__file__).resolve().parents[1]
 FILE_NAME = "Singh360_BASE_Project_Workbook_Template_V1.xlsx"
-TRACKED_OUTPUT = ROOT / "runtime_templates" / FILE_NAME
+TRACKED_OUTPUT = ROOT / "defaults" / "runtime_templates" / FILE_NAME
 
 ORANGE = "D97706"
 BLUE = "1F4E78"
