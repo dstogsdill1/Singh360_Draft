@@ -28,11 +28,13 @@ def main() -> int:
         "title Singh360 Draft",
         'set "SINGH360_PORT=8766"',
         "http://127.0.0.1:8766/app",
-        "npm.cmd run build",
+        "call npm.cmd run build",
     )
     for token in required_start:
         if token not in start:
             problems.append(f"start launcher is missing {token!r}")
+    if "if not exist node_modules call npm.cmd ci" not in start:
+        problems.append("start launcher does not return from conditional npm ci")
     if "?project=" in start or "ngrok" in start.casefold() or "829" in start:
         problems.append("start launcher is not generic Project Home")
     if "title Stop Singh360 Draft" not in stop or "$port=8766" not in stop:

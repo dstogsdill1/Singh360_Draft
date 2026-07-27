@@ -22,8 +22,8 @@ where npm.cmd >nul 2>&1 || (
 )
 
 pushd frontend
-if not exist node_modules npm.cmd ci || (popd & goto :failed)
-npm.cmd run build || (popd & goto :failed)
+if not exist node_modules call npm.cmd ci || (popd & goto :failed)
+call npm.cmd run build || (popd & goto :failed)
 popd
 
 if not exist ".docs\runtime_logs" mkdir ".docs\runtime_logs"
