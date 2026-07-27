@@ -183,6 +183,76 @@ def write_829_regression_workbook(path: Path) -> Path:
     return path
 
 
+def write_geometry_browser_workbook(path: Path) -> Path:
+    """Generate the browser/PDF geometry fixture without customer content."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    workbook = Workbook()
+    index = _add_control_sheets(workbook, "Disposable Geometry Browser Smoke")
+    page_codes = (
+        "EMS 3.0",
+        "EMS 4.0",
+        "EMS 7.0",
+        "EMS 8.0",
+        "EMS 13.0",
+        "EMS 23.0",
+        "EMS 24.0",
+        "EMS 24.1",
+        "EMS 24.2",
+    )
+    orange = PatternFill(fill_type="solid", fgColor="F4B183")
+    header = PatternFill(fill_type="solid", fgColor="FCE4D6")
+    widths = (14.0, 34.0, 18.0, 24.0, 48.0, 20.0)
+
+    for order, code in enumerate(page_codes, start=1):
+        tab = code.replace("EMS ", "Geometry ")
+        _append_index(index, ["YES", order, code, tab, f"{code} Geometry Proof", "Generated", "table", ""])
+        sheet = workbook.create_sheet(tab)
+        sheet.sheet_format.defaultColWidth = 11.5
+        sheet.sheet_format.defaultRowHeight = 18.0
+        for column, width in zip("ABCDEF", widths):
+            sheet.column_dimensions[column].width = width
+
+        sheet.merge_cells("A1:F1")
+        sheet["A1"] = f"{code} DISPOSABLE GEOMETRY INSTRUCTION BAND"
+        sheet["A1"].fill = orange
+        sheet["A1"].font = Font(bold=True, size=12)
+        sheet["A1"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        sheet.row_dimensions[1].height = 31.5
+
+        headings = ("Tag", "Description", "Type", "Signal", "Instructions", "Status")
+        for column, value in enumerate(headings, start=1):
+            cell = sheet.cell(2, column, value)
+            cell.fill = header
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        sheet.row_dimensions[2].height = 24.0
+
+        row_count = 78 if code == "EMS 24.2" else 14
+        for row in range(3, row_count + 3):
+            values = (
+                f"T-{row - 2:03d}",
+                f"Generated equipment description {row - 2}",
+                "PR0650CD-TDB",
+                "0-10VDC",
+                "Normal words remain readable and wrap only at spaces across the preserved workbook width map.",
+                "Review",
+            )
+            for column, value in enumerate(values, start=1):
+                cell = sheet.cell(row, column, value)
+                cell.alignment = Alignment(vertical="top", wrap_text=column in (2, 5))
+            sheet.row_dimensions[row].height = 27.75 if row == 3 else 22.5
+
+        # Exercise hidden geometry without hiding the visible proof range.
+        sheet.row_dimensions[row_count + 4].hidden = True
+        sheet.column_dimensions["H"].hidden = True
+        sheet["A3"] = "=1+1"
+
+    workbook.save(path)
+    return path
+
+
 def write_pdf(path: Path) -> Path:
     import fitz
 

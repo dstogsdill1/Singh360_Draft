@@ -11,9 +11,12 @@ if str(ROOT) not in sys.path:
 
 from openpyxl import Workbook
 
+from core.workbook_geometry import excel_column_width_to_pixels
 from core.workbook_importer import import_workbook
 
 _TOKENS = ["0-10VDC", "10K2", "NO", "NO*", "NC", "DI", "AIO1", "PR0650CD-TDB", "PR0663"]
+_TYPE_WIDTH = 18.0
+_SIGNAL_WIDTH = 20.0
 
 
 def _workbook(path: Path) -> None:
@@ -27,6 +30,8 @@ def _workbook(path: Path) -> None:
     lcp.append(["RO#", "Description", "Type", "Signal", "Notes"])
     for i, tok in enumerate(_TOKENS):
         lcp.append([str(i + 1), f"Point {i}", tok, tok, ""])
+    lcp.column_dimensions["C"].width = _TYPE_WIDTH
+    lcp.column_dimensions["D"].width = _SIGNAL_WIDTH
     wb.save(path)
 
 
@@ -61,10 +66,15 @@ def main() -> None:
             problems.append(f"column {col} ({header[col] if col < len(header) else '?'}) not in nowrapColumns")
 
     widths = block.get("colWidths") or []
-    longest = max(len(t) for t in _TOKENS)
-    for col in (type_col, signal_col):
-        if col < len(widths) and widths[col] < longest * 6:
-            problems.append(f"col {col} width {widths[col]} too narrow for token len {longest}")
+    expected_widths = {
+        type_col: excel_column_width_to_pixels(_TYPE_WIDTH),
+        signal_col: excel_column_width_to_pixels(_SIGNAL_WIDTH),
+    }
+    for col, expected in expected_widths.items():
+        if col >= len(widths) or abs(float(widths[col]) - expected) > 0.01:
+            problems.append(
+                f"col {col} source width changed {widths[col] if col < len(widths) else None} != {expected}"
+            )
 
     if problems:
         print("FAIL")

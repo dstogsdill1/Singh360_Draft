@@ -16,6 +16,12 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 from core.page_identity import is_sheet_index_page
+from core.workbook_geometry import (
+    DEFAULT_COLUMN_WIDTH_UNITS,
+    DEFAULT_ROW_HEIGHT_POINTS,
+    unchanged_excel_width_or_converted,
+    unchanged_row_height_or_converted,
+)
 
 HELP_VERSION = "2026.07.22-status-sync-1"
 SCHEMA_VERSION = "5.0"
@@ -341,8 +347,16 @@ def project_hash(project: dict[str, Any]) -> str:
                 "grid": w.get("grid", []),
                 "formulas": w.get("formulas", {}),
                 "styles": w.get("styles", {}),
+                "mergedCells": w.get("mergedCells", []),
                 "rowHeights": w.get("rowHeights", {}),
                 "columnWidths": w.get("columnWidths", {}),
+                "rowHeightsPx": w.get("rowHeightsPx", []),
+                "colWidthsPx": w.get("colWidthsPx", []),
+                "defaultColumnWidth": w.get("defaultColumnWidth"),
+                "defaultRowHeight": w.get("defaultRowHeight"),
+                "hiddenRows": w.get("hiddenRows", []),
+                "hiddenColumns": w.get("hiddenColumns", []),
+                "geometryAuthority": w.get("geometryAuthority"),
             }
             for w in project.get("worksheets", [])
             if isinstance(w, dict)
@@ -851,6 +865,65 @@ def _s360_apply_worksheet_payload(wb: Any, project: dict[str, Any]) -> None:
                 ws.column_dimensions[str(key)].width = float(value)
             except Exception:
                 pass
+
+        ws.sheet_format.defaultColWidth = float(
+            payload.get("defaultColumnWidth") or DEFAULT_COLUMN_WIDTH_UNITS
+        )
+        ws.sheet_format.defaultRowHeight = float(
+            payload.get("defaultRowHeight") or DEFAULT_ROW_HEIGHT_POINTS
+        )
+        for index, pixels in enumerate(payload.get("rowHeightsPx") or [], start=1):
+            try:
+                ws.row_dimensions[index].height = unchanged_row_height_or_converted(
+                    pixels, row_heights.get(str(index))
+                )
+            except (TypeError, ValueError):
+                continue
+        for index, pixels in enumerate(payload.get("colWidthsPx") or [], start=1):
+            letter = _s360_col(index)
+            try:
+                ws.column_dimensions[letter].width = unchanged_excel_width_or_converted(
+                    pixels, column_widths.get(letter)
+                )
+            except (TypeError, ValueError):
+                continue
+
+        geometry_authoritative = payload.get("geometryAuthority") == "workbook-v1"
+        if geometry_authoritative:
+            for dimension in ws.row_dimensions.values():
+                dimension.hidden = False
+            for dimension in ws.column_dimensions.values():
+                dimension.hidden = False
+        for row in payload.get("hiddenRows") or []:
+            if isinstance(row, int) and row >= 0:
+                ws.row_dimensions[row + 1].hidden = True
+        for column in payload.get("hiddenColumns") or []:
+            if isinstance(column, int) and column >= 0:
+                ws.column_dimensions[_s360_col(column + 1)].hidden = True
+
+        desired_merges: set[str] = set()
+        for merged in payload.get("mergedCells") or []:
+            if not isinstance(merged, dict):
+                continue
+            try:
+                desired_merges.add(
+                    f"{_s360_col(int(merged['startCol']) + 1)}"
+                    f"{int(merged['startRow']) + 1}:"
+                    f"{_s360_col(int(merged['endCol']) + 1)}"
+                    f"{int(merged['endRow']) + 1}"
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+        current_merges = {str(item) for item in ws.merged_cells.ranges}
+        if geometry_authoritative:
+            for merged in sorted(current_merges - desired_merges):
+                ws.unmerge_cells(merged)
+        for merged in sorted(desired_merges - current_merges):
+            ws.merge_cells(merged)
+
+        tab_color = _s360_hex(payload.get("tabColor"))
+        if tab_color:
+            ws.sheet_properties.tabColor = tab_color
 
 
 def _s360_find_index_header(ws: Any) -> tuple[int, dict[str, int]]:

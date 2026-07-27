@@ -7,6 +7,12 @@
 import type { ExcelCellStyle, MergedCell, PageBlock, PageModel, ProjectModel, Worksheet } from './types';
 import { buildIdfNetworkBlock, idfHeaderRow, isIdfNetworkPage } from './idfNetworkTable';
 import { inferMetadataFromWorksheet, isCoverWorksheet, mergeCoverMetadata } from './metadataInference';
+import {
+  DEFAULT_COLUMN_WIDTH_PX,
+  DEFAULT_ROW_HEIGHT_PX,
+  excelColumnWidthToPixels,
+  rowHeightPointsToPixels,
+} from './workbookGeometry';
 
 export const PAGE_BODY_WIDTH = 1600;
 export const PAGE_BODY_BUDGET = 720;
@@ -14,8 +20,8 @@ const BODY_W = PAGE_BODY_WIDTH;
 const BODY_BUDGET = PAGE_BODY_BUDGET;
 const MIN_SCALE = 0.5;
 const MIN_ORPHAN_DATA_ROWS = 4;
-const DEFAULT_COL = 64;
-const DEFAULT_ROW = 20;
+const DEFAULT_COL = DEFAULT_COLUMN_WIDTH_PX;
+const DEFAULT_ROW = DEFAULT_ROW_HEIGHT_PX;
 
 export function blockMinScale(block: PageBlock): number {
   const v = Number(block.minScale ?? MIN_SCALE);
@@ -107,20 +113,21 @@ function applySourceVisibility(ws: Worksheet): Worksheet {
     const rows = Array.from(
       { length: merge.endRow - merge.startRow + 1 },
       (_, index) => merge.startRow + index,
-    );
+    ).filter((row) => rowMap.has(row));
     const columns = Array.from(
       { length: merge.endCol - merge.startCol + 1 },
       (_, index) => merge.startCol + index,
-    );
-    if (!rows.every((row) => rowMap.has(row)) || !columns.every((col) => colMap.has(col))) {
-      continue;
+    ).filter((column) => colMap.has(column));
+    if (!rows.length || !columns.length) continue;
+    const mapped = {
+      startRow: rowMap.get(rows[0]) as number,
+      startCol: colMap.get(columns[0]) as number,
+      endRow: rowMap.get(rows[rows.length - 1]) as number,
+      endCol: colMap.get(columns[columns.length - 1]) as number,
+    };
+    if (mapped.startRow !== mapped.endRow || mapped.startCol !== mapped.endCol) {
+      mergedCells.push(mapped);
     }
-    mergedCells.push({
-      startRow: rowMap.get(merge.startRow) as number,
-      startCol: colMap.get(merge.startCol) as number,
-      endRow: rowMap.get(merge.endRow) as number,
-      endCol: colMap.get(merge.endCol) as number,
-    });
   }
 
   return {
@@ -128,8 +135,10 @@ function applySourceVisibility(ws: Worksheet): Worksheet {
     grid,
     styles,
     mergedCells,
-    colWidthsPx: visibleColumns.map((col) => ws.colWidthsPx?.[col] ?? DEFAULT_COL),
-    rowHeightsPx: visibleRows.map((row) => ws.rowHeightsPx?.[row] ?? DEFAULT_ROW),
+    colWidthsPx: visibleColumns.map((col) =>
+      ws.colWidthsPx?.[col] ?? excelColumnWidthToPixels(ws.defaultColumnWidth)),
+    rowHeightsPx: visibleRows.map((row) =>
+      ws.rowHeightsPx?.[row] ?? rowHeightPointsToPixels(ws.defaultRowHeight)),
   };
 }
 
@@ -142,6 +151,56 @@ function meaningfulStyle(st: ExcelCellStyle | undefined): boolean {
   if (st.fill) return true;
   const b = st.borders;
   return !!(b && (b.top || b.right || b.bottom || b.left));
+}
+
+function growWrappedRowHeights(
+  grid: string[][],
+  styles: Record<string, ExcelCellStyle>,
+  merges: MergedCell[],
+  colWidths: number[],
+  sourceHeights: number[],
+): number[] {
+  const mergedWidth = new Map<string, number>();
+  merges.forEach((merge) => {
+    let width = 0;
+    for (let column = merge.startCol; column <= merge.endCol; column += 1) {
+      width += colWidths[column] ?? DEFAULT_COL;
+    }
+    mergedWidth.set(`${merge.startRow}:${merge.startCol}`, width);
+  });
+  return grid.map((row, rowIndex) => {
+    let required = sourceHeights[rowIndex] ?? DEFAULT_ROW;
+    row.forEach((raw, columnIndex) => {
+      const style = styles[`${rowIndex}:${columnIndex}`];
+      if (!style?.wrap) return;
+      const text = String(raw || '').trim();
+      if (!text) return;
+      const width = Math.max(
+        24,
+        (mergedWidth.get(`${rowIndex}:${columnIndex}`)
+          ?? colWidths[columnIndex]
+          ?? DEFAULT_COL) - 8,
+      );
+      const fontPx = Math.max(9, Number(style.fontSize || 9) * 4 / 3);
+      const charactersPerLine = Math.max(4, Math.floor(width / Math.max(5.5, fontPx * 0.5)));
+      let lines = 0;
+      text.split(/\r?\n/).forEach((paragraph) => {
+        let lineLength = 0;
+        let paragraphLines = 1;
+        paragraph.split(/\s+/).filter(Boolean).forEach((word) => {
+          if (lineLength && lineLength + 1 + word.length > charactersPerLine) {
+            paragraphLines += 1;
+            lineLength = word.length;
+          } else {
+            lineLength += (lineLength ? 1 : 0) + word.length;
+          }
+        });
+        lines += paragraphLines;
+      });
+      required = Math.max(required, Math.ceil(lines * fontPx * 1.22 + 8));
+    });
+    return required;
+  });
 }
 
 /** Trim trailing blank worksheet columns/rows from a freshly-built excelRange
@@ -249,8 +308,21 @@ export function buildExcelRangeBlock(ws: Worksheet, blockId: string): PageBlock 
   const nRows = grid.length;
   const nCols = Math.max(0, ...grid.map((r) => r.length));
 
-  const colWidths = Array.from({ length: nCols }, (_, c) => visibleWs.colWidthsPx?.[c] ?? DEFAULT_COL);
-  const rowHeights = Array.from({ length: nRows }, (_, r) => visibleWs.rowHeightsPx?.[r] ?? DEFAULT_ROW);
+  const colWidths = Array.from(
+    { length: nCols },
+    (_, c) => visibleWs.colWidthsPx?.[c] ?? excelColumnWidthToPixels(visibleWs.defaultColumnWidth),
+  );
+  const sourceRowHeights = Array.from(
+    { length: nRows },
+    (_, r) => visibleWs.rowHeightsPx?.[r] ?? rowHeightPointsToPixels(visibleWs.defaultRowHeight),
+  );
+  const rowHeights = growWrappedRowHeights(
+    grid,
+    stylesRc,
+    trimmed.merges,
+    colWidths,
+    sourceRowHeights,
+  );
 
   return {
     id: blockId,

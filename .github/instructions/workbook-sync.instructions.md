@@ -12,6 +12,10 @@ Follow the root `AGENTS.md`.
   heights, merged ranges, formulas, styles, and manual canvas objects.
 - Support legacy persisted shapes with narrow read compatibility instead of
   overwriting project data.
+- The shared geometry contract preserves Excel column units, row-height points,
+  default and explicit dimensions, hidden rows/columns, merges, wrapping, and
+  alignment. Univer/drawing pixels and PDF points must use the canonical
+  conversion helpers; unchanged Excel units must round-trip exactly.
 - Never invent missing engineering values or silently substitute workbook data.
 - Never run or automate **SAVE + WRITE EXCEL** unless the user explicitly asks
   for that exact action.

@@ -54,6 +54,24 @@ Do not reintroduce the retired SmartDraw VSON / Visio VSDX / RDM XML generator.
 15. Do not weaken workbook authority, baseline hashes, project identity checks,
     or two-sided conflict detection.
 
+## Shared workbook geometry contract
+
+- `core/workbook_geometry.py` and
+  `frontend/src/model/workbookGeometry.ts` are parity implementations of the
+  one Singh360 workbook geometry contract.
+- Excel column widths remain OOXML character units; row heights remain points.
+  Univer, Page Editor, and drawing renderers use CSS pixels; PDF uses points.
+- Do not add ad-hoc `* 7`, `/ 7`, `* .75`, or `* 4 / 3` conversions. Preserve an
+  unchanged exact Excel dimension when its displayed pixel size is unchanged.
+- Persist default and explicit dimensions, hidden rows/columns, merges,
+  formulas, styles, wrapping, and alignment through import, Data Workspace,
+  project-local save/reload, Update Drawings, Page Editor, PDF, and explicit
+  Excel write-back.
+- Drawing/PDF tables preserve relative column proportions and use one uniform
+  page scale. Never stretch or crush individual columns, use `break-all`, or
+  split ordinary words letter-by-letter. Wrapped content grows rows and may
+  create continuation pages; continuation pages reuse the same width map.
+
 ## Required checks
 
 Run only the checks relevant to the requested change. When a release request

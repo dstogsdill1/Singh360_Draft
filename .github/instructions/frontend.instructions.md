@@ -15,4 +15,8 @@ Follow the root `AGENTS.md`.
   mirror or backup, not the primary workspace.
 - Do not expose or invoke **SAVE + WRITE EXCEL** from a new workflow unless the
   user explicitly requests workbook writes.
+- Route Univer/Page Editor/PDF geometry through
+  `frontend/src/model/workbookGeometry.ts`; keep it in parity with
+  `core/workbook_geometry.py`. Preserve workbook proportions with uniform page
+  scaling and never use `break-all` for normal cell text.
 - Run the production frontend build for source changes and report its result.

@@ -159,14 +159,21 @@ export interface MergedCell {
 export interface Worksheet {
   id: string;
   name: string;
+  visible?: boolean;
   grid: string[][];
   /** A1-keyed cell styles (superset used by both source view and exact range). */
   styles?: Record<string, ExcelCellStyle>;
+  formulas?: Record<string, string>;
   mergedCells?: MergedCell[];
+  /** Explicit Excel row heights in points and column widths in OOXML units. */
   rowHeights?: Record<string, number>;
   columnWidths?: Record<string, number>;
+  defaultColumnWidth?: number;
+  defaultRowHeight?: number;
+  geometryAuthority?: 'workbook-v1';
   colWidthsPx?: number[];
   rowHeightsPx?: number[];
+  tabColor?: string | null;
   /** App-only visibility. These never alter the original Excel workbook. */
   hiddenRows?: number[];
   hiddenColumns?: number[];

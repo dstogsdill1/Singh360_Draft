@@ -10,6 +10,13 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from core.workbook_geometry import (
+    DEFAULT_COLUMN_WIDTH_UNITS,
+    DEFAULT_ROW_HEIGHT_POINTS,
+    unchanged_excel_width_or_converted,
+    unchanged_row_height_or_converted,
+)
+
 
 def _safe_sheet_title(name: str) -> str:
     t = re.sub(r"[\[\]:*?/\\]", "_", (name or "Sheet").strip())[:31]
@@ -50,6 +57,8 @@ def export_worksheet_xlsx(ws: dict[str, Any]) -> bytes:
     styles = ws.get("styles") if isinstance(ws.get("styles"), dict) else {}
     col_widths = ws.get("colWidthsPx") if isinstance(ws.get("colWidthsPx"), list) else []
     row_heights = ws.get("rowHeightsPx") if isinstance(ws.get("rowHeightsPx"), list) else []
+    exact_col_widths = ws.get("columnWidths") if isinstance(ws.get("columnWidths"), dict) else {}
+    exact_row_heights = ws.get("rowHeights") if isinstance(ws.get("rowHeights"), dict) else {}
     formulas = ws.get("formulas") if isinstance(ws.get("formulas"), dict) else {}
     for r, row in enumerate(grid):
         if not isinstance(row, list): continue
@@ -64,10 +73,42 @@ def export_worksheet_xlsx(ws: dict[str, Any]) -> bytes:
             borders = st.get("borders") if isinstance(st.get("borders"), dict) else {}
             cell.border = Border(left=_side(borders.get("left")), right=_side(borders.get("right")), top=_side(borders.get("top")), bottom=_side(borders.get("bottom")))
             cell.alignment = Alignment(horizontal=st.get("hAlign") or "general", vertical=st.get("vAlign") or "bottom", wrap_text=bool(st.get("wrap")), text_rotation=int(st.get("rotation") or 0), indent=int(st.get("indent") or 0))
+    sheet.sheet_format.defaultColWidth = float(
+        ws.get("defaultColumnWidth") or DEFAULT_COLUMN_WIDTH_UNITS
+    )
+    sheet.sheet_format.defaultRowHeight = float(
+        ws.get("defaultRowHeight") or DEFAULT_ROW_HEIGHT_POINTS
+    )
+    for letter, units in exact_col_widths.items():
+        try:
+            if float(units) > 0:
+                sheet.column_dimensions[str(letter)].width = float(units)
+        except (TypeError, ValueError):
+            continue
+    for row, points in exact_row_heights.items():
+        try:
+            if float(points) > 0:
+                sheet.row_dimensions[int(row)].height = float(points)
+        except (TypeError, ValueError):
+            continue
     for c, width in enumerate(col_widths):
-        if width: sheet.column_dimensions[get_column_letter(c + 1)].width = max(3, min(120, width / 7))
+        if width:
+            letter = get_column_letter(c + 1)
+            sheet.column_dimensions[letter].width = unchanged_excel_width_or_converted(
+                width, exact_col_widths.get(letter)
+            )
     for r, height in enumerate(row_heights):
-        if height: sheet.row_dimensions[r + 1].height = max(8, min(240, height * 0.75))
+        if height:
+            key = str(r + 1)
+            sheet.row_dimensions[r + 1].height = unchanged_row_height_or_converted(
+                height, exact_row_heights.get(key)
+            )
+    for row in ws.get("hiddenRows") or []:
+        if isinstance(row, int) and row >= 0:
+            sheet.row_dimensions[row + 1].hidden = True
+    for column in ws.get("hiddenColumns") or []:
+        if isinstance(column, int) and column >= 0:
+            sheet.column_dimensions[get_column_letter(column + 1)].hidden = True
     for merge in ws.get("mergedCells") or []:
         if not isinstance(merge, dict): continue
         sheet.merge_cells(start_row=int(merge.get("startRow", 0)) + 1, start_column=int(merge.get("startCol", 0)) + 1, end_row=int(merge.get("endRow", 0)) + 1, end_column=int(merge.get("endCol", 0)) + 1)

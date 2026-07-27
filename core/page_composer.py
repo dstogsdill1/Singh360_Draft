@@ -16,6 +16,8 @@ import re
 from copy import deepcopy
 from typing import Any
 
+from core.workbook_geometry import DEFAULT_ROW_HEIGHT_PX
+
 from core.page_identity import is_sheet_index_page
 
 # Usable body height budget (logical px) for one 17x11 sheet, after title block
@@ -295,7 +297,10 @@ def _slice_excel_block(block: dict[str, Any], row_indices: list[int], part_index
 
     remap = {old: new for new, old in enumerate(row_indices)}
     new_grid = [list(grid[r]) for r in row_indices if 0 <= r < len(grid)]
-    new_row_h = [row_h[r] if r < len(row_h) else 20 for r in row_indices]
+    new_row_h = [
+        row_h[r] if r < len(row_h) else DEFAULT_ROW_HEIGHT_PX
+        for r in row_indices
+    ]
 
     new_styles: dict[str, Any] = {}
     for key, val in styles.items():
@@ -427,7 +432,7 @@ def _section_aware_chunks(
     row_h = block.get("rowHeights") or []
 
     def h(r: int) -> float:
-        return row_h[r] if r < len(row_h) else 20
+        return row_h[r] if r < len(row_h) else DEFAULT_ROW_HEIGHT_PX
 
     gold_pairs = _gold_section_starts(block)
     gold_rows = {g for g, _ in gold_pairs}
@@ -533,7 +538,7 @@ def _balanced_chunks(
     row_h = block.get("rowHeights") or []
 
     def h(r: int) -> float:
-        return row_h[r] if r < len(row_h) else 20
+        return row_h[r] if r < len(row_h) else DEFAULT_ROW_HEIGHT_PX
 
     total = sum(h(r) for r in data_rows)
     target = max(1.0, total / n_pages)
@@ -595,7 +600,7 @@ def _excel_data_chunks(block: dict[str, Any], data_rows: list[int], header_h: fl
     row_h = block.get("rowHeights") or []
 
     def h(r: int) -> float:
-        return row_h[r] if r < len(row_h) else 20
+        return row_h[r] if r < len(row_h) else DEFAULT_ROW_HEIGHT_PX
 
     if not data_rows:
         return []

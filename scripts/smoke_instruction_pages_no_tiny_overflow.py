@@ -10,9 +10,22 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from openpyxl import Workbook
+from openpyxl.styles import Alignment
 
-from core.page_composer import BODY_W
+from core.workbook_geometry import excel_column_width_to_pixels
 from core.workbook_importer import import_workbook
+
+
+COL_WIDTHS = (24.0, 118.0)
+
+
+def _set_instruction_geometry(ws) -> None:
+    ws.column_dimensions["A"].width = COL_WIDTHS[0]
+    ws.column_dimensions["B"].width = COL_WIDTHS[1]
+    ws.sheet_format.defaultRowHeight = 18.0
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
 
 
 def _workbook(path: Path) -> None:
@@ -27,11 +40,13 @@ def _workbook(path: Path) -> None:
     guide.append(["Topic", "Guideline"])
     for i in range(18):
         guide.append([f"Topic {i}", f"Guideline text row {i} with enough words to wrap naturally across the page body."])
+    _set_instruction_geometry(guide)
 
     field = wb.create_sheet("Field Instructions")
     field.append(["Step", "Instruction"])
     for i in range(22):
         field.append([str(i + 1), f"Instruction detail line {i} for EC/DC/EMS vendor sections."])
+    _set_instruction_geometry(field)
     wb.save(path)
 
 
@@ -54,9 +69,22 @@ def main() -> None:
         if block is None:
             problems.append(f"{code}: no excelRange block")
             continue
-        width = sum(block.get("colWidths") or [])
-        if width < int(BODY_W * 0.85):
-            problems.append(f"{code}: col width {width} < 85% BODY_W ({BODY_W})")
+        actual_widths = [float(value) for value in (block.get("colWidths") or [])]
+        expected_widths = [excel_column_width_to_pixels(value) for value in COL_WIDTHS]
+        if len(actual_widths) != len(expected_widths) or any(
+            abs(actual - expected) > 0.01
+            for actual, expected in zip(actual_widths, expected_widths)
+        ):
+            problems.append(
+                f"{code}: source width map changed {actual_widths} != {expected_widths}"
+            )
+        if len(actual_widths) == 2:
+            actual_ratio = actual_widths[1] / actual_widths[0]
+            expected_ratio = expected_widths[1] / expected_widths[0]
+            if abs(actual_ratio - expected_ratio) > 0.001:
+                problems.append(
+                    f"{code}: width ratio changed {actual_ratio:.6f} != {expected_ratio:.6f}"
+                )
         min_scale = float(block.get("minScale") or 0.73)
         if min_scale < 0.78:
             problems.append(f"{code}: minScale {min_scale} below narrative floor")

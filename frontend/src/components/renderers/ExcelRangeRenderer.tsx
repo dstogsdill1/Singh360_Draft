@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { BorderSide, ExcelCellStyle, MergedCell, PageBlock } from '../../model/types';
 import { BODY_W } from '../../model/sheetGeometry';
+import {
+  DEFAULT_COLUMN_WIDTH_PX,
+  DEFAULT_ROW_HEIGHT_PX,
+} from '../../model/workbookGeometry';
 
 interface Props {
   block: PageBlock;
@@ -12,13 +16,11 @@ interface Props {
 
 const PAD_X = 10;
 const PAD_Y = 10;
-const DEFAULT_COL = 64;
-const DEFAULT_ROW = 20;
+const DEFAULT_COL = DEFAULT_COLUMN_WIDTH_PX;
+const DEFAULT_ROW = DEFAULT_ROW_HEIGHT_PX;
 const GROW_CAP = 1.85;
 const MIN_BOTTOM_GAP = 20;
 const SAFE_FIT_HEIGHT = 700;
-// .np has 48px horizontal padding and .np-xr has 10px horizontal padding.
-const MIN_FILL_WIDTH = BODY_W - 118;
 
 function borderCss(side?: BorderSide): string | undefined {
   if (!side || !side.style) return undefined;
@@ -58,8 +60,9 @@ function cellCss(
     verticalAlign:
       st?.vAlign === 'top' ? 'top' : st?.vAlign === 'bottom' ? 'bottom' : 'middle',
     whiteSpace: wraps ? 'pre-wrap' : 'pre',
-    overflowWrap: wraps ? 'break-word' : 'normal',
+    overflowWrap: 'normal',
     wordBreak: 'normal',
+    hyphens: 'none',
     overflow: 'hidden',
   };
   if (!st) {
@@ -114,9 +117,9 @@ function cellCss(
 
 /**
  * Excel Exact Range renderer. It uses the source worksheet's widths, heights,
- * merges, fills, borders, fonts and wrap flags. When a table is narrower than
- * the printable body, only its widest column receives the unused space; this
- * keeps Step/ID columns narrow and lets Instructions/Notes use the page.
+ * merges, fills, borders, fonts and wrap flags. Column widths are never
+ * independently stretched or crushed; the complete table receives one uniform
+ * scale so relative workbook proportions survive editor and PDF output.
  */
 export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting = false }: Props) {
   const grid = block.grid ?? [];
@@ -132,18 +135,10 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
     [grid, colWidths],
   );
 
-  const displayColWidths = useMemo(() => {
-    const widths = Array.from({ length: nCols }, (_, c) => colWidths[c] ?? DEFAULT_COL);
-    const sourceWidth = widths.reduce((sum, width) => sum + width, 0);
-    if (widths.length && sourceWidth < MIN_FILL_WIDTH) {
-      let flexColumn = 0;
-      for (let c = 1; c < widths.length; c += 1) {
-        if (widths[c] > widths[flexColumn]) flexColumn = c;
-      }
-      widths[flexColumn] += MIN_FILL_WIDTH - sourceWidth;
-    }
-    return widths;
-  }, [colWidths, nCols]);
+  const displayColWidths = useMemo(
+    () => Array.from({ length: nCols }, (_, c) => colWidths[c] ?? DEFAULT_COL),
+    [colWidths, nCols],
+  );
 
   const naturalW = useMemo(
     () => Math.max(1, displayColWidths.reduce((sum, width) => sum + width, 0)),

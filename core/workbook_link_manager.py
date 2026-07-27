@@ -710,6 +710,12 @@ def _s360_workbook_projection(project: dict[str, Any]) -> dict[str, Any]:
                 "columnWidths": worksheet.get("columnWidths", {}),
                 "rowHeightsPx": worksheet.get("rowHeightsPx", []),
                 "colWidthsPx": worksheet.get("colWidthsPx", []),
+                "defaultColumnWidth": worksheet.get("defaultColumnWidth"),
+                "defaultRowHeight": worksheet.get("defaultRowHeight"),
+                "hiddenRows": worksheet.get("hiddenRows", []),
+                "hiddenColumns": worksheet.get("hiddenColumns", []),
+                "geometryAuthority": worksheet.get("geometryAuthority"),
+                "tabColor": worksheet.get("tabColor"),
                 "printArea": worksheet.get("printArea"),
             }
         )

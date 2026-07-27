@@ -21,7 +21,16 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from openpyxl import load_workbook
+from openpyxl.cell.cell import MergedCell
 from werkzeug.utils import secure_filename
+
+from core.workbook_geometry import (
+    DEFAULT_COLUMN_WIDTH_UNITS,
+    DEFAULT_ROW_HEIGHT_POINTS,
+    pixels_to_excel_column_width,
+    pixels_to_row_height_points,
+)
+from core.workbook_importer import _cell_style, _color_hex
 
 
 STANDARD_FOLDERS = [
@@ -669,12 +678,15 @@ def workbook_file_to_document(path: Path) -> dict[str, Any]:
     sheets: list[dict[str, Any]] = []
     for sheet in workbook.worksheets:
         cells: dict[str, Any] = {}
+        styles: dict[str, dict[str, Any]] = {}
         for row in sheet.iter_rows(
             min_row=1,
             max_row=min(sheet.max_row, 5_000),
             max_col=min(sheet.max_column, 200),
         ):
             for cell in row:
+                if isinstance(cell, MergedCell):
+                    continue
                 if cell.value is not None:
                     value = _json_cell_value(cell.value)
                     cells[cell.coordinate] = (
@@ -682,24 +694,50 @@ def workbook_file_to_document(path: Path) -> dict[str, Any]:
                         if isinstance(value, str) and value.startswith("=")
                         else {"v": value}
                     )
+                if cell.has_style:
+                    style = _cell_style(cell)
+                    if style:
+                        styles[cell.coordinate] = style
+        default_column_width = (
+            getattr(sheet.sheet_format, "defaultColWidth", None)
+            or DEFAULT_COLUMN_WIDTH_UNITS
+        )
+        default_row_height = (
+            getattr(sheet.sheet_format, "defaultRowHeight", None)
+            or DEFAULT_ROW_HEIGHT_POINTS
+        )
+        tab_color = _color_hex(getattr(sheet.sheet_properties, "tabColor", None))
         sheets.append(
             {
                 "id": uuid.uuid4().hex[:16],
                 "name": sheet.title,
                 "cells": cells,
-                "styles": {},
+                "styles": styles,
                 "merges": [str(item) for item in sheet.merged_cells.ranges],
                 "rowHeights": {
                     str(index): dimension.height
                     for index, dimension in sheet.row_dimensions.items()
-                    if dimension.height
+                    if dimension.height is not None
                 },
                 "columnWidths": {
                     key: dimension.width
                     for key, dimension in sheet.column_dimensions.items()
-                    if dimension.width
+                    if dimension.width is not None
                 },
+                "defaultColumnWidth": float(default_column_width),
+                "defaultRowHeight": float(default_row_height),
+                "hiddenRows": sorted(
+                    int(index)
+                    for index, dimension in sheet.row_dimensions.items()
+                    if dimension.hidden
+                ),
+                "hiddenColumns": sorted(
+                    str(key)
+                    for key, dimension in sheet.column_dimensions.items()
+                    if dimension.hidden
+                ),
                 "archived": sheet.sheet_state != "visible",
+                "tabColor": tab_color,
             }
         )
     workbook.close()
@@ -715,36 +753,80 @@ def project_to_workbook_document(project: dict[str, Any]) -> dict[str, Any]:
             letters = chr(65 + remainder) + letters
         return f"{letters}{row + 1}"
 
-    def dimensions(value: Any, *, columns: bool) -> dict[str, float]:
+    def dimensions(
+        explicit: Any,
+        pixels: Any,
+        *,
+        columns: bool,
+    ) -> dict[str, float]:
+        output: dict[str, float] = {}
+        value = explicit
         if isinstance(value, dict):
-            return {
+            output.update({
                 str(key): float(item)
                 for key, item in value.items()
                 if isinstance(item, (int, float)) and item > 0
-            }
-        if isinstance(value, list):
-            output: dict[str, float] = {}
+            })
+        elif isinstance(value, list):
             for index, item in enumerate(value):
                 if not isinstance(item, (int, float)) or item <= 0:
                     continue
                 key = coordinate(0, index)[:-1] if columns else str(index + 1)
-                output[key] = float(item)
-            return output
-        return {}
+                output[key] = (
+                    pixels_to_excel_column_width(item)
+                    if columns
+                    else pixels_to_row_height_points(item)
+                )
+        if isinstance(pixels, list):
+            for index, item in enumerate(pixels):
+                if not isinstance(item, (int, float)) or item <= 0:
+                    continue
+                key = coordinate(0, index)[:-1] if columns else str(index + 1)
+                output.setdefault(
+                    key,
+                    (
+                        pixels_to_excel_column_width(item)
+                        if columns
+                        else pixels_to_row_height_points(item)
+                    ),
+                )
+        return output
 
     sheets: list[dict[str, Any]] = []
     for index, worksheet in enumerate(project.get("worksheets") or []):
         cells: dict[str, Any] = {}
+        formulas = (
+            worksheet.get("formulas")
+            if isinstance(worksheet.get("formulas"), dict)
+            else {}
+        )
         for row_index, row in enumerate(worksheet.get("grid") or [], 1):
             for column_index, value in enumerate(row, 1):
-                if value in (None, ""):
-                    continue
                 current = column_index
                 letters = ""
                 while current:
                     current, remainder = divmod(current - 1, 26)
                     letters = chr(65 + remainder) + letters
-                cells[f"{letters}{row_index}"] = {"v": value}
+                cell_address = f"{letters}{row_index}"
+                formula = formulas.get(cell_address)
+                if isinstance(formula, str) and formula.startswith("="):
+                    cells[cell_address] = {"f": formula}
+                elif value not in (None, ""):
+                    cells[cell_address] = {"v": value}
+        hidden_rows = sorted(
+            {
+                int(row) + 1
+                for row in (worksheet.get("hiddenRows") or [])
+                if isinstance(row, int) and row >= 0
+            }
+        )
+        hidden_columns = sorted(
+            {
+                coordinate(0, int(column))[:-1]
+                for column in (worksheet.get("hiddenColumns") or [])
+                if isinstance(column, int) and column >= 0
+            }
+        )
         sheets.append(
             {
                 "id": str(
@@ -770,21 +852,98 @@ def project_to_workbook_document(project: dict[str, Any]) -> dict[str, Any]:
                     for item in (worksheet.get("mergedCells") or [])
                 ],
                 "rowHeights": dimensions(
-                    worksheet.get("rowHeights")
-                    or worksheet.get("rowHeightsPx")
-                    or {},
+                    worksheet.get("rowHeights") or {},
+                    worksheet.get("rowHeightsPx") or [],
                     columns=False,
                 ),
                 "columnWidths": dimensions(
-                    worksheet.get("columnWidths")
-                    or worksheet.get("colWidthsPx")
-                    or {},
+                    worksheet.get("columnWidths") or {},
+                    worksheet.get("colWidthsPx") or [],
                     columns=True,
                 ),
+                "defaultColumnWidth": float(
+                    worksheet.get("defaultColumnWidth")
+                    or DEFAULT_COLUMN_WIDTH_UNITS
+                ),
+                "defaultRowHeight": float(
+                    worksheet.get("defaultRowHeight")
+                    or DEFAULT_ROW_HEIGHT_POINTS
+                ),
+                "hiddenRows": hidden_rows,
+                "hiddenColumns": hidden_columns,
                 "archived": not bool(worksheet.get("visible", True)),
+                "tabColor": worksheet.get("tabColor"),
             }
         )
     return {"revision": 0, "updatedAt": utcnow(), "sheets": sheets}
+
+
+def _positive_dimensions(value: Any) -> dict[str, float]:
+    if not isinstance(value, dict):
+        return {}
+    output: dict[str, float] = {}
+    for key, raw in value.items():
+        try:
+            number = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if number > 0:
+            output[str(key)] = number
+    return output
+
+
+def _normalize_workbook_document(document: dict[str, Any]) -> dict[str, Any]:
+    """Read legacy workbook mirrors without rewriting their project package."""
+    normalized = dict(document)
+    normalized["revision"] = int(normalized.get("revision") or 0)
+    normalized.setdefault("updatedAt", utcnow())
+    sheets: list[dict[str, Any]] = []
+    for index, raw_sheet in enumerate(normalized.get("sheets") or []):
+        if not isinstance(raw_sheet, dict):
+            continue
+        sheet = dict(raw_sheet)
+        sheet["id"] = str(sheet.get("id") or uuid.uuid4().hex[:16])
+        sheet["name"] = str(sheet.get("name") or f"Sheet {index + 1}")
+        sheet["cells"] = (
+            dict(sheet.get("cells")) if isinstance(sheet.get("cells"), dict) else {}
+        )
+        sheet["styles"] = (
+            dict(sheet.get("styles"))
+            if isinstance(sheet.get("styles"), dict)
+            else {}
+        )
+        sheet["merges"] = [
+            str(item) for item in (sheet.get("merges") or []) if str(item)
+        ]
+        sheet["rowHeights"] = _positive_dimensions(sheet.get("rowHeights"))
+        sheet["columnWidths"] = _positive_dimensions(
+            sheet.get("columnWidths")
+        )
+        sheet["defaultColumnWidth"] = float(
+            sheet.get("defaultColumnWidth") or DEFAULT_COLUMN_WIDTH_UNITS
+        )
+        sheet["defaultRowHeight"] = float(
+            sheet.get("defaultRowHeight") or DEFAULT_ROW_HEIGHT_POINTS
+        )
+        sheet["hiddenRows"] = sorted(
+            {
+                int(item)
+                for item in (sheet.get("hiddenRows") or [])
+                if isinstance(item, int) and item >= 1
+            }
+        )
+        sheet["hiddenColumns"] = sorted(
+            {
+                str(item).upper()
+                for item in (sheet.get("hiddenColumns") or [])
+                if re.fullmatch(r"[A-Za-z]+", str(item))
+            }
+        )
+        sheet["archived"] = bool(sheet.get("archived"))
+        sheet["tabColor"] = sheet.get("tabColor") or None
+        sheets.append(sheet)
+    normalized["sheets"] = sheets
+    return normalized
 
 
 class WorkbookDocumentStore:
@@ -796,8 +955,10 @@ class WorkbookDocumentStore:
 
     def load(self, project: dict[str, Any]) -> dict[str, Any]:
         if self.path.is_file():
-            return json.loads(self.path.read_text("utf-8"))
-        return project_to_workbook_document(project)
+            return _normalize_workbook_document(
+                json.loads(self.path.read_text("utf-8"))
+            )
+        return _normalize_workbook_document(project_to_workbook_document(project))
 
     def save(
         self,
@@ -818,7 +979,7 @@ class WorkbookDocumentStore:
                 self.history
                 / f"workbook_{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}.json",
             )
-        saved = dict(document)
+        saved = _normalize_workbook_document(document)
         saved["revision"] = int(current.get("revision") or 0) + 1
         saved["updatedAt"] = utcnow()
         atomic_json_write(self.path, saved)
@@ -861,7 +1022,12 @@ class WorkbookDocumentStore:
                         "merges": [],
                         "rowHeights": {},
                         "columnWidths": {},
+                        "defaultColumnWidth": DEFAULT_COLUMN_WIDTH_UNITS,
+                        "defaultRowHeight": DEFAULT_ROW_HEIGHT_POINTS,
+                        "hiddenRows": [],
+                        "hiddenColumns": [],
                         "archived": False,
+                        "tabColor": None,
                     }
                 ]
             }

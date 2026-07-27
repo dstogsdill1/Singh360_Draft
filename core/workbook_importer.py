@@ -18,6 +18,14 @@ from core.metadata_inference import infer_metadata_from_labeled_grid
 from core.page_identity import is_sheet_index_page
 from core.project_model import classify_page_type, default_project, recalc_page_numbers, sanitize_json
 from core.page_normalizer import normalize_page
+from core.workbook_geometry import (
+    DEFAULT_COLUMN_WIDTH_PX,
+    DEFAULT_COLUMN_WIDTH_UNITS,
+    DEFAULT_ROW_HEIGHT_POINTS,
+    DEFAULT_ROW_HEIGHT_PX,
+    excel_column_width_to_pixels,
+    row_height_points_to_pixels,
+)
 from core.heb_idf_switch_matrix import replace_heb_idf_pages  # S360_HEB_IDF_SWITCH_MATRIX_V1
 from core.page_composer import (
     BODY_BUDGET,
@@ -187,23 +195,8 @@ def _included(raw: str, sheet_title: str, use_source: str, *, in_index: bool = T
     return False
 
 
-# Excel unit conversion. Column width is in "characters" of the default font;
-# the classic Excel/openpyxl approximation is px ~= width * 7 + 5. Row height is
-# in points; CSS px = pt * 96/72. Defaults mirror Excel's out-of-the-box sheet.
-_DEFAULT_COL_PX = 64
-_DEFAULT_ROW_PX = 20
-
-
-def _col_width_px(width: float | None) -> int:
-    if not width or width <= 0:
-        return _DEFAULT_COL_PX
-    return max(8, int(round(width * 7 + 5)))
-
-
-def _row_height_px(height: float | None) -> int:
-    if not height or height <= 0:
-        return _DEFAULT_ROW_PX
-    return max(8, int(round(height * 4 / 3)))
+_DEFAULT_COL_PX = DEFAULT_COLUMN_WIDTH_PX
+_DEFAULT_ROW_PX = DEFAULT_ROW_HEIGHT_PX
 
 
 def _color_hex(color) -> str | None:
@@ -346,20 +339,26 @@ def _worksheet_payload(ws, ws_data=None) -> dict[str, Any]:
             }
         )
 
-    default_col = getattr(getattr(ws, "sheet_format", None), "defaultColWidth", None)
-    default_row = getattr(getattr(ws, "sheet_format", None), "defaultRowHeight", None)
+    default_col = (
+        getattr(getattr(ws, "sheet_format", None), "defaultColWidth", None)
+        or DEFAULT_COLUMN_WIDTH_UNITS
+    )
+    default_row = (
+        getattr(getattr(ws, "sheet_format", None), "defaultRowHeight", None)
+        or DEFAULT_ROW_HEIGHT_POINTS
+    )
 
     col_widths_px: list[int] = []
     for c in range(1, n_cols + 1):
         dim = ws.column_dimensions.get(get_column_letter(c))
         width = dim.width if dim and dim.width else default_col
-        col_widths_px.append(_col_width_px(width))
+        col_widths_px.append(excel_column_width_to_pixels(width))
 
     row_heights_px: list[int] = []
     for r in range(1, n_rows + 1):
         dim = ws.row_dimensions.get(r)
         height = dim.height if dim and dim.height else default_row
-        row_heights_px.append(_row_height_px(height))
+        row_heights_px.append(row_height_points_to_pixels(height))
 
     # Legacy dict forms (kept for back-compat) plus px arrays for exact rendering.
     row_heights = {
@@ -372,6 +371,17 @@ def _worksheet_payload(ws, ws_data=None) -> dict[str, Any]:
         for idx, dim in ws.column_dimensions.items()
         if dim.width is not None
     }
+    hidden_rows = sorted(
+        int(index) - 1
+        for index, dimension in ws.row_dimensions.items()
+        if dimension.hidden and int(index) >= 1
+    )
+    hidden_columns = sorted(
+        column_index_from_string(str(key)) - 1
+        for key, dimension in ws.column_dimensions.items()
+        if dimension.hidden
+    )
+    tab_color = _color_hex(getattr(ws.sheet_properties, "tabColor", None))
 
     print_area = None
     try:
@@ -393,6 +403,12 @@ def _worksheet_payload(ws, ws_data=None) -> dict[str, Any]:
         "columnWidths": column_widths,
         "colWidthsPx": col_widths_px,
         "rowHeightsPx": row_heights_px,
+        "defaultColumnWidth": float(default_col),
+        "defaultRowHeight": float(default_row),
+        "geometryAuthority": "workbook-v1",
+        "hiddenRows": hidden_rows,
+        "hiddenColumns": hidden_columns,
+        "tabColor": tab_color,
         "sourceSheet": ws.title,
         "sourceRange": source_range,
         "printArea": print_area,
@@ -2302,18 +2318,42 @@ def _estimated_row_heights(
     header_rows: int,
     *,
     font_px: int | None = None,
+    styles_rc: dict[str, Any] | None = None,
+    merged_cells: list[dict[str, Any]] | None = None,
 ) -> list[int]:
     if font_px is None:
         font_px = 12 if family in ("matrix", "idfTable", "ioSchedule", "panelDetail", "rackLayout") else 13
     line_h = int(round(font_px * 1.22))
+    styles_rc = styles_rc or {}
+    merged_widths: dict[str, int] = {}
+    for merged in merged_cells or []:
+        try:
+            start_row = int(merged["startRow"])
+            start_col = int(merged["startCol"])
+            end_col = int(merged["endCol"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        merged_widths[f"{start_row}:{start_col}"] = sum(
+            col_widths[column] if column < len(col_widths) else _DEFAULT_COL_PX
+            for column in range(start_col, end_col + 1)
+        )
     out: list[int] = []
     for r, row in enumerate(grid):
         max_lines = 1
         for c, val in enumerate(row):
+            if not bool((styles_rc.get(f"{r}:{c}") or {}).get("wrap")):
+                continue
             text = " ".join(str(val or "").split())
             if not text:
                 continue
-            w = max(36, (col_widths[c] if c < len(col_widths) else _DEFAULT_COL_PX) - 8)
+            w = max(
+                36,
+                merged_widths.get(
+                    f"{r}:{c}",
+                    col_widths[c] if c < len(col_widths) else _DEFAULT_COL_PX,
+                )
+                - 8,
+            )
             chars = max(7, int(w / max(5.5, font_px * 0.48)))
             words = text.split()
             lines = 1
@@ -2338,14 +2378,20 @@ def _apply_table_geometry(
     page_type: str,
     layout_profile: str = "",
 ) -> None:
-    """Auto-size columns and rows for normalized/output table geometry."""
+    """Apply readable row growth without changing workbook column proportions.
+
+    Column widths arrive from the canonical workbook geometry conversion and
+    remain untouched. Drawing/Page Editor/PDF fit the entire table with one
+    uniform scale; rows may grow for wrapped words and continuation pagination.
+    """
     grid = block.get("grid") or []
     if not grid:
         return
     profile = layout_profile or block.get("layoutProfile") or ""
-    widths = _preferred_col_widths(grid, family, page_type, profile)
-    if widths:
-        block["colWidths"] = widths
+    n_cols = max((len(row) for row in grid), default=0)
+    widths = list(block.get("colWidths") or [])
+    widths = (widths + [_DEFAULT_COL_PX] * n_cols)[:n_cols]
+    block["colWidths"] = widths
     header_rows = int(block.get("headerRowCount") or 1)
     font_px = None
     if profile == "front_matter_narrative_table":
@@ -2379,9 +2425,23 @@ def _apply_table_geometry(
         block["wordWrapColumns"] = sorted(narrative_cols) if narrative_cols else sorted(
             i for i in range(len(widths)) if i not in nowrap
         )
-    block["rowHeights"] = _estimated_row_heights(
-        grid, block.get("colWidths") or widths, family, header_rows, font_px=font_px,
+    estimated_heights = _estimated_row_heights(
+        grid,
+        widths,
+        family,
+        header_rows,
+        font_px=font_px,
+        styles_rc=block.get("styles") or {},
+        merged_cells=block.get("mergedCells") or [],
     )
+    source_heights = list(block.get("rowHeights") or [])
+    block["rowHeights"] = [
+        max(
+            source_heights[row] if row < len(source_heights) else _DEFAULT_ROW_PX,
+            estimated,
+        )
+        for row, estimated in enumerate(estimated_heights)
+    ]
     block["pageFamily"] = family
     block["bodyRowFillMode"] = "none"
     block["gridLines"] = True
@@ -2590,13 +2650,34 @@ def _trim_trailing_blank_ranges(
 
     keep_col, keep_row = _print_area_last_col_row(print_area) or (-1, -1)
 
-    # A merge continuation cell never carries its own text or style (the
-    # anchor top-left cell holds both) — so a decorative full-width title
-    # band merge does not, by itself, make its trailing columns non-blank.
-    # Any merge that survives a trim simply has its endRow/endCol clamped
-    # below, so shrinking a banner's span loses no content.
+    # Merge continuation cells carry no text/style of their own, but a styled
+    # title/instruction/header band must retain its full span. Otherwise a
+    # trailing-blank trim silently destroys the workbook's visual geometry.
+    protected_merge_cells: set[tuple[int, int]] = set()
+    for merged in merges:
+        start_row = int(merged.get("startRow", 0))
+        start_col = int(merged.get("startCol", 0))
+        anchor_value = (
+            grid[start_row][start_col]
+            if 0 <= start_row < len(grid)
+            and 0 <= start_col < len(grid[start_row])
+            else ""
+        )
+        if not str(anchor_value or "").strip() and not _meaningful_style(
+            styles_rc.get(f"{start_row}:{start_col}")
+        ):
+            continue
+        for row in range(start_row, int(merged.get("endRow", start_row)) + 1):
+            for column in range(
+                start_col,
+                int(merged.get("endCol", start_col)) + 1,
+            ):
+                protected_merge_cells.add((row, column))
+
     def col_is_blank(c: int) -> bool:
         for r in range(n_rows):
+            if (r, c) in protected_merge_cells:
+                return False
             row = grid[r] if r < len(grid) else []
             if c < len(row) and str(row[c] or "").strip():
                 return False
@@ -2605,6 +2686,8 @@ def _trim_trailing_blank_ranges(
         return True
 
     def row_is_blank(r: int) -> bool:
+        if any(row == r for row, _ in protected_merge_cells):
+            return False
         row = grid[r] if r < len(grid) else []
         if any(str(v or "").strip() for v in row):
             return False
@@ -2653,10 +2736,44 @@ def _trim_trailing_blank_ranges(
 
 def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build a self-contained excel_exact block (grid + 0-based styles + dims)."""
-    grid = [list(r) for r in (ws.get("grid") or [])]
+    source_grid = [list(r) for r in (ws.get("grid") or [])]
+    source_rows = len(source_grid)
+    source_cols = max((len(r) for r in source_grid), default=0)
+    source_grid = [
+        row + [""] * (source_cols - len(row))
+        for row in source_grid
+    ]
+    hidden_rows = {
+        int(row)
+        for row in (ws.get("hiddenRows") or [])
+        if isinstance(row, int) and 0 <= row < source_rows
+    }
+    hidden_columns = {
+        int(column)
+        for column in (ws.get("hiddenColumns") or [])
+        if isinstance(column, int) and 0 <= column < source_cols
+    }
+    visible_rows = [
+        row for row in range(source_rows) if row not in hidden_rows
+    ]
+    visible_columns = [
+        column for column in range(source_cols)
+        if column not in hidden_columns
+    ]
+    if source_rows and not visible_rows:
+        visible_rows = [0]
+    if source_cols and not visible_columns:
+        visible_columns = [0]
+    row_map = {source: target for target, source in enumerate(visible_rows)}
+    column_map = {
+        source: target for target, source in enumerate(visible_columns)
+    }
+    grid = [
+        [source_grid[row][column] for column in visible_columns]
+        for row in visible_rows
+    ]
     n_rows = len(grid)
-    n_cols = max((len(r) for r in grid), default=0)
-    grid = [r + [""] * (n_cols - len(r)) for r in grid]
+    n_cols = len(visible_columns)
 
     # A1-keyed source styles -> 0-based "r:c" keys (slice/render friendly).
     styles_rc: dict[str, Any] = {}
@@ -2664,16 +2781,52 @@ def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[s
         m = re.fullmatch(r"([A-Z]+)(\d+)", key)
         if not m:
             continue
-        col = column_index_from_string(m.group(1)) - 1
-        row = int(m.group(2)) - 1
-        if 0 <= row < n_rows and 0 <= col < n_cols:
+        source_col = column_index_from_string(m.group(1)) - 1
+        source_row = int(m.group(2)) - 1
+        row = row_map.get(source_row)
+        col = column_map.get(source_col)
+        if row is not None and col is not None:
             styles_rc[f"{row}:{col}"] = val
 
-    col_widths = list(ws.get("colWidthsPx") or [])
-    col_widths = (col_widths + [64] * n_cols)[:n_cols]
-    row_heights = list(ws.get("rowHeightsPx") or [])
-    row_heights = (row_heights + [20] * n_rows)[:n_rows]
-    merged_cells = ws.get("mergedCells") or []
+    source_col_widths = list(ws.get("colWidthsPx") or [])
+    source_col_widths = (
+        source_col_widths + [DEFAULT_COLUMN_WIDTH_PX] * source_cols
+    )[:source_cols]
+    col_widths = [source_col_widths[column] for column in visible_columns]
+    source_row_heights = list(ws.get("rowHeightsPx") or [])
+    source_row_heights = (
+        source_row_heights + [DEFAULT_ROW_HEIGHT_PX] * source_rows
+    )[:source_rows]
+    row_heights = [source_row_heights[row] for row in visible_rows]
+    merged_cells: list[dict[str, Any]] = []
+    for raw_merge in ws.get("mergedCells") or []:
+        rows = [
+            row for row in range(
+            int(raw_merge.get("startRow", 0)),
+            int(raw_merge.get("endRow", 0)) + 1,
+            )
+            if row in row_map
+        ]
+        columns = [
+            column for column in range(
+            int(raw_merge.get("startCol", 0)),
+            int(raw_merge.get("endCol", 0)) + 1,
+            )
+            if column in column_map
+        ]
+        if not rows or not columns:
+            continue
+        mapped = {
+            "startRow": row_map[rows[0]],
+            "startCol": column_map[columns[0]],
+            "endRow": row_map[rows[-1]],
+            "endCol": column_map[columns[-1]],
+        }
+        if mapped["startRow"] != mapped["endRow"] or (
+            mapped["startCol"] != mapped["endCol"]
+        ):
+            merged_cells.append(mapped)
+    src_rows = list(visible_rows)
 
     # Header band: leading consecutive rows that are bold or filled (the yellow
     # controller / gray column headers). Repeated on continuation pages.
@@ -2711,6 +2864,7 @@ def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[s
         n_cols = max((len(r) for r in grid), default=0)
         col_widths = col_widths[:n_cols]
         row_heights = row_heights[:n_rows]
+        src_rows = src_rows[:n_rows]
 
     return {
         "id": block_id,
@@ -2725,7 +2879,7 @@ def _excel_range_block(ws: dict[str, Any], block_id: str, split_settings: dict[s
         "mergedCells": merged_cells,
         "colWidths": col_widths,
         "rowHeights": row_heights,
-        "srcRows": list(range(n_rows)),
+        "srcRows": src_rows,
         "headerRowCount": header_rows,
         "repeatRows": list(range(header_rows)),
         "splitMode": ss.get("splitMode", "auto_rows"),
@@ -2819,6 +2973,12 @@ def import_workbook(
                 "columnWidths": ws["columnWidths"],
                 "colWidthsPx": ws["colWidthsPx"],
                 "rowHeightsPx": ws["rowHeightsPx"],
+                "defaultColumnWidth": ws["defaultColumnWidth"],
+                "defaultRowHeight": ws["defaultRowHeight"],
+                "geometryAuthority": ws["geometryAuthority"],
+                "hiddenRows": ws["hiddenRows"],
+                "hiddenColumns": ws["hiddenColumns"],
+                "tabColor": ws["tabColor"],
                 "sourceSheet": ws["sourceSheet"],
                 "sourceRange": ws["sourceRange"],
                 "printArea": ws["printArea"],

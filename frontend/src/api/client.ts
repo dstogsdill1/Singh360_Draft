@@ -67,8 +67,15 @@ export interface WorkbookDocument {
     cells: Record<string, { v?: unknown; f?: string }>;
     styles: Record<string, Record<string, unknown>>;
     merges: string[];
+    /** Explicit Excel row heights in points, keyed by one-based row number. */
     rowHeights: Record<string, number>;
+    /** Explicit Excel column widths in OOXML character units, keyed by letters. */
     columnWidths: Record<string, number>;
+    defaultColumnWidth: number;
+    defaultRowHeight: number;
+    /** Workbook visibility uses one-based rows and Excel column letters. */
+    hiddenRows: number[];
+    hiddenColumns: string[];
     archived?: boolean;
     tabColor?: string | null;
   }>;

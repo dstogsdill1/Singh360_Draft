@@ -3,6 +3,11 @@ import type { MergedCell, Worksheet } from '../../model/types';
 import { HIGHLIGHT_SWATCHES } from '../../model/tableStyle';
 import { BODY_W } from '../../model/sheetGeometry';
 import {
+  DEFAULT_COLUMN_WIDTH_PX,
+  DEFAULT_ROW_HEIGHT_PX,
+  excelColumnWidthToPixels,
+} from '../../model/workbookGeometry';
+import {
   applySourceNumberAction,
   formatSourceSelectionLabel,
   type SourceNumberAction,
@@ -41,9 +46,8 @@ interface Rect {
 }
 
 const FONT_SIZES = [8, 9, 10, 11, 12];
-const SOURCE_DATA_WIDTH = BODY_W - 118;
-const SOURCE_MAX_COL_W = SOURCE_DATA_WIDTH;
-const DEFAULT_SOURCE_COL_W = WS_MIN_COL_W + 45;
+const SOURCE_MAX_COL_W = BODY_W - 118;
+const DEFAULT_SOURCE_COL_W = DEFAULT_COLUMN_WIDTH_PX;
 
 function norm(r: Rect): Rect {
   return {
@@ -147,17 +151,9 @@ export default function RawGridRenderer({
   );
 
   const displayColWidths = useMemo(() => {
-    const widths = Array.from({ length: nCols }, (_, c) => colWidthsPx[c] ?? DEFAULT_SOURCE_COL_W);
-    const storedWidth = visibleCols.reduce((sum, col) => sum + widths[col], 0);
-    if (visibleCols.length && storedWidth < SOURCE_DATA_WIDTH) {
-      let flexColumn = visibleCols[0];
-      for (const col of visibleCols.slice(1)) {
-        if (widths[col] > widths[flexColumn]) flexColumn = col;
-      }
-      widths[flexColumn] += SOURCE_DATA_WIDTH - storedWidth;
-    }
-    return widths;
-  }, [colWidthsPx, nCols, visibleCols]);
+    const defaultWidth = excelColumnWidthToPixels(worksheet?.defaultColumnWidth);
+    return Array.from({ length: nCols }, (_, c) => colWidthsPx[c] ?? defaultWidth);
+  }, [colWidthsPx, nCols, worksheet?.defaultColumnWidth]);
 
   const sourceTableWidth = 36 + visibleCols.reduce((sum, col) => sum + displayColWidths[col], 0);
 
@@ -417,7 +413,7 @@ export default function RawGridRenderer({
   );
 
   const colWidth = (c: number) => displayColWidths[c] ?? DEFAULT_SOURCE_COL_W;
-  const rowHeight = (r: number) => rowHeightsPx[r] ?? WS_MIN_ROW_H + 4;
+  const rowHeight = (r: number) => rowHeightsPx[r] ?? DEFAULT_ROW_HEIGHT_PX;
 
   const selectionLabel = formatSourceSelectionLabel(selCells());
 
@@ -655,7 +651,9 @@ export default function RawGridRenderer({
                   textAlign: (st?.hAlign as React.CSSProperties['textAlign']) ?? 'left',
                   verticalAlign: (st?.vAlign as React.CSSProperties['verticalAlign']) ?? 'top',
                   whiteSpace: wraps ? 'pre-wrap' : 'pre',
-                  wordBreak: wraps ? 'break-word' : 'normal',
+                  overflowWrap: 'normal',
+                  wordBreak: 'normal',
+                  hyphens: 'none',
                   overflow: 'hidden',
                 };
                 if (st?.bold) cellStyle.fontWeight = 700;

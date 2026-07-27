@@ -3,6 +3,8 @@ import type { ProjectModel } from '../model/types';
 import SheetFrame from './SheetFrame';
 import TitleBlock from './TitleBlock';
 import PageRenderer from './PageRenderer';
+import { pdfPointsToPixels } from '../model/workbookGeometry';
+import { SHEET_H, SHEET_W } from '../model/sheetGeometry';
 
 interface Props {
   project: ProjectModel | null;
@@ -10,15 +12,12 @@ interface Props {
 
 const noop = () => {};
 
-const SHEET_W = 1632;
-const SHEET_H = 1056;
-
 function paperFromUrl(): { wPx: number; hPx: number; scale: number } {
   const params = new URLSearchParams(window.location.search);
   const pw = parseFloat(params.get('pw') || '17');
   const ph = parseFloat(params.get('ph') || '11');
-  const wPx = (Number.isFinite(pw) ? pw : 17) * 96;
-  const hPx = (Number.isFinite(ph) ? ph : 11) * 96;
+  const wPx = pdfPointsToPixels((Number.isFinite(pw) ? pw : 17) * 72);
+  const hPx = pdfPointsToPixels((Number.isFinite(ph) ? ph : 11) * 72);
   // Fit the fixed-design 17x11 sheet onto the chosen paper, preserving aspect.
   const scale = Math.min(wPx / SHEET_W, hPx / SHEET_H);
   return { wPx, hPx, scale };

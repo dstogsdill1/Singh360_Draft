@@ -32,8 +32,14 @@ class ProjectWorkspaceTests(unittest.TestCase):
                     "grid": [["Device", "Count"], ["Sensor", "2"]],
                     "styles": {},
                     "mergedCells": [],
-                    "rowHeights": [24, 20],
-                    "columnWidths": [120, 80],
+                    "rowHeights": {"1": 18.0, "2": 15.0},
+                    "columnWidths": {"A": 31.5, "B": 11.25},
+                    "rowHeightsPx": [24, 20],
+                    "colWidthsPx": [225, 84],
+                    "defaultColumnWidth": 8.43,
+                    "defaultRowHeight": 15.0,
+                    "hiddenRows": [1],
+                    "hiddenColumns": [1],
                 }
             ],
         }
@@ -96,13 +102,17 @@ class ProjectWorkspaceTests(unittest.TestCase):
         self.assertEqual(0, initial["revision"])
         self.assertEqual("Fixture Schedule", initial["sheets"][0]["name"])
         self.assertEqual(
-            {"1": 24.0, "2": 20.0},
+            {"1": 18.0, "2": 15.0},
             initial["sheets"][0]["rowHeights"],
         )
         self.assertEqual(
-            {"A": 120.0, "B": 80.0},
+            {"A": 31.5, "B": 11.25},
             initial["sheets"][0]["columnWidths"],
         )
+        self.assertEqual(8.43, initial["sheets"][0]["defaultColumnWidth"])
+        self.assertEqual(15.0, initial["sheets"][0]["defaultRowHeight"])
+        self.assertEqual([2], initial["sheets"][0]["hiddenRows"])
+        self.assertEqual(["B"], initial["sheets"][0]["hiddenColumns"])
         initial["sheets"][0]["cells"]["B2"] = {"v": "3"}
         saved = store.save(self.project, 0, initial)
         self.assertEqual(1, saved["revision"])
