@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import {
   createSymbolMapperSession,
   createSymbolMapperCountPackage,
@@ -28,6 +28,7 @@ import { symbolCountLegendDataUrl, type SymbolMapperCountPageRequest } from '../
 interface Props {
   onClose: () => void;
   onAddPage?: (result: SymbolMapperRenderResult, title: string, sheetCode: string, countPage: SymbolMapperCountPageRequest) => Promise<void>;
+  initialFileUrl?: string;
 }
 
 type Step = 'upload' | 'choose' | 'results' | 'output';
@@ -113,7 +114,7 @@ function statusOf(candidate: SymbolMapperCandidate): 'accepted' | 'review' | 're
   return candidate.accepted ? 'accepted' : 'review';
 }
 
-export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
+export default function SymbolMapperModal({ onClose, onAddPage, initialFileUrl }: Props) {
   const [step, setStep] = useState<Step>('upload');
   const [session, setSession] = useState<SymbolMapperSession | null>(null);
   const [symbols, setSymbols] = useState<ConfiguredSymbol[]>([]);
@@ -130,6 +131,7 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateStatus, setTemplateStatus] = useState('');
   const [error, setError] = useState('');
+  const initialLoadStarted = useRef(false);
 
   const active = symbols.find((item) => item.id === activeId) ?? symbols[0];
   const enabled = symbols.filter((item) => item.enabled);
@@ -204,6 +206,26 @@ export default function SymbolMapperModal({ onClose, onAddPage }: Props) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!initialFileUrl || initialLoadStarted.current) return;
+    initialLoadStarted.current = true;
+    setLoading(true);
+    fetch(initialFileUrl)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Project PDF could not be opened (${response.status}).`);
+        const disposition = response.headers.get('content-disposition') || '';
+        const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+        const basicName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+        const name = decodeURIComponent(encodedName || basicName || 'project-drawing.pdf');
+        const blob = await response.blob();
+        await pickFile(new File([blob], name, { type: blob.type || 'application/pdf' }));
+      })
+      .catch((reason) => {
+        setError(String(reason));
+        setLoading(false);
+      });
+  }, [initialFileUrl]);
 
   const applyPalette = (paletteId: string) => {
     if (!active) return;

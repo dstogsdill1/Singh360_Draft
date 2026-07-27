@@ -133,6 +133,8 @@ export default function ProjectDashboard({ project }: Props) {
     if (tool) params.set('tool', tool);
     return `/app?${params.toString()}`;
   };
+  const workspaceUrl = (view: 'files' | 'data') =>
+    project ? `/app?project=${project.id}&view=${view}` : '/app';
 
   const run = async (label: string, fn: () => Promise<unknown>, refresh = true) => {
     setBusy(label);
@@ -364,8 +366,10 @@ export default function ProjectDashboard({ project }: Props) {
           <button type="button" onClick={() => window.open(aiGuideUrl('html'), '_blank', 'noopener,noreferrer')}>AI-Ready Instructions</button>
           <button type="button" onClick={() => window.open('/app?help=1', '_blank', 'noopener,noreferrer')}>Quick Help</button>
           <button type="button" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}>Component Builder</button>
+          {project && <button type="button" onClick={() => window.location.assign(workspaceUrl('files'))}>Project Files</button>}
+          {project && <button type="button" onClick={() => window.location.assign(workspaceUrl('data'))}>Data Workspace</button>}
           {project && <button type="button" onClick={() => window.location.assign(actionUrl('symbol-mapper'))}>Symbol Mapper</button>}
-          {project && <button type="button" className="primary" onClick={() => window.location.assign(actionUrl())}>Open Page Editor</button>}
+          {project && <button type="button" className="primary" onClick={() => window.location.assign(actionUrl())}>Page Editor</button>}
         </div>
       </header>
 
@@ -482,9 +486,11 @@ export default function ProjectDashboard({ project }: Props) {
               </section>
 
               <section className="quick-actions-card">
-                <div className="card-head"><h2>Start Here</h2><span>The five tools used for normal drawing-package work</span></div>
+                <div className="card-head"><h2>Primary Workspace</h2><span>Keep project files, schedules, and drawing pages together</span></div>
                 <div className="project-start-tools">
-                  <button type="button" className="primary" onClick={() => window.location.assign(actionUrl())}><b>Open Page Editor</b><span>Open the complete File / Home / Insert / Symbols / Draw editor</span></button>
+                  <button type="button" onClick={() => window.location.assign(workspaceUrl('files'))}><b>Project Files</b><span>Full-screen folders, uploads, previews, archive, and recovery</span></button>
+                  <button type="button" onClick={() => window.location.assign(workspaceUrl('data'))}><b>Data Workspace</b><span>Edit project-local schedule data without writing the linked Excel workbook</span></button>
+                  <button type="button" className="primary" onClick={() => window.location.assign(actionUrl())}><b>Page Editor</b><span>Open the complete File / Home / Insert / Symbols / Draw editor</span></button>
                   <button type="button" onClick={() => setPageManagerOpen(true)}><b>Review Drawing Pages</b><span>Scroll through every page and choose what publishes</span></button>
                   <button type="button" onClick={() => window.location.assign(actionUrl('symbol-mapper'))}><b>Run Symbol Mapper</b><span>Upload a drawing PDF, identify symbols, highlight, and count</span></button>
                   <button type="button" onClick={() => window.location.assign(actionUrl('symbol-legend'))}><b>Symbol Maker / Legend Builder</b><span>Edit the Singh360 symbol standard and insert a legend</span></button>

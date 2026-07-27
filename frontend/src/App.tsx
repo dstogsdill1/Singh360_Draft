@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   archiveProject,
   attachCsv,
@@ -60,6 +60,9 @@ import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 import HelpCenter from './components/HelpCenter';
 import ProjectDashboard from './components/ProjectDashboard';
+import ProjectFilesPage from './components/ProjectFilesPage';
+
+const DataWorkspace = lazy(() => import('./workspace/DataWorkspace'));
 
 function getUrlParams() {
   const params = new URLSearchParams(window.location.search);
@@ -68,7 +71,9 @@ function getUrlParams() {
     print: params.get('print') === '1',
     help: params.get('help') === '1',
     mode: params.get('mode') === 'editor' ? 'editor' : 'home',
+    view: params.get('view') || '',
     tool: params.get('tool') || '',
+    projectFileId: params.get('projectFile') || '',
     requestedPageId: params.get('page') || '',
   };
 }
@@ -95,7 +100,16 @@ function withPageNumbers(pages: PageModel[]): PageModel[] {
 }
 
 export default function App() {
-  const { projectId: initialProjectId, print: printMode, help: helpMode, mode: appMode, tool: initialTool, requestedPageId } = getUrlParams();
+  const {
+    projectId: initialProjectId,
+    print: printMode,
+    help: helpMode,
+    mode: appMode,
+    view: appView,
+    tool: initialTool,
+    projectFileId: initialProjectFileId,
+    requestedPageId,
+  } = getUrlParams();
 
   const [project, setProject] = useState<ProjectModel | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
@@ -2106,6 +2120,16 @@ export default function App() {
     );
   }
 
+  if (!printMode && project && (appView === 'files' || appView === 'sources')) {
+    return <ProjectFilesPage project={project} />;
+  }
+
+  if (!printMode && project && appView === 'data') {
+    return <Suspense fallback={<div className="data-workspace-loading">Loading Data Workspace…</div>}>
+      <DataWorkspace project={project} />
+    </Suspense>;
+  }
+
   // S360 PROJECT HOME DEFAULT ROUTE V1
   if (!printMode && appMode !== 'editor') {
     return <ProjectDashboard project={project} />;
@@ -2463,6 +2487,9 @@ export default function App() {
     {symbolMapperOpen && (
       <SymbolMapperModal
         onClose={() => setSymbolMapperOpen(false)}
+        initialFileUrl={initialProjectFileId
+          ? `/api/projects/${project.id}/project-files/${initialProjectFileId}/content`
+          : undefined}
         onAddPage={(result, title, sheetCode, countPage) => addSymbolMapPage(result, title, sheetCode, countPage)}
       />
     )}

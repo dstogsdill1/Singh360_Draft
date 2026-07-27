@@ -28,6 +28,154 @@ export async function listProjects(): Promise<ProjectListItem[]> {
   return json.projects ?? [];
 }
 
+async function workspaceJson<T>(response: Response): Promise<T> {
+  if (!response.ok) throw await exactApiError(response);
+  return response.json() as Promise<T>;
+}
+
+export interface ProjectFileRecord {
+  id: string;
+  originalFileName: string;
+  storedFileName: string;
+  mediaType: string;
+  fileType: 'pdf' | 'images' | 'spreadsheets' | 'csv' | 'text' | 'documents' | 'other';
+  size: number;
+  sha256: string;
+  dateAdded: string;
+  version: number;
+  status: 'active' | 'superseded' | 'archived';
+  virtualPath: string;
+  relativePath: string;
+  localProjectPath: string;
+  tags: string[];
+  notes: string;
+}
+
+export interface ProjectFilesPayload {
+  folders: string[];
+  archivedFolders: Array<{ path: string; restorePath: string; archivedAt: string }>;
+  files: ProjectFileRecord[];
+  conversionQueue: Array<Record<string, unknown>>;
+}
+
+export interface WorkbookDocument {
+  revision: number;
+  updatedAt: string;
+  sheets: Array<{
+    id: string;
+    name: string;
+    cells: Record<string, { v?: unknown; f?: string }>;
+    styles: Record<string, Record<string, unknown>>;
+    merges: string[];
+    rowHeights: Record<string, number>;
+    columnWidths: Record<string, number>;
+    archived?: boolean;
+    tabColor?: string | null;
+  }>;
+}
+
+export async function listProjectFiles(projectId: string): Promise<ProjectFilesPayload> {
+  return workspaceJson(await fetch(`/api/projects/${projectId}/project-files`));
+}
+
+export async function uploadProjectFiles(
+  projectId: string,
+  files: File[],
+  virtualPath = '',
+): Promise<ProjectFileRecord[]> {
+  const form = new FormData();
+  files.forEach((file) => form.append('files', file));
+  form.append('virtualPath', virtualPath);
+  form.append('relativePaths', JSON.stringify(files.map((file) => file.webkitRelativePath || file.name)));
+  const data = await workspaceJson<{ files: ProjectFileRecord[] }>(
+    await fetch(`/api/projects/${projectId}/project-files/upload`, { method: 'POST', body: form }),
+  );
+  return data.files;
+}
+
+export async function importProjectFilesZip(projectId: string, file: File, virtualPath = ''): Promise<void> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('virtualPath', virtualPath);
+  await workspaceJson(await fetch(`/api/projects/${projectId}/project-files/import-zip`, { method: 'POST', body: form }));
+}
+
+export async function createProjectFolder(projectId: string, path: string): Promise<void> {
+  await workspaceJson(await fetch(`/api/projects/${projectId}/project-folders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  }));
+}
+
+export async function updateProjectFolder(
+  projectId: string,
+  action: 'rename' | 'move' | 'archive' | 'restore',
+  path: string,
+  value = '',
+): Promise<string> {
+  const data = await workspaceJson<{ folder: string }>(
+    await fetch(`/api/projects/${projectId}/project-folders`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action,
+        path,
+        ...(action === 'rename' ? { name: value } : {}),
+        ...(action === 'move' ? { destination: value } : {}),
+      }),
+    }),
+  );
+  return data.folder;
+}
+
+export async function updateProjectFile(
+  projectId: string,
+  fileId: string,
+  action: 'rename' | 'move' | 'archive' | 'restore',
+  value = '',
+): Promise<ProjectFileRecord> {
+  const data = await workspaceJson<{ file: ProjectFileRecord }>(
+    await fetch(`/api/projects/${projectId}/project-files/${fileId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action,
+        ...(action === 'rename' ? { name: value } : {}),
+        ...(action === 'move' ? { destination: value } : {}),
+      }),
+    }),
+  );
+  return data.file;
+}
+
+export async function previewProjectFile(projectId: string, fileId: string): Promise<Record<string, unknown>> {
+  return workspaceJson(await fetch(`/api/projects/${projectId}/project-files/${fileId}/preview`));
+}
+
+export async function sendProjectFileToData(projectId: string, fileId: string): Promise<WorkbookDocument> {
+  const data = await workspaceJson<{ workbook: WorkbookDocument }>(
+    await fetch(`/api/projects/${projectId}/project-files/${fileId}/send-to-data`, { method: 'POST' }),
+  );
+  return data.workbook;
+}
+
+export async function getDataWorkspace(projectId: string): Promise<WorkbookDocument> {
+  return workspaceJson(await fetch(`/api/projects/${projectId}/data-workspace`));
+}
+
+export async function saveDataWorkspace(
+  projectId: string,
+  document: WorkbookDocument,
+  expectedRevision: number,
+): Promise<WorkbookDocument> {
+  return workspaceJson(await fetch(`/api/projects/${projectId}/data-workspace`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedRevision, document }),
+  }));
+}
+
 export async function getDuplicateFolders(id: string): Promise<{ canonicalFolder: string; duplicateFolders: string[] }> {
   const res = await fetch(`/api/projects/${id}/duplicate-folders`);
   if (!res.ok) throw new Error(await res.text());
