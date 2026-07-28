@@ -1,5 +1,54 @@
 export type PageType = 'data-grid' | 'canvas' | 'underlay' | 'hybrid' | 'cover' | 'index';
 
+export interface ExcelLayoutStyle {
+  fill?: string;
+  fontColor?: string;
+  fontSize?: number;
+  bold?: boolean;
+  align?: 'left' | 'center' | 'right';
+  wrap?: boolean;
+  borderColor?: string;
+  borderStyle?: 'none' | 'thin' | 'medium';
+}
+
+export interface ExcelLayoutMerge {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+}
+
+export interface ExcelLayoutTable {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rows: string[][];
+  columnWidths: number[];
+  rowHeights: number[];
+  merges: ExcelLayoutMerge[];
+  title: string;
+  titleStyle: ExcelLayoutStyle;
+  headerStyle: ExcelLayoutStyle;
+  bodyStyle: ExcelLayoutStyle;
+  alternatingFill?: string;
+  keepTogether: boolean;
+  splitRows: boolean;
+  repeatTitle: boolean;
+  repeatHeaders: boolean;
+}
+
+export interface ExcelLayoutModel {
+  version: 1;
+  pageWidth: number;
+  pageHeight: number;
+  printableMargin: number;
+  snapSize: number;
+  tabColor?: string | null;
+  tables: ExcelLayoutTable[];
+}
+
 export type BlockType =
   | 'title'
   | 'subtitle'
@@ -285,6 +334,8 @@ export interface PageModel {
     text: string;
     placement: 'right' | 'bottom';
   }>;
+  /** Opt-in independent editable tables positioned on stacked 17 x 11 sheets. */
+  excelLayout?: ExcelLayoutModel;
 }
 
 export interface ProjectModel {

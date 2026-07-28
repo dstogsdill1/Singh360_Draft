@@ -343,6 +343,7 @@ def project_hash(project: dict[str, Any]) -> str:
                 "canvasObjects": p.get("canvasObjects", []),
                 "assets": p.get("assets", []),
                 "notes": p.get("notes", ""),
+                "excelLayout": p.get("excelLayout"),
             }
             for p in project.get("pages", [])
             if isinstance(p, dict)

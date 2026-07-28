@@ -1,6 +1,7 @@
 import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from '../model/types';
 import NormalizedPage from './renderers/NormalizedPage';
 import RawGridRenderer from './renderers/RawGridRenderer';
+import ExcelLayoutCanvas from './ExcelLayoutCanvas';
 
 interface Props {
   page: PageModel;
@@ -55,6 +56,9 @@ export default function PageRenderer({
         onExportSource={onExportPageSource}
       />
     );
+  }
+  if (page.excelLayout) {
+    return <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={exporting} />;
   }
 
   return (

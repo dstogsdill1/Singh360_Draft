@@ -911,6 +911,7 @@ export default function App() {
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       if (!isCanvasContext()) return;
+      if (activePageRef.current?.excelLayout) return;
       const items = e.clipboardData?.items;
       if (!items) return;
 

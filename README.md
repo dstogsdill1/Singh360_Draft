@@ -4,6 +4,17 @@ Singh360 Draft is the Singh360 EMS drawing-package editor. It imports project
 workbooks, renders fixed 17 x 11 sheets, preserves app-owned overlays and
 components, and exports PDF drawing sets and portable project packages.
 
+## Excel Layout pages
+
+Published pages can opt into **Excel Layout** from the page toolbar. This mode
+keeps each pasted HTML, Excel, CSV, or TSV table as an independently editable
+table on the real 17 x 11 drawing canvas. Tables retain their own placement,
+column widths, row heights, merged title metadata, styles, and Keep
+Together/Split Rows continuation settings. Workbook output uses a fine-grained
+editable-cell grid with merged spans, Tabloid landscape print settings, print
+area, and manual page breaks; ordinary flow-based pages continue to use their
+existing renderer.
+
 ## Canonical identity
 
 - Product, UI, browser, and window name: **Singh360 Draft**

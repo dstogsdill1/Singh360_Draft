@@ -78,6 +78,15 @@ export default function ViewportToolbar({
           <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Drawing</button>
         )}
         <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Workbook Draft</button>
+        <button
+          className={`fit-btn ${activePage.excelLayout ? 'active' : ''}`}
+          onClick={() => onPatchPage?.({
+            excelLayout: activePage.excelLayout || {
+              version: 1, pageWidth: 1632, pageHeight: 1056,
+              printableMargin: 48, snapSize: 8, tabColor: '#F4B183', tables: [],
+            },
+          })}
+        >Excel Layout</button>
         {canRebuildFromSource && onRebuildFromSource ? (
           <button className="fit-btn" type="button" onClick={onRebuildFromSource} title="Rebuild this Published page from the linked Draft worksheet">Rebuild Published Page From Draft</button>
         ) : null}

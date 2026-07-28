@@ -568,6 +568,7 @@ def synchronize_project_to_workbook(
         # mirrors project worksheet values/styles/geometry into Excel. The
         # Data Workspace local-save endpoint never calls this writer.
         from core.workbook_status_sync import _s360_apply_worksheet_payload
+        from core.excel_layout_export import apply_excel_layout, is_excel_layout_page
 
         _s360_apply_worksheet_payload(wb, project)
         index_ws = best_index_sheet(wb)
@@ -657,13 +658,23 @@ def synchronize_project_to_workbook(
             page["publishStatus"] = publish_state
             page["include"] = include
             status = normalize_status(page.get("issueStatus"))
+            custom_tab_color = str(
+                (page.get("excelLayout") or {}).get("tabColor") or ""
+            ).strip().lstrip("#").upper()
             matched_sheet.sheet_properties.tabColor = (
                 TAB_COLORS["excluded"]
                 if not include
+                else custom_tab_color
+                if is_excel_layout_page(page) and len(custom_tab_color) in (6, 8)
                 else TAB_COLORS["source"]
                 if matched_sheet.title.strip().casefold().startswith("src")
                 else TAB_COLORS.get(status, TAB_COLORS["draft"])
             )
+            if is_excel_layout_page(page):
+                apply_excel_layout(matched_sheet, page)
+                # Exclusion gray always wins over an app-layout custom color.
+                if not include:
+                    matched_sheet.sheet_properties.tabColor = TAB_COLORS["excluded"]
 
             app_rows.append(
                 page_row_values(

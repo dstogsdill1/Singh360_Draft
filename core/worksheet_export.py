@@ -116,3 +116,18 @@ def export_worksheet_xlsx(ws: dict[str, Any]) -> bytes:
         try: sheet.print_area = str(ws["printArea"])
         except Exception: pass
     bio = BytesIO(); wb.save(bio); return bio.getvalue()
+
+
+def export_excel_layout_page_xlsx(page: dict[str, Any]) -> bytes:
+    """Standalone export for an app-managed Excel-layout drawing page."""
+    from core.excel_layout_export import apply_excel_layout
+
+    wb = Workbook()
+    sheet = wb.active
+    sheet.title = _safe_sheet_title(
+        str(page.get("sheetTab") or page.get("sheetTitle") or "Layout")
+    )
+    apply_excel_layout(sheet, page)
+    bio = BytesIO()
+    wb.save(bio)
+    return bio.getvalue()

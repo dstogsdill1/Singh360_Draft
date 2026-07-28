@@ -1437,6 +1437,7 @@ def export_project_worksheet(project_id: str):
     page_id = str(body.get("pageId") or "").strip()
     worksheets = doc.get("worksheets") if isinstance(doc.get("worksheets"), list) else []
     ws = None
+    page = None
     if ws_id:
         ws = next((w for w in worksheets if isinstance(w, dict) and w.get("id") == ws_id), None)
     elif page_id:
@@ -1444,29 +1445,38 @@ def export_project_worksheet(project_id: str):
         if page:
             link = page.get("linkedWorksheetId")
             ws = next((w for w in worksheets if isinstance(w, dict) and w.get("id") == link), None)
-    if not ws:
+    if not ws and not (page and isinstance(page.get("excelLayout"), dict)):
         return jsonify(_err("Worksheet not found for export.")), 404
     try:
-        from core.worksheet_export import export_source_worksheet_xlsx, export_worksheet_xlsx
+        from core.worksheet_export import (
+            export_excel_layout_page_xlsx,
+            export_source_worksheet_xlsx,
+            export_worksheet_xlsx,
+        )
+        if page and isinstance(page.get("excelLayout"), dict):
+            data = export_excel_layout_page_xlsx(page)
+            title = str(page.get("sheetTab") or page.get("sheetTitle") or "layout")
+        else:
+            assert ws is not None
         # S360 EXACT SOURCE WORKSHEET EXPORT V1
-        provenance = ws.get("provenance") if isinstance(ws.get("provenance"), dict) else {}
-        source_name = str(provenance.get("sourceFile") or "").strip()
-        source_sheet = str(provenance.get("sheet") or ws.get("sourceSheet") or ws.get("name") or "").strip()
-        source_path = None
-        for source in doc.get("sources") or []:
-            if not isinstance(source, dict):
-                continue
-            if source_name and str(source.get("name") or "").strip() != source_name:
-                continue
-            candidate = Path(str(source.get("path") or ""))
-            if candidate.is_file() and candidate.suffix.lower() in {".xlsx", ".xlsm"}:
-                source_path = candidate
-                break
-        data = export_source_worksheet_xlsx(source_path, source_sheet) if source_path else export_worksheet_xlsx(ws)
+            provenance = ws.get("provenance") if isinstance(ws.get("provenance"), dict) else {}
+            source_name = str(provenance.get("sourceFile") or "").strip()
+            source_sheet = str(provenance.get("sheet") or ws.get("sourceSheet") or ws.get("name") or "").strip()
+            source_path = None
+            for source in doc.get("sources") or []:
+                if not isinstance(source, dict):
+                    continue
+                if source_name and str(source.get("name") or "").strip() != source_name:
+                    continue
+                candidate = Path(str(source.get("path") or ""))
+                if candidate.is_file() and candidate.suffix.lower() in {".xlsx", ".xlsm"}:
+                    source_path = candidate
+                    break
+            data = export_source_worksheet_xlsx(source_path, source_sheet) if source_path else export_worksheet_xlsx(ws)
+            title = str(ws.get("name") or ws.get("sourceSheet") or "worksheet")
     except Exception as exc:
         app.logger.error("worksheet export failed for %s: %s", project_id, exc)
         return jsonify(_err("Failed to export worksheet.", str(exc))), 500
-    title = str(ws.get("name") or ws.get("sourceSheet") or "worksheet")
     safe = re.sub(r"[^\w.\- ]+", "_", title).strip() or "worksheet"
     download = f"{safe}.xlsx"
     buf = BytesIO(data)
