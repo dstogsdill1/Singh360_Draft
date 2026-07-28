@@ -56,6 +56,18 @@ Do not reintroduce the retired SmartDraw VSON / Visio VSDX / RDM XML generator.
 16. For linked-root projects, Project Files is a direct validated view of the
     physical project root. Never replace it with a synthetic folder list or
     mirrored `.docs/sources` workspace.
+17. Source-sheet metadata never occupies the editable paste canvas. `00_INDEX`
+    remains authoritative; source data begins at A3 unless a page recipe
+    explicitly requires another start. Locked/system cells are gray and
+    protected.
+18. Only an explicit `YES` publishes. Keep publication/lifecycle colors
+    consistent across `00_INDEX`, Data Workspace tabs, Project Home, Page
+    Editor, Visual Page Manager, and generated indexes where applicable.
+19. Dirty app state must block navigation. Saving the local project and
+    intentionally mirroring Excel are separate operations and separate sync
+    states.
+20. Never test Excel write-back on live customer data. Use a generated,
+    disposable workbook and project, then remove the fixture.
 
 ## Shared workbook geometry contract
 

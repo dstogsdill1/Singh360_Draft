@@ -16,6 +16,13 @@ Follow the root `AGENTS.md`.
   `.docs/sources` as the visible file workspace.
 - Do not expose or invoke **SAVE + WRITE EXCEL** from a new workflow unless the
   user explicitly requests workbook writes.
+- Source sheets reserve locked gray generated bands above an editable A3 paste
+  canvas; show `00_INDEX`-owned setup metadata outside normal cells.
+- Dirty Data Workspace state must prompt Save / Discard / Cancel for app
+  navigation and protect refresh/close. A local save is workbook-sync pending,
+  not a workbook match.
+- Treat only explicit `YES` as published and keep exclusion/lifecycle colors
+  consistent across tabs, cards, sidebars, managers, and index views.
 - Route Univer/Page Editor/PDF geometry through
   `frontend/src/model/workbookGeometry.ts`; keep it in parity with
   `core/workbook_geometry.py`. Preserve workbook proportions with uniform page

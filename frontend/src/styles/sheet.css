@@ -242,6 +242,42 @@
   background: #fff;
   color: #111;
 }
+.np-table-region-layout {
+  min-height: 720px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  justify-items: center;
+}
+.np-table-region-group {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  gap: 14px;
+  align-items: start;
+  justify-content: center;
+}
+.np-table-region-layout.side_by_side .np-table-region-group {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.np-table-region-layout.stacked .np-table-region-group,
+.np-table-region-layout.single .np-table-region-group {
+  grid-template-columns: 1fr;
+}
+.np-table-region-layout .np-xr { min-width: 0; padding: 4px; }
+.np-table-region-note {
+  max-width: 180px;
+  padding: 8px 10px;
+  border: 1px solid #94a3b8;
+  background: #fff;
+  white-space: pre-wrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-size: 12px;
+}
+.np-table-region-note.bottom { grid-column: 1 / -1; max-width: 100%; justify-self: stretch; }
 
 /* RDM / IDF network table — single full-width or two-up layout (TABLE STYLE 4F). */
 .np-idf-single { width: 100%; font-family: Calibri, "Segoe UI", Arial, sans-serif; }

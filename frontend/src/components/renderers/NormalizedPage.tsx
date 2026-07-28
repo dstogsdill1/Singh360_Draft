@@ -59,6 +59,7 @@ export default function NormalizedPage({
   const renderPage = projected.page;
   const renderProject = projected.project;
   const blocks = renderPage.blocks ?? [];
+  const excelBlocks = blocks.filter((block) => block.type === 'excelRange');
   const isImageType = renderPage.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
   const isIndexPage = renderPage.pageType === 'index';
   const indexUsesExcelExact = isIndexPage && renderPage.renderMode === 'excel_exact';
@@ -143,6 +144,18 @@ export default function NormalizedPage({
             case 'companyInfo':
               return <CompanyInfoRenderer key={b.id} block={b} project={renderProject} />;
             case 'excelRange':
+              if (excelBlocks.length > 1) {
+                if (b.id !== excelBlocks[0].id) return null;
+                const rightNote = renderPage.tableAnnotations?.find((item) => item.placement === 'right');
+                const bottomNote = renderPage.tableAnnotations?.find((item) => item.placement === 'bottom');
+                return <section key="table-region-layout" className={`np-table-region-layout ${renderPage.tableLayout || 'side_by_side'}`}>
+                  <div className="np-table-region-group">
+                    {excelBlocks.map((block) => <ExcelRangeRenderer key={block.id} block={block} reservedTop={bandReserve} exporting={exporting} />)}
+                  </div>
+                  {rightNote?.text && <aside className="np-table-region-note right">{rightNote.text}</aside>}
+                  {bottomNote?.text && <aside className="np-table-region-note bottom">{bottomNote.text}</aside>}
+                </section>;
+              }
               return <ExcelRangeRenderer key={b.id} block={b} reservedTop={bandReserve} exporting={exporting} />;
             case 'idfNetworkTable':
               return <NetworkTwoUpRenderer key={b.id} block={b} exporting={exporting} />;

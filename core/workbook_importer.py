@@ -26,6 +26,11 @@ from core.workbook_geometry import (
     excel_column_width_to_pixels,
     row_height_points_to_pixels,
 )
+from core.workbook_workspace import (
+    openpyxl_conditional_formats,
+    openpyxl_data_validations,
+    normalize_publish_value,
+)
 from core.heb_idf_switch_matrix import replace_heb_idf_pages  # S360_HEB_IDF_SWITCH_MATRIX_V1
 from core.page_composer import (
     BODY_BUDGET,
@@ -71,6 +76,8 @@ _INDEX_ALIASES = {
     "use_source": {"use", "source", "use / source", "use/source", "type"},
     "family": {"family", "page family", "discipline"},
     "page_type": {"page type", "kind"},
+    "issue_status": {"issue status", "lifecycle"},
+    "source_role": {"source role", "role"},
     "notes": {"notes", "remarks", "description", "comment"},
 }
 
@@ -95,6 +102,22 @@ def _norm(v: Any) -> str:
         return ""
     text = " ".join(str(v).split()).strip()
     return "" if text.lower() in {"nan", "nat", "<na>", "none"} else text
+
+
+def _issue_status(value: Any) -> str:
+    normalized = (
+        str(value or "Draft")
+        .strip()
+        .casefold()
+        .replace(" ", "_")
+        .replace("-", "_")
+    )
+    return (
+        normalized
+        if normalized
+        in {"draft", "draft_confirmed", "public", "public_confirmed"}
+        else "draft"
+    )
 
 
 def _display_cell_value(value: Any, number_format: str = "") -> str:
@@ -412,6 +435,12 @@ def _worksheet_payload(ws, ws_data=None) -> dict[str, Any]:
         "sourceSheet": ws.title,
         "sourceRange": source_range,
         "printArea": print_area,
+        "protectedRanges": [],
+        "dataValidations": openpyxl_data_validations(ws),
+        "conditionalFormats": openpyxl_conditional_formats(ws),
+        "tableRegions": [],
+        "tableLayout": "single",
+        "annotations": [],
     }
 
 
@@ -444,6 +473,9 @@ def _parse_index(workbook, index_sheet_name: str | None) -> list[dict[str, Any]]
         include_raw = row[col["include"]] if 0 <= col["include"] < len(row) else ""
         order_raw = row[col["order"]] if 0 <= col["order"] < len(row) else ""
         sheet_code_raw = row[col["sheet_code"]] if 0 <= col["sheet_code"] < len(row) else ""
+        page_type = row[col["page_type"]] if 0 <= col["page_type"] < len(row) else ""
+        issue_status = row[col["issue_status"]] if 0 <= col["issue_status"] < len(row) else ""
+        source_role = row[col["source_role"]] if 0 <= col["source_role"] < len(row) else ""
 
         if not tab and not title:
             continue
@@ -456,7 +488,11 @@ def _parse_index(workbook, index_sheet_name: str | None) -> list[dict[str, Any]]
                 "notes": notes,
                 "orderRaw": order_raw,
                 "sheetCodeRaw": sheet_code_raw,
+                "pageType": page_type,
+                "sourceRole": source_role,
+                "issueStatus": issue_status,
                 "include": _included(include_raw, title or tab, use_source),
+                "publishStatus": normalize_publish_value(include_raw),
             }
         )
 
@@ -2982,6 +3018,12 @@ def import_workbook(
                 "sourceSheet": ws["sourceSheet"],
                 "sourceRange": ws["sourceRange"],
                 "printArea": ws["printArea"],
+                "protectedRanges": ws["protectedRanges"],
+                "dataValidations": ws["dataValidations"],
+                "conditionalFormats": ws["conditionalFormats"],
+                "tableRegions": ws["tableRegions"],
+                "tableLayout": ws["tableLayout"],
+                "annotations": ws["annotations"],
                 "embeddedImages": embedded_by_sheet.get(ws["name"], []),
                 "provenance": {"sheet": ws["name"]},
             }
@@ -3047,10 +3089,6 @@ def import_workbook(
             # including 00_INDEX itself, never becomes an implicit output page.
             include = not has_index
         use_source = idx["useSource"] if idx else ""
-
-        # Index include/exclude is law: no output page/tab/PDF for excluded sheets.
-        if not include:
-            continue
 
         page_type = classify_page_type(ws["name"], title, use_source)
         family = page_family(ws["name"], title, use_source)
@@ -3236,6 +3274,14 @@ def import_workbook(
             "id": f"page_{i+1}",
             "order": workbook_order,
             "include": include,
+            "publishStatus": (
+                idx.get("publishStatus")
+                if idx
+                else ("YES" if include else "")
+            ),
+            "issueStatus": _issue_status(
+                idx.get("issueStatus") if idx else "Draft"
+            ),
             "sheetCode": sheet_code,
             "displaySheetCode": sheet_code,
             "sheetTitle": title,

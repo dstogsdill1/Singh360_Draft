@@ -27,6 +27,11 @@ import SyncDecisionModal from './SyncDecisionModal';
 import PageManagerModal from './PageManagerModal';
 import WorkbookQualityModal from './WorkbookQualityModal';
 import DeleteProjectModal from './DeleteProjectModal';
+import {
+  readWorkspaceState,
+  subscribeWorkspaceState,
+  type WorkspaceStateSignal,
+} from '../workspace/workspaceState';
 
 interface Props {
   project: ProjectModel | null;
@@ -78,6 +83,9 @@ export default function ProjectDashboard({ project }: Props) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [projectProfile, setProjectProfile] = useState<ProjectProfile>('ems');
   const [libraryHealth, setLibraryHealth] = useState<{ total: number; favorites: number; needsReview: number } | null>(null);
+  const [workspaceState, setWorkspaceState] = useState<WorkspaceStateSignal | null>(
+    () => project ? readWorkspaceState(project.id) : null,
+  );
   const newWorkbookRef = useRef<HTMLInputElement | null>(null);
 
   const reload = async () => {
@@ -111,6 +119,15 @@ export default function ProjectDashboard({ project }: Props) {
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
+
+  useEffect(() => {
+    if (!project) {
+      setWorkspaceState(null);
+      return undefined;
+    }
+    setWorkspaceState(readWorkspaceState(project.id));
+    return subscribeWorkspaceState(project.id, setWorkspaceState);
   }, [project?.id]);
 
   const selectedWorkbookPending = Boolean(
@@ -328,7 +345,13 @@ export default function ProjectDashboard({ project }: Props) {
     newWorkbookRef.current?.click();
   };
 
-  const syncTone = !project
+  const workspaceDirty = workspaceState?.state === 'DIRTY' || workspaceState?.state === 'CONFLICT';
+  const workspacePending = workspaceState?.state === 'PROJECT_SAVED_WORKBOOK_SYNC_PENDING';
+  const syncTone = workspaceDirty
+    ? 'red'
+    : workspacePending
+      ? 'yellow'
+      : !project
     ? 'neutral'
     : link?.status === 'in_sync'
       ? 'green'
@@ -338,7 +361,11 @@ export default function ProjectDashboard({ project }: Props) {
           ? 'red'
           : 'neutral';
 
-  const syncHeadline = !project
+  const syncHeadline = workspaceDirty
+    ? 'Data Workspace has unsaved edits'
+    : workspacePending
+      ? 'Project saved locally — workbook sync pending'
+      : !project
     ? 'Choose an existing project'
     : link?.status === 'in_sync'
       ? 'Ready — Project and workbook match'
@@ -472,7 +499,11 @@ export default function ProjectDashboard({ project }: Props) {
                   <div>
                     <div className="eyebrow">PROJECT / WORKBOOK CHECK</div>
                     <h2>{syncHeadline}</h2>
-                    <p>{link?.message || 'Choose the project workbook.'}</p>
+                    <p>{workspaceDirty
+                      ? 'Save or explicitly discard the open Data Workspace edits before trusting workbook sync status.'
+                      : workspacePending
+                        ? 'The local project is saved. Excel has not been intentionally mirrored.'
+                        : link?.message || 'Choose the project workbook.'}</p>
                     <div className="simple-edit-times">
                       <span><b>Workbook last edit</b>{link?.workbook?.modified || 'Not recorded'}</span>
                       <span><b>Project last save</b>{project.lastSavedAt || project.modified || 'Not recorded'}</span>

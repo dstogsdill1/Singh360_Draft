@@ -103,6 +103,7 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
         "importWarnings": [],
         "archivedPages": [],
         "workbookSync": {},
+        "dataWorkspace": {},
     }
 
 
@@ -146,6 +147,8 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
         merged["paginationLocked"] = bool(project["paginationLocked"])
     if "workbookSync" in project and isinstance(project["workbookSync"], dict):
         merged["workbookSync"] = project["workbookSync"]
+    if "dataWorkspace" in project and isinstance(project["dataWorkspace"], dict):
+        merged["dataWorkspace"] = project["dataWorkspace"]
 
     merged = sanitize_json(merged)
     merged["modified"] = utcnow_iso()

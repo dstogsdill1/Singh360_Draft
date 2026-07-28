@@ -12,8 +12,12 @@ import time
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.formatting.rule import CellIsRule, FormulaRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.workbook.properties import CalcProperties
+from openpyxl.worksheet.datavalidation import DataValidation
+
+from core.workbook_workspace import normalize_publish_value
 
 
 INDEX_HEADERS = [
@@ -29,6 +33,7 @@ TAB_COLORS = {
     "public": "2D7DD2",
     "public_confirmed": "14845A",
     "excluded": "9AA3AB",
+    "source": "7F8C8D",
     "control": "252C34",
     "help": "276FA8",
 }
@@ -142,6 +147,157 @@ def find_or_create_headers(ws: Any) -> tuple[int, dict[str, int]]:
     }
 
 
+def ensure_index_state_controls(
+    ws: Any,
+    header_row: int,
+    headers: dict[str, int],
+) -> None:
+    """Install strict dropdowns and non-destructive status color rules."""
+    include_column = headers["include"]
+    status_column = headers["issue status"]
+    include_letter = ws.cell(header_row, include_column).column_letter
+    status_letter = ws.cell(header_row, status_column).column_letter
+    last_letter = ws.cell(header_row, max(headers.values())).column_letter
+    include_range = f"{include_letter}{header_row + 1}:{include_letter}500"
+    status_range = f"{status_letter}{header_row + 1}:{status_letter}500"
+
+    existing_validation_ranges = {
+        str(item)
+        for validation in (
+            getattr(
+                getattr(ws, "data_validations", None),
+                "dataValidation",
+                None,
+            )
+            or []
+        )
+        for item in getattr(
+            getattr(validation, "ranges", None),
+            "ranges",
+            [],
+        )
+    }
+    def add_list_validation(
+        target: str,
+        values: tuple[str, ...],
+        *,
+        allow_blank: bool,
+        message: str,
+    ) -> None:
+        if target in existing_validation_ranges:
+            return
+        validation = DataValidation(
+            type="list",
+            formula1=f'"{",".join(values)}"',
+            allow_blank=allow_blank,
+            errorStyle="stop",
+            showErrorMessage=True,
+            error=message,
+        )
+        ws.add_data_validation(validation)
+        validation.add(target)
+        existing_validation_ranges.add(target)
+
+    add_list_validation(
+        include_range,
+        ("YES", "NO", "VERIFY"),
+        allow_blank=True,
+        message="Choose YES, NO, or VERIFY. Only YES publishes.",
+    )
+    add_list_validation(
+        status_range,
+        ("Draft", "Draft Confirmed", "Public", "Public Confirmed"),
+        allow_blank=False,
+        message=(
+            "Choose Draft, Draft Confirmed, Public, or Public Confirmed."
+        ),
+    )
+    for label in ("required", "manual paste needed"):
+        column = headers.get(label)
+        if column:
+            letter = ws.cell(header_row, column).column_letter
+            add_list_validation(
+                f"{letter}{header_row + 1}:{letter}500",
+                ("YES", "NO", "VERIFY"),
+                allow_blank=True,
+                message="Choose YES, NO, or VERIFY.",
+            )
+    convert_column = headers.get("convert?", headers.get("convert"))
+    if convert_column:
+        letter = ws.cell(header_row, convert_column).column_letter
+        add_list_validation(
+            f"{letter}{header_row + 1}:{letter}500",
+            ("YES", "NO"),
+            allow_blank=True,
+            message="Choose YES or NO.",
+        )
+
+    formulas = {
+        str(formula)
+        for rules in getattr(
+            getattr(ws, "conditional_formatting", None),
+            "_cf_rules",
+            {},
+        ).values()
+        for rule in rules or []
+        for formula in (getattr(rule, "formula", None) or [])
+    }
+    first_row = header_row + 1
+    body_range = f"A{first_row}:{last_letter}500"
+    include_formula = f"${include_letter}{first_row}"
+    if f'{include_formula}="NO"' not in formulas:
+        ws.conditional_formatting.add(
+            body_range,
+            FormulaRule(
+                formula=[f'{include_formula}="NO"'],
+                fill=PatternFill("solid", fgColor="D9D9D9"),
+                stopIfTrue=True,
+            ),
+        )
+    if f'{include_formula}="VERIFY"' not in formulas:
+        ws.conditional_formatting.add(
+            body_range,
+            FormulaRule(
+                formula=[f'{include_formula}="VERIFY"'],
+                fill=PatternFill("solid", fgColor="FFE699"),
+                stopIfTrue=True,
+            ),
+        )
+    if f'{include_formula}=""' not in formulas:
+        ws.conditional_formatting.add(
+            body_range,
+            FormulaRule(
+                formula=[f'{include_formula}=""'],
+                fill=PatternFill("solid", fgColor="E7E9EB"),
+                stopIfTrue=True,
+            ),
+        )
+    if '"YES"' not in formulas:
+        ws.conditional_formatting.add(
+            include_range,
+            CellIsRule(
+                operator="equal",
+                formula=['"YES"'],
+                fill=PatternFill("solid", fgColor="C6E0B4"),
+            ),
+        )
+    for label, color in (
+        ("Draft", "F28C28"),
+        ("Draft Confirmed", "76B852"),
+        ("Public", "2D7DD2"),
+        ("Public Confirmed", "14845A"),
+    ):
+        if f'"{label}"' not in formulas:
+            ws.conditional_formatting.add(
+                status_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=[f'"{label}"'],
+                    fill=PatternFill("solid", fgColor=color),
+                ),
+            )
+
+
 def read_existing_rows(
     ws: Any,
     header_row: int,
@@ -248,10 +404,13 @@ def page_row_values(
     stamp: str,
     app_hash: str,
 ) -> dict[str, Any]:
-    include = bool(page.get("include", True))
+    publish_status = normalize_publish_value(
+        page.get("publishStatus")
+        or ("YES" if page.get("include", True) else "NO")
+    )
     status = normalize_status(page.get("issueStatus"))
     return {
-        "Include": "YES" if include else "NO",
+        "Include": publish_status,
         "Order": order,
         "Sheet Code": str(
             page.get("displaySheetCode") or page.get("sheetCode") or "NEW"
@@ -405,9 +564,16 @@ def synchronize_project_to_workbook(
     temp_path: Path | None = None
     try:
         stamp = utcnow()
+        # Explicit app-to-workbook synchronization is the only path that
+        # mirrors project worksheet values/styles/geometry into Excel. The
+        # Data Workspace local-save endpoint never calls this writer.
+        from core.workbook_status_sync import _s360_apply_worksheet_payload
+
+        _s360_apply_worksheet_payload(wb, project)
         index_ws = best_index_sheet(wb)
         index_ws.sheet_properties.tabColor = TAB_COLORS["control"]
         header_row, headers = find_or_create_headers(index_ws)
+        ensure_index_state_controls(index_ws, header_row, headers)
         existing_rows = read_existing_rows(index_ws, header_row, headers)
 
         existing_by_id = {
@@ -483,12 +649,20 @@ def synchronize_project_to_workbook(
                     matched_sheet.title = actual_tab
 
             page["sheetTab"] = matched_sheet.title
-            include = bool(page.get("include", True))
+            publish_state = normalize_publish_value(
+                page.get("publishStatus")
+                or ("YES" if page.get("include", True) else "NO")
+            )
+            include = publish_state == "YES"
+            page["publishStatus"] = publish_state
+            page["include"] = include
             status = normalize_status(page.get("issueStatus"))
             matched_sheet.sheet_properties.tabColor = (
-                TAB_COLORS.get(status, TAB_COLORS["draft"])
-                if include
-                else TAB_COLORS["excluded"]
+                TAB_COLORS["excluded"]
+                if not include
+                else TAB_COLORS["source"]
+                if matched_sheet.title.strip().casefold().startswith("src")
+                else TAB_COLORS.get(status, TAB_COLORS["draft"])
             )
 
             app_rows.append(
@@ -547,7 +721,6 @@ def synchronize_project_to_workbook(
                     headers[header.casefold()],
                     values.get(header, ""),
                 )
-
         for row_number in range(new_last_row + 1, old_last_row + 1):
             for column in range(1, max_col + 1):
                 index_ws.cell(row_number, column).value = None

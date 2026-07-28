@@ -252,6 +252,14 @@ export function toUniverWorkbook(
       columnData,
       mergeData: sheet.merges.map(parseRange),
       showGridlines: 1,
+      custom: {
+        role: sheet.role,
+        sourceSetup: sheet.sourceSetup,
+        protectedRanges: sheet.protectedRanges,
+        tableRegions: sheet.tableRegions,
+        tableLayout: sheet.tableLayout,
+        annotations: sheet.annotations,
+      },
     } as Partial<IWorksheetData>;
   }
   return {
@@ -344,6 +352,18 @@ export function fromUniverWorkbook(
       hiddenColumns: hiddenColumns.sort((a, b) => columnIndex(a) - columnIndex(b)),
       archived: Boolean(sheet.hidden),
       tabColor: (sheet as { tabColor?: string }).tabColor || prior?.tabColor,
+      role: prior?.role || (
+        sheet.custom && typeof sheet.custom === 'object'
+          ? String((sheet.custom as Record<string, unknown>).role || '') || null
+          : null
+      ),
+      sourceSetup: prior?.sourceSetup || {},
+      protectedRanges: [...(prior?.protectedRanges || [])],
+      dataValidations: [...(prior?.dataValidations || [])],
+      conditionalFormats: [...(prior?.conditionalFormats || [])],
+      tableRegions: [...(prior?.tableRegions || [])],
+      tableLayout: prior?.tableLayout || 'single',
+      annotations: [...(prior?.annotations || [])],
     };
   });
   return { ...previous, sheets };

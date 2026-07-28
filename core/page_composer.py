@@ -1103,6 +1103,10 @@ def compose_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     for page in pages:
         if not page.get("include", True):
+            # Exclusion controls publication only. Keep the complete editable
+            # page and its manual canvas state in the project; export/index
+            # filtering happens downstream.
+            composed.append(deepcopy(page))
             continue
 
         blocks = page.get("blocks") or []

@@ -8,6 +8,7 @@ indexed non-destructively into a virtual folder tree.
 from __future__ import annotations
 
 import csv
+from copy import deepcopy
 import hashlib
 import json
 import os
@@ -32,6 +33,11 @@ from core.workbook_geometry import (
     pixels_to_row_height_points,
 )
 from core.workbook_importer import _cell_style, _color_hex
+from core.workbook_workspace import (
+    apply_controlled_default_validations,
+    apply_source_sheet_contract,
+    is_source_sheet,
+)
 
 
 STANDARD_FOLDERS = [
@@ -1300,6 +1306,221 @@ def _json_cell_value(value: Any) -> Any:
     return value
 
 
+def _data_validations_payload(sheet: Any) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    container = getattr(sheet, "data_validations", None)
+    for index, validation in enumerate(
+        getattr(container, "dataValidation", None) or []
+    ):
+        ranges = [
+            str(item)
+            for item in getattr(getattr(validation, "ranges", None), "ranges", [])
+        ]
+        if not ranges:
+            continue
+        formula1 = getattr(validation, "formula1", None)
+        values: list[str] = []
+        if (
+            str(getattr(validation, "type", "") or "").casefold() == "list"
+            and isinstance(formula1, str)
+            and len(formula1) >= 2
+            and formula1.startswith('"')
+            and formula1.endswith('"')
+        ):
+            values = [
+                value.strip()
+                for value in formula1[1:-1].split(",")
+            ]
+        output.append(
+            {
+                "id": str(
+                    getattr(validation, "uid", None)
+                    or f"excel-validation-{index + 1}"
+                ),
+                "ranges": ranges,
+                "type": str(getattr(validation, "type", "") or ""),
+                "operator": str(getattr(validation, "operator", "") or ""),
+                "formula1": formula1,
+                "formula2": getattr(validation, "formula2", None),
+                "values": values,
+                "allowBlank": bool(getattr(validation, "allow_blank", False)),
+                "showDropdown": not bool(
+                    getattr(validation, "showDropDown", False)
+                ),
+                "showErrorMessage": bool(
+                    getattr(validation, "showErrorMessage", True)
+                ),
+                "error": str(getattr(validation, "error", "") or ""),
+                "errorTitle": str(
+                    getattr(validation, "errorTitle", "") or ""
+                ),
+            }
+        )
+    return output
+
+
+def _conditional_formats_payload(sheet: Any) -> list[dict[str, Any]]:
+    """Capture portable conditional-format metadata without mutating rules."""
+    output: list[dict[str, Any]] = []
+    rules_by_range = getattr(
+        getattr(sheet, "conditional_formatting", None),
+        "_cf_rules",
+        {},
+    )
+    for range_key, rules in rules_by_range.items():
+        sqref = str(getattr(range_key, "sqref", None) or range_key)
+        for rule in rules or []:
+            fill = None
+            font_color = None
+            differential = getattr(rule, "dxf", None)
+            if differential is not None:
+                pattern = getattr(getattr(differential, "fill", None), "fgColor", None)
+                fill = _color_hex(pattern)
+                font_color = _color_hex(
+                    getattr(getattr(differential, "font", None), "color", None)
+                )
+            output.append(
+                {
+                    "ranges": [value for value in sqref.split() if value],
+                    "type": str(getattr(rule, "type", "") or ""),
+                    "operator": str(getattr(rule, "operator", "") or ""),
+                    "formula": [
+                        str(value)
+                        for value in (getattr(rule, "formula", None) or [])
+                    ],
+                    "priority": int(getattr(rule, "priority", 0) or 0),
+                    "stopIfTrue": bool(
+                        getattr(rule, "stopIfTrue", False)
+                    ),
+                    "fill": fill,
+                    "fontColor": font_color,
+                }
+            )
+    return output
+
+
+def _project_index_entries(project: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    index = next(
+        (
+            sheet
+            for sheet in (project.get("worksheets") or [])
+            if str(sheet.get("name") or "").strip().casefold() == "00_index"
+        ),
+        None,
+    )
+    grid = index.get("grid") if isinstance(index, dict) else None
+    if not isinstance(grid, list):
+        return {}
+    header_row = -1
+    headers: dict[str, int] = {}
+    for row_number, row in enumerate(grid[:30]):
+        found = {
+            str(value or "").strip().casefold(): column
+            for column, value in enumerate(row if isinstance(row, list) else [])
+            if str(value or "").strip()
+        }
+        if {"include", "sheet tab", "page title"}.issubset(found):
+            header_row = row_number
+            headers = found
+            break
+    if header_row < 0:
+        return {}
+
+    def value(row: list[Any], label: str) -> Any:
+        column = headers.get(label)
+        return row[column] if column is not None and column < len(row) else ""
+
+    output: dict[str, dict[str, Any]] = {}
+    for raw in grid[header_row + 1 :]:
+        row = raw if isinstance(raw, list) else []
+        tab = str(value(row, "sheet tab") or "").strip()
+        if not tab:
+            continue
+        output[tab.casefold()] = {
+            "include": value(row, "include"),
+            "sheetCode": value(row, "sheet code"),
+            "title": value(row, "page title"),
+            "pageType": value(row, "page type"),
+            "role": value(row, "source role"),
+        }
+    return output
+
+
+def _apply_document_contract(
+    document: dict[str, Any],
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    output = dict(document)
+    entries = _project_index_entries(project)
+    index_sheet = next(
+        (
+            sheet
+            for sheet in (output.get("sheets") or [])
+            if str(sheet.get("name") or "").strip().casefold() == "00_index"
+        ),
+        None,
+    )
+    if isinstance(index_sheet, dict):
+        rows: dict[int, dict[int, str]] = {}
+        for coordinate, cell in (index_sheet.get("cells") or {}).items():
+            match = re.fullmatch(r"([A-Z]+)(\d+)", str(coordinate), re.I)
+            if not match or not isinstance(cell, dict):
+                continue
+            column_number = 0
+            for character in match.group(1).upper():
+                column_number = column_number * 26 + ord(character) - 64
+            parsed = (int(match.group(2)), column_number)
+            text = str(cell.get("v") or "").strip()
+            if text:
+                rows.setdefault(parsed[0], {})[parsed[1]] = text
+        header_row = 0
+        headers: dict[str, int] = {}
+        for row_number, values in rows.items():
+            labels = {value.casefold(): column for column, value in values.items()}
+            if (
+                any(key in labels for key in ("sheet tab", "sheet name", "tab"))
+                and any(key in labels for key in ("page title", "sheet title", "title"))
+            ):
+                header_row = row_number
+                headers = labels
+                break
+        if header_row and headers:
+            def column(*aliases: str) -> int:
+                return next((headers[item] for item in aliases if item in headers), -1)
+
+            tab_column = column("sheet tab", "sheet name", "tab")
+            for row_number, values in rows.items():
+                if row_number <= header_row or tab_column < 0:
+                    continue
+                tab = values.get(tab_column, "").strip()
+                if not tab:
+                    continue
+                def value(*aliases: str) -> str:
+                    index = column(*aliases)
+                    return values.get(index, "") if index >= 0 else ""
+                entries[tab.casefold()] = {
+                    "include": value("include", "include / publish", "publish"),
+                    "sheetCode": value("sheet code", "sheet no.", "sheet no", "code"),
+                    "title": value("page title", "sheet title", "title"),
+                    "pageType": value("page type", "type"),
+                    "role": value("source role", "role"),
+                }
+    sheets: list[dict[str, Any]] = []
+    for raw in output.get("sheets") or []:
+        sheet = dict(raw)
+        entry = entries.get(str(sheet.get("name") or "").casefold(), {})
+        if is_source_sheet(
+            sheet.get("name"),
+            entry.get("pageType"),
+            entry.get("role"),
+        ):
+            sheet = apply_source_sheet_contract(sheet, entry)
+        sheet = apply_controlled_default_validations(sheet)
+        sheets.append(sheet)
+    output["sheets"] = sheets
+    return output
+
+
 def workbook_file_to_document(path: Path) -> dict[str, Any]:
     workbook = load_workbook(
         path,
@@ -1369,6 +1590,12 @@ def workbook_file_to_document(path: Path) -> dict[str, Any]:
                 ),
                 "archived": sheet.sheet_state != "visible",
                 "tabColor": tab_color,
+                "protectedRanges": [],
+                "dataValidations": _data_validations_payload(sheet),
+                "conditionalFormats": _conditional_formats_payload(sheet),
+                "tableRegions": [],
+                "tableLayout": "single",
+                "annotations": [],
             }
         )
     workbook.close()
@@ -1504,9 +1731,32 @@ def project_to_workbook_document(project: dict[str, Any]) -> dict[str, Any]:
                 "hiddenColumns": hidden_columns,
                 "archived": not bool(worksheet.get("visible", True)),
                 "tabColor": worksheet.get("tabColor"),
+                "role": worksheet.get("role"),
+                "sourceSetup": deepcopy(
+                    worksheet.get("sourceSetup") or {}
+                ),
+                "protectedRanges": list(
+                    worksheet.get("protectedRanges") or []
+                ),
+                "dataValidations": deepcopy(
+                    worksheet.get("dataValidations") or []
+                ),
+                "conditionalFormats": deepcopy(
+                    worksheet.get("conditionalFormats") or []
+                ),
+                "tableRegions": deepcopy(
+                    worksheet.get("tableRegions") or []
+                ),
+                "tableLayout": worksheet.get("tableLayout") or "single",
+                "annotations": deepcopy(
+                    worksheet.get("annotations") or []
+                ),
             }
         )
-    return {"revision": 0, "updatedAt": utcnow(), "sheets": sheets}
+    return _apply_document_contract(
+        {"revision": 0, "updatedAt": utcnow(), "sheets": sheets},
+        project,
+    )
 
 
 def _positive_dimensions(value: Any) -> dict[str, float]:
@@ -1572,6 +1822,30 @@ def _normalize_workbook_document(document: dict[str, Any]) -> dict[str, Any]:
         )
         sheet["archived"] = bool(sheet.get("archived"))
         sheet["tabColor"] = sheet.get("tabColor") or None
+        sheet["role"] = str(sheet.get("role") or "") or None
+        sheet["sourceSetup"] = (
+            dict(sheet.get("sourceSetup"))
+            if isinstance(sheet.get("sourceSetup"), dict)
+            else {}
+        )
+        for field in (
+            "protectedRanges",
+            "dataValidations",
+            "conditionalFormats",
+            "tableRegions",
+            "annotations",
+        ):
+            sheet[field] = (
+                deepcopy(sheet.get(field))
+                if isinstance(sheet.get(field), list)
+                else []
+            )
+        layout = str(sheet.get("tableLayout") or "single")
+        sheet["tableLayout"] = (
+            layout
+            if layout in {"single", "side_by_side", "stacked"}
+            else "single"
+        )
         sheets.append(sheet)
     normalized["sheets"] = sheets
     return normalized
@@ -1586,10 +1860,18 @@ class WorkbookDocumentStore:
 
     def load(self, project: dict[str, Any]) -> dict[str, Any]:
         if self.path.is_file():
-            return _normalize_workbook_document(
-                json.loads(self.path.read_text("utf-8"))
+            return _apply_document_contract(
+                _normalize_workbook_document(
+                    json.loads(self.path.read_text("utf-8"))
+                ),
+                project,
             )
-        return _normalize_workbook_document(project_to_workbook_document(project))
+        return _apply_document_contract(
+            _normalize_workbook_document(
+                project_to_workbook_document(project)
+            ),
+            project,
+        )
 
     def save(
         self,
@@ -1610,7 +1892,10 @@ class WorkbookDocumentStore:
                 self.history
                 / f"workbook_{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}.json",
             )
-        saved = _normalize_workbook_document(document)
+        saved = _apply_document_contract(
+            _normalize_workbook_document(document),
+            project,
+        )
         saved["revision"] = int(current.get("revision") or 0) + 1
         saved["updatedAt"] = utcnow()
         atomic_json_write(self.path, saved)
@@ -1659,6 +1944,12 @@ class WorkbookDocumentStore:
                         "hiddenColumns": [],
                         "archived": False,
                         "tabColor": None,
+                        "protectedRanges": [],
+                        "dataValidations": [],
+                        "conditionalFormats": [],
+                        "tableRegions": [],
+                        "tableLayout": "single",
+                        "annotations": [],
                     }
                 ]
             }

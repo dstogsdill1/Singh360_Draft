@@ -5,6 +5,7 @@ import PageRenderer from './PageRenderer';
 import SheetFrame from './SheetFrame';
 import TitleBlock from './TitleBlock';
 import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
+import { pageStatusClass } from '../model/pageStatus';
 
 interface Props {
   project: ProjectModel;
@@ -418,6 +419,7 @@ export default function PageNavigator({
                   'page-nav-card',
                   page.id === activePageId ? 'active' : '',
                   page.include ? '' : 'excluded',
+                  pageStatusClass(page),
                   dragOverId === page.id ? 'drag-over' : '',
                 ].filter(Boolean).join(' ')}
                 draggable={!locked}

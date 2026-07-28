@@ -235,7 +235,14 @@ def _ensure_index(wb):
     status_letter = ws.cell(4, status_col).column_letter
     include_letter = ws.cell(4, include_col).column_letter
     status_dv = DataValidation(type="list", formula1='"Draft,Draft Confirmed,Public,Public Confirmed"', allow_blank=False)
-    include_dv = DataValidation(type="list", formula1='"YES,NO"', allow_blank=False)
+    include_dv = DataValidation(
+        type="list",
+        formula1='"YES,NO,VERIFY"',
+        allow_blank=True,
+        errorStyle="stop",
+        showErrorMessage=True,
+        error="Choose YES, NO, or VERIFY. Only YES publishes.",
+    )
     ws.add_data_validation(status_dv)
     ws.add_data_validation(include_dv)
     status_dv.add(f"{status_letter}5:{status_letter}500")
@@ -328,6 +335,7 @@ def project_hash(project: dict[str, Any]) -> str:
                 "id": p.get("id"),
                 "order": p.get("order"),
                 "include": p.get("include", True),
+                "publishStatus": p.get("publishStatus", ""),
                 "sheetCode": p.get("sheetCode"),
                 "displaySheetCode": p.get("displaySheetCode"),
                 "sheetTitle": p.get("sheetTitle"),
@@ -357,10 +365,17 @@ def project_hash(project: dict[str, Any]) -> str:
                 "hiddenRows": w.get("hiddenRows", []),
                 "hiddenColumns": w.get("hiddenColumns", []),
                 "geometryAuthority": w.get("geometryAuthority"),
+                "protectedRanges": w.get("protectedRanges", []),
+                "dataValidations": w.get("dataValidations", []),
+                "conditionalFormats": w.get("conditionalFormats", []),
+                "tableRegions": w.get("tableRegions", []),
+                "tableLayout": w.get("tableLayout", "single"),
+                "annotations": w.get("annotations", []),
             }
             for w in project.get("worksheets", [])
             if isinstance(w, dict)
         ],
+        "dataWorkspace": project.get("dataWorkspace", {}),
     }
     return sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
@@ -508,7 +523,7 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
             "highlightedCells", "manualObjects", "lockedObjects", "connectors",
         }
         workbook_owned_fields = {
-            "order", "include", "sheetCode", "displaySheetCode", "sheetTitle",
+            "order", "include", "publishStatus", "sheetCode", "displaySheetCode", "sheetTitle",
             "sheetTab", "pageType", "pageFamily", "layoutProfile", "renderMode",
             "renderProfile", "sourceSheet", "sourceRange", "printArea", "splitMode",
             "repeatRows", "minScale", "allowContinuation", "scaleMode", "orientation",
@@ -529,7 +544,7 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
             item = _s360_page_match(page, manifest) if not page.get("continuationOf") else None
             if item:
                 for key in (
-                    "include", "order", "sheetCode", "displaySheetCode", "sheetTab",
+                    "include", "publishStatus", "order", "sheetCode", "displaySheetCode", "sheetTab",
                     "sheetTitle", "pageFamily", "notes", "renderProfile", "splitMode",
                     "parentPageId", "issueStatus", "sourceMode", "syncDirection",
                 ):
@@ -1077,7 +1092,12 @@ def _s360_scan_index_sheet(ws) -> tuple[list[dict[str, Any]], int]:
             return str(cell(values, name, default)).strip()
 
         result.append({
-            "include": include_raw in {"YES", "TRUE", "INCLUDE", "Y", "1", "X", "✓"},
+            "include": include_raw == "YES",
+            "publishStatus": (
+                include_raw
+                if include_raw in {"YES", "NO", "VERIFY"}
+                else ""
+            ),
             "order": order,
             "sheetCode": code,
             "displaySheetCode": code,

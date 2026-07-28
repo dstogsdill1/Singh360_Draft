@@ -182,6 +182,28 @@ export interface Worksheet {
   sourceSheet?: string;
   sourceRange?: string;
   printArea?: string | null;
+  role?: string | null;
+  sourceSetup?: {
+    authority?: string;
+    sheetCode?: string;
+    title?: string;
+    pageType?: string;
+    publish?: '' | 'YES' | 'NO' | 'VERIFY';
+    purpose?: string;
+    instruction?: string;
+    editableStartRow?: number;
+    metadata?: Array<{ field: string; value: string; notes: string }>;
+  };
+  protectedRanges?: string[];
+  dataValidations?: Array<Record<string, unknown>>;
+  conditionalFormats?: Array<Record<string, unknown>>;
+  tableRegions?: Array<{ id: string; range: string; label: string }>;
+  tableLayout?: 'single' | 'side_by_side' | 'stacked';
+  annotations?: Array<{
+    id: string;
+    text: string;
+    placement: 'right' | 'bottom';
+  }>;
 }
 
 export type PageIssueStatus = 'draft' | 'draft_confirmed' | 'public' | 'public_confirmed';
@@ -192,6 +214,8 @@ export interface PageModel {
   /** Original package slot retained while a page is excluded. */
   restorePackageIndex?: number;
   include: boolean;
+  /** Only an explicit YES publishes; NO, VERIFY, and blank stay editable. */
+  publishStatus?: '' | 'YES' | 'NO' | 'VERIFY';
   /** Four-stage issue workflow. Include/Exclude remains separate. */
   issueStatus?: PageIssueStatus;
   statusUpdatedAt?: string;
@@ -255,6 +279,12 @@ export interface PageModel {
   indexRowsPerPage?: number;
   indexPageCount?: number;
   layoutWarnings?: string[];
+  tableLayout?: 'single' | 'side_by_side' | 'stacked';
+  tableAnnotations?: Array<{
+    id: string;
+    text: string;
+    placement: 'right' | 'bottom';
+  }>;
 }
 
 export interface ProjectModel {
@@ -296,12 +326,20 @@ export interface ProjectModel {
   sourceWorkbookName?: string;
   paginationLocked?: boolean;
   workbookSync?: {
+    state?: string;
+    status?: string;
     mode?: string;
     workbook?: string;
     lastSyncUtc?: string;
     workbookHash?: string;
     appHash?: string;
     warning?: string;
+  };
+  dataWorkspace?: {
+    revision?: number;
+    signature?: string;
+    savedAt?: string;
+    appliedRevision?: number;
   };
   revisionHistory?: Array<{ revision: string; date: string; description?: string; exportedBy?: string }>;
 }

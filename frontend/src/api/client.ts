@@ -85,6 +85,43 @@ export interface WorkbookDocument {
     hiddenColumns: string[];
     archived?: boolean;
     tabColor?: string | null;
+    role?: string | null;
+    sourceSetup?: {
+      authority?: string;
+      sheetCode?: string;
+      title?: string;
+      pageType?: string;
+      publish?: '' | 'YES' | 'NO' | 'VERIFY';
+      purpose?: string;
+      instruction?: string;
+      editableStartRow?: number;
+      metadata?: Array<{ field: string; value: string; notes: string }>;
+    };
+    protectedRanges: string[];
+    dataValidations: Array<{
+      id: string;
+      ranges: string[];
+      type: string;
+      operator?: string;
+      formula1?: unknown;
+      formula2?: unknown;
+      values?: string[];
+      allowBlank?: boolean;
+      showDropdown?: boolean;
+      showErrorMessage?: boolean;
+      error?: string;
+      errorTitle?: string;
+      strict?: boolean;
+      source?: string;
+    }>;
+    conditionalFormats: Array<Record<string, unknown>>;
+    tableRegions: Array<{ id: string; range: string; label: string }>;
+    tableLayout: 'single' | 'side_by_side' | 'stacked';
+    annotations: Array<{
+      id: string;
+      text: string;
+      placement: 'right' | 'bottom';
+    }>;
   }>;
 }
 

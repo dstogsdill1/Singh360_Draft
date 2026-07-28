@@ -73,6 +73,7 @@ from core.vector_pdf_export import (
 )
 from core.vsdx_importer import import_vsdx
 from core.workbook_importer import import_workbook
+from core.workbook_workspace import workbook_document_signature
 from core.workbook_status_sync import WorkbookSyncError, sync_project_from_workbook, sync_project_to_workbook
 from core.workbook_link_manager import (
     claim_workbook_for_project,
@@ -667,6 +668,31 @@ def save_data_workspace(project_id: str):
         saved = WorkbookDocumentStore(project_dir).save(
             doc, int(body.get("expectedRevision") or 0), document
         )
+        saved_at = _utcnow()
+        doc["dataWorkspace"] = {
+            **dict(doc.get("dataWorkspace") or {}),
+            "revision": int(saved.get("revision") or 0),
+            "signature": workbook_document_signature(saved),
+            "savedAt": saved_at,
+            "appliedRevision": int(
+                (doc.get("dataWorkspace") or {}).get("appliedRevision") or 0
+            ),
+        }
+        sync = dict(doc.get("workbookSync") or {})
+        sync.update(
+            {
+                "status": "app_changed",
+                "warning": (
+                    "Data Workspace saved locally. The linked Excel workbook "
+                    "was not written."
+                ),
+                "pendingReason": "data_workspace_saved_excel_pending",
+                "localProjectSavedAt": saved_at,
+                "lastAuthorityAction": "data_workspace_local_save",
+            }
+        )
+        doc["workbookSync"] = sync
+        store.save(project_id, doc)
         return jsonify(saved)
     except WorkbookRevisionConflict as exc:
         return jsonify(_err(str(exc))), 409
@@ -1114,7 +1140,9 @@ def save_page_inclusion(project_id: str):
             continue
         page_id = str(page.get("id") or "")
         if page_id in included_by_page_id:
-            page["include"] = bool(included_by_page_id[page_id])
+            included = bool(included_by_page_id[page_id])
+            page["include"] = included
+            page["publishStatus"] = "YES" if included else "NO"
 
     doc["pages"] = pages
     doc = ensure_project_shape(doc)

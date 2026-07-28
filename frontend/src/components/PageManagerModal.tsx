@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import type { PageModel, ProjectModel } from '../model/types';
+import { pageStatusClass } from '../model/pageStatus';
 
 interface Props {
   project: ProjectModel;
@@ -140,7 +141,7 @@ export default function PageManagerModal({
             const image = previewUrl(page);
             const isIncluded = Boolean(included[page.id]);
             return (
-              <article key={page.id} className={`page-thumbnail-card readable ${isIncluded ? 'included' : 'excluded'}`}>
+              <article key={page.id} className={`page-thumbnail-card readable ${isIncluded ? 'included' : 'excluded'} ${isIncluded ? pageStatusClass({ ...page, include: true }) : 'status-excluded'}`}>
                 <button type="button" className="page-thumb-preview readable" onClick={() => onOpenPage(page.id)}>
                   {image ? (
                     <img src={image} alt={`Preview of ${page.sheetTitle}`} />
