@@ -113,7 +113,13 @@ export default function ExcelLayoutCanvas({ page, onPatchPage, exporting }: Prop
   };
 
   return (
-    <div className="excel-layout-root" data-testid="excel-layout-canvas"
+    <div
+      className="excel-layout-root"
+      data-testid="excel-layout-canvas"
+      data-action="excel-layout-canvas"
+      data-help-id="excelLayout.table"
+      aria-label="Excel Layout canvas"
+      tabIndex={0}
       onPointerMove={(event) => {
         if (!drag.current) return;
         const dx = event.clientX - drag.current.x, dy = event.clientY - drag.current.y;

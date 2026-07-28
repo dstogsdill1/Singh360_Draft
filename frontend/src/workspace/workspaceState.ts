@@ -10,10 +10,15 @@ export interface WorkspaceStateSignal {
   state: SharedWorkspaceState;
   instanceId: string;
   updatedAt: string;
+  expiresAt: string;
+  revision: number;
+  signature: string;
+  dirtyDomains: string[];
 }
 
 const PREFIX = 'singh360:data-workspace:';
 const CHANNEL = 'singh360:data-workspace-state';
+const LEASE_MS = 30_000;
 
 export function workspaceStateKey(projectId: string): string {
   return `${PREFIX}${projectId}`;
@@ -24,7 +29,15 @@ export function readWorkspaceState(projectId: string): WorkspaceStateSignal | nu
     const value = window.localStorage.getItem(workspaceStateKey(projectId));
     if (!value) return null;
     const parsed = JSON.parse(value) as WorkspaceStateSignal;
-    return parsed?.projectId === projectId ? parsed : null;
+    if (parsed?.projectId !== projectId) return null;
+    if (
+      (parsed.state === 'DIRTY' || parsed.state === 'CONFLICT')
+      && (!parsed.expiresAt || Date.parse(parsed.expiresAt) <= Date.now())
+    ) {
+      window.localStorage.removeItem(workspaceStateKey(projectId));
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -34,8 +47,19 @@ export function publishWorkspaceState(
   projectId: string,
   state: SharedWorkspaceState,
   instanceId: string,
+  details: { revision?: number; signature?: string; dirtyDomains?: string[] } = {},
 ): WorkspaceStateSignal {
-  const signal = { projectId, state, instanceId, updatedAt: new Date().toISOString() };
+  const now = new Date();
+  const signal = {
+    projectId,
+    state,
+    instanceId,
+    updatedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + LEASE_MS).toISOString(),
+    revision: details.revision || 0,
+    signature: details.signature || '',
+    dirtyDomains: details.dirtyDomains || [],
+  };
   window.localStorage.setItem(workspaceStateKey(projectId), JSON.stringify(signal));
   try {
     const channel = new BroadcastChannel(CHANNEL);
@@ -60,7 +84,12 @@ export function subscribeWorkspaceState(
     channel = new BroadcastChannel(CHANNEL);
     channel.onmessage = (event) => {
       const signal = event.data as WorkspaceStateSignal;
-      if (signal?.projectId === projectId) listener(signal);
+      if (signal?.projectId !== projectId) return;
+      if (
+        (signal.state === 'DIRTY' || signal.state === 'CONFLICT')
+        && (!signal.expiresAt || Date.parse(signal.expiresAt) <= Date.now())
+      ) listener(null);
+      else listener(signal);
     };
   } catch {
     channel = null;

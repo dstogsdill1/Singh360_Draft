@@ -158,6 +158,11 @@ def main() -> int:
 
     # 6) Export package includes crop PNG and source PDF.
     pkg = c.post(f"/api/projects/{pid}/export/package")
+    if pkg.status_code == 409 and (pkg.get_json() or {}).get("confirmationRequired"):
+        pkg = c.post(
+            f"/api/projects/{pid}/export/package",
+            json={"confirmPreflight": True},
+        )
     if pkg.status_code != 200:
         problems.append(f"export package failed ({pkg.status_code})")
     else:

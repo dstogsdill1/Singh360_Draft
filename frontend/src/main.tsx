@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './clipboardBridge';
 import App from './App';
+import TooltipProvider from './components/help/TooltipProvider';
 import '@univerjs/preset-sheets-core/lib/index.css';
 import '@univerjs/preset-sheets-data-validation/lib/index.css';
 import '@univerjs/preset-sheets-conditional-formatting/lib/index.css';
@@ -13,9 +14,12 @@ import './styles/textBoxFormatting.css';
 import './styles/statusHelp.css';
 import './styles/projectDashboard.css';
 import './styles/projectWorkspace.css';
+import './styles/tooltips.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <TooltipProvider>
+      <App />
+    </TooltipProvider>
   </React.StrictMode>,
 );

@@ -23,6 +23,7 @@ def main() -> int:
     sync = (ROOT / "core/workbook_status_sync.py").read_text(encoding="utf-8")
     types = (ROOT / "frontend/src/model/types.ts").read_text(encoding="utf-8")
     start = (ROOT / "START_SINGH360_DRAFT.bat").read_text(encoding="utf-8")
+    launcher = (ROOT / "scripts/singh360_launcher.ps1").read_text(encoding="utf-8")
 
     with tempfile.TemporaryDirectory(prefix="s360_home_") as temp:
         folder = Path(temp)
@@ -63,7 +64,8 @@ def main() -> int:
         "externalPathPreferred": "external-workbook-link" in sync or "workbookSync" in sync,
         "canonicalLauncher": "title Singh360 Draft" in start
         and "SINGH360_PORT=8766" in start
-        and "http://127.0.0.1:8766/app" in start,
+        and "singh360_launcher.ps1" in start
+        and "http://127.0.0.1:$Port/app" in launcher,
         "dashboardCss": "PROJECT HOME + EXTERNAL WORKBOOK LINK"
         in (ROOT / "frontend/src/styles/projectDashboard.css").read_text(encoding="utf-8"),
         "projectLastSavedType": "lastSavedAt?: string;" in types,

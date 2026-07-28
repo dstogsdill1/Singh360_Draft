@@ -460,14 +460,21 @@ export default function CanvasEditor({
         }
         return obj;
       });
+      // Loading the server-confirmed snapshot emits Fabric object:added events.
+      // Those are a render/hydration echo, not user edits, so suppress the
+      // persistence listeners until the full snapshot is mounted.
+      restoringRef.current = true;
       void canvas.loadFromJSON({ version: '6', objects: liveObjects }).then(() => {
         canvas.getObjects().forEach((o) => styleForSelection(o));
         canvas.renderAll();
         historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
         histIdxRef.current = 0;
+        restoringRef.current = false;
         if (repairedPdfObjects) {
           onSerRef.current(normalizeCanvasObjects((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         }
+      }).catch(() => {
+        restoringRef.current = false;
       });
     } else {
       historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
@@ -1934,7 +1941,13 @@ export default function CanvasEditor({
   }, [registerApi]);
 
   return (
-    <div className="canvas-wrap">
+    <div
+      className="canvas-wrap"
+      data-action="canvas-selection"
+      data-help-id="object.select"
+      aria-label="Drawing canvas objects"
+      tabIndex={0}
+    >
       <canvas ref={canvasRef} className="canvas-surface" />
     </div>
   );

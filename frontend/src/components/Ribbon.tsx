@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, type ReactNode } from 'react';
 import type { FitMode } from './DocumentView';
 import type { CanvasSelection, LineStyle, SymbolLegendInsertConfig } from '../model/types';
 import { CONNECTOR_PRESETS } from '../model/connectorPresets';
+import type { DirtyDomain, SaveState } from '../model/saveState';
+import SaveStateIndicator from './SaveStateIndicator';
 
 export type PageReviewFilter = 'all' | 'included' | 'excluded';
 
@@ -21,8 +23,12 @@ export interface ViewControls {
 import TextBoxFormatControls from './TextBoxFormatControls';
 
 interface Props {
-  saveStatus: string;
-  saveLabel?: string;
+  saveStatus: SaveState;
+  savedAt?: string;
+  lastWorkbookSync?: string;
+  dirtyDomains: DirtyDomain[];
+  saveError?: string;
+  onRetrySave: () => void;
   hasProject: boolean;
   view: ViewControls;
   canvasEnabled: boolean;
@@ -125,7 +131,11 @@ function PlaceholderBtn({ label }: { label: string }) {
 
 export default function Ribbon({
   saveStatus,
-  saveLabel,
+  savedAt,
+  lastWorkbookSync,
+  dirtyDomains,
+  saveError,
+  onRetrySave,
   hasProject,
   view,
   canvasEnabled,
@@ -233,13 +243,21 @@ export default function Ribbon({
           <button
             type="button"
             className="ribbon-btn ribbon-write-excel-btn"
-            disabled={!hasProject || writeExcelBusy || saveStatus === 'saving'}
+            disabled={!hasProject || writeExcelBusy || saveStatus === 'savingLocal' || saveStatus === 'writingWorkbook'}
             onClick={onWriteExcel}
-            title="Save locally, then mirror page rows, worksheet tabs, order, codes, titles, and Include/Exclude to the linked Excel workbook"
+            data-help-id="save.writeExcel"
+            data-disabled-reason={!hasProject ? 'Open a project and link its verified workbook first.' : undefined}
           >
             {writeExcelBusy ? 'WRITING EXCEL…' : 'SAVE + WRITE EXCEL'}
           </button>
-          <span className={`status-pill ${saveStatus}`}>{saveLabel ?? saveStatus}</span>
+          <SaveStateIndicator
+            state={saveStatus}
+            lastLocalSave={savedAt}
+            lastWorkbookSync={lastWorkbookSync}
+            dirtyDomains={dirtyDomains}
+            error={saveError}
+            onRetry={onRetrySave}
+          />
         </div>
       </div>
 

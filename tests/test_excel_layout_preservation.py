@@ -82,6 +82,71 @@ class ExcelLayoutPreservationTests(unittest.TestCase):
             excluded = load_workbook(workbook_path)["EMS TEST"]
             self.assertEqual(excluded.sheet_properties.tabColor.rgb[-6:], TAB_COLORS["excluded"][-6:])
 
+    def test_control_sheet_is_not_duplicated_and_virtual_pages_stay_app_only(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            workbook_path = root / "fixture.xlsx"
+            wb = Workbook()
+            wb.active.title = "00_PROJECT_META"
+            index = wb.create_sheet("00_INDEX")
+            index.append(["Include", "Order", "Sheet Code", "Sheet Tab", "Page Title"])
+            source = wb.create_sheet("SOURCE")
+            source["A1"] = "=SUM(1,2)"
+            wb.save(workbook_path)
+
+            project = {
+                "id": "fixture",
+                "metadata": {},
+                "worksheets": [
+                    {
+                        "id": "ws_virtual",
+                        "name": "33_ABBREVIATIONS",
+                        "virtualCanonicalSource": True,
+                    }
+                ],
+                "pages": [
+                    {
+                        "id": "index-page",
+                        "order": 1,
+                        "sheetTab": "00_INDEX",
+                        "sourceSheet": "00_INDEX",
+                        "sheetTitle": "Sheet Index",
+                        "sheetCode": "EMS 0.1",
+                        "displaySheetCode": "EMS 0.1",
+                        "linkedWorksheetId": "ws_index",
+                        "publishStatus": "NO",
+                        "include": False,
+                    },
+                    {
+                        "id": "virtual-page",
+                        "order": 2,
+                        "sheetTab": "33_ABBREVIATIONS",
+                        "sheetTitle": "Abbreviations",
+                        "linkedWorksheetId": "ws_virtual",
+                        "publishStatus": "NO",
+                        "include": False,
+                    },
+                ],
+            }
+
+            synchronize_project_to_workbook(
+                workbook_path,
+                "fixture",
+                project,
+                SimpleNamespace(docs=root),
+                app_hash="fixture-hash",
+            )
+
+            reopened = load_workbook(workbook_path, data_only=False)
+            try:
+                self.assertEqual(
+                    reopened.sheetnames,
+                    ["00_PROJECT_META", "00_INDEX", "SOURCE"],
+                )
+                self.assertEqual(reopened["SOURCE"]["A1"].value, "=SUM(1,2)")
+            finally:
+                reopened.close()
+
 
 if __name__ == "__main__":
     unittest.main()

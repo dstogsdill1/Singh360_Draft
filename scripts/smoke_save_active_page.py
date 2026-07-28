@@ -105,6 +105,11 @@ def main() -> int:
         problems.append("project backup missing")
 
     pkg = client.post(f"/api/projects/{pid}/export/package")
+    if pkg.status_code == 409 and (pkg.get_json() or {}).get("confirmationRequired"):
+        pkg = client.post(
+            f"/api/projects/{pid}/export/package",
+            json={"confirmPreflight": True},
+        )
     if pkg.status_code != 200:
         problems.append(f"package export failed {pkg.status_code}")
     else:

@@ -1,0 +1,173 @@
+.s360-app-tooltip {
+  position: fixed;
+  z-index: 2147483000;
+  display: grid;
+  gap: 5px;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 10px 12px;
+  border: 1px solid rgba(242, 140, 40, 0.72);
+  border-radius: 8px;
+  background: #17191c;
+  color: #fff;
+  box-shadow: 0 9px 26px rgba(0, 0, 0, 0.42);
+  font: 12px/1.42 "Segoe UI", Arial, sans-serif;
+  white-space: normal;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  animation: s360-tooltip-in 90ms ease-out;
+}
+
+.s360-app-tooltip strong {
+  color: #f28c28;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.s360-app-tooltip span {
+  display: block;
+  color: #fff;
+}
+
+.s360-app-tooltip small {
+  color: #c9ced4;
+  font-size: 10px;
+}
+
+.s360-app-tooltip kbd {
+  justify-self: start;
+  padding: 1px 5px;
+  border: 1px solid #636b73;
+  border-radius: 4px;
+  background: #2c3035;
+  color: #fff;
+  font: 10px/1.4 Consolas, monospace;
+}
+
+.s360-app-tooltip .s360-app-tooltip-disabled {
+  color: #ffd5a8;
+}
+
+.s360-app-tooltip-arrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(242, 140, 40, 0.72);
+  background: #17191c;
+  transform: rotate(45deg);
+}
+
+.s360-app-tooltip.placement-bottom .s360-app-tooltip-arrow {
+  top: -5px;
+  left: calc(50% - 4px);
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.s360-app-tooltip.placement-top .s360-app-tooltip-arrow {
+  bottom: -5px;
+  left: calc(50% - 4px);
+  border-left: 0;
+  border-top: 0;
+}
+
+.s360-app-tooltip.placement-left .s360-app-tooltip-arrow {
+  top: calc(50% - 4px);
+  right: -5px;
+  border-left: 0;
+  border-bottom: 0;
+}
+
+.s360-app-tooltip.placement-right .s360-app-tooltip-arrow {
+  top: calc(50% - 4px);
+  left: -5px;
+  border-right: 0;
+  border-top: 0;
+}
+
+.s360-tooltip-disabled-wrapper {
+  display: inline-flex;
+}
+
+.s360-tooltip-disabled-wrapper:focus-visible,
+[data-help-id]:focus-visible {
+  outline: 2px solid #f28c28;
+  outline-offset: 2px;
+}
+
+@keyframes s360-tooltip-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .s360-app-tooltip { animation: none; }
+}
+
+.save-state-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.save-state-control .status-pill {
+  cursor: pointer;
+}
+
+.status-pill.cleanLocal,
+.status-pill.savedAndSynced { color: #7fd39b; border-color: #2f6f45; }
+.status-pill.dirtyLocal,
+.status-pill.dirtyWorkspace,
+.status-pill.localSavedSyncPending,
+.status-pill.writingWorkbook,
+.status-pill.savingLocal { color: #f0c37a; border-color: #7a5a1e; }
+.status-pill.saveFailed,
+.status-pill.syncFailed,
+.status-pill.conflict { color: #f19a99; border-color: #7a2b2a; background: #3a2726; }
+
+.save-state-times {
+  display: grid;
+  gap: 1px;
+  color: #cbd2d8;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.save-state-details-button {
+  border: 0;
+  background: transparent;
+  color: #ffd5a8;
+  font-size: 10px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.save-state-details {
+  position: absolute;
+  z-index: 10000;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 290px;
+  padding: 10px;
+  border: 1px solid #5a626a;
+  border-radius: 6px;
+  background: #22262b;
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .35);
+  font-size: 11px;
+}
+
+.save-state-details ul {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
+.save-state-error {
+  max-width: 280px;
+  color: #ffb6b4;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

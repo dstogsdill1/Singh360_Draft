@@ -385,6 +385,9 @@ export interface ProjectModel {
     workbookHash?: string;
     appHash?: string;
     warning?: string;
+    pendingReason?: string;
+    localProjectSavedAt?: string;
+    lastAuthorityAction?: string;
   };
   dataWorkspace?: {
     revision?: number;

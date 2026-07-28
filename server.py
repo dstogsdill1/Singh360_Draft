@@ -14,6 +14,7 @@ import re
 import shutil
 import socket
 import sys
+import time
 import traceback
 import uuid
 import zipfile
@@ -665,6 +666,9 @@ def save_data_workspace(project_id: str):
     ):
         return jsonify(_err("A workbook document is required.")), 400
     try:
+        test_delay_ms = int(os.environ.get("SINGH360_TEST_SAVE_DELAY_MS") or 0)
+        if test_delay_ms > 0:
+            time.sleep(min(test_delay_ms, 5_000) / 1_000)
         saved = WorkbookDocumentStore(project_dir).save(
             doc, int(body.get("expectedRevision") or 0), document
         )
@@ -906,15 +910,28 @@ def save_project(project_id: str):
         else {}
     )
     sync = {**previous_sync, **incoming_sync}
+    conflict_active = (
+        str(previous_sync.get("status") or previous_sync.get("state") or "")
+        == "conflict"
+        or str(incoming_sync.get("status") or incoming_sync.get("state") or "")
+        == "conflict"
+    )
     sync.update(
         {
-            "status": "app_changed",
+            "status": "conflict" if conflict_active else "app_changed",
             "warning": (
-                "Project saved locally. Workbook update is pending. "
-                "Use Project Home > Review Workbook Sync > "
-                "Sync Project to Workbook Now."
+                "Both the local project and workbook changed. Automatic "
+                "overwrite remains blocked."
+                if conflict_active
+                else (
+                    "Project saved locally. Workbook update is pending. "
+                    "Use Project Home > Review Workbook Sync > "
+                    "Sync Project to Workbook Now."
+                )
             ),
-            "pendingReason": "app_changes_pending",
+            "pendingReason": (
+                "two_sided_conflict" if conflict_active else "app_changes_pending"
+            ),
             "localProjectSavedAt": _utcnow(),
             "lastAuthorityAction": "local_autosave",
             "syncEngineVersion": "V25",

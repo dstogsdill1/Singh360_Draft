@@ -61,6 +61,13 @@ import StatusBar from './components/StatusBar';
 import HelpCenter from './components/HelpCenter';
 import ProjectDashboard from './components/ProjectDashboard';
 import ProjectFilesPage from './components/ProjectFilesPage';
+import {
+  classifyProjectChanges,
+  confirmedProjectSaveState,
+  hasUnconfirmedLocalEdits,
+  type DirtyDomain,
+  type SaveState,
+} from './model/saveState';
 
 const DataWorkspace = lazy(() => import('./workspace/DataWorkspace'));
 
@@ -114,8 +121,11 @@ export default function App() {
   const [project, setProject] = useState<ProjectModel | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [selectedWorksheetId, setSelectedWorksheetId] = useState<string | undefined>(undefined);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'unsaved' | 'saving' | 'saved' | 'failed'>('idle');
+  const [saveStatus, setSaveStatus] = useState<SaveState>('cleanLocal');
   const [savedAt, setSavedAt] = useState<string>('');
+  const [lastWorkbookSync, setLastWorkbookSync] = useState<string>('');
+  const [dirtyDomains, setDirtyDomains] = useState<DirtyDomain[]>([]);
+  const [saveError, setSaveError] = useState<string>('');
   const [saveNotice, setSaveNotice] = useState<string>('');
   // S360 SAVE + WRITE EXCEL BUTTON V26
   const [excelWriteBusy, setExcelWriteBusy] = useState(false);
@@ -196,6 +206,7 @@ export default function App() {
   // lastSavedJson is the JSON we last confirmed on the server. A project whose
   // JSON differs from it is genuinely dirty; equality means "hydrated, clean".
   const lastSavedJsonRef = useRef<string>('');
+  const lastSavedProjectRef = useRef<ProjectModel | null>(null);
   const projectRef = useRef<ProjectModel | null>(project);
   const saveStatusRef = useRef(saveStatus);
   saveStatusRef.current = saveStatus;
@@ -213,15 +224,35 @@ export default function App() {
     return next;
   }, []);
 
-  const markSaved = (saved?: ProjectModel) => {
+  const establishSavedBaseline = useCallback((saved: ProjectModel) => {
+    const applied = setProjectSync(saved);
+    const baseline = applied ?? saved;
+    lastSavedProjectRef.current = baseline;
+    lastSavedJsonRef.current = JSON.stringify(baseline);
+    setSavedAt(
+      baseline.workbookSync?.localProjectSavedAt
+      || baseline.lastSavedAt
+      || new Date().toISOString(),
+    );
+    setLastWorkbookSync(baseline.workbookSync?.lastSyncUtc || '');
+    setDirtyDomains([]);
+    setSaveError('');
+    setSaveStatus(confirmedProjectSaveState(baseline));
+    return baseline;
+  }, [setProjectSync]);
+
+  const markSaved = useCallback((saved?: ProjectModel) => {
+    if (saved) {
+      establishSavedBaseline(saved);
+      return;
+    }
     const d = new Date();
     const p = (n: number) => String(n).padStart(2, '0');
     setSavedAt(`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`);
-    const sync = (saved?.workbookSync || {}) as Record<string, unknown>;
-    const pending = sync.status === 'pending' || sync.status === 'conflict' || Boolean(sync.warning);
-    setSaveNotice(pending ? 'Project Saved · Workbook Sync Pending' : '');
-    setSaveStatus('saved');
-  };
+    setDirtyDomains([]);
+    setSaveError('');
+    setSaveStatus('cleanLocal');
+  }, [establishSavedBaseline]);
 
   // Persist the freshest project to the server. Returns true only when the
   // server actually confirmed the write of the CURRENT project snapshot.
@@ -229,30 +260,34 @@ export default function App() {
     const p = projectRef.current;
     if (!p || printMode) return true;
     const json = JSON.stringify(p);
-    if (json === lastSavedJsonRef.current) return true; // nothing new to save
-    if (savingRef.current) return false; // a save is already in flight
+    if (json === lastSavedJsonRef.current) {
+      return true;
+    }
+    if (savingRef.current) {
+      return false;
+    }
     savingRef.current = true;
-    setSaveStatus('saving');
+    setSaveStatus('savingLocal');
+    setSaveError('');
     try {
       const savedFromServer = normalizeProjectAssetUrls(await saveProject(p));
       savingRef.current = false;
       if (JSON.stringify(projectRef.current) !== json) {
         // A newer local edit exists. Do not overwrite it with this older response;
         // the next autosave will synchronize the latest Sheet Index.
-        setSaveStatus('unsaved');
+        setSaveStatus('dirtyLocal');
         return false;
       }
-      const applied = setProjectSync(savedFromServer);
-      lastSavedJsonRef.current = JSON.stringify(applied ?? savedFromServer);
       markSaved(savedFromServer);
       return true;
-    } catch {
+    } catch (error) {
       savingRef.current = false;
-      setSaveStatus('failed');
+      setSaveStatus('saveFailed');
+      setSaveError(String(error));
       writeRecoverySnapshot(p);
       return false;
     }
-  }, [printMode]);
+  }, [markSaved, printMode]);
 
 
   // Wait through any in-flight autosave and keep retrying until the exact latest
@@ -264,15 +299,20 @@ export default function App() {
     while (Date.now() < deadline) {
       const current = projectRef.current;
       if (!current) return false;
-      if (JSON.stringify(current) === lastSavedJsonRef.current) return true;
+      if (JSON.stringify(current) === lastSavedJsonRef.current) {
+        return true;
+      }
       if (!savingRef.current) {
         const ok = await flushSave();
-        if (ok) return true;
+        if (ok) {
+          return true;
+        }
       }
       await new Promise<void>((resolve) => window.setTimeout(resolve, 150));
     }
     const current = projectRef.current;
-    return !!current && JSON.stringify(current) === lastSavedJsonRef.current;
+    const confirmed = !!current && JSON.stringify(current) === lastSavedJsonRef.current;
+    return confirmed;
   }, [flushSave]);
 
   // ── captureActivePageState ─────────────────────────────────────────────────
@@ -341,39 +381,19 @@ export default function App() {
   // Explicit "Save Now": capture the live canvas, then contact the server.
   const saveNow = useCallback(async (): Promise<boolean> => {
     captureActivePageState(); // sync active-page capture MUST happen before any read of projectRef
-    let p = projectRef.current;
+    const p = projectRef.current;
     if (p) {
       const wsId = activePageRef.current?.linkedWorksheetId;
       if (wsId && isCoverWorksheet(p, wsId)) {
-        p = applyCoverSourceTruth(p, wsId);
-        projectRef.current = p;
-        setProjectSync(p);
+        const withCoverTruth = applyCoverSourceTruth(p, wsId);
+        projectRef.current = withCoverTruth;
+        setProjectSync(withCoverTruth);
         setSourceEditStatus('updated');
         setSourceDirty(false);
       }
     }
-    if (!p || printMode) return true;
-    const json = JSON.stringify(p);
-    savingRef.current = true;
-    setSaveStatus('saving');
-    try {
-      const savedFromServer = normalizeProjectAssetUrls(await saveProject(p));
-      savingRef.current = false;
-      if (JSON.stringify(projectRef.current) !== json) {
-        setSaveStatus('unsaved');
-        return false;
-      }
-      const applied = setProjectSync(savedFromServer);
-      lastSavedJsonRef.current = JSON.stringify(applied ?? savedFromServer);
-      markSaved(savedFromServer);
-      return true;
-    } catch {
-      savingRef.current = false;
-      setSaveStatus('failed');
-      writeRecoverySnapshot(p);
-      return false;
-    }
-  }, [printMode, captureActivePageState, setProjectSync]);
+    return confirmLatestProjectSaved(15_000);
+  }, [captureActivePageState, confirmLatestProjectSaved, setProjectSync]);
 
   // S360 SAVE + WRITE EXCEL BUTTON V26
   const writeProjectToExcel = useCallback(async (): Promise<boolean> => {
@@ -385,30 +405,34 @@ export default function App() {
       return false;
     }
     setExcelWriteBusy(true);
-    setSaveStatus('saving');
+    setSaveStatus('savingLocal');
+    setSaveError('');
     setSaveNotice('Saving project locally…');
+    let localSaveConfirmed = false;
     try {
+      // Save Now waits through any in-flight autosave and confirms the exact
+      // latest project snapshot before workbook mirroring is allowed to begin.
       const localSaved = await saveNow();
       if (!localSaved) throw new Error('The local project save did not complete.');
+      localSaveConfirmed = true;
       const latest = projectRef.current;
       if (!latest) throw new Error('The active project disappeared before Excel synchronization.');
-      setSaveStatus('saving');
+      setSaveStatus('writingWorkbook');
       setSaveNotice('Writing project to Excel…');
       const result = await resolveWorkbookLink(latest.id, 'app_to_workbook');
       const synced = normalizeProjectAssetUrls(result.project);
-      const applied = setProjectSync(synced);
-      lastSavedJsonRef.current = JSON.stringify(applied ?? synced);
       markSaved(synced);
-      setSaveStatus('saved');
-      setSaveNotice('PROJECT + EXCEL SAVED');
+      setSaveStatus('savedAndSynced');
+      setSaveNotice('PROJECT SAVED · WORKBOOK SYNCED');
       window.setTimeout(() => {
-        setSaveNotice((notice) => notice === 'PROJECT + EXCEL SAVED' ? '' : notice);
+        setSaveNotice((notice) => notice === 'PROJECT SAVED · WORKBOOK SYNCED' ? '' : notice);
       }, 6000);
       return true;
     } catch (error) {
       console.error('Save + Write Excel failed', error);
-      setSaveStatus('failed');
-      setSaveNotice('EXCEL WRITE FAILED · LOCAL PROJECT IS STILL SAVED');
+      setSaveStatus(localSaveConfirmed ? 'syncFailed' : 'saveFailed');
+      setSaveError(String(error));
+      setSaveNotice(localSaveConfirmed ? 'WORKBOOK SYNC FAILED' : 'SAVE FAILED');
       writeRecoverySnapshot(projectRef.current ?? current);
       window.alert(
         `Could not write the project to Excel.\n\n${String(error)}\n\n`
@@ -418,7 +442,7 @@ export default function App() {
     } finally {
       setExcelWriteBusy(false);
     }
-  }, [excelWriteBusy, printMode, captureActivePageState, saveNow, setProjectSync]);
+  }, [captureActivePageState, excelWriteBusy, markSaved, printMode, saveNow]);
 
   const resetSourceEditState = useCallback(() => {
     sourceHistoryRef.current.clear();
@@ -432,8 +456,7 @@ export default function App() {
     void getProject(initialProjectId).then((p) => {
       const normalized = normalizeProjectAssetUrls(p);
       resetSourceEditState();
-      const applied = setProjectSync(normalized);
-      lastSavedJsonRef.current = JSON.stringify(applied ?? normalized);
+      establishSavedBaseline(normalized);
       // S360 PAGE MANAGER DEEP LINK V1
       let savedPageId = '';
       try {
@@ -447,7 +470,7 @@ export default function App() {
       setActivePageId(firstPage?.id ?? null);
       setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? normalized.worksheets?.[0]?.id);
     });
-  }, [initialProjectId, setProjectSync, resetSourceEditState]);
+  }, [initialProjectId, establishSavedBaseline, resetSourceEditState]);
 
   // Debounced autosave driven by real changes. Marks Unsaved Changes immediately,
   // writes a local recovery snapshot, then persists after a short quiet period.
@@ -456,7 +479,8 @@ export default function App() {
     projectRef.current = project;
     const json = JSON.stringify(project);
     if (json === lastSavedJsonRef.current) return; // hydrated / no real change
-    setSaveStatus('unsaved');
+    setDirtyDomains(classifyProjectChanges(lastSavedProjectRef.current, project));
+    setSaveStatus(confirmedProjectSaveState(project) === 'conflict' ? 'conflict' : 'dirtyLocal');
     writeRecoverySnapshot(project);
     const t = setTimeout(() => { void flushSave(); }, 800);
     return () => clearTimeout(t);
@@ -465,7 +489,7 @@ export default function App() {
   // Warn before leaving with unsaved/in-flight changes.
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (saveStatusRef.current === 'unsaved' || saveStatusRef.current === 'saving') {
+      if (hasUnconfirmedLocalEdits(saveStatusRef.current)) {
         e.preventDefault();
         e.returnValue = '';
       }
@@ -1406,12 +1430,13 @@ export default function App() {
     const nextProject = { ...currentProject, pages };
     setRapidReviewBusy(true);
     setProjectSync(nextProject);
-    setSaveStatus('saving');
+    setSaveStatus('savingLocal');
     setSaveNotice('Saving page review…');
     await new Promise<void>((resolve) => window.setTimeout(resolve, 700));
     const saved = await confirmLatestProjectSaved(15000);
     if (!saved) {
-      setSaveStatus('failed');
+      setSaveStatus('saveFailed');
+      setSaveError('Page review save failed before the current project revision was confirmed.');
       setSaveNotice('PAGE REVIEW SAVE FAILED · STAYING ON CURRENT PAGE');
       setRapidReviewBusy(false);
       return;
@@ -1644,7 +1669,7 @@ export default function App() {
           : p,
       );
     });
-    setSaveStatus('unsaved');
+    setSaveStatus('dirtyLocal');
   };
 
   const onUploadWorkbook = async (file: File) => {
@@ -1666,9 +1691,7 @@ export default function App() {
     try {
       const p = await getProject(project.id);
       resetSourceEditState();
-      const applied = setProjectSync(p);
-      lastSavedJsonRef.current = JSON.stringify(applied ?? p);
-      setSaveStatus('idle');
+      establishSavedBaseline(p);
       setSelection(null);
     } catch (err) {
       console.error('refresh after reimport failed', err);
@@ -1692,9 +1715,7 @@ export default function App() {
     setPendingWorkbookFile(null);
     const p = await getProject(id);
     resetSourceEditState();
-    const applied = setProjectSync(p);
-    lastSavedJsonRef.current = JSON.stringify(applied ?? p);
-    setSaveStatus('idle');
+    establishSavedBaseline(p);
     const firstPage = p.pages?.[0];
     setActivePageId(firstPage?.id ?? null);
     setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? p.worksheets?.[0]?.id);
@@ -1708,9 +1729,7 @@ export default function App() {
       if (!ok) return;
       const p = await getProject(id);
       resetSourceEditState();
-      const applied = setProjectSync(p);
-      lastSavedJsonRef.current = JSON.stringify(applied ?? p);
-      setSaveStatus('idle');
+      establishSavedBaseline(p);
       const firstPage = p.pages?.[0];
     setActivePageId(firstPage?.id ?? null);
     setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? p.worksheets?.[0]?.id);
@@ -1733,8 +1752,7 @@ export default function App() {
     try {
       const p = await getProject(project.id);
       resetSourceEditState();
-      const applied = setProjectSync(p);
-      lastSavedJsonRef.current = JSON.stringify(applied ?? p);
+      establishSavedBaseline(p);
       if (replacedPageId) {
         setActivePageId(replacedPageId);
       } else if (pageIds.length) {
@@ -1750,13 +1768,12 @@ export default function App() {
   // live editor and re-baseline the save manager so status is accurate.
   const applyRestoredProject = (p: ProjectModel) => {
     resetSourceEditState();
-    const applied = setProjectSync(p);
-    lastSavedJsonRef.current = JSON.stringify(applied ?? p);
+    establishSavedBaseline(p);
     const firstPage = p.pages?.[0];
     setActivePageId(firstPage?.id ?? activePageId);
     setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? p.worksheets?.[0]?.id);
     setSelection(null);
-    setSaveStatus('idle');
+    setSaveStatus(confirmedProjectSaveState(p));
     setBackupOpen(false);
   };
 
@@ -1778,14 +1795,14 @@ export default function App() {
   const onUploadCsv = async (file: File) => {
     if (!project) return;
     try {
-      setSaveStatus('saving');
+      setSaveStatus('savingLocal');
       await attachCsv(project.id, file);
       const p = await getProject(project.id);
-      setProjectSync(p);
-      setSaveStatus('saved');
+      establishSavedBaseline(p);
     } catch (err) {
       console.error('CSV attach failed', err);
-      setSaveStatus('failed');
+      setSaveStatus('saveFailed');
+      setSaveError(String(err));
     }
   };
 
@@ -1912,7 +1929,7 @@ export default function App() {
   const onRenameProject = async (name: string) => {
     if (!project || !name.trim()) return;
     try {
-      setSaveStatus('saving');
+      setSaveStatus('savingLocal');
       const res = await renameProject(project.id, name.trim());
       setProjectSync((prev) =>
         prev
@@ -1924,10 +1941,11 @@ export default function App() {
             }
           : prev,
       );
-      setSaveStatus('saved');
+      setSaveStatus(confirmedProjectSaveState(projectRef.current));
     } catch (err) {
       console.error('rename failed', err);
-      setSaveStatus('failed');
+      setSaveStatus('saveFailed');
+      setSaveError(String(err));
     }
   };
 
@@ -2035,17 +2053,14 @@ export default function App() {
     return '';
   })();
 
-  const saveLabel =
-    saveStatus === 'saving' ? 'Saving…'
-    : saveStatus === 'unsaved' ? 'Unsaved Changes'
-    : saveStatus === 'failed' ? 'Save Failed'
-    : saveStatus === 'saved' ? (saveNotice || (savedAt ? `Saved ${savedAt}` : 'Saved'))
-    : 'Ready';
-
   const ribbon = (
     <Ribbon
       saveStatus={saveStatus}
-      saveLabel={saveLabel}
+      savedAt={savedAt}
+      lastWorkbookSync={lastWorkbookSync}
+      dirtyDomains={dirtyDomains}
+      saveError={saveError}
+      onRetrySave={() => { void saveNow(); }}
       hasProject={!!project}
       view={view}
       canvasEnabled={canvasEnabled}

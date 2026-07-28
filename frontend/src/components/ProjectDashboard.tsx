@@ -130,6 +130,12 @@ export default function ProjectDashboard({ project }: Props) {
     return subscribeWorkspaceState(project.id, setWorkspaceState);
   }, [project?.id]);
 
+  useEffect(() => {
+    if (!project) return undefined;
+    const timer = window.setInterval(() => setWorkspaceState(readWorkspaceState(project.id)), 5_000);
+    return () => window.clearInterval(timer);
+  }, [project?.id]);
+
   const selectedWorkbookPending = Boolean(
     linkPath.trim() && linkPath.trim() !== String(link?.path || '').trim(),
   );
@@ -362,19 +368,19 @@ export default function ProjectDashboard({ project }: Props) {
           : 'neutral';
 
   const syncHeadline = workspaceDirty
-    ? 'Data Workspace has unsaved edits'
+    ? 'UNSAVED WORKSPACE EDITS'
     : workspacePending
-      ? 'Project saved locally — workbook sync pending'
+      ? 'PROJECT SAVED · WORKBOOK SYNC PENDING'
       : !project
     ? 'Choose an existing project'
     : link?.status === 'in_sync'
-      ? 'Ready — Project and workbook match'
+      ? 'PROJECT SAVED · WORKBOOK SYNCED'
       : link?.status === 'workbook_changed'
         ? 'Workbook changed after the last sync'
-        : link?.status === 'app_changed'
-          ? 'Project saved locally — workbook update pending'
+      : link?.status === 'app_changed'
+          ? 'PROJECT SAVED · WORKBOOK SYNC PENDING'
           : link?.status === 'conflict'
-            ? 'Both versions changed — choose which one is correct'
+            ? 'PROJECT / WORKBOOK CONFLICT'
             : link?.status === 'project_mismatch'
               ? 'Wrong workbook is linked to this project'
               : link?.status === 'review_required'
@@ -498,7 +504,16 @@ export default function ProjectDashboard({ project }: Props) {
                   <span className="simple-status-light" aria-hidden="true" />
                   <div>
                     <div className="eyebrow">PROJECT / WORKBOOK CHECK</div>
-                    <h2>{syncHeadline}</h2>
+                    <h2
+                      data-status-chip="true"
+                      data-help-id={workspaceDirty
+                        ? 'status.unsavedWorkspace'
+                        : workspacePending || link?.status === 'app_changed'
+                          ? 'status.syncPending'
+                          : link?.status === 'conflict'
+                            ? 'status.conflict'
+                            : 'status.localSaved'}
+                    >{syncHeadline}</h2>
                     <p>{workspaceDirty
                       ? 'Save or explicitly discard the open Data Workspace edits before trusting workbook sync status.'
                       : workspacePending
@@ -506,8 +521,19 @@ export default function ProjectDashboard({ project }: Props) {
                         : link?.message || 'Choose the project workbook.'}</p>
                     <div className="simple-edit-times">
                       <span><b>Workbook last edit</b>{link?.workbook?.modified || 'Not recorded'}</span>
-                      <span><b>Project last save</b>{project.lastSavedAt || project.modified || 'Not recorded'}</span>
+                      <span data-status-chip="true" data-help-id="status.lastLocalSave"><b>Last local save</b>{project.workbookSync?.localProjectSavedAt || project.lastSavedAt || project.modified || 'Not recorded'}</span>
+                      <span data-status-chip="true" data-help-id="status.lastWorkbookSync"><b>Last workbook sync</b>{project.workbookSync?.lastSyncUtc || 'Not recorded'}</span>
                     </div>
+                    {workspaceDirty && (
+                      <details className="workspace-dirty-details">
+                        <summary data-help-id="status.whatUnsaved">What is unsaved?</summary>
+                        <ul>
+                          {(workspaceState?.dirtyDomains?.length
+                            ? workspaceState.dirtyDomains
+                            : ['Data Workspace cells']).map((domain) => <li key={domain}>{domain}</li>)}
+                        </ul>
+                      </details>
+                    )}
                   </div>
                 </div>
                 <div className="simple-project-open-actions">

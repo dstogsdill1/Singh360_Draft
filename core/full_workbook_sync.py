@@ -351,10 +351,19 @@ def read_existing_rows(
 
 
 def base_pages(project: dict[str, Any]) -> list[dict[str, Any]]:
+    virtual_worksheet_ids = {
+        str(worksheet.get("id") or "")
+        for worksheet in project.get("worksheets", [])
+        if isinstance(worksheet, dict) and worksheet.get("virtualCanonicalSource")
+    }
     pages = [
         page
         for page in project.get("pages", [])
-        if isinstance(page, dict) and not generated_page(page)
+        if (
+            isinstance(page, dict)
+            and not generated_page(page)
+            and str(page.get("linkedWorksheetId") or "") not in virtual_worksheet_ids
+        )
     ]
     pages.sort(key=lambda page: int(page.get("order") or 10**9))
 
@@ -684,7 +693,14 @@ def synchronize_project_to_workbook(
                     app_hash=app_hash,
                 )
             )
-            app_sheet_objects.append(matched_sheet)
+            # Control sheets are already placed by the controls list below.
+            # Adding the same Worksheet object again makes openpyxl serialize a
+            # duplicate tab (for example 00_INDEX1) on the next open.
+            if matched_sheet is not index_ws and matched_sheet.title not in {
+                "00_PROJECT_META",
+                "00_HELP",
+            }:
+                app_sheet_objects.append(matched_sheet)
             used_sheet_objects.add(id(matched_sheet))
 
         # Preserve unmatched workbook-only rows and sheets as excluded source rows.
