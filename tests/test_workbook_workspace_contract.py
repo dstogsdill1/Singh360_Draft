@@ -12,6 +12,7 @@ import server
 from core.full_workbook_sync import ensure_index_state_controls
 from core.project_workspace import WorkbookDocumentStore
 from core.workbook_importer import import_workbook
+from core.workbook_status_sync import project_hash
 from core.workbook_workspace import (
     apply_controlled_default_validations,
     apply_source_sheet_contract,
@@ -240,6 +241,44 @@ class WorkbookWorkspaceContractTests(unittest.TestCase):
             )
             self.assertGreaterEqual(rule_count, 7)
             reloaded.close()
+
+    def test_new_workspace_metadata_does_not_invalidate_legacy_sync_baseline(self) -> None:
+        project = {
+            "metadata": {"projectName": "Sanitized Hash Fixture"},
+            "pages": [{
+                "id": "page-1",
+                "order": 1,
+                "include": False,
+                "sheetCode": "R-2.0",
+                "sheetTitle": "Fixture",
+                "sheetTab": "SRC Fixture",
+                "issueStatus": "draft",
+                "canvasObjects": [],
+                "assets": [],
+                "notes": "",
+            }],
+            "worksheets": [{
+                "id": "sheet-1",
+                "name": "SRC Fixture",
+                "grid": [["Fixture"]],
+                "styles": {},
+                "formulas": {},
+                "mergedCells": [],
+            }],
+        }
+        baseline = project_hash(project)
+        enriched = deepcopy(project)
+        enriched["pages"][0]["publishStatus"] = "VERIFY"
+        enriched["worksheets"][0].update({
+            "protectedRanges": ["A1:H2"],
+            "dataValidations": [{"ranges": ["A3:A20"], "type": "list"}],
+            "conditionalFormats": [{"ranges": ["A3:A20"], "type": "text"}],
+            "tableRegions": [{"id": "table-1", "range": "A3:B9"}],
+            "tableLayout": "side_by_side",
+            "annotations": [{"id": "note", "text": "Fixture", "placement": "right"}],
+        })
+        enriched["dataWorkspace"] = {"revision": 2, "signature": "fixture"}
+        self.assertEqual(baseline, project_hash(enriched))
 
 
 class DataWorkspaceStateEndpointTests(unittest.TestCase):

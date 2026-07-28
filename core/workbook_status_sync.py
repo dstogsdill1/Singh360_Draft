@@ -335,7 +335,6 @@ def project_hash(project: dict[str, Any]) -> str:
                 "id": p.get("id"),
                 "order": p.get("order"),
                 "include": p.get("include", True),
-                "publishStatus": p.get("publishStatus", ""),
                 "sheetCode": p.get("sheetCode"),
                 "displaySheetCode": p.get("displaySheetCode"),
                 "sheetTitle": p.get("sheetTitle"),
@@ -365,17 +364,10 @@ def project_hash(project: dict[str, Any]) -> str:
                 "hiddenRows": w.get("hiddenRows", []),
                 "hiddenColumns": w.get("hiddenColumns", []),
                 "geometryAuthority": w.get("geometryAuthority"),
-                "protectedRanges": w.get("protectedRanges", []),
-                "dataValidations": w.get("dataValidations", []),
-                "conditionalFormats": w.get("conditionalFormats", []),
-                "tableRegions": w.get("tableRegions", []),
-                "tableLayout": w.get("tableLayout", "single"),
-                "annotations": w.get("annotations", []),
             }
             for w in project.get("worksheets", [])
             if isinstance(w, dict)
         ],
-        "dataWorkspace": project.get("dataWorkspace", {}),
     }
     return sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
