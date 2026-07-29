@@ -20,6 +20,7 @@ import {
 import type { SymbolMapperRenderResult } from './api/client';
 import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, SymbolLegendInsertConfig, ViewMode, Worksheet, ImageCropPlacement, ImageCropRect, ImageCropState } from './model/types';
 import { writeRecoverySnapshot } from './model/recovery';
+import { duplicateAsAppManagedPage } from './model/pageDuplication';
 import { normalizeProjectAssetUrls } from './model/assetUrl';
 import ContinuationPreviewModal from './components/ContinuationPreviewModal';
 import ReimportWorkbookModal from './components/ReimportWorkbookModal';
@@ -1282,14 +1283,7 @@ export default function App() {
       const idx = pages.findIndex((p) => p.id === id);
       if (idx < 0) return pages;
       const src = pages[idx];
-      const copy: PageModel = {
-        ...structuredClone(src),
-        id: newPageId(),
-        sheetTitle: `${src.sheetTitle} Copy`,
-        continuationOf: null,
-        generatedContinuation: false,
-        continuationIndex: undefined,
-      };
+      const copy = duplicateAsAppManagedPage(src, newPageId());
       const out = [...pages];
       out.splice(idx + 1, 0, copy);
       return out;
@@ -1305,18 +1299,10 @@ export default function App() {
       const source = pages[index];
       const newId = newPageId();
       const copy: PageModel = {
-        ...structuredClone(source),
-        id: newId,
-        order: source.order + 0.5,
+        ...duplicateAsAppManagedPage(source, newId),
         sheetTitle: title.trim() || `${source.sheetTitle} Copy`,
         sheetCode: code.trim() || 'NEW',
         displaySheetCode: code.trim() || 'NEW',
-        sheetTab: '',
-        linkedWorksheetId: undefined,
-        continuationOf: null,
-        generatedContinuation: false,
-        continuationIndex: undefined,
-        pageGroupId: newId,
       };
       const next = [...pages];
       next.splice(index + 1, 0, copy);
