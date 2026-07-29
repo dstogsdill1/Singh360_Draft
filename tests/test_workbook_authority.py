@@ -289,8 +289,10 @@ class WorkbookAuthorityTests(unittest.TestCase):
 
             state = status_payload(project["id"], project, store)
             self.assertEqual("conflict", state["status"])
-            with self.assertRaises(WorkbookSyncError):
-                maybe_pull_on_open(project["id"], project, store)
+            opened = maybe_pull_on_open(project["id"], project, store)
+            self.assertEqual(project["pages"], opened["pages"])
+            self.assertEqual("conflict", opened["workbookSync"]["status"])
+            self.assertIn("Both Excel and the local project changed", opened["workbookSync"]["openError"])
 
 
 if __name__ == "__main__":

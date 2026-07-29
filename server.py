@@ -883,8 +883,17 @@ def get_project(project_id: str):
     try:
         doc = maybe_pull_on_open(project_id, doc, store)
     except WorkbookSyncError as exc:
-        app.logger.error("Could not open authoritative workbook project %s: %s", project_id, exc)
-        return jsonify(_err("The editor cannot open until the authoritative workbook is available.", str(exc))), 409
+        # A workbook sync problem must never hide an intact locally saved
+        # drawing package. Return it with the exact failure attached.
+        app.logger.error("Opening local project %s with workbook sync error: %s", project_id, exc)
+        sync = dict(doc.get("workbookSync") or {})
+        sync.update({
+            "status": "sync_failed",
+            "warning": str(exc),
+            "openError": str(exc),
+            "lastAuthorityAction": "opened_local_project_with_sync_error",
+        })
+        doc["workbookSync"] = sync
     return jsonify(doc)
 
 

@@ -46,6 +46,13 @@ function positionFor(
   return { left, top, fits };
 }
 
+function overlaps(left: number, top: number, tooltip: DOMRect, obstacle: DOMRect): boolean {
+  return left < obstacle.right
+    && left + tooltip.width > obstacle.left
+    && top < obstacle.bottom
+    && top + tooltip.height > obstacle.top;
+}
+
 function disabledExplanation(active: ActiveTooltip): string {
   const { target, definition } = active;
   if (!(target.matches(':disabled') || target.getAttribute('aria-disabled') === 'true')) return '';
@@ -69,18 +76,48 @@ export default function AppTooltip({
   viewportTick: number;
 }) {
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ left: -9999, top: -9999, placement: 'bottom' as TooltipPlacement });
+  const [position, setPosition] = useState({
+    left: -9999,
+    top: -9999,
+    placement: 'bottom' as TooltipPlacement,
+  });
 
   useLayoutEffect(() => {
     if (!active || !tooltipRef.current || !document.contains(active.target)) return;
     const targetRect = active.target.getBoundingClientRect();
     const tooltipRect = tooltipRef.current.getBoundingClientRect();
     const candidates = placementOrder(active.target);
+    const obstacles = Array.from(document.querySelectorAll<HTMLElement>(
+      '.canvas-wrap > .canvas-container, [data-canvas-stage="true"], '
+      + 'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+    )).map((node) => node.getBoundingClientRect()).filter((rect) => rect.width > 0 && rect.height > 0);
     let selected = { ...positionFor(candidates[0], targetRect, tooltipRect), placement: candidates[0] };
+    let safe = false;
     for (const placement of candidates) {
       const candidate = { ...positionFor(placement, targetRect, tooltipRect), placement };
       selected = candidate;
-      if (candidate.fits) break;
+      if (
+        candidate.fits
+        && !obstacles.some((rect) => overlaps(candidate.left, candidate.top, tooltipRect, rect))
+      ) {
+        safe = true;
+        break;
+      }
+    }
+    if (!safe && obstacles.length) {
+      const fallbackPositions = [
+        { left: VIEWPORT_PAD, top: VIEWPORT_PAD },
+        { left: window.innerWidth - tooltipRect.width - VIEWPORT_PAD, top: VIEWPORT_PAD },
+        { left: VIEWPORT_PAD, top: window.innerHeight - tooltipRect.height - VIEWPORT_PAD },
+        {
+          left: window.innerWidth - tooltipRect.width - VIEWPORT_PAD,
+          top: window.innerHeight - tooltipRect.height - VIEWPORT_PAD,
+        },
+      ];
+      const fallback = fallbackPositions.find((candidate) => !obstacles.some(
+        (rect) => overlaps(candidate.left, candidate.top, tooltipRect, rect),
+      ));
+      if (fallback) selected = { ...selected, ...fallback };
     }
     setPosition({
       placement: selected.placement,

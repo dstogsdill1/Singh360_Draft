@@ -468,7 +468,7 @@ export async function applyReimportWorkbook(
 
 export async function getProject(id: string): Promise<ProjectModel> {
   const res = await fetch(`/api/projects/${id}`);
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw await exactApiError(res);
   return res.json();
 }
 

@@ -2171,6 +2171,29 @@ def _identity_match(
 ) -> dict[str, Any] | None:
     available = [payload for payload in payloads if id(payload) not in used]
     stable_id = str(item.get("worksheetId") or "").strip().casefold()
+    tab = str(item.get("sheetTab") or "").strip().casefold()
+    # The worksheet tab is the human-visible identity recorded by 00_INDEX.
+    # Prefer its unique agreement when a stale page reference points at a
+    # different, otherwise valid worksheet. This prevents reconciliation from
+    # renaming the wrong sheet and creating a second ambiguous identity.
+    tab_matches = [
+        payload
+        for payload in available
+        if tab and str(payload.get("name") or "").strip().casefold() == tab
+    ]
+    if len(tab_matches) > 1:
+        stable_tab_matches = [
+            payload for payload in tab_matches
+            if stable_id
+            and str(payload.get("id") or "").strip().casefold() == stable_id
+        ]
+        if len(stable_tab_matches) == 1:
+            return stable_tab_matches[0]
+        raise ProjectWorkspaceError(
+            f"Ambiguous worksheet tab {item.get('sheetTab')}; linked identity "
+            f"{item.get('worksheetId') or '(blank)'} does not identify exactly "
+            "one matching worksheet."
+        )
     if stable_id:
         matches = [
             payload
@@ -2178,24 +2201,26 @@ def _identity_match(
             if str(payload.get("id") or "").strip().casefold() == stable_id
         ]
         if len(matches) > 1:
+            agreed = [
+                payload
+                for payload in matches
+                if tab
+                and str(payload.get("name") or "").strip().casefold() == tab
+            ]
+            if len(agreed) == 1:
+                return agreed[0]
             raise ProjectWorkspaceError(
-                f"Ambiguous worksheet identity {item.get('worksheetId')}."
+                f"Ambiguous worksheet identity {item.get('worksheetId')}; "
+                f"worksheet tab {item.get('sheetTab') or '(blank)'} does not "
+                "identify exactly one duplicate."
             )
-        if matches:
+        if matches and (
+            not tab_matches
+            or str(matches[0].get("name") or "").strip().casefold() == tab
+        ):
             return matches[0]
-    tab = str(item.get("sheetTab") or "").strip().casefold()
-    if tab:
-        matches = [
-            payload
-            for payload in available
-            if str(payload.get("name") or "").strip().casefold() == tab
-        ]
-        if len(matches) > 1:
-            raise ProjectWorkspaceError(
-                f"Ambiguous worksheet tab {item.get('sheetTab')}."
-            )
-        if matches:
-            return matches[0]
+    if tab_matches:
+        return tab_matches[0]
     code = str(item.get("sheetCode") or "").strip().casefold()
     if code:
         matches = []
@@ -2215,6 +2240,201 @@ def _identity_match(
         if matches:
             return matches[0]
     return None
+
+
+def _replace_identity(value: Any, old_id: str, new_id: str) -> Any:
+    """Replace an exact worksheet identity in one already-disambiguated scope."""
+    if isinstance(value, dict):
+        return {
+            key: _replace_identity(item, old_id, new_id)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_replace_identity(item, old_id, new_id) for item in value]
+    if isinstance(value, str) and value == old_id:
+        return new_id
+    return value
+
+
+def _repair_project_worksheet_identities(project: dict[str, Any]) -> None:
+    """Repair worksheet IDs only when project-local evidence is unique.
+
+    Every repair is recorded in ``worksheetIdentityRecovery``. Duplicate IDs
+    are remapped from project ID + worksheet tab, and page-scoped references
+    are updated only after an exact tab match. If that evidence is absent, the
+    operation fails instead of silently selecting a duplicate.
+    """
+    worksheets = [
+        item for item in project.get("worksheets") or []
+        if isinstance(item, dict)
+    ]
+    pages = [
+        item for item in project.get("pages") or []
+        if isinstance(item, dict)
+    ]
+    project_id = str(project.get("id") or "").strip()
+    recovery: list[dict[str, Any]] = []
+    by_id: dict[str, list[dict[str, Any]]] = {}
+    for worksheet in worksheets:
+        key = str(worksheet.get("id") or "").strip().casefold()
+        if key:
+            by_id.setdefault(key, []).append(worksheet)
+
+    for duplicate_id, matches in by_id.items():
+        if len(matches) < 2:
+            continue
+        original = str(matches[0].get("id") or duplicate_id)
+        tabs = [str(item.get("name") or "").strip() for item in matches]
+        if len({tab.casefold() for tab in tabs if tab}) != len(matches):
+            raise ProjectWorkspaceError(
+                f'Ambiguous worksheet identity "{original}": duplicate '
+                f"worksheets do not have unique tabs ({', '.join(tabs)})."
+            )
+        remapped: dict[str, str] = {}
+        for worksheet in sorted(matches, key=lambda item: str(item.get("name") or "").casefold()):
+            tab = str(worksheet.get("name") or "").strip()
+            new_id = "worksheet_" + hashlib.sha256(
+                f"{project_id}\0{tab.casefold()}".encode("utf-8")
+            ).hexdigest()[:16]
+            worksheet["id"] = new_id
+            remapped[tab.casefold()] = new_id
+            recovery.append({
+                "kind": "duplicate_worksheet_id",
+                "oldId": original,
+                "newId": new_id,
+                "sheetTab": tab,
+                "reason": "unique_project_sheet_tab",
+            })
+        for page in pages:
+            if str(page.get("linkedWorksheetId") or "").strip().casefold() != duplicate_id:
+                continue
+            tab = str(page.get("sheetTab") or "").strip().casefold()
+            new_id = remapped.get(tab)
+            if not new_id:
+                candidates = ", ".join(sorted(tabs))
+                raise ProjectWorkspaceError(
+                    f'Ambiguous worksheet identity "{original}" for page '
+                    f'{page.get("id")}: tab {page.get("sheetTab") or "(blank)"} '
+                    f"does not uniquely match [{candidates}]."
+                )
+            repaired = _replace_identity(page, str(page.get("linkedWorksheetId")), new_id)
+            page.clear()
+            page.update(repaired)
+
+    by_tab: dict[str, list[dict[str, Any]]] = {}
+    for worksheet in worksheets:
+        tab = str(worksheet.get("name") or "").strip().casefold()
+        if tab:
+            by_tab.setdefault(tab, []).append(worksheet)
+
+    page_by_id = {
+        str(page.get("id") or ""): page for page in pages
+        if str(page.get("id") or "")
+    }
+    # Restore legacy continuation metadata when the page ID and shared source
+    # worksheet provide deterministic evidence.
+    for page in pages:
+        if page.get("continuationOf") or page.get("generatedContinuation"):
+            continue
+        page_id = str(page.get("id") or "")
+        match = re.match(r"^(.+)_c(\d+)$", page_id)
+        base = page_by_id.get(match.group(1)) if match else None
+        if (
+            base
+            and page.get("linkedWorksheetId")
+            and page.get("linkedWorksheetId") == base.get("linkedWorksheetId")
+        ):
+            page["continuationOf"] = base["id"]
+            page["pageGroupId"] = base["id"]
+            page["continuationIndex"] = int(match.group(2))
+            page["generatedContinuation"] = True
+            recovery.append({
+                "kind": "continuation_relationship",
+                "pageId": page_id,
+                "basePageId": base["id"],
+                "reason": "legacy_page_id_and_shared_worksheet",
+            })
+
+    for page in pages:
+        if page.get("continuationOf") or page.get("generatedContinuation"):
+            continue
+        tab = str(page.get("sheetTab") or "").strip().casefold()
+        matches = by_tab.get(tab, [])
+        if len(matches) > 1:
+            current = str(page.get("linkedWorksheetId") or "").strip().casefold()
+            stable_matches = [
+                item for item in matches
+                if str(item.get("id") or "").strip().casefold() == current
+            ]
+            if len(stable_matches) == 1:
+                matches = stable_matches
+            else:
+                raise ProjectWorkspaceError(
+                    f"Ambiguous worksheet tab {page.get('sheetTab')}; "
+                    f"linked identity {page.get('linkedWorksheetId') or '(blank)'} "
+                    "does not identify exactly one matching worksheet."
+                )
+        if not matches:
+            continue
+        wanted = str(matches[0].get("id") or "")
+        old = str(page.get("linkedWorksheetId") or "")
+        if old == wanted:
+            continue
+        repaired = _replace_identity(page, old, wanted) if old else deepcopy(page)
+        repaired["linkedWorksheetId"] = wanted
+        for block in repaired.get("blocks") or []:
+            if isinstance(block, dict) and block.get("sourceWorksheetId") in {None, "", old}:
+                block["sourceWorksheetId"] = wanted
+        page.clear()
+        page.update(repaired)
+        recovery.append({
+            "kind": "stale_page_reference",
+            "pageId": page.get("id"),
+            "oldId": old,
+            "newId": wanted,
+            "sheetTab": page.get("sheetTab"),
+            "reason": "unique_project_sheet_tab",
+        })
+
+    page_by_id = {
+        str(page.get("id") or ""): page for page in pages
+        if str(page.get("id") or "")
+    }
+    for page in pages:
+        base_id = str(page.get("continuationOf") or "")
+        if not base_id:
+            continue
+        base = page_by_id.get(base_id)
+        if not base:
+            raise ProjectWorkspaceError(
+                f"Continuation page {page.get('id')} references missing base page {base_id}."
+            )
+        wanted = str(base.get("linkedWorksheetId") or "")
+        old = str(page.get("linkedWorksheetId") or "")
+        if not wanted or old == wanted:
+            continue
+        repaired = _replace_identity(page, old, wanted) if old else deepcopy(page)
+        repaired["linkedWorksheetId"] = wanted
+        for block in repaired.get("blocks") or []:
+            if isinstance(block, dict) and block.get("sourceWorksheetId") in {None, "", old}:
+                block["sourceWorksheetId"] = wanted
+        page.clear()
+        page.update(repaired)
+        recovery.append({
+            "kind": "continuation_worksheet_reference",
+            "pageId": page.get("id"),
+            "basePageId": base_id,
+            "oldId": old,
+            "newId": wanted,
+            "reason": "base_page_identity",
+        })
+
+    if recovery:
+        existing = project.get("worksheetIdentityRecovery")
+        project["worksheetIdentityRecovery"] = [
+            *(existing if isinstance(existing, list) else []),
+            *recovery,
+        ]
 
 
 def _new_project_worksheet(item: dict[str, Any]) -> dict[str, Any]:
@@ -2259,6 +2479,7 @@ def reconcile_project_workbook_order(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Reconcile project pages, the project ``00_INDEX``, and worksheet order."""
     reconciled = deepcopy(project)
+    _repair_project_worksheet_identities(reconciled)
     _ensure_base_page_worksheet_identities(reconciled)
     manifest = project_base_drawing_manifest(reconciled)
     page_by_id = {

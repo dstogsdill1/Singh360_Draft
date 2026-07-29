@@ -127,6 +127,7 @@ export default function App() {
   const [dirtyDomains, setDirtyDomains] = useState<DirtyDomain[]>([]);
   const [saveError, setSaveError] = useState<string>('');
   const [saveNotice, setSaveNotice] = useState<string>('');
+  const [projectLoadError, setProjectLoadError] = useState<string>('');
   // S360 SAVE + WRITE EXCEL BUTTON V26
   const [excelWriteBusy, setExcelWriteBusy] = useState(false);
 
@@ -461,6 +462,7 @@ export default function App() {
 
   useEffect(() => {
     if (!initialProjectId) return;
+    setProjectLoadError('');
     void getProject(initialProjectId).then((p) => {
       const normalized = normalizeProjectAssetUrls(p);
       resetSourceEditState();
@@ -477,6 +479,9 @@ export default function App() {
       const firstPage = normalized.pages?.find((page) => page.id === targetPageId) ?? normalized.pages?.[0];
       setActivePageId(firstPage?.id ?? null);
       setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? normalized.worksheets?.[0]?.id);
+    }).catch((error) => {
+      console.warn('initial project load failed', error);
+      setProjectLoadError(String(error));
     });
   }, [initialProjectId, establishSavedBaseline, resetSourceEditState]);
 
@@ -1736,6 +1741,7 @@ export default function App() {
       const ok = await ensureSavedBeforeNavigation();
       if (!ok) return;
       const p = await getProject(id);
+      setProjectLoadError('');
       resetSourceEditState();
       establishSavedBaseline(p);
       const firstPage = p.pages?.[0];
@@ -1744,7 +1750,8 @@ export default function App() {
       setSelection(null);
       window.history.replaceState({}, '', `?project=${id}`);
     } catch (err) {
-      console.error('open project failed', err);
+      console.warn('open project failed', err);
+      setProjectLoadError(String(err));
     } finally {
       setOpenProjectOpen(false);
     }
@@ -2195,8 +2202,8 @@ export default function App() {
         center={
           <div className="empty-stage">
             <div className="empty-card">
-              <h2>No workbook loaded</h2>
-              <p>Choose a workbook (.xlsx or .xlsm) from the File tab to generate output pages and begin editing your drawing package, or <button className="link-btn" onClick={() => setOpenProjectOpen(true)}>open a saved project</button>.</p>
+              <h2>{projectLoadError ? 'Project could not be loaded' : 'No workbook loaded'}</h2>
+              <p>{projectLoadError || <>Choose a workbook (.xlsx or .xlsm) from the File tab to generate output pages and begin editing your drawing package, or <button className="link-btn" onClick={() => setOpenProjectOpen(true)}>open a saved project</button>.</>}</p>
             </div>
           </div>
         }

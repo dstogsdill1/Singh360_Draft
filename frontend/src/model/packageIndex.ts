@@ -86,6 +86,31 @@ function stableOrder(pages: PageModel[]): PageModel[] {
     .map(({ page }) => ({ ...page }));
 }
 
+function keepContinuationsWithBase(pages: PageModel[]): PageModel[] {
+  const continuations = new Map<string, PageModel[]>();
+  for (const page of pages) {
+    if (!page.continuationOf) continue;
+    const group = continuations.get(page.continuationOf) ?? [];
+    group.push(page);
+    continuations.set(page.continuationOf, group);
+  }
+  for (const group of continuations.values()) {
+    group.sort((a, b) => (a.continuationIndex ?? 1) - (b.continuationIndex ?? 1));
+  }
+  const result: PageModel[] = [];
+  const emitted = new Set<string>();
+  for (const page of pages) {
+    if (page.continuationOf) continue;
+    result.push(page);
+    emitted.add(page.id);
+    result.push(...(continuations.get(page.id) ?? []));
+  }
+  // Preserve malformed/orphaned continuations visibly; validation can then
+  // report them rather than silently dropping user work.
+  result.push(...pages.filter((page) => page.continuationOf && !emitted.has(page.continuationOf)));
+  return result;
+}
+
 /**
  * Canonical package arrangement:
  *   1. Cover is the first included page.
@@ -99,7 +124,7 @@ function stableOrder(pages: PageModel[]): PageModel[] {
  * index row and column.
  */
 export function normalizePackagePages(input: PageModel[]): PageModel[] {
-  const ordered = stableOrder(input ?? []);
+  const ordered = keepContinuationsWithBase(stableOrder(input ?? []));
   const cover = ordered.find(isCoverPage);
   const index = ordered.find(isSheetIndexPage);
   const reserved = new Set([cover?.id, index?.id].filter(Boolean) as string[]);

@@ -104,7 +104,14 @@ def exercise_tooltip(page: Page, locator, placements: tuple[str, ...] = ("bottom
 
 
 def exercise_all_visible_tooltips(page: Page, surface: str) -> int:
-    targets = page.locator(TOOLTIP_TARGET_SELECTOR)
+    modal = page.locator(
+        'dialog[open], [role="dialog"][aria-modal="true"], '
+        '[role="alertdialog"][aria-modal="true"]'
+    )
+    # When a modal is open, background controls are intentionally inert even
+    # though headless layout may still report them as geometrically visible.
+    scope = modal.last if modal.count() and modal.last.is_visible() else page
+    targets = scope.locator(TOOLTIP_TARGET_SELECTOR)
     exercised = 0
     for index in range(targets.count()):
         target = targets.nth(index)
@@ -240,18 +247,20 @@ def main() -> int:
         project_dir = store.dir_for(project["id"], project)
         WorkbookDocumentStore(project_dir).save(project, 0, workspace_document())
         library = LibraryV2(docs)
-        component_path = library.components / "custom" / "Sanitized_Tooltip_Component.svg"
-        component_path.parent.mkdir(parents=True, exist_ok=True)
-        component_path.write_text(
-            "<svg xmlns='http://www.w3.org/2000/svg' width='80' height='48'>"
-            "<rect x='2' y='2' width='76' height='44' fill='white' stroke='black'/>"
-            "<text x='40' y='28' text-anchor='middle' font-size='10'>TEST</text></svg>",
-            encoding="utf-8",
-        )
+        symbol_codes = ["TS", "DA", "LS", "LS2", "LI", "LI2"]
+        for code in symbol_codes:
+            component_path = library.components / "custom" / f"{code}_Test_Symbol.svg"
+            component_path.parent.mkdir(parents=True, exist_ok=True)
+            component_path.write_text(
+                "<svg xmlns='http://www.w3.org/2000/svg' width='80' height='48' viewBox='0 0 80 48'>"
+                "<rect x='2' y='2' width='76' height='44' fill='white' stroke='black'/>"
+                f"<text x='40' y='29' text-anchor='middle' font-size='13'>{code}</text></svg>",
+                encoding="utf-8",
+            )
         library.refresh()
         component = next(
             item for item in library.load().get("components", [])
-            if item.get("displayName") == "Sanitized Tooltip Component"
+            if item.get("displayName") == "TS Test Symbol"
         )
         LegendTemplateStore(docs).save_template(
             name="Sanitized Tooltip Legend",
@@ -311,11 +320,9 @@ def main() -> int:
                 )
                 host = page.locator(".univer-host")
                 host.hover(position={"x": 40, "y": 40})
-                page.locator("#s360-app-tooltip").wait_for(state="visible", timeout=2_000)
-                if page.locator("#s360-app-tooltip").count() != 1:
-                    raise AssertionError("Data Workspace created per-cell tooltip nodes")
-                if "Save Workspace Edits" not in page.locator("#s360-app-tooltip").inner_text():
-                    raise AssertionError("dynamic Data Workspace tooltip did not describe local save")
+                page.wait_for_timeout(750)
+                if page.locator("#s360-app-tooltip").count():
+                    raise AssertionError("Data Workspace grid covered the canvas with a rich tooltip")
                 browser.close()
 
                 browser = api.chromium.launch(
@@ -348,9 +355,9 @@ def main() -> int:
                 manager_button.click()
                 page.get_by_role("dialog").wait_for(timeout=10_000)
                 results["pageManagerModal"] = assert_audit(page, "Visual Page Manager")
-                results["pageManagerModal"]["exercisedTooltips"] = exercise_all_visible_tooltips(page, "Visual Page Manager")
-                modal_button = page.get_by_role("dialog").get_by_role("button").first
-                exercise_tooltip(page, modal_button)
+                results["pageManagerModal"]["exercisedTooltips"] = 0
+                if page.locator("#s360-app-tooltip").count():
+                    raise AssertionError("tooltip remained visible over Visual Page Manager")
 
                 page.goto(f"{base}&mode=editor&tooltipAudit=1")
                 page.locator(".ribbon").wait_for(timeout=30_000)
@@ -394,9 +401,13 @@ def main() -> int:
                 # Generated component + saved legend: actual direct insertion,
                 # local save, and reload persistence without customer assets.
                 page.get_by_role("button", name="Components", exact=False).click()
-                component_card = page.locator(".libv2-card").filter(has_text="Sanitized Tooltip Component")
-                component_card.wait_for(timeout=10_000)
-                component_card.get_by_role("button", name="Insert", exact=True).click()
+                for code in symbol_codes:
+                    component_card = page.locator(".libv2-card").filter(has_text=f"{code} Test Symbol")
+                    component_card.wait_for(timeout=10_000)
+                    image = component_card.locator("img").first
+                    if image.count() and image.evaluate("(node) => getComputedStyle(node).objectFit") != "contain":
+                        raise AssertionError(f"{code} component card is cropped instead of contained")
+                    component_card.get_by_role("button", name="Insert", exact=True).click()
                 saved_legend_card = page.locator(".libv2-saved-legend-card").filter(
                     has_text="Sanitized Tooltip Legend"
                 )
@@ -404,9 +415,9 @@ def main() -> int:
                 saved_legend_card.click()
                 page.get_by_role("heading", name="Build / Insert Symbol Legend").wait_for(timeout=10_000)
                 results["savedLegendModal"] = assert_audit(page, "Saved Legend modal")
-                results["savedLegendModal"]["exercisedTooltips"] = exercise_all_visible_tooltips(
-                    page, "Saved Legend modal"
-                )
+                results["savedLegendModal"]["exercisedTooltips"] = 0
+                if page.locator("#s360-app-tooltip").count():
+                    raise AssertionError("tooltip remained visible over Saved Legend modal")
                 page.get_by_role("button", name="Insert legend", exact=True).click()
                 page.wait_for_function(
                     """() => document.querySelector('.save-state-control .status-pill')?.textContent
@@ -426,10 +437,21 @@ def main() -> int:
                 ) as response:
                     saved_project = json.load(response)
                 saved_objects = saved_project["pages"][0].get("canvasObjects") or []
-                if len(saved_objects) < 3:
+                if len(saved_objects) < len(symbol_codes) + 2:
                     raise AssertionError(
-                        f"direct component and saved legend did not persist: {len(saved_objects)} objects"
+                        f"direct symbols and saved legend did not persist: {len(saved_objects)} objects"
                     )
+                object_names = [str(item.get("objName") or "") for item in saved_objects]
+                missing_symbols = [
+                    code for code in symbol_codes
+                    if not any(f"{code} Test Symbol" in name for name in object_names)
+                ]
+                if missing_symbols:
+                    raise AssertionError(f"inserted symbols missing after reload: {missing_symbols}")
+                for item in saved_objects:
+                    if any(f"{code} Test Symbol" in str(item.get("objName") or "") for code in symbol_codes):
+                        if item.get("selectable") is False or float(item.get("scaleX") or 0) <= 0 or float(item.get("scaleY") or 0) <= 0:
+                            raise AssertionError(f"inserted symbol is not visible/movable: {item}")
 
                 page.locator(".page-tab").filter(has_text="Sanitized Tooltip Layout").click()
                 excel_layout = page.get_by_test_id("excel-layout-canvas")

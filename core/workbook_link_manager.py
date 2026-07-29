@@ -653,11 +653,22 @@ def maybe_pull_on_open(project_id: str, project: dict[str, Any], store: Any) -> 
         })
         opened["workbookSync"] = sync
         return opened
+    opened = dict(project)
+    sync = dict(opened.get("workbookSync") or {})
     if state == "review_required":
-        raise WorkbookSyncError("Choose the matching workbook/project baseline from Project Home before opening the editor.")
-    if state == "conflict":
-        raise WorkbookSyncError("Both Excel and the local project changed after the last sync. Review the two versions from Project Home.")
-    raise WorkbookSyncError(status.get("message") or "The linked workbook is unavailable.")
+        message = "Choose the matching workbook/project baseline from Project Home before writing to Excel."
+    elif state == "conflict":
+        message = "Both Excel and the local project changed after the last sync. Review the two versions from Project Home."
+    else:
+        message = str(status.get("message") or "The linked workbook is unavailable.")
+    sync.update({
+        "status": state or "sync_failed",
+        "warning": message,
+        "openError": message,
+        "lastAuthorityAction": "opened_local_project_with_sync_error",
+    })
+    opened["workbookSync"] = sync
+    return opened
 
 
 

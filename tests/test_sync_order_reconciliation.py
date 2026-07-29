@@ -406,6 +406,65 @@ class SyncOrderReconciliationTests(unittest.TestCase):
             ),
         )
 
+    def test_stale_page_identity_is_repaired_by_unique_tab_and_blocks_follow(self) -> None:
+        candidate = deepcopy(self.project)
+        target_page = next(page for page in candidate["pages"] if page["id"] == "page-beta")
+        target_page["linkedWorksheetId"] = "ws-alpha"
+        target_page["blocks"] = [{"type": "excelRange", "sourceWorksheetId": "ws-alpha"}]
+
+        reconciled, manifest = reconcile_project_workbook_order(candidate)
+
+        repaired = next(page for page in reconciled["pages"] if page["id"] == "page-beta")
+        self.assertEqual("ws-beta", repaired["linkedWorksheetId"])
+        self.assertEqual("ws-beta", repaired["blocks"][0]["sourceWorksheetId"])
+        self.assertEqual("ws-beta", next(item for item in manifest if item["pageId"] == "page-beta")["worksheetId"])
+        self.assertTrue(any(
+            item["kind"] == "stale_page_reference" and item["pageId"] == "page-beta"
+            for item in reconciled["worksheetIdentityRecovery"]
+        ))
+
+    def test_duplicate_id_remap_requires_unique_tab_evidence(self) -> None:
+        candidate = deepcopy(self.project)
+        beta = next(item for item in candidate["worksheets"] if item["id"] == "ws-beta")
+        beta["id"] = "ws-alpha"
+        reconciled, _ = reconcile_project_workbook_order(candidate)
+        alpha = next(item for item in reconciled["worksheets"] if item["name"] == "ALPHA")
+        beta = next(item for item in reconciled["worksheets"] if item["name"] == "BETA")
+        self.assertNotEqual(alpha["id"], beta["id"])
+        self.assertTrue(alpha["id"].startswith("worksheet_"))
+        self.assertTrue(beta["id"].startswith("worksheet_"))
+        page_beta = next(item for item in reconciled["pages"] if item["id"] == "page-beta")
+        self.assertEqual(beta["id"], page_beta["linkedWorksheetId"])
+
+        ambiguous = deepcopy(candidate)
+        ambiguous_page = next(item for item in ambiguous["pages"] if item["id"] == "page-beta")
+        ambiguous_page["sheetTab"] = "Missing"
+        ambiguous_page["linkedWorksheetId"] = "ws-alpha"
+        with self.assertRaisesRegex(
+            ProjectWorkspaceError,
+            'Ambiguous worksheet identity "ws-alpha"',
+        ):
+            reconcile_project_workbook_order(ambiguous)
+
+    def test_legacy_continuation_is_restored_and_excluded_from_index(self) -> None:
+        candidate = deepcopy(self.project)
+        base = next(page for page in candidate["pages"] if page["id"] == "page-beta")
+        continuation = deepcopy(base)
+        continuation.update({
+            "id": "page-beta_c1",
+            "order": 99,
+            "sheetTab": "Beta~2",
+            "sheetTitle": "Beta — CONTINUED",
+            "continuationOf": None,
+            "generatedContinuation": False,
+        })
+        candidate["pages"].append(continuation)
+        reconciled, manifest = reconcile_project_workbook_order(candidate)
+        repaired = next(page for page in reconciled["pages"] if page["id"] == "page-beta_c1")
+        self.assertEqual("page-beta", repaired["continuationOf"])
+        self.assertTrue(repaired["generatedContinuation"])
+        self.assertNotIn("page-beta_c1", {item["pageId"] for item in manifest})
+
     def test_blank_page_worksheet_tab_is_valid_and_unique(self) -> None:
         candidate = deepcopy(self.project)
         candidate["worksheets"].append(worksheet("source-new", "New Sheet", [["source"]]))
