@@ -37,6 +37,7 @@ from core.legend_template_store import LegendTemplateStore
 from core.page_template_store import PageTemplateStore
 from core import pdf_import_v2
 from core.symbol_mapper import SymbolMapperError, SymbolMapperStore
+from core.svg_asset import add_intrinsic_svg_dimensions
 from core.drawing_generators import (
     generate_callout_schedule,
     generate_component_stack,
@@ -1944,6 +1945,16 @@ def lib2_asset(rel: str):
     target = lib2.resolve_asset(rel)
     if target is None:
         abort(404)
+    if target.suffix.lower() == ".svg":
+        original = target.read_bytes()
+        normalized = add_intrinsic_svg_dimensions(original)
+        if normalized != original:
+            return send_file(
+                BytesIO(normalized),
+                mimetype="image/svg+xml",
+                download_name=target.name,
+                max_age=0,
+            )
     return send_file(str(target))
 
 

@@ -5,6 +5,7 @@ import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
 import { BODY_W, BODY_H } from '../model/sheetGeometry';
 import { normalizeAssetUrl, normalizeCanvasObjects } from '../model/assetUrl';
+import { loadSafeFabricImage, repairSerializedComponentSvgImages } from '../model/fabricImageLoader';
 import { scaleImageToSize, standardSymbolSize, SYMBOL_SIZE_SMALL } from '../model/symbolSizing';
 
 interface Props {
@@ -331,6 +332,73 @@ function applyBwIfRequested(img: FabricImage, url: string) {
   img.applyFilters();
 }
 
+type RenderedImageAudit = {
+  name: string;
+  sourceUrl: string;
+  width: number;
+  height: number;
+  cropX: number;
+  cropY: number;
+  pixelCount: number;
+  pixelWidthRatio: number;
+  pixelHeightRatio: number;
+};
+
+type RenderAuditWindow = Window & typeof globalThis & {
+  __S360_CANVAS_RENDER_AUDIT__?: () => RenderedImageAudit[];
+};
+
+function renderedSvgImageAudit(objects: FabricObject[]): RenderedImageAudit[] {
+  const results: RenderedImageAudit[] = [];
+  const visit = (items: FabricObject[]) => {
+    items.forEach((obj) => {
+      if (obj.type === 'group') {
+        visit((obj as Group).getObjects());
+        return;
+      }
+      if (obj.type !== 'image') return;
+      const img = obj as FabricImage;
+      const rec = img as unknown as Record<string, unknown>;
+      const sourceUrl = String(rec.sourceUrl || img.getSrc() || '');
+      if (!/\.svg(?:$|[?#])/i.test(sourceUrl)) return;
+      const rendered = img.toCanvasElement();
+      const ctx = rendered.getContext('2d', { willReadFrequently: true });
+      if (!ctx || rendered.width < 1 || rendered.height < 1) return;
+      const pixels = ctx.getImageData(0, 0, rendered.width, rendered.height).data;
+      let minX = rendered.width;
+      let minY = rendered.height;
+      let maxX = -1;
+      let maxY = -1;
+      let pixelCount = 0;
+      for (let y = 0; y < rendered.height; y += 1) {
+        for (let x = 0; x < rendered.width; x += 1) {
+          if (pixels[(y * rendered.width + x) * 4 + 3] < 8) continue;
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+          pixelCount += 1;
+        }
+      }
+      const pixelWidth = maxX >= minX ? maxX - minX + 1 : 0;
+      const pixelHeight = maxY >= minY ? maxY - minY + 1 : 0;
+      results.push({
+        name: String(rec.objName || ''),
+        sourceUrl,
+        width: Number(img.width || 0) * Number(img.scaleX ?? 1),
+        height: Number(img.height || 0) * Number(img.scaleY ?? 1),
+        cropX: Number(img.cropX || 0),
+        cropY: Number(img.cropY || 0),
+        pixelCount,
+        pixelWidthRatio: pixelWidth / rendered.width,
+        pixelHeightRatio: pixelHeight / rendered.height,
+      });
+    });
+  };
+  visit(objects);
+  return results;
+}
+
 export default function CanvasEditor({
   serialized,
   onSerializedChange,
@@ -403,6 +471,11 @@ export default function CanvasEditor({
       perPixelTargetFind: false,
     });
     fabricRef.current = canvas;
+    const auditWindow = window as RenderAuditWindow;
+    const renderAuditEnabled = new URLSearchParams(window.location.search).get('renderAudit') === '1';
+    if (renderAuditEnabled) {
+      auditWindow.__S360_CANVAS_RENDER_AUDIT__ = () => renderedSvgImageAudit(canvas.getObjects());
+    }
 
     // Robust pointer → scene mapping. The sheet is rendered inside a CSS
     // `transform: scale(...)` wrapper (the zoom), and Fabric's own
@@ -449,32 +522,38 @@ export default function CanvasEditor({
       // Export-only clones intentionally hide their raster PDF preview. A prior
       // interrupted save or copied object must never leave the live editor faded
       // or invisible. Restore direct PDF objects to an opaque visible preview.
-      let repairedPdfObjects = false;
-      const liveObjects = normalizeCanvasObjects(serialized).map((raw) => {
-        const obj: Record<string, unknown> = { ...raw };
-        if (typeof obj.pdfSource === 'string' && obj.pdfSource.trim()) {
-          if (obj.visible === false || Number(obj.opacity ?? 1) !== 1 || obj.excludeFromExport === true) repairedPdfObjects = true;
-          obj.visible = true;
-          obj.opacity = 1;
-          delete obj.excludeFromExport;
-        }
-        return obj;
-      });
       // Loading the server-confirmed snapshot emits Fabric object:added events.
       // Those are a render/hydration echo, not user edits, so suppress the
       // persistence listeners until the full snapshot is mounted.
       restoringRef.current = true;
-      void canvas.loadFromJSON({ version: '6', objects: liveObjects }).then(() => {
+      void (async () => {
+        const normalized = normalizeCanvasObjects(serialized);
+        const componentRepair = await repairSerializedComponentSvgImages(normalized);
+        if (isTearingDown) return;
+        let repairedPdfObjects = false;
+        const liveObjects = componentRepair.objects.map((raw) => {
+          const obj: Record<string, unknown> = { ...raw };
+          if (typeof obj.pdfSource === 'string' && obj.pdfSource.trim()) {
+            if (obj.visible === false || Number(obj.opacity ?? 1) !== 1 || obj.excludeFromExport === true) repairedPdfObjects = true;
+            obj.visible = true;
+            obj.opacity = 1;
+            delete obj.excludeFromExport;
+          }
+          return obj;
+        });
+        await canvas.loadFromJSON({ version: '6', objects: liveObjects });
+        if (isTearingDown) return;
         canvas.getObjects().forEach((o) => styleForSelection(o));
         canvas.renderAll();
         historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
         histIdxRef.current = 0;
         restoringRef.current = false;
-        if (repairedPdfObjects) {
+        if (repairedPdfObjects || componentRepair.repaired > 0) {
           onSerRef.current(normalizeCanvasObjects((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         }
-      }).catch(() => {
+      })().catch((error) => {
         restoringRef.current = false;
+        console.error('Canvas object hydration failed', error);
       });
     } else {
       historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
@@ -893,6 +972,7 @@ export default function CanvasEditor({
       isTearingDown = true;
       window.removeEventListener('keydown', onKeyDown);
       canvas.upperCanvasEl?.removeEventListener('dblclick', onDblClick);
+      if (renderAuditEnabled) delete auditWindow.__S360_CANVAS_RENDER_AUDIT__;
       void canvas.dispose();
       fabricRef.current = null;
     };
@@ -1030,7 +1110,7 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         if (!c) return;
         const assetUrl = normalizeAssetUrl(url) || url;
-        void FabricImage.fromURL(assetUrl, { crossOrigin: 'anonymous' }).then((img) => {
+        void loadSafeFabricImage(assetUrl).then((img) => {
           applyBwIfRequested(img, assetUrl);
           const maxW = CANVAS_W * 0.6;
           const maxH = CANVAS_H * 0.6;
@@ -1239,7 +1319,7 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         if (!c) return;
         const assetUrl = normalizeAssetUrl(url) || url;
-        void FabricImage.fromURL(assetUrl, { crossOrigin: 'anonymous' }).then((img) => {
+        void loadSafeFabricImage(assetUrl).then((img) => {
           applyBwIfRequested(img, assetUrl);
           const size = standardSymbolSize({
             category: meta?.category,
@@ -1305,8 +1385,8 @@ export default function CanvasEditor({
         // Load both images, then place source on the left and the B/W symbol to
         // its right, each with an optional label, and select them together.
         void Promise.all([
-          FabricImage.fromURL(sourceUrl, { crossOrigin: 'anonymous' }),
-          FabricImage.fromURL(symbolUrl, { crossOrigin: 'anonymous' }),
+          loadSafeFabricImage(sourceUrl),
+          loadSafeFabricImage(symbolUrl),
         ]).then(([srcImg, symImg]) => {
           const maxW = CANVAS_W * 0.3;
           const maxH = CANVAS_H * 0.3;
@@ -1498,7 +1578,7 @@ export default function CanvasEditor({
           if (!rawUrl) return null;
           const assetUrl = normalizeAssetUrl(rawUrl) || rawUrl;
           try {
-            const img = await FabricImage.fromURL(assetUrl, { crossOrigin: 'anonymous' });
+            const img = await loadSafeFabricImage(assetUrl);
             const iw = img.width || 1;
             const ih = img.height || 1;
             const scale = scaleImageToSize(iw, ih, markerSize, markerSize);
