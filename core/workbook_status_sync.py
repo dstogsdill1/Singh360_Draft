@@ -475,6 +475,9 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
 
     with _project_lock(store, project_id, project):
         from core.project_model import ensure_project_shape, recalc_page_numbers
+        from core.project_workspace import (
+            reconcile_project_workbook_order,
+        )
         from core.sheet_index_sync import sync_project_sheet_index
         from core.workbook_importer import import_workbook
 
@@ -650,6 +653,7 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
             or path.stem
         )
         merged = sync_project_sheet_index(ensure_project_shape(merged))
+        merged, _final_manifest = reconcile_project_workbook_order(merged)
 
         # S360 GENERATED INDEX VALIDATION V15.3
         # Every explicitly included normal worksheet must import. The Sheet
@@ -700,6 +704,14 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
                 + "; ".join(missing[:20])
             )
 
+        from core.full_workbook_sync import verify_synchronized_workbook
+
+        merged, verification = verify_synchronized_workbook(
+            path,
+            project_id,
+            merged,
+            store,
+        )
         sync = dict(merged.get("workbookSync") or {})
         sync.update({
             "mode": "external-workbook-link",
@@ -711,6 +723,8 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
             "appHash": project_hash(merged),
             "authority": "workbook",
             "lastAuthorityAction": "workbook_to_app",
+            "verification": verification,
+            "verified": True,
         })
         merged["workbookSync"] = sync
         store.save(project_id, merged)
@@ -978,7 +992,13 @@ def sync_project_to_workbook(
 
     with _project_lock(store, project_id, project):
         try:
-            from core.full_workbook_sync import synchronize_project_to_workbook
+            from core.full_workbook_sync import (
+                synchronize_project_to_workbook,
+                verify_synchronized_workbook,
+            )
+            from core.project_workspace import reconcile_project_workbook_order
+
+            project, _manifest = reconcile_project_workbook_order(project)
 
             updated = synchronize_project_to_workbook(
                 path,
@@ -986,6 +1006,12 @@ def sync_project_to_workbook(
                 project,
                 store,
                 app_hash=project_hash(project),
+            )
+            updated, verification = verify_synchronized_workbook(
+                path,
+                project_id,
+                updated,
+                store,
             )
         except PermissionError as exc:
             raise WorkbookSyncError(
@@ -1014,6 +1040,8 @@ def sync_project_to_workbook(
                 "authority": "workbook",
                 "lastAuthorityAction": "full_app_to_workbook_mirror",
                 "syncEngineVersion": "V25",
+                "verification": verification,
+                "verified": True,
             }
         )
         updated["workbookSync"] = sync

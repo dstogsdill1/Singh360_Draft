@@ -97,7 +97,12 @@ export default function AppTooltip({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, viewportTick]);
 
-  if (!active) return null;
+  if (
+    !active
+    || document.querySelector(
+      'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+    )
+  ) return null;
   const disabledReason = disabledExplanation(active);
   const dynamicBody = active.target.dataset.tooltipBody?.trim();
   const body = dynamicBody || active.definition.body;

@@ -62,6 +62,8 @@ from core.project_workspace import (
     WorkbookDocumentStore,
     WorkbookRevisionConflict,
     open_local_path,
+    reconcile_project_workbook_order,
+    reconcile_workbook_document_order,
     reveal_local_path,
     safe_virtual_path,
 )
@@ -653,7 +655,8 @@ def reveal_project_folder(project_id: str):
 @app.get("/api/projects/<project_id>/data-workspace")
 def get_data_workspace(project_id: str):
     doc, project_dir = _project_workspace(project_id)
-    return jsonify(WorkbookDocumentStore(project_dir).load(doc))
+    current = WorkbookDocumentStore(project_dir).load(doc)
+    return jsonify(reconcile_workbook_document_order(current, doc))
 
 
 @app.put("/api/projects/<project_id>/data-workspace")
@@ -891,6 +894,10 @@ def save_project(project_id: str):
     data["id"] = project_id
     data = ensure_project_shape(data)
     data = sync_project_sheet_index(data)
+    try:
+        data, manifest = reconcile_project_workbook_order(data)
+    except ProjectWorkspaceError as exc:
+        return jsonify(_err("Project order reconciliation failed.", str(exc))), 400
 
     problems = validate_project(data)
     if problems:
@@ -941,9 +948,19 @@ def save_project(project_id: str):
 
     try:
         store.save(project_id, data)
+        project_dir = store.find_dir(project_id)
+        if project_dir is None:
+            raise ProjectWorkspaceError(
+                "The saved project package could not be resolved."
+            )
+        WorkbookDocumentStore(project_dir).reconcile_order(data, manifest)
     except OSError as exc:
         app.logger.error("Could not save local project %s: %s", project_id, exc)
         return jsonify(_err("Local project save failed.", str(exc))), 500
+    except ProjectWorkspaceError as exc:
+        return jsonify(
+            _err("Data Workspace order reconciliation failed.", str(exc))
+        ), 400
 
     return jsonify(data)
 

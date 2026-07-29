@@ -388,6 +388,15 @@ export interface ProjectModel {
     pendingReason?: string;
     localProjectSavedAt?: string;
     lastAuthorityAction?: string;
+    verified?: boolean;
+    verification?: {
+      status?: string;
+      verified?: boolean;
+      basePageCount?: number;
+      physicalDrawingSheetCount?: number;
+      dataWorkspaceDrawingSheetCount?: number;
+      verifiedAt?: string;
+    };
   };
   dataWorkspace?: {
     revision?: number;

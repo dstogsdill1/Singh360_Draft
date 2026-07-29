@@ -17,7 +17,16 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.workbook.properties import CalcProperties
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from core.workbook_workspace import normalize_publish_value
+from core.workbook_workspace import (
+    normalize_publish_value,
+    workbook_document_signature,
+)
+from core.project_workspace import (
+    WorkbookDocumentStore,
+    drawing_workspace_sequence,
+    project_base_drawing_manifest,
+    reconcile_project_workbook_order,
+)
 
 
 INDEX_HEADERS = [
@@ -541,6 +550,126 @@ def update_meta(wb: Any, project: dict[str, Any], stamp: str) -> None:
         ws.cell(row, 2, value)
 
 
+def _first_sequence_discrepancy(
+    expected: list[dict[str, Any]],
+    actual: list[dict[str, Any]],
+    *,
+    label: str,
+    fields: list[tuple[str, str, str]],
+) -> str:
+    if len(expected) != len(actual):
+        return (
+            f"{label} count mismatch: expected {len(expected)}, "
+            f"found {len(actual)}."
+        )
+    for position, (wanted, found) in enumerate(
+        zip(expected, actual), start=1
+    ):
+        for expected_key, actual_key, display in fields:
+            expected_value = wanted.get(expected_key)
+            actual_value = found.get(actual_key)
+            if expected_value != actual_value:
+                return (
+                    f"{label} item {position} {display} mismatch: "
+                    f"expected {expected_value!r}, found {actual_value!r}."
+                )
+    return ""
+
+
+def verify_synchronized_workbook(
+    path: Path,
+    project_id: str,
+    project: dict[str, Any],
+    store: Any,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Reopen Excel, verify all order projections, then persist workbook.json."""
+    from core.workbook_status_sync import _s360_index_manifest
+
+    reconciled_project, expected = reconcile_project_workbook_order(project)
+    actual_index = _s360_index_manifest(path)
+    discrepancy = _first_sequence_discrepancy(
+        expected,
+        actual_index,
+        label="00_INDEX",
+        fields=[
+            ("pageId", "id", "Page ID"),
+            ("sheetCode", "sheetCode", "Sheet Code"),
+            ("sheetTab", "sheetTab", "Sheet Tab"),
+            ("title", "sheetTitle", "Page Title"),
+            ("include", "include", "Include"),
+            ("publishStatus", "publishStatus", "Include state"),
+            ("order", "order", "Order"),
+        ],
+    )
+    if discrepancy:
+        raise RuntimeError(discrepancy)
+
+    final_workbook = load_workbook(
+        path,
+        read_only=True,
+        data_only=False,
+        keep_vba=path.suffix.lower() == ".xlsm",
+    )
+    try:
+        expected_tabs = [item["sheetTab"] for item in expected]
+        drawing_keys = {tab.casefold() for tab in expected_tabs}
+        actual_tabs = [
+            worksheet.title
+            for worksheet in final_workbook.worksheets
+            if worksheet.title.casefold() in drawing_keys
+        ]
+    finally:
+        final_workbook.close()
+    tab_discrepancy = _first_sequence_discrepancy(
+        [{"sheetTab": value} for value in expected_tabs],
+        [{"sheetTab": value} for value in actual_tabs],
+        label="Physical drawing worksheet sequence",
+        fields=[("sheetTab", "sheetTab", "Sheet Tab")],
+    )
+    if tab_discrepancy:
+        raise RuntimeError(tab_discrepancy)
+
+    project_dir = store.dir_for(project_id, reconciled_project)
+    document_store = WorkbookDocumentStore(project_dir)
+    saved_document = document_store.reconcile_order(
+        reconciled_project, expected
+    )
+    reloaded_document = document_store.load(reconciled_project)
+    actual_workspace = drawing_workspace_sequence(reloaded_document)
+    workspace_discrepancy = _first_sequence_discrepancy(
+        expected,
+        actual_workspace,
+        label="Data Workspace Drawing Pages",
+        fields=[
+            ("pageId", "pageId", "Page ID"),
+            ("sheetCode", "sheetCode", "Sheet Code"),
+            ("sheetTab", "sheetTab", "Sheet Tab"),
+            ("title", "title", "Page Title"),
+            ("include", "include", "Include"),
+            ("publishStatus", "publishStatus", "Include state"),
+            ("order", "order", "Order"),
+        ],
+    )
+    if workspace_discrepancy:
+        raise RuntimeError(workspace_discrepancy)
+
+    reconciled_project["dataWorkspace"] = {
+        **dict(reconciled_project.get("dataWorkspace") or {}),
+        "revision": int(saved_document.get("revision") or 0),
+        "signature": workbook_document_signature(saved_document),
+        "reconciledAt": utcnow(),
+    }
+    verification = {
+        "status": "verified",
+        "verified": True,
+        "basePageCount": len(expected),
+        "physicalDrawingSheetCount": len(actual_tabs),
+        "dataWorkspaceDrawingSheetCount": len(actual_workspace),
+        "verifiedAt": utcnow(),
+    }
+    return reconciled_project, verification
+
+
 def synchronize_project_to_workbook(
     path: Path,
     project_id: str,
@@ -631,6 +760,20 @@ def synchronize_project_to_workbook(
                     matched_row = code_matches[0]
             if matched_row is not None:
                 used_row_numbers.add(int(matched_row["row"]))
+                if not str(page.get("sheetTitle") or "").strip():
+                    page["sheetTitle"] = str(
+                        matched_row.get("Page Title") or ""
+                    ).strip()
+                if not str(
+                    page.get("displaySheetCode")
+                    or page.get("sheetCode")
+                    or ""
+                ).strip():
+                    code_from_row = str(
+                        matched_row.get("Sheet Code") or ""
+                    ).strip()
+                    page["sheetCode"] = code_from_row
+                    page["displaySheetCode"] = code_from_row
 
             matched_sheet = None
             candidate_tabs = [
@@ -693,44 +836,18 @@ def synchronize_project_to_workbook(
                     app_hash=app_hash,
                 )
             )
-            # Control sheets are already placed by the controls list below.
-            # Adding the same Worksheet object again makes openpyxl serialize a
-            # duplicate tab (for example 00_INDEX1) on the next open.
-            if matched_sheet is not index_ws and matched_sheet.title not in {
+            # A controlling 00_INDEX worksheet may also be the base Sheet Index
+            # drawing. Include each physical worksheet object exactly once.
+            if matched_sheet.title not in {
                 "00_PROJECT_META",
                 "00_HELP",
             }:
                 app_sheet_objects.append(matched_sheet)
             used_sheet_objects.add(id(matched_sheet))
 
-        # Preserve unmatched workbook-only rows and sheets as excluded source rows.
-        preserved_rows: list[dict[str, Any]] = []
-        preserved_sheet_objects: list[Any] = []
-        next_order = len(app_rows) + 1
-        for row in sorted(existing_rows, key=lambda item: (item["Order"], item["row"])):
-            if int(row["row"]) in used_row_numbers:
-                continue
-            if row["Page ID"] and row["Page ID"] in app_ids:
-                continue
-            tab = row["Sheet Tab"]
-            if not tab or tab not in wb.sheetnames:
-                continue
-            sheet = wb[tab]
-            if id(sheet) in used_sheet_objects:
-                continue
-            preserved = dict(row)
-            preserved.pop("row", None)
-            preserved["Include"] = "NO"
-            preserved["Order"] = next_order
-            preserved["Last Sync UTC"] = stamp
-            preserved["App Hash"] = app_hash
-            preserved_rows.append(preserved)
-            preserved_sheet_objects.append(sheet)
-            used_sheet_objects.add(id(sheet))
-            sheet.sheet_properties.tabColor = TAB_COLORS["excluded"]
-            next_order += 1
-
-        manifest_rows = app_rows + preserved_rows
+        # Unmatched workbook sheets remain physically intact in their stable
+        # source/control section, but 00_INDEX contains base project pages only.
+        manifest_rows = app_rows
         template_row = header_row + 1
         max_col = max(headers.values())
         old_last_row = max(
@@ -756,7 +873,7 @@ def synchronize_project_to_workbook(
         for control_name in ("00_PROJECT_META", index_ws.title, "00_HELP"):
             if control_name in wb.sheetnames:
                 sheet = wb[control_name]
-                if sheet not in controls:
+                if id(sheet) not in used_sheet_objects and sheet not in controls:
                     controls.append(sheet)
         if "00_HELP" in wb.sheetnames:
             wb["00_HELP"].sheet_properties.tabColor = TAB_COLORS["help"]
@@ -767,12 +884,7 @@ def synchronize_project_to_workbook(
             if sheet not in controls
             and id(sheet) not in used_sheet_objects
         ]
-        wb._sheets = (
-            controls
-            + app_sheet_objects
-            + preserved_sheet_objects
-            + remaining
-        )
+        wb._sheets = app_sheet_objects + controls + remaining
 
         update_meta(wb, project, stamp)
 
@@ -822,7 +934,7 @@ def synchronize_project_to_workbook(
         )
         updated["workbookSync"]["lastBasePageCount"] = len(app_rows)
         updated["workbookSync"]["lastPreservedWorkbookOnlyCount"] = len(
-            preserved_rows
+            remaining
         )
         updated["workbookSync"]["lastFullMirrorBackup"] = str(backup_path)
         return updated

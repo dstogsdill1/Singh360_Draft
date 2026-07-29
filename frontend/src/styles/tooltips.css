@@ -2,16 +2,16 @@
   position: fixed;
   z-index: 2147483000;
   display: grid;
-  gap: 5px;
+  gap: 3px;
   width: max-content;
-  max-width: min(360px, calc(100vw - 16px));
-  padding: 10px 12px;
-  border: 1px solid rgba(242, 140, 40, 0.72);
-  border-radius: 8px;
+  max-width: min(300px, calc(100vw - 16px));
+  padding: 7px 9px;
+  border: 1px solid rgba(242, 140, 40, 0.58);
+  border-radius: 6px;
   background: #17191c;
   color: #fff;
-  box-shadow: 0 9px 26px rgba(0, 0, 0, 0.42);
-  font: 12px/1.42 "Segoe UI", Arial, sans-serif;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.32);
+  font: 11px/1.32 "Segoe UI", Arial, sans-serif;
   white-space: normal;
   overflow-wrap: break-word;
   pointer-events: none;
@@ -27,6 +27,13 @@
 .s360-app-tooltip span {
   display: block;
   color: #fff;
+}
+
+.s360-app-tooltip > span:not(.s360-app-tooltip-disabled) {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .s360-app-tooltip small {

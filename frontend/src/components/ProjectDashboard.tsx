@@ -237,8 +237,10 @@ export default function ProjectDashboard({ project }: Props) {
     try {
       const status = await getWorkbookLinkStatus(project.id);
       setLink(status);
-      if (status.status === 'in_sync') {
+      if (status.status === 'in_sync' && status.verified) {
         setMessage('The project and workbook are already in sync. No files were changed.');
+      } else if (status.status === 'in_sync') {
+        setMessage('Hashes match, but workbook order verification is still required. Run Save + Write Excel from Page Editor.');
       } else if (['review_required', 'conflict', 'workbook_changed', 'app_changed'].includes(status.status)) {
         setSyncDecisionOpen(true);
       } else {
@@ -353,13 +355,16 @@ export default function ProjectDashboard({ project }: Props) {
 
   const workspaceDirty = workspaceState?.state === 'DIRTY' || workspaceState?.state === 'CONFLICT';
   const workspacePending = workspaceState?.state === 'PROJECT_SAVED_WORKBOOK_SYNC_PENDING';
+  const workbookVerified = link?.status === 'in_sync'
+    && link.verified === true
+    && link.verification?.status === 'verified';
   const syncTone = workspaceDirty
     ? 'red'
     : workspacePending
       ? 'yellow'
       : !project
     ? 'neutral'
-    : link?.status === 'in_sync'
+    : workbookVerified
       ? 'green'
       : ['workbook_changed', 'app_changed', 'review_required', 'pending'].includes(link?.status || '')
         ? 'yellow'
@@ -373,8 +378,10 @@ export default function ProjectDashboard({ project }: Props) {
       ? 'PROJECT SAVED · WORKBOOK SYNC PENDING'
       : !project
     ? 'Choose an existing project'
-    : link?.status === 'in_sync'
+    : workbookVerified
       ? 'PROJECT SAVED · WORKBOOK SYNCED'
+      : link?.status === 'in_sync'
+        ? 'Workbook order verification required'
       : link?.status === 'workbook_changed'
         ? 'Workbook changed after the last sync'
       : link?.status === 'app_changed'
@@ -417,7 +424,7 @@ export default function ProjectDashboard({ project }: Props) {
       <div className="workflow-strip">
         <span className={link?.path ? 'done' : ''}>1. Link Workbook</span>
         <span className={quality ? 'done' : ''}>2. Inspect / Repair</span>
-        <span className={link?.status === 'in_sync' ? 'done' : ''}>3. Establish Sync</span>
+        <span className={workbookVerified ? 'done' : ''}>3. Establish Sync</span>
         <span>4. Review Pages</span>
         <span>5. Edit / Export</span>
       </div>
@@ -537,7 +544,7 @@ export default function ProjectDashboard({ project }: Props) {
                   </div>
                 </div>
                 <div className="simple-project-open-actions">
-                  {link?.status === 'in_sync' ? (
+                  {workbookVerified ? (
                     <>
                       <button type="button" className="primary large" onClick={() => window.location.assign(actionUrl())}>Open Project</button>
                       <button type="button" onClick={() => project && void openLinkedWorkbook(project.id)}>Open Workbook</button>
@@ -581,7 +588,11 @@ export default function ProjectDashboard({ project }: Props) {
                     <h2>Linked Workbook</h2>
                     <p>G:, Google Drive for Desktop, OneDrive, network, or local Excel workbook</p>
                   </div>
-                  <span className={`sync-badge ${link?.status || 'not_linked'}`}>{statusLabel[link?.status || 'not_linked'] || link?.status}</span>
+                  <span className={`sync-badge ${link?.status || 'not_linked'}`}>
+                    {link?.status === 'in_sync' && !workbookVerified
+                      ? 'Verification required'
+                      : statusLabel[link?.status || 'not_linked'] || link?.status}
+                  </span>
                 </div>
                 <div className="link-path-row">
                   <input
@@ -625,7 +636,7 @@ export default function ProjectDashboard({ project }: Props) {
                 <div className="workbook-action-row">
                   <button type="button" disabled={!project || !!busy} onClick={() => void browseWorkbook()}>Change Workbook</button>
                   <button type="button" className="primary" disabled={!project || !!busy || !link?.path} onClick={() => void reviewSync()}>
-                    {link?.status === 'in_sync' ? 'Check for Workbook Changes' : 'Review and Synchronize Safely'}
+                    {workbookVerified ? 'Check for Workbook Changes' : 'Review and Synchronize Safely'}
                   </button>
                   <button type="button" disabled={!project || !link?.path} onClick={() => project && void openLinkedWorkbook(project.id)}>Open in Excel</button>
                   <button type="button" disabled={!project || !link?.path} onClick={() => project && void revealLinkedWorkbook(project.id)}>Show in Explorer</button>

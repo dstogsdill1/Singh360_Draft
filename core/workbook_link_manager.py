@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
@@ -290,6 +291,8 @@ def status_payload(project_id: str, project: dict[str, Any], store: Any) -> dict
         "currentAppHash": current_app,
         "lastSyncUtc": sync.get("lastSyncUtc", ""),
         "warning": sync.get("warning", ""),
+        "verified": bool(sync.get("verified")),
+        "verification": deepcopy(sync.get("verification") or {}),
     }
 
 
@@ -682,7 +685,16 @@ def _s360_workbook_projection(project: dict[str, Any]) -> dict[str, Any]:
         pages.append(
             {
                 "id": page.get("id"),
+                "order": page.get("order"),
                 "include": bool(page.get("include", True)),
+                "publishStatus": page.get("publishStatus") or (
+                    "YES" if page.get("include", True) else "NO"
+                ),
+                "sheetCode": page.get("displaySheetCode")
+                or page.get("sheetCode")
+                or "",
+                "sheetTab": page.get("sheetTab") or "",
+                "sheetTitle": page.get("sheetTitle") or "",
                 "notes": page.get("notes", ""),
                 "renderProfile": page.get("renderProfile") or page.get("layoutProfile") or "",
                 "splitMode": page.get("splitMode") or "",
@@ -692,7 +704,12 @@ def _s360_workbook_projection(project: dict[str, Any]) -> dict[str, Any]:
                 "syncDirection": page.get("syncDirection") or "",
             }
         )
-    pages.sort(key=lambda item: str(item.get("id") or ""))
+    pages.sort(
+        key=lambda item: (
+            int(item.get("order") or 10**9),
+            str(item.get("id") or ""),
+        )
+    )
 
     worksheets: list[dict[str, Any]] = []
     for worksheet in project.get("worksheets", []) or []:

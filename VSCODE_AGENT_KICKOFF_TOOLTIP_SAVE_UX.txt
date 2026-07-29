@@ -1,0 +1,30 @@
+Open the current Singh360 Draft repository in Visual Studio Code and execute the tooltip/save-state repair end to end.
+
+Repository expected:
+C:\Users\DarrinStogsdill\OneDrive - Homeland Development Services LLC\Desktop\Singh360_Draft
+
+First read this root instruction file completely:
+SINGH360_TOOLTIP_SAVE_UX_SPEC.md
+
+Then do exactly what it says.
+
+Important execution rules:
+- Discover the live current branch, HEAD, upstream, origin, Git status, staged diff, and unstaged diff before changing anything.
+- Stay on the current branch.
+- Diagnose the exact source of `Unsaved workspace edits` before patching.
+- Create the required protected `.docs\patch_backups\tooltip_save_ux_<timestamp>` backup before source changes.
+- Never delete, reset, clean, stash, rebuild, normalize, or commit `.docs`.
+- Preserve the 829 project, linked workbook, manual canvas work, component library, symbols, legends, PDF crops, Excel Layout, Visual Page Manager, Project Home, Data Workspace, SAVE + WRITE EXCEL, and PDF export.
+- Implement the centralized accessible tooltip registry and cover every actionable/status control described in the specification.
+- Fix the save-state logic so local project save, Data Workspace save, workbook sync pending, workbook sync, failures, and conflicts are distinct and truthful.
+- Do not use browser `title` attributes as the primary tooltip system.
+- Do not run SAVE + WRITE EXCEL against a live customer workbook. Use a protected clone.
+- Run every mandatory automated and browser test in the specification.
+- Do not claim success unless all required gates pass.
+- Commit with `feat: add application-wide tooltips and clarify save state`.
+- Push the discovered current branch normally; never force push.
+- Verify remote SHA equals local HEAD.
+- Leave the correct app running at http://127.0.0.1:8766/app.
+- Write the required closeout report in the new backup folder.
+
+Do not ask me to identify files, write code, diagnose state, run partial commands, or manually stitch patches together. Inspect the live source, implement, test, repair failures, commit, push, and report the exact evidence.

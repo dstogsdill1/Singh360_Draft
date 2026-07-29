@@ -20,7 +20,7 @@ import {
   type WorkbookDocument,
 } from '../api/client';
 import type { ProjectModel } from '../model/types';
-import { fromUniverWorkbook, toUniverWorkbook } from './UniverWorkbookAdapter';
+import { fromUniverWorkbook, letters, toUniverWorkbook } from './UniverWorkbookAdapter';
 import {
   activeRangeA1,
   detectTableRegions,
@@ -42,6 +42,13 @@ type WorkspaceStatus =
   | 'error';
 
 type NavigationRequest = { url: string; historyBack?: boolean } | null;
+type WorkspaceValidationError = {
+  sheetName: string;
+  row: number;
+  column: number;
+  ruleId: string;
+  inputValue: string | number | boolean | null;
+};
 
 const SOURCE_COLOR = '#7F8C8D';
 const EXCLUDED_COLOR = '#9AA3AB';
@@ -51,10 +58,52 @@ const STATUS_COLORS: Record<string, string> = {
   public: '#2D7DD2',
   public_confirmed: '#14845A',
 };
+const TAB_COLOR_COMMAND_IDS = new Set([
+  'sheet.command.set-tab-color',
+  'sheet.mutation.set-tab-color',
+]);
 
 function workspaceContentSignature(document: WorkbookDocument | null): string {
   if (!document) return '';
   return JSON.stringify(document.sheets);
+}
+
+function validationAddress(error: WorkspaceValidationError): string {
+  return `${letters(error.column)}${error.row + 1}`;
+}
+
+function validationErrorKey(error: WorkspaceValidationError): string {
+  return [
+    error.sheetName,
+    validationAddress(error),
+    error.ruleId,
+    JSON.stringify(error.inputValue),
+  ].join('|');
+}
+
+function strictValidationDetail(
+  document: WorkbookDocument,
+  error: WorkspaceValidationError,
+): string | null {
+  const sheet = document.sheets.find((item) => item.name === error.sheetName);
+  if (!sheet) return null;
+  const address = validationAddress(error);
+  const rule = sheet.dataValidations.find((item) => {
+    if (item.strict === false) return false;
+    return item.ranges.some((range) => {
+      const bounds = rangeBounds(range);
+      return Boolean(bounds
+        && error.row >= bounds.startRow
+        && error.row <= bounds.endRow
+        && error.column >= bounds.startColumn
+        && error.column <= bounds.endColumn);
+    });
+  });
+  if (!rule) return null;
+  const ranges = rule.ranges.map((range) => `${error.sheetName}!${range}`).join(', ');
+  const allowed = validationValues(rule);
+  return `${error.sheetName}!${address} (range ${ranges}; value ${JSON.stringify(error.inputValue)}`
+    + `${allowed.length ? `; choose ${allowed.join(', ')}` : ''})`;
 }
 
 function sharedStateFor(status: WorkspaceStatus): Parameters<typeof publishWorkspaceState>[1] {
@@ -144,6 +193,10 @@ function mergeLocales() {
   };
 }
 
+function tabColorKey(value: string | undefined): string {
+  return String(value || '').trim().replace(/^#/, '').slice(-6).toUpperCase();
+}
+
 function applyTabColors(api: FUniver, document: WorkbookDocument): void {
   const workbook = api.getActiveWorkbook();
   if (!workbook) return;
@@ -158,7 +211,11 @@ function applyTabColors(api: FUniver, document: WorkbookDocument): void {
       : isSourceSheet(sheet)
         ? SOURCE_COLOR
         : STATUS_COLORS[state?.lifecycle || 'draft'] || sheet.tabColor || STATUS_COLORS.draft;
-    worksheet.setTabColor(color);
+    // setTabColor emits CommandExecuted. Reapplying an unchanged color from
+    // that event creates an unbounded command/snapshot loop and freezes the UI.
+    if (tabColorKey(worksheet.getTabColor()) !== tabColorKey(color)) {
+      worksheet.setTabColor(color);
+    }
   });
 }
 
@@ -177,12 +234,16 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
   const currentSignatureRef = useRef('');
   const editRevisionRef = useRef(0);
   const confirmedStatusRef = useRef<WorkspaceStatus>('clean');
+  const baselineValidationErrorsRef = useRef<Set<string>>(new Set());
   const [status, setStatusState] = useState<WorkspaceStatus>('loading');
   const [message, setMessage] = useState('Loading project schedules…');
   const [activeSheetId, setActiveSheetId] = useState('');
   const [activeRange, setActiveRange] = useState<IRange | null>(null);
   const [navigation, setNavigation] = useState<NavigationRequest>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<'drawing' | 'all'>('drawing');
+  const [documentSheets, setDocumentSheets] = useState<WorkbookDocument['sheets']>([]);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
 
   const setStatus = useCallback((next: WorkspaceStatus) => {
     statusRef.current = next;
@@ -200,6 +261,12 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
   const activeDocumentSheet = useMemo(
     () => baseRef.current?.sheets.find((sheet) => sheet.id === activeSheetId),
     [activeSheetId, status, previewOpen],
+  );
+  const drawingSheets = useMemo(
+    () => documentSheets
+      .filter((sheet) => sheet.workspaceSection === 'drawing')
+      .sort((left, right) => (left.drawingOrder || 0) - (right.drawingOrder || 0)),
+    [documentSheets],
   );
   const activeIsSource = isSourceSheet(activeDocumentSheet);
 
@@ -288,15 +355,66 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
     applyTabColors(api, document);
   }, []);
 
+  const restoreDocument = useCallback(async (
+    document: WorkbookDocument,
+    nextStatus: WorkspaceStatus,
+  ) => {
+    const api = apiRef.current;
+    if (!api) return;
+    readyRef.current = false;
+    setWorkspaceReady(false);
+    const current = api.getActiveWorkbook();
+    if (current) api.disposeUnit(current.getId());
+    api.createWorkbook(toUniverWorkbook(
+      document,
+      project.metadata.projectName,
+      project.id,
+    ));
+    applyWorkbookRules(api, document);
+    baseRef.current = document;
+    setDocumentSheets(document.sheets);
+    const signature = workspaceContentSignature(document);
+    confirmedSignatureRef.current = signature;
+    currentSignatureRef.current = signature;
+    editRevisionRef.current = 0;
+    const active = api.getActiveWorkbook()?.getActiveSheet();
+    setActiveSheetId(active?.getSheetId() || document.sheets[0]?.id || '');
+    setActiveRange(active?.getActiveRange()?.getRange() || null);
+    const errors = await api.getActiveWorkbook()?.getAllDataValidationErrorAsync() || [];
+    baselineValidationErrorsRef.current = new Set(
+      (errors as WorkspaceValidationError[]).map(validationErrorKey),
+    );
+    confirmedStatusRef.current = nextStatus;
+    setStatus(nextStatus);
+    signal(sharedStateFor(nextStatus));
+    readyRef.current = true;
+    setWorkspaceReady(true);
+  }, [
+    applyWorkbookRules,
+    project.id,
+    project.metadata.projectName,
+    setStatus,
+    signal,
+  ]);
+
   const save = useCallback(async () => {
     const document = snapshot();
     const base = baseRef.current;
     const workbook = apiRef.current?.getActiveWorkbook();
     if (!document || !base || !workbook) return null;
-    const validationErrors = await workbook.getAllDataValidationErrorAsync();
-    if (validationErrors.length) {
+    const validationErrors = (
+      await workbook.getAllDataValidationErrorAsync()
+    ) as WorkspaceValidationError[];
+    const newlyInvalid = validationErrors
+      .filter((error) => !baselineValidationErrorsRef.current.has(validationErrorKey(error)))
+      .map((error) => strictValidationDetail(document, error))
+      .filter((detail): detail is string => Boolean(detail));
+    if (newlyInvalid.length) {
       setStatus('dirty');
-      setMessage('Save blocked: one or more strict dropdown cells contain an invalid value.');
+      setMessage(
+        `Save blocked by newly introduced strict-dropdown values: ${newlyInvalid.join('; ')}. `
+        + 'Choose an allowed value or revert the listed cell.',
+      );
       signal('DIRTY');
       return null;
     }
@@ -319,11 +437,8 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
         signal('DIRTY');
         return null;
       }
-      baseRef.current = saved;
-      confirmedStatusRef.current = 'project_saved_workbook_sync_pending';
-      setStatus('project_saved_workbook_sync_pending');
+      await restoreDocument(saved, 'project_saved_workbook_sync_pending');
       setMessage(`Project-local revision ${saved.revision} saved. Excel sync remains pending.`);
-      signal('PROJECT_SAVED_WORKBOOK_SYNC_PENDING');
       return saved;
     } catch (reason) {
       const conflict = String(reason).toLowerCase().includes('conflict');
@@ -332,7 +447,7 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
       signal(conflict ? 'CONFLICT' : 'DIRTY');
       return null;
     }
-  }, [project.id, setStatus, signal, snapshot]);
+  }, [project.id, restoreDocument, setStatus, signal, snapshot]);
 
   const updateDrawings = useCallback(async () => {
     let document = snapshot();
@@ -370,7 +485,7 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
   const finishNavigation = useCallback((request: NavigationRequest) => {
     if (!request) return;
     const current = statusRef.current;
-    const published = current === 'dirty' || current === 'conflict'
+    const published = current === 'dirty' || current === 'conflict' || current === 'error'
       ? sharedStateFor(confirmedStatusRef.current)
       : sharedStateFor(current);
     signal(published);
@@ -427,9 +542,11 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
     let disposed = false;
     let readyTimer = 0;
     readyRef.current = false;
+    setWorkspaceReady(false);
     getDataWorkspace(project.id).then((document) => {
       if (disposed || !containerRef.current) return;
       baseRef.current = document;
+      setDocumentSheets(document.sheets);
       confirmedSignatureRef.current = workspaceContentSignature(document);
       currentSignatureRef.current = confirmedSignatureRef.current;
       editRevisionRef.current = 0;
@@ -501,7 +618,14 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
           setActiveRange(event.selections[0] || null);
         }),
         univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
-          if (!readyRef.current || event.type === CommandType.OPERATION) return;
+          if (
+            !readyRef.current
+            // One user edit dispatches a top-level command plus many internal
+            // mutations. Tracking every mutation queues redundant snapshots
+            // that can overwrite a later, more specific save error message.
+            || event.type !== CommandType.COMMAND
+            || TAB_COLOR_COMMAND_IDS.has(event.id)
+          ) return;
           window.setTimeout(() => {
             markDirty();
             const current = snapshot();
@@ -509,10 +633,22 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
           }, 0);
         }),
       ];
-      readyTimer = window.setTimeout(() => {
+      readyTimer = window.setTimeout(async () => {
+        const validationErrors = (
+          await univerAPI.getActiveWorkbook()?.getAllDataValidationErrorAsync()
+          || []
+        ) as WorkspaceValidationError[];
+        baselineValidationErrorsRef.current = new Set(
+          validationErrors.map(validationErrorKey),
+        );
         readyRef.current = true;
+        setWorkspaceReady(true);
         const shared = readWorkspaceState(project.id);
-        const workbookMatches = (project.workbookSync?.status || project.workbookSync?.state) === 'in_sync';
+        const workbookMatches = (
+          (project.workbookSync?.status || project.workbookSync?.state) === 'in_sync'
+          && project.workbookSync?.verified === true
+          && project.workbookSync?.verification?.status === 'verified'
+        );
         if (shared?.state === 'DIRTY' && shared.instanceId !== instanceIdRef.current) {
           setStatus('conflict');
           setMessage('Another Data Workspace instance reports unsaved edits. Resolve that instance before saving here.');
@@ -537,6 +673,7 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
         }
       }, 750);
     }).catch((reason) => {
+      setWorkspaceReady(false);
       setMessage(String(reason));
       setStatus('error');
     });
@@ -557,6 +694,8 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
     project.metadata.projectName,
     project.workbookSync?.state,
     project.workbookSync?.status,
+    project.workbookSync?.verified,
+    project.workbookSync?.verification?.status,
     setStatus,
     signal,
     snapshot,
@@ -590,10 +729,29 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
     sheet.tableRegions = sheet.tableRegions.filter((region) => region.id !== target);
   });
 
+  const activateWorkspaceSheet = (sheetId: string) => {
+    const worksheet = apiRef.current?.getActiveWorkbook()?.getSheetBySheetId(sheetId);
+    worksheet?.activate();
+  };
+
+  const discardAndNavigate = async () => {
+    const request = navigation;
+    const confirmed = baseRef.current;
+    if (!request || !confirmed) return;
+    setNavigation(null);
+    await restoreDocument(confirmed, confirmedStatusRef.current);
+    setMessage('In-memory Data Workspace edits were discarded. The last confirmed snapshot was restored.');
+    finishNavigation(request);
+  };
+
   const statusLabel = WORKSPACE_STATUS_LABELS[status];
   const setup = activeDocumentSheet?.sourceSetup;
 
-  return <div className="data-workspace">
+  return <div
+    className="data-workspace"
+    data-testid="data-workspace-shell"
+    data-workspace-state={status === 'error' ? 'error' : workspaceReady ? 'ready' : 'loading'}
+  >
     <header className="data-toolbar">
       <button type="button" data-help-id="nav.projectHome" onClick={() => requestNavigation(`/app?project=${project.id}`)}>Project Home</button>
       <strong>Data Workspace</strong>
@@ -616,13 +774,52 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
       <button type="button" data-help-id="view.canvas" onClick={() => requestNavigation(`/app?project=${project.id}&mode=editor`)}>Page Editor</button>
     </header>
     <div className="data-message">{message}</div>
+    <nav className="workspace-sheet-view" aria-label="Data Workspace sheet view">
+      <label>
+        View
+        <select
+          data-help-id="workspace.sheetSelector"
+          value={workspaceView}
+          onChange={(event) => setWorkspaceView(event.target.value as 'drawing' | 'all')}
+        >
+          <option value="drawing">Drawing Pages</option>
+          <option value="all">All Workbook Tabs</option>
+        </select>
+      </label>
+      {workspaceView === 'drawing' && <div
+        className="workspace-drawing-tabs"
+        role="tablist"
+        aria-label="Drawing Pages"
+        data-testid="drawing-pages-strip"
+        data-ready={workspaceReady ? 'true' : 'false'}
+        data-base-page-count={drawingSheets.length}
+      >
+        {drawingSheets.map((sheet) => <button
+          type="button"
+          role="tab"
+          key={sheet.id}
+          data-testid="drawing-page-tab"
+          data-page-id={sheet.drawingPageId}
+          data-sheet-code={sheet.drawingSheetCode}
+          data-sheet-tab={sheet.name}
+          data-drawing-order={sheet.drawingOrder}
+          data-help-id="workspace.sheetSelector"
+          aria-selected={sheet.id === activeSheetId}
+          onClick={() => activateWorkspaceSheet(sheet.id)}
+        >
+          <span>{sheet.drawingOrder}. {sheet.drawingSheetCode || sheet.name}</span>
+          <small>{sheet.drawingTitle || sheet.name}</small>
+        </button>)}
+      </div>}
+      {workspaceView === 'all' && <span className="workspace-view-note">
+        Drawing tabs remain first and contiguous; control and source tabs follow in the workbook tab bar.
+      </span>}
+    </nav>
     <main className={`data-workspace-main ${activeIsSource ? 'with-setup' : ''}`}>
       <div
         ref={containerRef}
         className="univer-host"
         aria-label="Project schedule workbook"
-        data-help-id="workspace.cell"
-        data-tooltip-body={`Cell ${activeRange ? activeRangeA1(activeRange) : 'selection'}. Click to select; double-click or press Enter to edit. Current changes save to the local Singh360 project with Save Workspace Edits and reach Excel only through Save + Write Excel.`}
       />
       {activeIsSource && activeDocumentSheet && <aside className="sheet-setup-panel" aria-label="Sheet Setup">
         <h2>Sheet Setup <span className="lock-indicator">Locked</span></h2>
@@ -682,11 +879,11 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
         <h2 id="unsaved-title">Unsaved Data Workspace edits</h2>
         <p>Save the project-local grid, discard these in-memory edits, or cancel navigation.</p>
         <div>
-          <button type="button" className="primary" onClick={() => void save().then((saved) => {
+          <button type="button" data-help-id="workspace.save" className="primary" onClick={() => void save().then((saved) => {
             if (saved) finishNavigation(navigation);
           })}>Save</button>
-          <button type="button" onClick={() => finishNavigation(navigation)}>Discard</button>
-          <button type="button" onClick={() => setNavigation(null)}>Cancel</button>
+          <button type="button" data-help-id="workspace.discard" onClick={() => void discardAndNavigate()}>Discard</button>
+          <button type="button" data-help-id="dialog.cancel" onClick={() => setNavigation(null)}>Cancel</button>
         </div>
       </section>
     </div>}

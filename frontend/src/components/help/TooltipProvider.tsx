@@ -6,8 +6,14 @@ import {
   validateTooltipRegistry,
 } from './TooltipAudit';
 
-const HOVER_DELAY_MS = 350;
+const HOVER_DELAY_MS = 650;
 const LEAVE_GRACE_MS = 140;
+
+function modalIsOpen(): boolean {
+  return Boolean(document.querySelector(
+    'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+  ));
+}
 
 function withDescription(target: HTMLElement): void {
   const ids = new Set((target.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
@@ -64,6 +70,7 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
     if (registryErrors.length) console.error('Singh360 tooltip registry errors', registryErrors);
 
     const observer = new MutationObserver((mutations) => {
+      if (modalIsOpen()) close();
       mutations.forEach((mutation) => {
         if (mutation.type === 'attributes' && mutation.target instanceof HTMLElement) {
           hydrateTooltipTargets(mutation.target);
@@ -76,18 +83,26 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
     });
     observer.observe(document.getElementById('root') || document.body, {
       attributes: true,
-      attributeFilter: ['title'],
+      attributeFilter: ['title', 'open', 'aria-modal'],
       childList: true,
       subtree: true,
     });
 
     const onMouseOver = (event: MouseEvent) => {
+      if (modalIsOpen()) {
+        close();
+        return;
+      }
       const target = tooltipTarget(event.target);
       if (!target) return;
       if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
       if (activeRef.current?.target === target) return;
       if (hoverTimerRef.current !== null) window.clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = window.setTimeout(() => {
+        if (modalIsOpen()) {
+          close();
+          return;
+        }
         setActive(openTooltipFor(target, 'hover'));
         hoverTimerRef.current = null;
       }, HOVER_DELAY_MS);
@@ -106,6 +121,10 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
     };
 
     const onFocusIn = (event: FocusEvent) => {
+      if (modalIsOpen()) {
+        close();
+        return;
+      }
       const target = tooltipTarget(event.target);
       if (!target) return;
       clearTimers();

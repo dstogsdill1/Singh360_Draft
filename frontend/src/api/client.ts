@@ -122,6 +122,13 @@ export interface WorkbookDocument {
       text: string;
       placement: 'right' | 'bottom';
     }>;
+    workspaceSection?: 'drawing' | 'control' | 'source';
+    drawingPageId?: string;
+    drawingSheetCode?: string;
+    drawingOrder?: number;
+    drawingTitle?: string;
+    drawingInclude?: boolean;
+    drawingPublishStatus?: '' | 'YES' | 'NO' | 'VERIFY';
   }>;
 }
 
@@ -1636,6 +1643,12 @@ export interface WorkbookLinkStatus {
   currentAppHash?: string;
   lastSyncUtc?: string;
   warning?: string;
+  verified?: boolean;
+  verification?: {
+    status?: string;
+    verified?: boolean;
+    basePageCount?: number;
+  };
 }
 
 export async function getWorkbookLinkStatus(projectId: string): Promise<WorkbookLinkStatus> {

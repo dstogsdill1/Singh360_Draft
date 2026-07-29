@@ -1851,6 +1851,514 @@ def _normalize_workbook_document(document: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+_DRAWING_INDEX_HEADERS = [
+    "Include",
+    "Order",
+    "Sheet Code",
+    "Sheet Tab",
+    "Page Title",
+    "Family",
+    "Page Type",
+    "Notes",
+    "Render Profile",
+    "Split Mode",
+    "Page ID",
+    "Parent Page ID",
+    "Issue Status",
+    "Source Mode",
+    "Sync Direction",
+]
+
+
+def _generated_drawing_page(page: dict[str, Any]) -> bool:
+    if (
+        page.get("generatedContinuation")
+        or page.get("indexContinuation")
+        or page.get("generatedIndexContinuation")
+    ):
+        return True
+    page_id = str(page.get("id") or "")
+    source_mode = str(page.get("sourceMode") or "").strip().casefold()
+    return bool(
+        page.get("continuationOf")
+        and source_mode != "workbook"
+        and (
+            "__continuation_" in page_id
+            or re.search(r"_c\d+(?:_\d+)?$", page_id)
+        )
+    )
+
+
+def project_base_drawing_manifest(
+    project: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return the exact base drawing manifest controlled by project ``00_INDEX``."""
+    ordered = [
+        (position, page)
+        for position, page in enumerate(project.get("pages") or [])
+        if isinstance(page, dict) and not _generated_drawing_page(page)
+    ]
+    ordered.sort(
+        key=lambda item: (
+            int(item[1].get("order") or 10**9),
+            item[0],
+        )
+    )
+    manifest: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_tabs: set[str] = set()
+    for order, (_, page) in enumerate(ordered, start=1):
+        page_id = str(page.get("id") or "").strip()
+        sheet_tab = str(
+            page.get("sheetTab") or page.get("sourceSheet") or ""
+        ).strip()
+        sheet_code = str(
+            page.get("displaySheetCode") or page.get("sheetCode") or ""
+        ).strip()
+        if not page_id:
+            raise ProjectWorkspaceError(
+                f"Base drawing page at order {order} has no stable Page ID."
+            )
+        if page_id.casefold() in seen_ids:
+            raise ProjectWorkspaceError(
+                f"Duplicate base Page ID prevents order reconciliation: {page_id}."
+            )
+        if not sheet_tab:
+            raise ProjectWorkspaceError(
+                f"Base drawing page {page_id} has no worksheet tab name."
+            )
+        if sheet_tab.casefold() in seen_tabs:
+            raise ProjectWorkspaceError(
+                "Duplicate drawing worksheet tab prevents order reconciliation: "
+                f"{sheet_tab}."
+            )
+        seen_ids.add(page_id.casefold())
+        seen_tabs.add(sheet_tab.casefold())
+        publish = str(page.get("publishStatus") or "").strip().upper()
+        if publish not in {"YES", "NO", "VERIFY"}:
+            publish = "YES" if page.get("include", True) else "NO"
+        manifest.append(
+            {
+                "pageId": page_id,
+                "worksheetId": str(page.get("linkedWorksheetId") or "").strip(),
+                "sheetCode": sheet_code,
+                "sheetTab": sheet_tab,
+                "title": str(page.get("sheetTitle") or sheet_tab).strip(),
+                "include": publish == "YES",
+                "publishStatus": publish,
+                "order": order,
+                "family": str(page.get("pageFamily") or ""),
+                "pageType": str(page.get("pageType") or ""),
+                "notes": str(page.get("notes") or ""),
+                "renderProfile": str(
+                    page.get("renderProfile")
+                    or page.get("layoutProfile")
+                    or ""
+                ),
+                "splitMode": str(page.get("splitMode") or ""),
+                "parentPageId": str(page.get("parentPageId") or ""),
+                "issueStatus": str(page.get("issueStatus") or "draft"),
+                "sourceMode": str(page.get("sourceMode") or ""),
+                "syncDirection": str(page.get("syncDirection") or "Both"),
+            }
+        )
+    return manifest
+
+
+def _index_row_values(item: dict[str, Any]) -> dict[str, Any]:
+    status = str(item.get("issueStatus") or "draft").strip()
+    status = status.replace("_", " ").replace("-", " ").title()
+    return {
+        "Include": item.get("publishStatus") or (
+            "YES" if item.get("include") else "NO"
+        ),
+        "Order": int(item.get("order") or 0),
+        "Sheet Code": item.get("sheetCode") or "",
+        "Sheet Tab": item.get("sheetTab") or "",
+        "Page Title": item.get("title") or "",
+        "Family": item.get("family") or "",
+        "Page Type": item.get("pageType") or "",
+        "Notes": item.get("notes") or "",
+        "Render Profile": item.get("renderProfile") or "",
+        "Split Mode": item.get("splitMode") or "",
+        "Page ID": item.get("pageId") or "",
+        "Parent Page ID": item.get("parentPageId") or "",
+        "Issue Status": status,
+        "Source Mode": item.get("sourceMode") or "",
+        "Sync Direction": item.get("syncDirection") or "Both",
+    }
+
+
+def _reconcile_index_grid(
+    worksheet: dict[str, Any],
+    manifest: list[dict[str, Any]],
+) -> None:
+    grid = worksheet.get("grid")
+    if not isinstance(grid, list):
+        return
+    header_row = -1
+    headers: dict[str, int] = {}
+    for row_number, raw in enumerate(grid[:30]):
+        row = raw if isinstance(raw, list) else []
+        found = {
+            str(value or "").strip().casefold(): column
+            for column, value in enumerate(row)
+            if str(value or "").strip()
+        }
+        if {"include", "sheet tab", "page title"}.issubset(found):
+            header_row = row_number
+            headers = found
+            break
+    if header_row < 0:
+        return
+    header = list(grid[header_row]) if isinstance(grid[header_row], list) else []
+    for label in _DRAWING_INDEX_HEADERS:
+        key = label.casefold()
+        if key not in headers:
+            headers[key] = len(header)
+            header.append(label)
+    grid[header_row] = header
+    max_column = max(headers.values(), default=-1) + 1
+    required_rows = header_row + len(manifest) + 1
+    while len(grid) < required_rows:
+        grid.append([])
+    for offset, item in enumerate(manifest, start=1):
+        row_number = header_row + offset
+        row = list(grid[row_number]) if isinstance(grid[row_number], list) else []
+        if len(row) < max_column:
+            row.extend([""] * (max_column - len(row)))
+        for label, value in _index_row_values(item).items():
+            row[headers[label.casefold()]] = value
+        grid[row_number] = row
+    for row_number in range(required_rows, len(grid)):
+        row = list(grid[row_number]) if isinstance(grid[row_number], list) else []
+        if len(row) < max_column:
+            row.extend([""] * (max_column - len(row)))
+        for label in _DRAWING_INDEX_HEADERS:
+            row[headers[label.casefold()]] = ""
+        grid[row_number] = row
+    worksheet["grid"] = grid
+
+
+def _column_letters(number: int) -> str:
+    output = ""
+    while number:
+        number, remainder = divmod(number - 1, 26)
+        output = chr(65 + remainder) + output
+    return output
+
+
+def _reconcile_index_cells(
+    sheet: dict[str, Any],
+    manifest: list[dict[str, Any]],
+) -> None:
+    cells = sheet.setdefault("cells", {})
+    rows: dict[int, dict[int, str]] = {}
+    for coordinate, cell in cells.items():
+        match = re.fullmatch(r"([A-Z]+)(\d+)", str(coordinate), re.I)
+        if not match or not isinstance(cell, dict):
+            continue
+        column = 0
+        for character in match.group(1).upper():
+            column = column * 26 + ord(character) - 64
+        value = str(cell.get("v") or "").strip()
+        if value:
+            rows.setdefault(int(match.group(2)), {})[column] = value
+    header_row = 0
+    headers: dict[str, int] = {}
+    for row_number in sorted(rows):
+        if row_number > 30:
+            break
+        found = {
+            value.casefold(): column
+            for column, value in rows[row_number].items()
+        }
+        if {"include", "sheet tab", "page title"}.issubset(found):
+            header_row = row_number
+            headers = found
+            break
+    if not header_row:
+        return
+    next_column = max(headers.values(), default=0) + 1
+    for label in _DRAWING_INDEX_HEADERS:
+        key = label.casefold()
+        if key in headers:
+            continue
+        headers[key] = next_column
+        cells[f"{_column_letters(next_column)}{header_row}"] = {"v": label}
+        next_column += 1
+    for offset, item in enumerate(manifest, start=1):
+        row_number = header_row + offset
+        for label, value in _index_row_values(item).items():
+            cells[f"{_column_letters(headers[label.casefold()])}{row_number}"] = {
+                "v": value
+            }
+    last_manifest_row = header_row + len(manifest)
+    controlled_columns = set(headers.values())
+    for coordinate in list(cells):
+        match = re.fullmatch(r"([A-Z]+)(\d+)", str(coordinate), re.I)
+        if not match or int(match.group(2)) <= last_manifest_row:
+            continue
+        column = 0
+        for character in match.group(1).upper():
+            column = column * 26 + ord(character) - 64
+        if column in controlled_columns:
+            cells.pop(coordinate, None)
+
+
+def _identity_match(
+    payloads: list[dict[str, Any]],
+    item: dict[str, Any],
+    used: set[int],
+    *,
+    document: bool,
+) -> dict[str, Any] | None:
+    available = [payload for payload in payloads if id(payload) not in used]
+    stable_id = str(item.get("worksheetId") or "").strip().casefold()
+    if stable_id:
+        matches = [
+            payload
+            for payload in available
+            if str(payload.get("id") or "").strip().casefold() == stable_id
+        ]
+        if len(matches) > 1:
+            raise ProjectWorkspaceError(
+                f"Ambiguous worksheet identity {item.get('worksheetId')}."
+            )
+        if matches:
+            return matches[0]
+    tab = str(item.get("sheetTab") or "").strip().casefold()
+    if tab:
+        matches = [
+            payload
+            for payload in available
+            if str(payload.get("name") or "").strip().casefold() == tab
+        ]
+        if len(matches) > 1:
+            raise ProjectWorkspaceError(
+                f"Ambiguous worksheet tab {item.get('sheetTab')}."
+            )
+        if matches:
+            return matches[0]
+    code = str(item.get("sheetCode") or "").strip().casefold()
+    if code:
+        matches = []
+        for payload in available:
+            setup = payload.get("sourceSetup")
+            payload_code = (
+                setup.get("sheetCode")
+                if isinstance(setup, dict)
+                else payload.get("sheetCode")
+            )
+            if str(payload_code or "").strip().casefold() == code:
+                matches.append(payload)
+        if len(matches) > 1:
+            raise ProjectWorkspaceError(
+                f"Ambiguous worksheet sheet code {item.get('sheetCode')}."
+            )
+        if matches:
+            return matches[0]
+    return None
+
+
+def _new_project_worksheet(item: dict[str, Any]) -> dict[str, Any]:
+    stable = str(item.get("worksheetId") or "").strip()
+    if not stable:
+        stable = "worksheet_" + hashlib.sha256(
+            str(item.get("pageId") or "").encode("utf-8")
+        ).hexdigest()[:16]
+    is_index = str(item.get("sheetTab") or "").strip().casefold() == "00_index"
+    return {
+        "id": stable,
+        "name": item.get("sheetTab") or "Drawing Page",
+        "sourceSheet": item.get("sheetTab") or "Drawing Page",
+        "grid": [list(_DRAWING_INDEX_HEADERS)] if is_index else [],
+        "styles": {},
+        "formulas": {},
+        "mergedCells": [],
+        "rowHeights": {},
+        "columnWidths": {},
+        "defaultColumnWidth": DEFAULT_COLUMN_WIDTH_UNITS,
+        "defaultRowHeight": DEFAULT_ROW_HEIGHT_POINTS,
+        "hiddenRows": [],
+        "hiddenColumns": [],
+        "visible": True,
+        "role": "drawing",
+        "sourceSetup": {
+            "authority": "00_INDEX",
+            "sheetCode": item.get("sheetCode") or "",
+            "title": item.get("title") or "",
+        },
+        "protectedRanges": [],
+        "dataValidations": [],
+        "conditionalFormats": [],
+        "tableRegions": [],
+        "tableLayout": "single",
+        "annotations": [],
+    }
+
+
+def reconcile_project_workbook_order(
+    project: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Reconcile project pages, the project ``00_INDEX``, and worksheet order."""
+    reconciled = deepcopy(project)
+    manifest = project_base_drawing_manifest(reconciled)
+    page_by_id = {
+        str(page.get("id") or ""): page
+        for page in reconciled.get("pages") or []
+        if isinstance(page, dict)
+    }
+    for item in manifest:
+        page = page_by_id[item["pageId"]]
+        page["order"] = item["order"]
+        page["publishStatus"] = item["publishStatus"]
+        page["include"] = item["include"]
+
+    worksheets = [
+        worksheet
+        for worksheet in reconciled.get("worksheets") or []
+        if isinstance(worksheet, dict)
+    ]
+    index = next(
+        (
+            worksheet
+            for worksheet in worksheets
+            if str(worksheet.get("name") or "").strip().casefold()
+            == "00_index"
+        ),
+        None,
+    )
+    if index is not None:
+        _reconcile_index_grid(index, manifest)
+
+    drawing_worksheets: list[dict[str, Any]] = []
+    used: set[int] = set()
+    for item in manifest:
+        worksheet = _identity_match(
+            worksheets, item, used, document=False
+        )
+        if worksheet is None:
+            worksheet = _new_project_worksheet(item)
+            worksheets.append(worksheet)
+            if str(worksheet.get("name") or "").casefold() == "00_index":
+                _reconcile_index_grid(worksheet, manifest)
+        used.add(id(worksheet))
+        drawing_worksheets.append(worksheet)
+    reconciled["worksheets"] = [
+        *drawing_worksheets,
+        *[worksheet for worksheet in worksheets if id(worksheet) not in used],
+    ]
+    return reconciled, manifest
+
+
+def _new_drawing_document_sheet(item: dict[str, Any]) -> dict[str, Any]:
+    stable = str(item.get("worksheetId") or "").strip()
+    if not stable:
+        stable = "drawing_" + hashlib.sha256(
+            str(item.get("pageId") or "").encode("utf-8")
+        ).hexdigest()[:16]
+    return {
+        "id": stable,
+        "name": item.get("sheetTab") or "Drawing Page",
+        "cells": {},
+        "styles": {},
+        "merges": [],
+        "rowHeights": {},
+        "columnWidths": {},
+        "defaultColumnWidth": DEFAULT_COLUMN_WIDTH_UNITS,
+        "defaultRowHeight": DEFAULT_ROW_HEIGHT_POINTS,
+        "hiddenRows": [],
+        "hiddenColumns": [],
+        "archived": False,
+        "tabColor": None,
+        "role": "drawing",
+        "sourceSetup": {},
+        "protectedRanges": [],
+        "dataValidations": [],
+        "conditionalFormats": [],
+        "tableRegions": [],
+        "tableLayout": "single",
+        "annotations": [],
+    }
+
+
+def reconcile_workbook_document_order(
+    document: dict[str, Any],
+    project: dict[str, Any],
+    manifest: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Reorder only worksheet identities while preserving every sheet payload."""
+    reconciled = _normalize_workbook_document(deepcopy(document))
+    final_manifest = manifest or project_base_drawing_manifest(project)
+    sheets = [
+        sheet
+        for sheet in reconciled.get("sheets") or []
+        if isinstance(sheet, dict)
+    ]
+    index = next(
+        (
+            sheet
+            for sheet in sheets
+            if str(sheet.get("name") or "").strip().casefold() == "00_index"
+        ),
+        None,
+    )
+    if index is not None:
+        _reconcile_index_cells(index, final_manifest)
+
+    drawing_sheets: list[dict[str, Any]] = []
+    used: set[int] = set()
+    for item in final_manifest:
+        sheet = _identity_match(sheets, item, used, document=True)
+        if sheet is None:
+            sheet = _new_drawing_document_sheet(item)
+            sheets.append(sheet)
+        used.add(id(sheet))
+        sheet["name"] = item["sheetTab"]
+        sheet["workspaceSection"] = "drawing"
+        sheet["drawingPageId"] = item["pageId"]
+        sheet["drawingSheetCode"] = item["sheetCode"]
+        sheet["drawingOrder"] = item["order"]
+        sheet["drawingTitle"] = item["title"]
+        sheet["drawingInclude"] = item["include"]
+        sheet["drawingPublishStatus"] = item["publishStatus"]
+        drawing_sheets.append(sheet)
+    remaining = [sheet for sheet in sheets if id(sheet) not in used]
+    for sheet in remaining:
+        name = str(sheet.get("name") or "").strip().casefold()
+        sheet["workspaceSection"] = (
+            "control" if name.startswith("00_") else "source"
+        )
+        sheet.pop("drawingPageId", None)
+        sheet.pop("drawingSheetCode", None)
+        sheet.pop("drawingOrder", None)
+        sheet.pop("drawingTitle", None)
+        sheet.pop("drawingInclude", None)
+        sheet.pop("drawingPublishStatus", None)
+    reconciled["sheets"] = [*drawing_sheets, *remaining]
+    return _apply_document_contract(reconciled, project)
+
+
+def drawing_workspace_sequence(
+    document: dict[str, Any],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "pageId": str(sheet.get("drawingPageId") or ""),
+            "sheetCode": str(sheet.get("drawingSheetCode") or ""),
+            "sheetTab": str(sheet.get("name") or ""),
+            "title": str(sheet.get("drawingTitle") or ""),
+            "include": bool(sheet.get("drawingInclude")),
+            "publishStatus": str(sheet.get("drawingPublishStatus") or ""),
+            "order": int(sheet.get("drawingOrder") or 0),
+        }
+        for sheet in document.get("sheets") or []
+        if isinstance(sheet, dict)
+        and sheet.get("workspaceSection") == "drawing"
+    ]
+
+
 class WorkbookDocumentStore:
     """JSON workbook mirror used by the browser-only Data Workspace."""
 
@@ -1892,14 +2400,47 @@ class WorkbookDocumentStore:
                 self.history
                 / f"workbook_{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}.json",
             )
-        saved = _apply_document_contract(
-            _normalize_workbook_document(document),
+        saved = reconcile_workbook_document_order(
+            document,
             project,
         )
         saved["revision"] = int(current.get("revision") or 0) + 1
         saved["updatedAt"] = utcnow()
         atomic_json_write(self.path, saved)
         return saved
+
+    def reconcile_order(
+        self,
+        project: dict[str, Any],
+        manifest: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        current = self.load(project)
+        reconciled = reconcile_workbook_document_order(
+            current, project, manifest
+        )
+        comparable_current = {
+            key: value
+            for key, value in current.items()
+            if key not in {"revision", "updatedAt"}
+        }
+        comparable_reconciled = {
+            key: value
+            for key, value in reconciled.items()
+            if key not in {"revision", "updatedAt"}
+        }
+        if comparable_current == comparable_reconciled and self.path.is_file():
+            return current
+        if self.path.is_file():
+            self.history.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(
+                self.path,
+                self.history
+                / f"workbook_{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}.json",
+            )
+        reconciled["revision"] = int(current.get("revision") or 0) + 1
+        reconciled["updatedAt"] = utcnow()
+        atomic_json_write(self.path, reconciled)
+        return reconciled
 
     def import_file(
         self,

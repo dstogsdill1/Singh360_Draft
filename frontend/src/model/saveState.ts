@@ -41,7 +41,9 @@ export function isWorkbookConflict(project: ProjectModel | null | undefined): bo
 
 export function isWorkbookSynced(project: ProjectModel | null | undefined): boolean {
   const state = project?.workbookSync?.status || project?.workbookSync?.state || '';
-  return state === 'in_sync';
+  return state === 'in_sync'
+    && project?.workbookSync?.verified === true
+    && project?.workbookSync?.verification?.status === 'verified';
 }
 
 export function confirmedProjectSaveState(project: ProjectModel | null | undefined): SaveState {

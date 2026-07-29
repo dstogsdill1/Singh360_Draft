@@ -421,6 +421,14 @@ export default function App() {
       setSaveNotice('Writing project to Excel…');
       const result = await resolveWorkbookLink(latest.id, 'app_to_workbook');
       const synced = normalizeProjectAssetUrls(result.project);
+      if (
+        synced.workbookSync?.verified !== true
+        || synced.workbookSync?.verification?.status !== 'verified'
+      ) {
+        throw new Error(
+          'Workbook write returned without verified 00_INDEX, physical tab, and Data Workspace order.',
+        );
+      }
       markSaved(synced);
       setSaveStatus('savedAndSynced');
       setSaveNotice('PROJECT SAVED · WORKBOOK SYNCED');
