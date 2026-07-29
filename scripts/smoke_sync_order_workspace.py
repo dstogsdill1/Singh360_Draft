@@ -107,6 +107,7 @@ def capture_browser_evidence(
     title: str,
     console_messages: list[dict[str, str]],
     page_errors: list[str],
+    failed_requests: list[dict[str, str]],
     api_responses: list[dict[str, Any]],
     detail: str = "",
 ) -> tuple[Path, dict[str, Any]]:
@@ -166,6 +167,7 @@ def capture_browser_evidence(
         "dom": dom,
         "consoleMessages": console_messages[-500:],
         "pageErrors": page_errors,
+        "failedRequests": failed_requests,
         "apiResponses": api_responses,
         "screenshotError": screenshot_error,
     }
@@ -243,6 +245,7 @@ def main() -> int:
         console_errors: list[str] = []
         console_messages: list[dict[str, str]] = []
         page_errors: list[str] = []
+        failed_requests: list[dict[str, str]] = []
         api_responses: list[dict[str, Any]] = []
         try:
             wait_health(port)
@@ -276,8 +279,18 @@ def main() -> int:
                         }
                     )
 
+                def record_failed_request(request) -> None:
+                    failed_requests.append(
+                        {
+                            "method": request.method,
+                            "url": request.url,
+                            "failure": request.failure or "",
+                        }
+                    )
+
                 page.on("console", record_console)
                 page.on("pageerror", lambda error: page_errors.append(str(error)))
+                page.on("requestfailed", record_failed_request)
                 page.on("response", record_response)
                 data_url = (
                     f"http://127.0.0.1:{port}/app"
@@ -318,6 +331,7 @@ def main() -> int:
                             title=title,
                             console_messages=console_messages,
                             page_errors=page_errors,
+                            failed_requests=failed_requests,
                             api_responses=api_responses,
                             detail=str(error),
                         )
@@ -350,6 +364,7 @@ def main() -> int:
                             title=title,
                             console_messages=console_messages,
                             page_errors=page_errors,
+                            failed_requests=failed_requests,
                             api_responses=api_responses,
                             detail=f"expected={expected_drawing_pages!r}; actual={actual!r}",
                         )
@@ -388,6 +403,7 @@ def main() -> int:
                     title=page.title(),
                     console_messages=console_messages,
                     page_errors=page_errors,
+                    failed_requests=failed_requests,
                     api_responses=api_responses,
                     detail=f"drawingPages={initial_records!r}",
                 )
@@ -461,6 +477,7 @@ def main() -> int:
                         title=page.title(),
                         console_messages=console_messages,
                         page_errors=page_errors,
+                        failed_requests=failed_requests,
                         api_responses=api_responses,
                         detail=str(error),
                     )
@@ -500,6 +517,7 @@ def main() -> int:
                         title=page.title(),
                         console_messages=console_messages,
                         page_errors=page_errors,
+                        failed_requests=failed_requests,
                         api_responses=api_responses,
                         detail=str(error),
                     )
@@ -523,6 +541,7 @@ def main() -> int:
                     title=page.title(),
                     console_messages=console_messages,
                     page_errors=page_errors,
+                    failed_requests=failed_requests,
                     api_responses=api_responses,
                     detail=f"workspaceReloads={workspace_open_count}",
                 )
@@ -553,6 +572,18 @@ def main() -> int:
         ]
         if unexpected:
             raise AssertionError(f"browser console errors: {unexpected}")
+        unexpected_failed_requests = [
+            request
+            for request in failed_requests
+            # Playwright reports requests cancelled by the smoke's deliberate
+            # full-page navigations as ERR_ABORTED. Preserve them in evidence,
+            # but do not confuse navigation cancellation with an API failure.
+            if request["failure"] != "net::ERR_ABORTED"
+        ]
+        if unexpected_failed_requests:
+            raise AssertionError(
+                f"unexpected browser request failures: {unexpected_failed_requests}"
+            )
         print(
             json.dumps(
                 {
@@ -564,6 +595,8 @@ def main() -> int:
                     "legacyInvalidDropdownDidNotBlock": True,
                     "gridTooltipSuppressed": True,
                     "dialogTooltipSuppressed": True,
+                    "failedRequestsCaptured": len(failed_requests),
+                    "unexpectedFailedRequests": 0,
                 },
                 indent=2,
             )
