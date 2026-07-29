@@ -16,6 +16,7 @@ from core.project_workspace import (
     WorkbookDocumentStore,
     drawing_workspace_sequence,
     project_base_drawing_manifest,
+    reconcile_project_workbook_order,
     reconcile_workbook_document_order,
 )
 from core.sheet_index_sync import sync_project_sheet_index
@@ -350,6 +351,85 @@ class SyncOrderReconciliationTests(unittest.TestCase):
             [{"type": "text", "text": "manual-page-beta__continuation_1"}],
             continuation["canvasObjects"],
         )
+
+    def test_blank_page_creates_matching_project_worksheet_and_index_row(self) -> None:
+        candidate = deepcopy(self.project)
+        candidate["pages"].append(
+            {
+                "id": "page-blank",
+                "order": 6,
+                "include": True,
+                "sheetCode": "",
+                "displaySheetCode": "",
+                "sheetTab": "",
+                "sheetTitle": "New Sheet",
+                "pageType": "canvas",
+                "blocks": [],
+                "canvasObjects": [],
+            }
+        )
+
+        reconciled, manifest = reconcile_project_workbook_order(candidate)
+        blank = next(page for page in reconciled["pages"] if page["id"] == "page-blank")
+        self.assertEqual("", blank["sheetCode"])
+        self.assertEqual("", blank["displaySheetCode"])
+        self.assertEqual("New Sheet", blank["sheetTab"])
+        self.assertTrue(blank["linkedWorksheetId"].startswith("worksheet_"))
+
+        matching = next(
+            item
+            for item in reconciled["worksheets"]
+            if item["id"] == blank["linkedWorksheetId"]
+        )
+        self.assertEqual("New Sheet", matching["name"])
+        self.assertEqual("", matching["sourceSetup"]["sheetCode"])
+        self.assertEqual("New Sheet", matching["sourceSetup"]["title"])
+
+        index = next(
+            item for item in reconciled["worksheets"] if item["name"] == "00_INDEX"
+        )
+        header = {str(value): column for column, value in enumerate(index["grid"][0])}
+        row = next(
+            row
+            for row in index["grid"][1:]
+            if row[header["Page ID"]] == "page-blank"
+        )
+        self.assertEqual("", row[header["Sheet Code"]])
+        self.assertEqual("New Sheet", row[header["Sheet Tab"]])
+        self.assertEqual("New Sheet", row[header["Page Title"]])
+        self.assertEqual(
+            ("page-blank", "", "New Sheet"),
+            (
+                manifest[-1]["pageId"],
+                manifest[-1]["sheetCode"],
+                manifest[-1]["sheetTab"],
+            ),
+        )
+
+    def test_blank_page_worksheet_tab_is_valid_and_unique(self) -> None:
+        candidate = deepcopy(self.project)
+        candidate["worksheets"].append(worksheet("source-new", "New Sheet", [["source"]]))
+        candidate["pages"].append(
+            {
+                "id": "page-blank",
+                "order": 6,
+                "include": True,
+                "sheetCode": "",
+                "displaySheetCode": "",
+                "sheetTab": "",
+                "sheetTitle": "New/Sheet:*?[] With A Very Long Worksheet Title",
+                "pageType": "canvas",
+                "blocks": [],
+                "canvasObjects": [],
+            }
+        )
+
+        reconciled, _ = reconcile_project_workbook_order(candidate)
+        blank = next(page for page in reconciled["pages"] if page["id"] == "page-blank")
+        self.assertLessEqual(len(blank["sheetTab"]), 31)
+        self.assertNotRegex(blank["sheetTab"], r"[\[\]:*?/\\]")
+        names = [item["name"].casefold() for item in reconciled["worksheets"]]
+        self.assertEqual(len(names), len(set(names)))
 
     def test_injected_mismatch_reports_the_first_exact_difference(self) -> None:
         synced = sync_project_to_workbook(

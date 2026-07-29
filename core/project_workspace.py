@@ -1889,6 +1889,62 @@ def _generated_drawing_page(page: dict[str, Any]) -> bool:
     )
 
 
+_INVALID_WORKSHEET_TITLE = re.compile(r"[\[\]:*?/\\]")
+
+
+def _unique_worksheet_tab(
+    title: Any,
+    used_tabs: set[str],
+) -> str:
+    """Return a valid, case-insensitively unique Excel worksheet title."""
+    base = _INVALID_WORKSHEET_TITLE.sub(" ", str(title or "")).strip().strip("'")
+    base = re.sub(r"\s+", " ", base) or "New Sheet"
+    base = base[:31].rstrip() or "New Sheet"
+    candidate = base
+    suffix_number = 2
+    while candidate.casefold() in used_tabs:
+        suffix = f" ({suffix_number})"
+        candidate = f"{base[: 31 - len(suffix)].rstrip()}{suffix}"
+        suffix_number += 1
+    used_tabs.add(candidate.casefold())
+    return candidate
+
+
+def _ensure_base_page_worksheet_identities(project: dict[str, Any]) -> None:
+    """Give new base pages a stable worksheet identity before reconciliation.
+
+    Sheet code is intentionally not part of this requirement. A user may leave
+    the optional code blank until the explicit renumber workflow.
+    """
+    pages = [
+        page
+        for page in project.get("pages") or []
+        if isinstance(page, dict) and not _generated_drawing_page(page)
+    ]
+    used_tabs = {
+        str(page.get("sheetTab") or "").strip().casefold()
+        for page in pages
+        if str(page.get("sheetTab") or "").strip()
+    }
+    used_tabs.update(
+        str(worksheet.get("name") or "").strip().casefold()
+        for worksheet in project.get("worksheets") or []
+        if isinstance(worksheet, dict)
+        and str(worksheet.get("name") or "").strip()
+    )
+    for page in pages:
+        page_id = str(page.get("id") or "").strip()
+        if not str(page.get("sheetTab") or "").strip():
+            page["sheetTab"] = _unique_worksheet_tab(
+                page.get("sheetTitle") or "New Sheet",
+                used_tabs,
+            )
+        if page_id and not str(page.get("linkedWorksheetId") or "").strip():
+            page["linkedWorksheetId"] = "worksheet_" + hashlib.sha256(
+                page_id.encode("utf-8")
+            ).hexdigest()[:16]
+
+
 def project_base_drawing_manifest(
     project: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -2203,6 +2259,7 @@ def reconcile_project_workbook_order(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Reconcile project pages, the project ``00_INDEX``, and worksheet order."""
     reconciled = deepcopy(project)
+    _ensure_base_page_worksheet_identities(reconciled)
     manifest = project_base_drawing_manifest(reconciled)
     page_by_id = {
         str(page.get("id") or ""): page
@@ -2243,6 +2300,20 @@ def reconcile_project_workbook_order(
             worksheets.append(worksheet)
             if str(worksheet.get("name") or "").casefold() == "00_index":
                 _reconcile_index_grid(worksheet, manifest)
+        worksheet["name"] = item["sheetTab"]
+        worksheet["sourceSheet"] = item["sheetTab"]
+        worksheet["role"] = "drawing"
+        source_setup = worksheet.get("sourceSetup")
+        if not isinstance(source_setup, dict):
+            source_setup = {}
+        source_setup.update(
+            {
+                "authority": "00_INDEX",
+                "sheetCode": item["sheetCode"],
+                "title": item["title"],
+            }
+        )
+        worksheet["sourceSetup"] = source_setup
         used.add(id(worksheet))
         drawing_worksheets.append(worksheet)
     reconciled["worksheets"] = [
@@ -2414,6 +2485,17 @@ class WorkbookDocumentStore:
         project: dict[str, Any],
         manifest: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        prepared, changed = self.prepare_reconciled_order(project, manifest)
+        if not changed:
+            return prepared
+        return self.commit_reconciled_order(prepared)
+
+    def prepare_reconciled_order(
+        self,
+        project: dict[str, Any],
+        manifest: list[dict[str, Any]] | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        """Build and validate the next workspace document without writing it."""
         current = self.load(project)
         reconciled = reconcile_workbook_document_order(
             current, project, manifest
@@ -2429,7 +2511,16 @@ class WorkbookDocumentStore:
             if key not in {"revision", "updatedAt"}
         }
         if comparable_current == comparable_reconciled and self.path.is_file():
-            return current
+            return current, False
+        reconciled["revision"] = int(current.get("revision") or 0) + 1
+        reconciled["updatedAt"] = utcnow()
+        return reconciled, True
+
+    def commit_reconciled_order(
+        self,
+        reconciled: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Atomically replace workbook.json with a prevalidated document."""
         if self.path.is_file():
             self.history.mkdir(parents=True, exist_ok=True)
             shutil.copy2(
@@ -2437,8 +2528,6 @@ class WorkbookDocumentStore:
                 self.history
                 / f"workbook_{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}.json",
             )
-        reconciled["revision"] = int(current.get("revision") or 0) + 1
-        reconciled["updatedAt"] = utcnow()
         atomic_json_write(self.path, reconciled)
         return reconciled
 

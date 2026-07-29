@@ -228,6 +228,16 @@ def _err(message: str, detail: str = "") -> dict:
     return payload
 
 
+def _restore_file_bytes(path: Path, payload: bytes) -> None:
+    """Restore one transaction participant without exposing a partial file."""
+    temp = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.rollback")
+    try:
+        temp.write_bytes(payload)
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
 def _project_profile() -> str:
     profile = str(request.form.get("profile") or "ems").strip().casefold()
     if profile not in _PROJECT_PROFILES:
@@ -946,21 +956,34 @@ def save_project(project_id: str):
     )
     data["workbookSync"] = sync
 
+    project_dir = store.find_dir(project_id)
+    if project_dir is None:
+        return jsonify(_err("Local project save failed.", "Project package was not found.")), 404
+    project_path = project_dir / "project.json"
+    document_store = WorkbookDocumentStore(project_dir)
     try:
-        store.save(project_id, data)
-        project_dir = store.find_dir(project_id)
-        if project_dir is None:
-            raise ProjectWorkspaceError(
-                "The saved project package could not be resolved."
-            )
-        WorkbookDocumentStore(project_dir).reconcile_order(data, manifest)
-    except OSError as exc:
-        app.logger.error("Could not save local project %s: %s", project_id, exc)
-        return jsonify(_err("Local project save failed.", str(exc))), 500
+        prepared_document, document_changed = (
+            document_store.prepare_reconciled_order(data, manifest)
+        )
     except ProjectWorkspaceError as exc:
         return jsonify(
             _err("Data Workspace order reconciliation failed.", str(exc))
         ), 400
+
+    previous_project_bytes = project_path.read_bytes()
+    try:
+        store.save(project_id, data)
+        if document_changed:
+            document_store.commit_reconciled_order(prepared_document)
+    except OSError as exc:
+        try:
+            _restore_file_bytes(project_path, previous_project_bytes)
+        except OSError:
+            app.logger.exception(
+                "Could not roll back partial local project save %s", project_id
+            )
+        app.logger.error("Could not save local project %s: %s", project_id, exc)
+        return jsonify(_err("Local project save failed.", str(exc))), 500
 
     return jsonify(data)
 
