@@ -155,6 +155,8 @@ def _configured_port() -> int:
 
 
 _SERVER_PORT = _configured_port()
+_SERVER_REPOSITORY = str(HERE.resolve())
+_SERVER_OWNERSHIP_TOKEN = os.environ.get("SINGH360_OWNERSHIP_TOKEN", "").strip()
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 512 * 1024 * 1024
@@ -366,7 +368,16 @@ def app_modular_assets(asset_path: str):
 @app.get("/health")
 @app.get("/api/health")
 def health():
-    return jsonify({"ok": True})
+    return jsonify(
+        {
+            "ok": True,
+            "product": "Singh360 Draft",
+            "repository": _SERVER_REPOSITORY,
+            "configuredPort": _SERVER_PORT,
+            "pid": os.getpid(),
+            "ownershipToken": _SERVER_OWNERSHIP_TOKEN,
+        }
+    )
 
 
 @app.get("/api/debug/routes")

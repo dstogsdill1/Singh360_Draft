@@ -8,6 +8,7 @@
 
 # Generated outputs
 output/
+/.singh360-runtime/
 
 # Web bridge job sandbox
 .jobs/

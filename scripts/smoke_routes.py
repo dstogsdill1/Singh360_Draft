@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -37,8 +38,21 @@ def main() -> int:
 
     r_health = client.get("/api/health")
     print(f"GET /api/health  -> status {r_health.status_code}")
-    if r_health.status_code != 200 or (r_health.get_json() or {}).get("ok") is not True:
+    health = r_health.get_json() or {}
+    if r_health.status_code != 200 or health.get("ok") is not True:
         problems.append("/api/health is not healthy")
+    expected_health = {
+        "product": "Singh360 Draft",
+        "repository": str(server.HERE.resolve()),
+        "configuredPort": server._SERVER_PORT,
+        "pid": os.getpid(),
+        "ownershipToken": os.environ.get("SINGH360_OWNERSHIP_TOKEN", "").strip(),
+    }
+    for field, expected in expected_health.items():
+        if health.get(field) != expected:
+            problems.append(
+                f"/api/health {field} is {health.get(field)!r}, expected {expected!r}"
+            )
 
     r_logo = client.get("/static/LOGO-750px.png")
     print(f"GET /static/LOGO-750px.png -> status {r_logo.status_code}")

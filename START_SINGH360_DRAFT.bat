@@ -14,6 +14,6 @@ exit /b 0
 :failed
 echo.
 echo Singh360 Draft failed to start. Review the message above and the latest
-echo file under .docs\runtime_logs.
+echo file under .singh360-runtime\logs.
 if not defined SINGH360_LAUNCHER_NO_PAUSE pause
 exit /b 1

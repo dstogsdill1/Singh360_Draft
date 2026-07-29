@@ -16,12 +16,13 @@ $global:LASTEXITCODE = 0
 $repo = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot)).TrimEnd("\")
 $python = Join-Path $repo ".venv\Scripts\python.exe"
 $server = Join-Path $repo "server.py"
-$runtimeDir = Join-Path $repo ".docs\runtime"
-$logDir = Join-Path $repo ".docs\runtime_logs"
+$runtimeDir = Join-Path $repo ".singh360-runtime"
+$logDir = Join-Path $runtimeDir "logs"
 $pidFile = Join-Path $runtimeDir "singh360-draft.pid"
 $stateFile = Join-Path $runtimeDir "singh360-draft.state.json"
 $browserFile = Join-Path $runtimeDir "singh360-draft.browser.pid"
 $appUrl = "http://127.0.0.1:$Port/app"
+$healthUrl = "http://127.0.0.1:$Port/api/health"
 
 function Get-PortListener {
     $listeners = @(
@@ -37,28 +38,96 @@ function Get-PortListener {
     return Get-CimInstance Win32_Process -Filter ("ProcessId=" + $listeners[0]) -ErrorAction SilentlyContinue
 }
 
-function Test-Singh360Process {
-    param([AllowNull()]$Process)
-
-    if (-not $Process -or -not $Process.CommandLine) {
+function Test-SameRepository {
+    param(
+        [AllowNull()][string]$Left,
+        [AllowNull()][string]$Right
+    )
+    if ([string]::IsNullOrWhiteSpace($Left) -or [string]::IsNullOrWhiteSpace($Right)) {
         return $false
     }
+    try {
+        $leftFull = [System.IO.Path]::GetFullPath($Left).TrimEnd("\")
+        $rightFull = [System.IO.Path]::GetFullPath($Right).TrimEnd("\")
+        return [string]::Equals(
+            $leftFull,
+            $rightFull,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+    }
+    catch {
+        return $false
+    }
+}
 
-    $pythonQuoted = [regex]::Escape('"' + $python + '"')
-    $pythonBare = [regex]::Escape($python)
-    $serverQuoted = [regex]::Escape('"' + $server + '"')
-    $serverBare = [regex]::Escape($server)
-    $relativeServer = [regex]::Escape("server.py")
-    $pattern = (
-        "^\s*(?:$pythonQuoted|$pythonBare)\s+" +
-        "(?:-u\s+)?" +
-        "(?:$serverQuoted|$serverBare|$relativeServer)(?:\s|$)"
+function Get-HealthIdentity {
+    try {
+        return Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 3
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-LauncherState {
+    if (-not (Test-Path -LiteralPath $stateFile)) {
+        return $null
+    }
+    try {
+        return Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-IdentityShape {
+    param(
+        [AllowNull()]$Object,
+        [string[]]$Properties
     )
-    return [bool]([regex]::IsMatch(
-        [string]$Process.CommandLine,
-        $pattern,
-        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
-    ))
+    if (-not $Object) {
+        return $false
+    }
+    foreach ($property in $Properties) {
+        if ($Object.PSObject.Properties.Name -notcontains $property) {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Test-OwnedListener {
+    param(
+        [AllowNull()]$Listener,
+        [AllowNull()]$State,
+        [AllowNull()]$Health
+    )
+    if (-not $Listener) {
+        return $false
+    }
+    if (-not (Test-IdentityShape $State @("pid", "port", "repository", "token"))) {
+        return $false
+    }
+    if (-not (Test-IdentityShape $Health @(
+        "ok", "product", "pid", "configuredPort", "repository", "ownershipToken"
+    ))) {
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$State.token)) {
+        return $false
+    }
+    return (
+        $Health.ok -eq $true -and
+        [string]$Health.product -eq "Singh360 Draft" -and
+        [int]$Listener.ProcessId -eq [int]$State.pid -and
+        [int]$Listener.ProcessId -eq [int]$Health.pid -and
+        [int]$State.port -eq $Port -and
+        [int]$Health.configuredPort -eq $Port -and
+        (Test-SameRepository ([string]$State.repository) $repo) -and
+        (Test-SameRepository ([string]$Health.repository) $repo) -and
+        [string]$State.token -ceq [string]$Health.ownershipToken
+    )
 }
 
 function Show-ProcessIdentity {
@@ -85,8 +154,11 @@ function Clear-LauncherState {
     }
 }
 
-function Repair-LauncherState {
-    param($Process)
+function Write-LauncherState {
+    param(
+        $Process,
+        [string]$Token
+    )
 
     New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
     $pidText = [string]$Process.ProcessId
@@ -98,9 +170,10 @@ function Repair-LauncherState {
         pid = [int]$Process.ProcessId
         port = $Port
         repository = $repo
+        token = $Token
         executable = [string]$Process.ExecutablePath
         commandLine = [string]$Process.CommandLine
-        repairedAt = (Get-Date).ToString("o")
+        startedAt = (Get-Date).ToString("o")
     } | ConvertTo-Json | Set-Content -LiteralPath $stateTemp -Encoding utf8
     Move-Item -LiteralPath $stateTemp -Destination $stateFile -Force
 }
@@ -244,13 +317,13 @@ function Ensure-StartPrerequisites {
 function Start-Singh360 {
     $listener = Get-PortListener
     if ($listener) {
-        if (-not (Test-Singh360Process $listener)) {
-            Clear-LauncherState
+        $state = Get-LauncherState
+        $health = Get-HealthIdentity
+        if (-not (Test-OwnedListener $listener $state $health)) {
             Write-Host "ERROR: Port $Port belongs to an unrelated process. Nothing was terminated." -ForegroundColor Red
             Show-ProcessIdentity $listener
             return 1
         }
-        Repair-LauncherState $listener
         Write-Host ("Singh360 Draft is already running (PID " + $listener.ProcessId + ").") -ForegroundColor Green
         Open-AppOnce ([int]$listener.ProcessId)
         return 0
@@ -264,7 +337,10 @@ function Start-Singh360 {
     $stamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
     $stdout = Join-Path $logDir "singh360-draft-$stamp.out.log"
     $stderr = Join-Path $logDir "singh360-draft-$stamp.err.log"
+    $token = [guid]::NewGuid().ToString("N")
     $env:SINGH360_PORT = [string]$Port
+    $env:SINGH360_REPOSITORY = $repo
+    $env:SINGH360_OWNERSHIP_TOKEN = $token
     $started = Start-Process `
         -FilePath $python `
         -ArgumentList "server.py" `
@@ -276,28 +352,40 @@ function Start-Singh360 {
 
     $deadline = (Get-Date).AddSeconds(45)
     $listener = $null
+    $health = $null
     do {
         Start-Sleep -Milliseconds 500
         $listener = Get-PortListener
+        if ($listener) {
+            $health = Get-HealthIdentity
+        }
         $started.Refresh()
-    } until ($listener -or $started.HasExited -or (Get-Date) -gt $deadline)
+        $identityMatches = (
+            $listener -and
+            (Test-IdentityShape $health @(
+                "product", "pid", "configuredPort", "repository", "ownershipToken"
+            )) -and
+            [string]$health.product -eq "Singh360 Draft" -and
+            [int]$health.pid -eq [int]$listener.ProcessId -and
+            [int]$health.configuredPort -eq $Port -and
+            (Test-SameRepository ([string]$health.repository) $repo) -and
+            [string]$health.ownershipToken -ceq $token
+        )
+    } until ($identityMatches -or $started.HasExited -or (Get-Date) -gt $deadline)
 
-    if (-not $listener) {
+    if (-not $identityMatches) {
         if (-not $started.HasExited) {
             Stop-Process -Id $started.Id -Force -ErrorAction SilentlyContinue
         }
-        throw "Singh360 Draft did not begin listening on port $Port. Review $stderr."
-    }
-    if (-not (Test-Singh360Process $listener)) {
-        if (-not $started.HasExited) {
-            Stop-Process -Id $started.Id -Force -ErrorAction SilentlyContinue
+        if ($listener) {
+            Write-Host "ERROR: A listener without this launcher's repository token acquired port $Port. It was not terminated." -ForegroundColor Red
+            Show-ProcessIdentity $listener
+            return 1
         }
-        Write-Host "ERROR: An unrelated process acquired port $Port while Singh360 Draft was starting. It was not terminated." -ForegroundColor Red
-        Show-ProcessIdentity $listener
-        return 1
+        throw "Singh360 Draft did not establish its health identity on port $Port. Review $stderr."
     }
 
-    Repair-LauncherState $listener
+    Write-LauncherState $listener $token
     Write-Host ("Singh360 Draft is running at $appUrl (PID " + $listener.ProcessId + ").") -ForegroundColor Green
     Open-AppOnce ([int]$listener.ProcessId)
     return 0
@@ -310,19 +398,12 @@ function Stop-Singh360 {
         Write-Host "Singh360 Draft is already stopped. Stale launcher state was removed." -ForegroundColor Yellow
         return 0
     }
-    if (-not (Test-Singh360Process $listener)) {
-        Clear-LauncherState
+    $state = Get-LauncherState
+    $health = Get-HealthIdentity
+    if (-not (Test-OwnedListener $listener $state $health)) {
         Write-Host "ERROR: Port $Port belongs to an unrelated process. Nothing was terminated." -ForegroundColor Red
         Show-ProcessIdentity $listener
         return 1
-    }
-
-    $verifiedParent = $null
-    if ($listener.ParentProcessId) {
-        $candidate = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $listener.ParentProcessId) -ErrorAction SilentlyContinue
-        if (Test-Singh360Process $candidate) {
-            $verifiedParent = $candidate
-        }
     }
 
     $listenerPid = [int]$listener.ProcessId
@@ -335,9 +416,6 @@ function Stop-Singh360 {
 
     if ($remaining) {
         throw "Singh360 Draft PID $listenerPid did not release port $Port."
-    }
-    if ($verifiedParent) {
-        Stop-Process -Id ([int]$verifiedParent.ProcessId) -Force -ErrorAction SilentlyContinue
     }
     Clear-LauncherState
     Write-Host ("Singh360 Draft PID $listenerPid stopped.") -ForegroundColor Green

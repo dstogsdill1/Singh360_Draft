@@ -48,12 +48,19 @@ def main() -> int:
     required_controller = (
         "Get-NetTCPConnection -LocalPort $Port -State Listen",
         'http://127.0.0.1:$Port/app',
-        "Test-Singh360Process",
-        "Repair-LauncherState",
+        'http://127.0.0.1:$Port/api/health',
+        "Test-OwnedListener",
+        "Write-LauncherState",
         "Singh360 Draft is already running",
         "Port $Port belongs to an unrelated process",
         "Show-ProcessIdentity $listener",
         "Clear-LauncherState",
+        '.singh360-runtime',
+        "SINGH360_OWNERSHIP_TOKEN",
+        "SINGH360_REPOSITORY",
+        "[guid]::NewGuid().ToString",
+        "ownershipToken",
+        "Test-SameRepository",
         "Test-FrontendBuildRequired",
         "Frontend production build is current; skipping rebuild.",
         "Vite size advisories are informational.",
@@ -66,8 +73,12 @@ def main() -> int:
     if "Stop-Process -Id $listenerPid" not in controller:
         problems.append("stop controller does not stop the verified listener PID")
     unrelated_section = controller.split("function Stop-Singh360", 1)[-1]
-    if "Test-Singh360Process $listener" not in unrelated_section:
-        problems.append("stop controller does not prove listener ownership from its command line")
+    if "Test-OwnedListener $listener $state $health" not in unrelated_section:
+        problems.append("stop controller does not prove token, health, repository, and listener ownership")
+    if '.docs\\runtime' in controller or '.docs\\runtime_logs' in controller:
+        problems.append("launcher runtime state must not be stored under protected .docs")
+    if "-FilePath $python" not in controller:
+        problems.append("launcher does not start with .venv\\Scripts\\python.exe")
 
     obsolete_root = sorted(
         path.name
