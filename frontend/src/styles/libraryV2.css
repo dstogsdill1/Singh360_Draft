@@ -4,6 +4,8 @@
 .libv2-quick-insert-grid, .libv2-section-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .libv2-section-nav { padding: 10px; border-bottom: 1px solid #d8dee8; }
 .libv2-section-nav button:last-child { grid-column: 1 / -1; }
+.libv2-section-nav button { display: flex; align-items: center; justify-content: space-between; gap: 6px; text-align: left; }
+.libv2-section-nav button strong { min-width: 2em; text-align: right; font-size: 10px; }
 .libv2-section-nav button.active { color: #fff; background: #12539b; }
 .libv2-controls { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .libv2-row { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
@@ -16,7 +18,7 @@
 .libv2-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; max-height: 360px; overflow-y: auto; overflow-x: hidden; min-width: 0; }
 .libv2-grid.list { display: block; }
 
-.libv2-card { border: 1px solid #d0d0d0; border-radius: 6px; padding: 6px; background: #fff; cursor: pointer; }
+.libv2-card { position: relative; border: 1px solid #d0d0d0; border-radius: 6px; padding: 6px; background: #fff; cursor: pointer; }
 .libv2-card.selected { border: 2px solid #2563eb; }
 .libv2-grid.list .libv2-card { display: flex; gap: 8px; align-items: center; }
 
@@ -41,6 +43,25 @@
 .libv2-actions { display: flex; gap: 4px; margin-top: 4px; }
 
 .libv2-empty { padding: 12px; color: #888; font-size: 12px; }
+.libv2-empty-recovery { grid-column: 1 / -1; display: grid; justify-items: start; gap: 7px; border: 1px dashed #aeb8c5; border-radius: 6px; background: #f8fafc; }
+.libv2-empty-recovery strong { color: #344054; }
+.libv2-favorite-star {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #9aa7b5;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .94);
+  color: #556270;
+  font-size: 19px;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .15);
+}
+.libv2-favorite-star.active { color: #9a6700; border-color: #d6a326; background: #fff8df; }
 .libv2-missing { color: #9a3412; font-size: 11px; }
 .libv2-insert-menu { position: relative; }
 .libv2-insert-menu summary { list-style: none; cursor: pointer; border: 1px solid #d0d0d0; border-radius: 4px; padding: 2px 6px; background: #fff; }

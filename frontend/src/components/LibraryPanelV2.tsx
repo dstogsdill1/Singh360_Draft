@@ -296,17 +296,22 @@ function CardPreview({ c, rep, small = false }: { c: LibV2Component; rep: ViewRe
   );
 }
 
-type LibrarySection = 'favorites' | 'assemblies' | 'refrigeration' | 'callouts' | 'signage' | 'all' | 'advanced';
+type LibrarySection = 'recent' | 'favorites' | 'highlighted' | 'plan-markers' | 'assemblies' | 'callouts' | 'signage' | 'lcp' | 'all';
 
 const LIBRARY_SECTIONS: Array<{ id: LibrarySection; label: string }> = [
-  { id: 'favorites', label: 'Project Favorites' },
+  { id: 'recent', label: 'Recently Used' },
+  { id: 'favorites', label: 'Favorites' },
+  { id: 'highlighted', label: 'Highlighted Symbols' },
+  { id: 'plan-markers', label: 'Plan Markers' },
   { id: 'assemblies', label: 'Saved Assemblies' },
-  { id: 'refrigeration', label: 'Refrigeration Symbols' },
-  { id: 'callouts', label: 'Callouts 1–10' },
+  { id: 'callouts', label: 'Callouts' },
   { id: 'signage', label: 'Safety Signage' },
+  { id: 'lcp', label: 'LCP Components' },
   { id: 'all', label: 'All Components' },
-  { id: 'advanced', label: 'Advanced / Symbol Mapper' },
 ];
+
+const RECENT_COMPONENTS_KEY = 'singh360-recent-component-ids';
+const MAX_RECENT_COMPONENTS = 24;
 
 const QUICK_ASSEMBLIES: Array<{ id: QuickAssemblyId; label: string }> = [
   { id: 'signage-marker-trio', label: 'Signage Marker Trio' },
@@ -336,7 +341,15 @@ export default function LibraryPanelV2({
   const [rep, setRep] = useState<ViewRep>('source');
   const [showDashboard, setShowDashboard] = useState(false);
   const [showLegacyItems, setShowLegacyItems] = useState(true);
-  const [section, setSection] = useState<LibrarySection>('favorites');
+  const [section, setSection] = useState<LibrarySection>('all');
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    try {
+      const value = JSON.parse(localStorage.getItem(RECENT_COMPONENTS_KEY) || '[]');
+      return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [builderQuery, setBuilderQuery] = useState('');
   const [builderCategory, setBuilderCategory] = useState('all');
@@ -387,7 +400,8 @@ export default function LibraryPanelV2({
   useEffect(() => { setRep(defaultRepForPage(activePageType, data)); }, [activePageType, data]);
 
   const components = data?.components ?? [];
-  const previewReady = useMemo(() => components.filter((component) => !!previewUrl(component, rep)).length, [components, rep]);
+  const activeComponents = useMemo(() => components.filter((component) => !isRetired(component)), [components]);
+  const previewReady = useMemo(() => activeComponents.filter((component) => !!previewUrl(component, rep)).length, [activeComponents, rep]);
 
   const selected = useMemo(() => {
     return components.find((c) => c.id === selectedId) || components.find((c) => selectedIds.includes(c.id)) || null;
@@ -396,9 +410,9 @@ export default function LibraryPanelV2({
   const categories = useMemo(() => {
     const ids = new Set<string>();
     CATEGORY_PRESETS.forEach((c) => ids.add(c.id));
-    components.forEach((c) => { categoriesFor(c).forEach((id) => ids.add(id)); });
+    activeComponents.forEach((c) => { categoriesFor(c).forEach((id) => ids.add(id)); });
     const counts = new Map<string, number>();
-    components.forEach((c) => {
+    activeComponents.forEach((c) => {
       categoriesFor(c).forEach((id) => counts.set(id, (counts.get(id) || 0) + 1));
     });
     return Array.from(ids).sort().map((id) => ({
@@ -406,39 +420,60 @@ export default function LibraryPanelV2({
       label: niceCategoryLabel(id),
       count: counts.get(id) || 0,
     }));
-  }, [components]);
+  }, [activeComponents]);
 
   const collections = useMemo(() => {
     const set = new Set<string>();
     COLLECTION_PRESETS.forEach((x) => set.add(x));
-    components.forEach((c) => {
+    activeComponents.forEach((c) => {
       const val = collectionFor(c);
       if (val) set.add(val);
     });
     return Array.from(set).sort();
-  }, [components]);
+  }, [activeComponents]);
+  const collectionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    activeComponents.forEach((component) => {
+      const value = collectionFor(component);
+      if (value) counts.set(value, (counts.get(value) || 0) + 1);
+    });
+    return counts;
+  }, [activeComponents]);
 
-  const mapperSymbolCount = useMemo(
-    () => components.filter(
-      (component) => !isRetired(component)
-        && collectionFor(component) === MAPPER_SYMBOL_COLLECTION,
-    ).length,
-    [components],
-  );
-  const planMarkerCount = useMemo(
-    () => components.filter(
-      (component) => !isRetired(component)
-        && collectionFor(component) === PLAN_MARKER_COLLECTION,
-    ).length,
-    [components],
-  );
+  const isLcpComponent = (component: LibV2Component) => {
+    const x = asAny(component);
+    const blob = [
+      displayNameFor(component),
+      collectionFor(component),
+      x.partNumber,
+      x.shortName,
+      ...(Array.isArray(x.tags) ? x.tags : []),
+    ].join(' ').toLowerCase();
+    return /\blcp\b/.test(blob) || blob.includes('lighting control panel');
+  };
+
+  const sectionBaseCards = useMemo(() => {
+    if (section === 'assemblies') return [];
+    if (section === 'favorites') return activeComponents.filter((component) => Boolean(asAny(component).favorite));
+    if (section === 'highlighted') return activeComponents.filter((component) => collectionFor(component) === MAPPER_SYMBOL_COLLECTION);
+    if (section === 'plan-markers') return activeComponents.filter((component) => collectionFor(component) === PLAN_MARKER_COLLECTION);
+    if (section === 'callouts') return activeComponents.filter((component) => collectionFor(component) === 'Callout Numbers');
+    if (section === 'signage') return activeComponents.filter((component) => collectionFor(component) === 'Safety Signage');
+    if (section === 'lcp') return activeComponents.filter(isLcpComponent);
+    if (section === 'recent') {
+      const order = new Map(recentIds.map((id, index) => [id, index]));
+      return activeComponents
+        .filter((component) => order.has(component.id))
+        .sort((a, b) => (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+    }
+    return activeComponents;
+  }, [activeComponents, recentIds, section]);
 
   const visibleCards = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rows = components.filter((c) => {
+    const rows = sectionBaseCards.filter((c) => {
       if (category !== 'all' && !categoriesFor(c).includes(category)) return false;
       if (collection !== 'all' && collectionFor(c) !== collection) return false;
-      if (isRetired(c)) return false;
       if (!q) return true;
       return componentSearchBlob(c, edits).includes(q);
     });
@@ -455,19 +490,20 @@ export default function LibraryPanelV2({
       });
     }
     return rows;
-  }, [components, query, category, collection, edits]);
+  }, [sectionBaseCards, query, category, collection, edits]);
 
-  const sectionCards = useMemo(() => {
-    const rows = visibleCards.filter((component) => {
-      const collectionName = collectionFor(component);
-      if (section === 'favorites') return Boolean(asAny(component).favorite);
-      if (section === 'refrigeration') return collectionName === MAPPER_SYMBOL_COLLECTION || categoriesFor(component).includes('refrigeration');
-      if (section === 'callouts') return collectionName === 'Callout Numbers';
-      if (section === 'signage') return collectionName === 'Safety Signage' || collectionName === 'Signage / Safety';
-      return section === 'all';
-    });
-    return section === 'callouts' ? rows.slice(0, 10) : rows;
-  }, [section, visibleCards]);
+  const shortcutCounts = useMemo<Record<LibrarySection, number>>(() => ({
+    recent: activeComponents.filter((component) => recentIds.includes(component.id)).length,
+    favorites: activeComponents.filter((component) => Boolean(asAny(component).favorite)).length,
+    highlighted: activeComponents.filter((component) => collectionFor(component) === MAPPER_SYMBOL_COLLECTION).length,
+    'plan-markers': activeComponents.filter((component) => collectionFor(component) === PLAN_MARKER_COLLECTION).length,
+    assemblies: savedAssemblies.length,
+    callouts: activeComponents.filter((component) => collectionFor(component) === 'Callout Numbers').length,
+    signage: activeComponents.filter((component) => collectionFor(component) === 'Safety Signage').length,
+    lcp: activeComponents.filter(isLcpComponent).length,
+    all: activeComponents.length,
+  }), [activeComponents, recentIds, savedAssemblies.length]);
+  const activeFilterLabel = LIBRARY_SECTIONS.find((item) => item.id === section)?.label || 'All Components';
 
   const dashboardRows = useMemo(() => {
     const q = builderQuery.trim().toLowerCase();
@@ -541,16 +577,30 @@ export default function LibraryPanelV2({
     return !!variantUrl(c, which);
   };
 
+  const rememberRecent = (id: string) => {
+    setRecentIds((current) => {
+      const next = [id, ...current.filter((value) => value !== id)].slice(0, MAX_RECENT_COMPONENTS);
+      try {
+        localStorage.setItem(RECENT_COMPONENTS_KEY, JSON.stringify(next));
+      } catch {
+        // Recent shortcuts remain usable for this session when storage is unavailable.
+      }
+      return next;
+    });
+  };
+
   const insertAs = (c: LibV2Component, which: ViewRep, withLabel = true) => {
     if (!canInsert) return;
     const url = variantUrl(c, which) || previewUrl(c, which);
     if (!url) return;
+    rememberRecent(c.id);
     onInsert(displayNameFor(c), url, withLabel ? labelFor(c) : null, insertMetaFor(c));
   };
 
   const onDragStart = (e: React.DragEvent, c: LibV2Component) => {
     const url = variantUrl(c, rep) || previewUrl(c, rep);
     if (!url) return;
+    rememberRecent(c.id);
     e.dataTransfer.setData(COMPONENT_DRAG_TYPE, JSON.stringify({
       name: displayNameFor(c),
       url,
@@ -558,6 +608,46 @@ export default function LibraryPanelV2({
       ...insertMetaFor(c),
     }));
     e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const showAllComponents = () => {
+    setSection('all');
+    setQuery('');
+    setCategory('all');
+    setCollection('all');
+  };
+
+  const selectSection = (next: LibrarySection) => {
+    setSection(next);
+    setQuery('');
+    setCategory('all');
+    if (next === 'highlighted') setCollection(MAPPER_SYMBOL_COLLECTION);
+    else if (next === 'plan-markers') setCollection(PLAN_MARKER_COLLECTION);
+    else if (next === 'callouts') setCollection('Callout Numbers');
+    else if (next === 'signage') setCollection('Safety Signage');
+    else setCollection('all');
+  };
+
+  const toggleFavorite = async (component: LibV2Component) => {
+    const favorite = !Boolean(asAny(component).favorite);
+    setLoadError('');
+    setData((current) => current ? {
+      ...current,
+      components: current.components.map((row) => row.id === component.id ? { ...row, favorite } : row),
+    } : current);
+    try {
+      const result = await updateLibV2Component(component.id, { favorite });
+      setData((current) => current ? {
+        ...current,
+        components: current.components.map((row) => row.id === component.id ? result.component : row),
+      } : current);
+    } catch (error) {
+      setData((current) => current ? {
+        ...current,
+        components: current.components.map((row) => row.id === component.id ? component : row),
+      } : current);
+      setLoadError(`Favorite update failed: ${String(error)}`);
+    }
   };
 
   const doRefresh = async () => {
@@ -887,22 +977,37 @@ This is NOT saved until you click Save All Edits.`,
         </div>
       </section>
       <nav className="libv2-section-nav" aria-label="Component categories">
-        {LIBRARY_SECTIONS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={section === item.id ? 'active' : undefined}
-            aria-pressed={section === item.id}
-            onClick={() => setSection(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+        {LIBRARY_SECTIONS.map((item) => {
+          const displayedCount = item.id === section
+            ? (item.id === 'assemblies' ? savedAssemblies.length : visibleCards.length)
+            : shortcutCounts[item.id];
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={section === item.id ? 'active' : undefined}
+              aria-pressed={section === item.id}
+              aria-label={`${item.label}: ${displayedCount}`}
+              onClick={() => selectSection(item.id)}
+            >
+              <span>{item.label}</span>
+              <strong>{displayedCount}</strong>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          aria-label="Manage Library"
+          data-help-id="library.manage"
+          onClick={() => setShowDashboard(true)}
+        >
+          <span>Manage Library</span>
+        </button>
       </nav>
-      {(section === 'favorites' || section === 'assemblies') && (
+      {section === 'assemblies' && (
         <section className="libv2-assemblies" aria-label="Saved assemblies">
           <div className="libv2-saved-legends-head">
-            <strong>{section === 'favorites' ? 'Project Favorites' : 'Saved Assemblies'}</strong>
+            <strong>Saved Assemblies</strong>
             <button type="button" disabled={!canInsert} data-help-id="assembly.saveSelection" onClick={onSaveSelectionAssembly}>
               Save Selection as Assembly
             </button>
@@ -921,15 +1026,14 @@ This is NOT saved until you click Save All Edits.`,
                 <em>Insert</em>
               </button>
             ))}
-            {!savedAssemblies.length && <div className="libv2-empty">No project assemblies saved yet.</div>}
+            {!savedAssemblies.length && (
+              <div className="libv2-empty libv2-empty-recovery">
+                <strong>Active filter: Saved Assemblies</strong>
+                <span>No saved assemblies are available for this project.</span>
+                <button type="button" onClick={showAllComponents}>Show All Components</button>
+              </div>
+            )}
           </div>
-        </section>
-      )}
-      {section === 'advanced' && (
-        <section className="libv2-advanced-actions" aria-label="Advanced component tools">
-          <button type="button" onClick={() => onOpenSymbolMapper?.()}>Open Symbol Mapper</button>
-          <button type="button" onClick={() => setShowDashboard(true)}>Manage Components</button>
-          <button type="button" onClick={() => openSavedLegend(preferredLegendTemplate?.id)}>Saved Symbol Legends</button>
         </section>
       )}
       <div className="libv2-controls">
@@ -938,46 +1042,44 @@ This is NOT saved until you click Save All Edits.`,
           type="search"
           placeholder="Search components…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setSection('all');
+            setQuery(e.target.value);
+            setCategory('all');
+            setCollection('all');
+          }}
         />
         <div className="libv2-row">
-          <select className="libv2-grow" title="Filter by category" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <select
+            className="libv2-grow"
+            aria-label="Filter by category"
+            value={category}
+            onChange={(e) => {
+              setSection('all');
+              setQuery('');
+              setCategory(e.target.value);
+              setCollection('all');
+            }}
+          >
             <option value="all">All categories</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.label} ({c.count})</option>)}
           </select>
-          <select className="libv2-grow" title="Filter by collection" value={collection} onChange={(e) => setCollection(e.target.value)}>
+          <select
+            className="libv2-grow"
+            aria-label="Filter by collection"
+            value={collection}
+            onChange={(e) => {
+              setSection('all');
+              setQuery('');
+              setCollection(e.target.value);
+              setCategory('all');
+            }}
+          >
             <option value="all">All collections</option>
-            {collections.map((value) => <option key={value} value={value}>{value}</option>)}
+            {collections.map((value) => (
+              <option key={value} value={value}>{value} ({collectionCounts.get(value) || 0})</option>
+            ))}
           </select>
-        </div>
-        <div className="libv2-row libv2-quick-filters">
-          <button
-            className={collection === MAPPER_SYMBOL_COLLECTION ? 'active' : undefined}
-            aria-pressed={collection === MAPPER_SYMBOL_COLLECTION}
-            title="Square highlighted symbols used by Symbol Mapper on existing drawings"
-            onClick={() => {
-              setCollection((current) => current === MAPPER_SYMBOL_COLLECTION ? 'all' : MAPPER_SYMBOL_COLLECTION);
-              setCategory('all');
-              setQuery('');
-            }}
-          >
-            Mapper Highlights ({mapperSymbolCount})
-          </button>
-          <button
-            className={collection === PLAN_MARKER_COLLECTION ? 'active' : undefined}
-            aria-pressed={collection === PLAN_MARKER_COLLECTION}
-            title="Simple colored-ring markers for direct placement on plan and layout pages"
-            onClick={() => {
-              setCollection((current) => current === PLAN_MARKER_COLLECTION ? 'all' : PLAN_MARKER_COLLECTION);
-              setCategory('all');
-              setQuery('');
-            }}
-          >
-            Plan Markers ({planMarkerCount})
-          </button>
-          {collection !== 'all' && (
-            <button onClick={() => setCollection('all')}>Show All Components</button>
-          )}
         </div>
         <div className="libv2-row libv2-modes">
           {(['source', 'edge', 'bw'] as ViewRep[]).map((r) => (
@@ -987,39 +1089,40 @@ This is NOT saved until you click Save All Edits.`,
           ))}
         </div>
         <div className="libv2-row">
-          <button onClick={() => setShowDashboard(true)}>Manage Components</button>
+          <button onClick={() => onOpenSymbolMapper?.()}>Open Symbol Mapper</button>
+          <button onClick={() => openSavedLegend(preferredLegendTemplate?.id)}>Saved Symbol Legends</button>
           <button onClick={() => void doRefresh()} disabled={loading}>Refresh</button>
           <button onClick={() => void rebuildPreviews()} disabled={loading}>Rebuild Previews</button>
         </div>
       </div>
 
       <div className={`libv2-health ${loadError ? 'error' : ''}`}>
-        {loadError ? `Library error: ${loadError}` : loading ? 'Loading component library…' : `${sectionCards.length} shown · ${components.length} total · ${previewReady} previews ready`}
+        {loadError
+          ? `Library error: ${loadError}`
+          : loading
+            ? 'Loading component library…'
+            : `${activeFilterLabel}: ${section === 'assemblies' ? savedAssemblies.length : visibleCards.length} shown · ${activeComponents.length} active · ${previewReady} previews ready`}
       </div>
 
-      {section === 'advanced' && legendTemplates.length > 0 && (
-        <section className="libv2-saved-legends" aria-label="Saved symbol legends">
-          <div className="libv2-saved-legends-head">
-            <strong>Saved Symbol Legends</strong>
-            <span>Editable grouped legends; separate from individual symbol components.</span>
-          </div>
-          <div className="libv2-saved-legends-grid">
-            {legendTemplates.map((template) => (
-              <button key={template.id} className="libv2-saved-legend-card" onClick={() => openSavedLegend(template.id)}>
-                <strong>{template.name}</strong>
-                <span>{template.rowCount ?? 0} rows</span>
-                <em>Open / Insert</em>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
       <div className="libv2-grid">
-        {sectionCards.map((c) => {
+        {visibleCards.map((c) => {
           const canCurrent = !!(variantUrl(c, rep) || previewUrl(c, rep));
+          const favorite = Boolean(asAny(c).favorite);
           return (
             <div key={c.id} className={`libv2-card ${previewUrl(c, rep) ? '' : 'preview-missing'}`} title={displayNameFor(c)} draggable={canInsert && canCurrent} onDragStart={(e) => onDragStart(e, c)}>
+              <button
+                type="button"
+                className={`libv2-favorite-star ${favorite ? 'active' : ''}`}
+                aria-label={`${favorite ? 'Unfavorite' : 'Favorite'} ${displayNameFor(c)}`}
+                aria-pressed={favorite}
+                data-help-id="library.favorite"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void toggleFavorite(c);
+                }}
+              >
+                {favorite ? '★' : '☆'}
+              </button>
               <CardPreview c={c} rep={rep} />
               <div className="libv2-meta">
                 <div className="libv2-name">{displayNameFor(c)}</div>
@@ -1040,7 +1143,13 @@ This is NOT saved until you click Save All Edits.`,
             </div>
           );
         })}
-        {!sectionCards.length && section !== 'assemblies' && section !== 'advanced' && <div className="libv2-empty">No matching components.</div>}
+        {!visibleCards.length && section !== 'assemblies' && (
+          <div className="libv2-empty libv2-empty-recovery">
+            <strong>Active filter: {activeFilterLabel}</strong>
+            <span>No components match the active view and filters.</span>
+            <button type="button" onClick={showAllComponents}>Show All Components</button>
+          </div>
+        )}
       </div>
 
       {showDashboard && (

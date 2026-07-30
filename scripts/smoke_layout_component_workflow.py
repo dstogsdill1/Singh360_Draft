@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import socket
 import subprocess
@@ -217,15 +218,18 @@ def main() -> int:
                 page.goto(editor, wait_until="domcontentloaded", timeout=60_000)
                 page.locator(".page-tab").filter(has_text="Gamma").click()
                 page.locator(".nav-section-head").filter(has_text="Components").click()
-                section_labels = page.locator(".libv2-section-nav > button").all_inner_texts()
+                section_labels = page.locator(".libv2-section-nav > button > span").all_inner_texts()
                 if section_labels != [
-                    "Project Favorites",
+                    "Recently Used",
+                    "Favorites",
+                    "Highlighted Symbols",
+                    "Plan Markers",
                     "Saved Assemblies",
-                    "Refrigeration Symbols",
-                    "Callouts 1–10",
+                    "Callouts",
                     "Safety Signage",
+                    "LCP Components",
                     "All Components",
-                    "Advanced / Symbol Mapper",
+                    "Manage Library",
                 ]:
                     raise AssertionError(f"component section order is wrong: {section_labels!r}")
 
@@ -267,7 +271,7 @@ def main() -> int:
                 if not dialog_trace["prompts"]:
                     raise AssertionError(f"save selection did not reach the naming prompt: {dialog_trace!r}")
                 page.wait_for_timeout(1_200)
-                page.get_by_role("button", name="Saved Assemblies", exact=True).click()
+                page.get_by_role("button", name=re.compile(r"^Saved Assemblies: \d+$")).click()
                 saved_card = page.get_by_role("button", name="Saved Signage Assembly", exact=False)
                 try:
                     saved_card.wait_for(state="visible", timeout=15_000)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -401,7 +402,7 @@ def main() -> int:
                 # Generated component + saved legend: actual direct insertion,
                 # local save, and reload persistence without customer assets.
                 page.get_by_role("button", name="Components", exact=False).click()
-                page.get_by_role("button", name="All Components", exact=True).click()
+                page.get_by_role("button", name=re.compile(r"^All Components: \d+$")).click()
                 for code in symbol_codes:
                     component_card = page.locator(".libv2-card").filter(has_text=f"{code} Test Symbol")
                     component_card.wait_for(timeout=10_000)
@@ -409,12 +410,8 @@ def main() -> int:
                     if image.count() and image.evaluate("(node) => getComputedStyle(node).objectFit") != "contain":
                         raise AssertionError(f"{code} component card is cropped instead of contained")
                     component_card.get_by_role("button", name="Insert", exact=True).click()
-                page.get_by_role("button", name="Advanced / Symbol Mapper", exact=True).click()
-                saved_legend_card = page.locator(".libv2-saved-legend-card").filter(
-                    has_text="Sanitized Tooltip Legend"
-                )
-                saved_legend_card.wait_for(timeout=10_000)
-                saved_legend_card.click()
+                page.get_by_role("button", name="Manage Library", exact=True).click()
+                page.get_by_role("button", name=re.compile(r"^Saved Legends \(\d+\)$")).click()
                 page.get_by_role("heading", name="Build / Insert Symbol Legend").wait_for(timeout=10_000)
                 results["savedLegendModal"] = assert_audit(page, "Saved Legend modal")
                 results["savedLegendModal"]["exercisedTooltips"] = 0

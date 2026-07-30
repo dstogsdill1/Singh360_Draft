@@ -33,6 +33,15 @@ PROJECT_ID = "c0ffee40c0ffee40"
 COMPONENT_NAME = "V40 Render Fixture"
 SOURCE_REL = "components/symbols_markers/plan_markers/v40_render_fixture.svg"
 SOURCE_URL = f"/api/lib/asset/{SOURCE_REL}"
+SIDEBAR_FIXTURES = [
+    ("highlighted_a.svg", "Highlighted Alpha", "Refrigeration Controls Symbols", "symbols_markers"),
+    ("highlighted_b.svg", "Highlighted Beta", "Refrigeration Controls Symbols", "symbols_markers"),
+    ("plan_marker_b.svg", "Plan Marker Beta", "Singh360 Plan Markers", "symbols_markers"),
+    ("callout_1.svg", "Callout One", "Callout Numbers", "symbols_markers"),
+    ("safety_sign.svg", "Safety Sign", "Safety Signage", "alarms_safety"),
+    ("lcp_panel.svg", "LCP Panel Fixture", "LCP Components", "controllers"),
+    ("general_fixture.svg", "General Fixture", "General Components", "custom"),
+]
 
 
 def free_port() -> int:
@@ -141,6 +150,19 @@ def create_fixture(docs: Path) -> tuple[dict, str]:
         """</svg>""",
         encoding="utf-8",
     )
+    for index, (filename, _name, _collection, _category) in enumerate(SIDEBAR_FIXTURES, start=1):
+        fixture_path = library.root / "components" / "symbols_markers" / "sidebar" / filename
+        fixture_path.parent.mkdir(parents=True, exist_ok=True)
+        fixture_path.write_text(
+            (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">'
+                f'<rect x="8" y="8" width="80" height="80" rx="8" fill="hsl({index * 37} 70% 82%)" '
+                'stroke="#172554" stroke-width="5"/>'
+                f'<text x="48" y="58" text-anchor="middle" font-family="Arial" font-size="24">{index}</text>'
+                '</svg>'
+            ),
+            encoding="utf-8",
+        )
     library.refresh()
     manifest = library._read_manifest()  # noqa: SLF001 - sanitized fixture setup
     component = next(
@@ -167,6 +189,28 @@ def create_fixture(docs: Path) -> tuple[dict, str]:
             },
         }
     )
+    by_source = {
+        str(item.get("sourceFile") or "").replace("\\", "/"): item
+        for item in manifest["components"]
+    }
+    for filename, name, collection, category in SIDEBAR_FIXTURES:
+        rel = f"components/symbols_markers/sidebar/{filename}"
+        item = by_source[rel]
+        item.update(
+            {
+                "displayName": name,
+                "defaultLabel": "",
+                "category": category,
+                "categories": [category],
+                "collection": collection,
+                "status": "approved",
+                "approved": True,
+                "retired": False,
+                "favorite": False,
+                "defaultWidth": 96,
+                "defaultHeight": 96,
+            }
+        )
     library._write_manifest(manifest)  # noqa: SLF001 - sanitized fixture setup
 
     legend = LegendTemplateStore(docs).save_template(
@@ -327,6 +371,81 @@ def main() -> int:
                 page.locator(".panel-rail-left").click()
                 page.locator(".panel-left").wait_for(timeout=10_000)
                 page.locator(".nav-section-head").filter(has_text=re.compile("Components", re.IGNORECASE)).click()
+
+                section_nav = page.locator(".libv2-section-nav")
+                try:
+                    section_nav.wait_for(timeout=15_000)
+                except Exception:
+                    page.screenshot(path=evidence / "component-sidebar-open-failure.png", full_page=True)
+                    raise AssertionError(
+                        f"Component Library sidebar did not open; console={console_errors}; "
+                        f"body={page.locator('body').inner_text()[:4000]!r}"
+                    )
+                all_shortcut = section_nav.locator("button").filter(has_text="All Components")
+                all_shortcut.wait_for(timeout=15_000)
+                page.wait_for_function(
+                    """() => {
+                      const button = [...document.querySelectorAll('.libv2-section-nav button')]
+                        .find((node) => node.textContent?.includes('All Components'));
+                      const count = Number((button?.getAttribute('aria-label') || '').split(':').pop());
+                      return count > 0 && document.querySelectorAll('.libv2-card').length === count;
+                    }""",
+                    timeout=15_000,
+                )
+                if all_shortcut.get_attribute("aria-pressed") != "true":
+                    raise AssertionError(
+                        "Component Library did not default to All Components: "
+                        f"aria={all_shortcut.get_attribute('aria-pressed')!r}, "
+                        f"class={all_shortcut.get_attribute('class')!r}, "
+                        f"buttons={section_nav.locator('button').all_inner_texts()!r}"
+                    )
+                active_count = int((all_shortcut.get_attribute("aria-label") or "").rsplit(":", 1)[1])
+                if page.locator(".libv2-card").count() != active_count:
+                    raise AssertionError(
+                        f"All Components count/card mismatch: shortcut={active_count}, "
+                        f"cards={page.locator('.libv2-card').count()}"
+                    )
+
+                highlighted = page.get_by_role(
+                    "button", name="Highlighted Symbols: 2", exact=True
+                )
+                highlighted.click()
+                if page.get_by_role("combobox", name="Filter by collection").input_value() != "Refrigeration Controls Symbols":
+                    raise AssertionError("Highlighted Symbols did not select its exact collection")
+                if page.locator(".libv2-card").count() != 2:
+                    raise AssertionError("Highlighted Symbols count and displayed cards disagree")
+                for name in ("Highlighted Alpha", "Highlighted Beta"):
+                    page.locator(".libv2-card").filter(has_text=name).wait_for()
+
+                plan_markers = page.get_by_role("button", name="Plan Markers: 2", exact=True)
+                plan_markers.click()
+                if page.get_by_role("combobox", name="Filter by collection").input_value() != "Singh360 Plan Markers":
+                    raise AssertionError("Plan Markers did not select its exact collection")
+                if page.locator(".libv2-card").count() != 2:
+                    raise AssertionError("Plan Markers count and displayed cards disagree")
+
+                all_shortcut.click()
+                general_card = page.locator(".libv2-card").filter(has_text="General Fixture")
+                favorite_button = general_card.get_by_role("button", name="Favorite General Fixture", exact=True)
+                favorite_button.click()
+                page.get_by_role("button", name="Favorites: 1", exact=True).click()
+                page.locator(".libv2-card").filter(has_text="General Fixture").wait_for()
+                if page.locator(".libv2-card").count() != 1:
+                    raise AssertionError("Favorites shortcut count and displayed cards disagree")
+
+                page.get_by_role("button", name="Saved Assemblies: 0", exact=True).click()
+                page.get_by_text("Active filter: Saved Assemblies", exact=True).wait_for()
+                page.get_by_role("button", name="Show All Components", exact=True).click()
+                page.wait_for_function(
+                    "count => document.querySelectorAll('.libv2-card').length === count",
+                    arg=active_count,
+                    timeout=10_000,
+                )
+                if all_shortcut.get_attribute("aria-pressed") != "true":
+                    raise AssertionError("empty Saved Assemblies recovery did not restore All Components")
+                if page.locator(".libv2-card").count() != active_count:
+                    raise AssertionError("Show All Components did not restore every active card")
+
                 card = page.locator(".libv2-card").filter(has_text=COMPONENT_NAME)
                 card.wait_for(timeout=15_000)
                 preview = card.locator("img").first
@@ -341,13 +460,14 @@ def main() -> int:
                 )
                 direct = matching(render_audit(page), COMPONENT_NAME)
                 assert_visible(direct, "direct insertion")
+                page.get_by_role("button", name="Recently Used: 1", exact=True).click()
+                if page.locator(".libv2-card").count() != 1:
+                    raise AssertionError("Recently Used count and displayed cards disagree")
+                page.locator(".libv2-card").filter(has_text=COMPONENT_NAME).wait_for()
                 page.screenshot(path=evidence / "02-direct-insert-visible.png", full_page=True)
 
-                saved_card = page.locator(".libv2-saved-legend-card").filter(
-                    has_text="V40 Visible Render Legend"
-                )
-                saved_card.wait_for(timeout=15_000)
-                saved_card.click()
+                page.get_by_role("button", name="Manage Library", exact=True).click()
+                page.get_by_role("button", name="Saved Legends (1)", exact=True).click()
                 page.get_by_role("heading", name="Build / Insert Symbol Legend").wait_for(timeout=15_000)
                 page.get_by_role("button", name="Insert legend", exact=True).click()
                 page.wait_for_function(
@@ -393,6 +513,15 @@ def main() -> int:
                 reloaded = render_audit(page)
                 for fragment in ("Existing Clipped V40 Fixture", COMPONENT_NAME, "Legend TS"):
                     assert_visible(matching(reloaded, fragment), f"reload {fragment}")
+                if not page.locator(".panel-left").is_visible():
+                    page.locator(".panel-rail-left").click()
+                    page.locator(".panel-left").wait_for(timeout=10_000)
+                if not page.locator(".libv2-section-nav").is_visible():
+                    page.locator(".nav-section-head").filter(has_text=re.compile("Components", re.IGNORECASE)).click()
+                page.get_by_role("button", name="Favorites: 1", exact=True).click()
+                page.locator(".libv2-card").filter(has_text="General Fixture").wait_for()
+                page.get_by_role("button", name="Recently Used: 1", exact=True).click()
+                page.locator(".libv2-card").filter(has_text=COMPONENT_NAME).wait_for()
                 page.screenshot(path=evidence / "04-save-reload-visible.png", full_page=True)
 
                 report["initialAudit"] = initial
