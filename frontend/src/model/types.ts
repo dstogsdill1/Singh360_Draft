@@ -405,7 +405,22 @@ export interface ProjectModel {
     appliedRevision?: number;
   };
   revisionHistory?: Array<{ revision: string; date: string; description?: string; exportedBy?: string }>;
+  savedAssemblies?: SavedAssembly[];
 }
+
+export interface SavedAssembly {
+  id: string;
+  name: string;
+  createdAt: string;
+  object: Record<string, unknown>;
+}
+
+export type QuickAssemblyId =
+  | 'signage-marker-trio'
+  | 'signage-legend'
+  | 'callout-block'
+  | 'generated-symbol-key'
+  | 'wicp-annotation-pack';
 
 export type ViewMode = 'normalized' | 'source';
 
@@ -430,6 +445,7 @@ export interface CanvasSelection {
   underline?: boolean;
   textAlign?: string;
   isText?: boolean;
+  text?: string;
   isConnector?: boolean;
   connectorKind?: 'line' | 'arrow' | 'polyline' | 'elbow';
   pointsCount?: number;
@@ -556,6 +572,9 @@ export interface CanvasApi {
   addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addLegend: (presetIds?: string[]) => void;
   addSymbolLegend: (config: SymbolLegendInsertConfig) => void;
+  addQuickAssembly: (kind: QuickAssemblyId) => Promise<void> | void;
+  captureSelectedAssembly: () => Record<string, unknown> | null;
+  addSavedAssembly: (assembly: SavedAssembly) => Promise<void> | void;
   normalizeSymbolSize: () => void;
   addPageTitle: (text: string) => void;
   addSectionHeader: (text: string) => void;

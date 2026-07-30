@@ -19,6 +19,7 @@ import {
   type LibV2HistoryEntry,
 } from '../api/client';
 import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
+import type { QuickAssemblyId, SavedAssembly } from '../model/types';
 import '../styles/libraryV2.css';
 
 interface Props {
@@ -31,6 +32,11 @@ interface Props {
   canInsert: boolean;
   activePageType?: string;
   onOpenLegendEditor?: () => void;
+  onOpenSymbolMapper?: () => void;
+  savedAssemblies?: SavedAssembly[];
+  onInsertSavedAssembly?: (assembly: SavedAssembly) => void;
+  onSaveSelectionAssembly?: () => void;
+  onInsertQuickAssembly?: (kind: QuickAssemblyId) => void;
 }
 
 type ViewRep = 'source' | 'edge' | 'bw';
@@ -290,7 +296,37 @@ function CardPreview({ c, rep, small = false }: { c: LibV2Component; rep: ViewRe
   );
 }
 
-export default function LibraryPanelV2({ onInsert, canInsert, activePageType, onOpenLegendEditor }: Props) {
+type LibrarySection = 'favorites' | 'assemblies' | 'refrigeration' | 'callouts' | 'signage' | 'all' | 'advanced';
+
+const LIBRARY_SECTIONS: Array<{ id: LibrarySection; label: string }> = [
+  { id: 'favorites', label: 'Project Favorites' },
+  { id: 'assemblies', label: 'Saved Assemblies' },
+  { id: 'refrigeration', label: 'Refrigeration Symbols' },
+  { id: 'callouts', label: 'Callouts 1–10' },
+  { id: 'signage', label: 'Safety Signage' },
+  { id: 'all', label: 'All Components' },
+  { id: 'advanced', label: 'Advanced / Symbol Mapper' },
+];
+
+const QUICK_ASSEMBLIES: Array<{ id: QuickAssemblyId; label: string }> = [
+  { id: 'signage-marker-trio', label: 'Signage Marker Trio' },
+  { id: 'signage-legend', label: 'Signage Legend' },
+  { id: 'callout-block', label: 'Callout Block' },
+  { id: 'generated-symbol-key', label: 'Generated Symbol Key' },
+  { id: 'wicp-annotation-pack', label: 'WICP Annotation Pack' },
+];
+
+export default function LibraryPanelV2({
+  onInsert,
+  canInsert,
+  activePageType,
+  onOpenLegendEditor,
+  onOpenSymbolMapper,
+  savedAssemblies = [],
+  onInsertSavedAssembly,
+  onSaveSelectionAssembly,
+  onInsertQuickAssembly,
+}: Props) {
   const [data, setData] = useState<LibV2Data | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -300,6 +336,7 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
   const [rep, setRep] = useState<ViewRep>('source');
   const [showDashboard, setShowDashboard] = useState(false);
   const [showLegacyItems, setShowLegacyItems] = useState(true);
+  const [section, setSection] = useState<LibrarySection>('favorites');
 
   const [builderQuery, setBuilderQuery] = useState('');
   const [builderCategory, setBuilderCategory] = useState('all');
@@ -419,6 +456,18 @@ export default function LibraryPanelV2({ onInsert, canInsert, activePageType, on
     }
     return rows;
   }, [components, query, category, collection, edits]);
+
+  const sectionCards = useMemo(() => {
+    const rows = visibleCards.filter((component) => {
+      const collectionName = collectionFor(component);
+      if (section === 'favorites') return Boolean(asAny(component).favorite);
+      if (section === 'refrigeration') return collectionName === MAPPER_SYMBOL_COLLECTION || categoriesFor(component).includes('refrigeration');
+      if (section === 'callouts') return collectionName === 'Callout Numbers';
+      if (section === 'signage') return collectionName === 'Safety Signage' || collectionName === 'Signage / Safety';
+      return section === 'all';
+    });
+    return section === 'callouts' ? rows.slice(0, 10) : rows;
+  }, [section, visibleCards]);
 
   const dashboardRows = useMemo(() => {
     const q = builderQuery.trim().toLowerCase();
@@ -821,6 +870,68 @@ This is NOT saved until you click Save All Edits.`,
 
   return (
     <div className="libv2">
+      <section className="libv2-quick-insert" aria-label="Quick Insert assemblies">
+        <strong>Quick Insert</strong>
+        <div className="libv2-quick-insert-grid">
+          {QUICK_ASSEMBLIES.map((assembly) => (
+            <button
+              key={assembly.id}
+              type="button"
+              disabled={!canInsert}
+              data-help-id={`assembly.${assembly.id}`}
+              onClick={() => onInsertQuickAssembly?.(assembly.id)}
+            >
+              {assembly.label}
+            </button>
+          ))}
+        </div>
+      </section>
+      <nav className="libv2-section-nav" aria-label="Component categories">
+        {LIBRARY_SECTIONS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={section === item.id ? 'active' : undefined}
+            aria-pressed={section === item.id}
+            onClick={() => setSection(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
+      {(section === 'favorites' || section === 'assemblies') && (
+        <section className="libv2-assemblies" aria-label="Saved assemblies">
+          <div className="libv2-saved-legends-head">
+            <strong>{section === 'favorites' ? 'Project Favorites' : 'Saved Assemblies'}</strong>
+            <button type="button" disabled={!canInsert} data-help-id="assembly.saveSelection" onClick={onSaveSelectionAssembly}>
+              Save Selection as Assembly
+            </button>
+          </div>
+          <div className="libv2-saved-legends-grid">
+            {savedAssemblies.map((assembly) => (
+              <button
+                key={assembly.id}
+                type="button"
+                className="libv2-saved-legend-card"
+                disabled={!canInsert}
+                onClick={() => onInsertSavedAssembly?.(assembly)}
+              >
+                <strong>{assembly.name}</strong>
+                <span>Editable persistent group</span>
+                <em>Insert</em>
+              </button>
+            ))}
+            {!savedAssemblies.length && <div className="libv2-empty">No project assemblies saved yet.</div>}
+          </div>
+        </section>
+      )}
+      {section === 'advanced' && (
+        <section className="libv2-advanced-actions" aria-label="Advanced component tools">
+          <button type="button" onClick={() => onOpenSymbolMapper?.()}>Open Symbol Mapper</button>
+          <button type="button" onClick={() => setShowDashboard(true)}>Manage Components</button>
+          <button type="button" onClick={() => openSavedLegend(preferredLegendTemplate?.id)}>Saved Symbol Legends</button>
+        </section>
+      )}
       <div className="libv2-controls">
         <input
           className="libv2-search"
@@ -883,10 +994,10 @@ This is NOT saved until you click Save All Edits.`,
       </div>
 
       <div className={`libv2-health ${loadError ? 'error' : ''}`}>
-        {loadError ? `Library error: ${loadError}` : loading ? 'Loading component library…' : `${visibleCards.length} shown · ${components.length} total · ${previewReady} previews ready`}
+        {loadError ? `Library error: ${loadError}` : loading ? 'Loading component library…' : `${sectionCards.length} shown · ${components.length} total · ${previewReady} previews ready`}
       </div>
 
-      {legendTemplates.length > 0 && (
+      {section === 'advanced' && legendTemplates.length > 0 && (
         <section className="libv2-saved-legends" aria-label="Saved symbol legends">
           <div className="libv2-saved-legends-head">
             <strong>Saved Symbol Legends</strong>
@@ -905,7 +1016,7 @@ This is NOT saved until you click Save All Edits.`,
       )}
 
       <div className="libv2-grid">
-        {visibleCards.map((c) => {
+        {sectionCards.map((c) => {
           const canCurrent = !!(variantUrl(c, rep) || previewUrl(c, rep));
           return (
             <div key={c.id} className={`libv2-card ${previewUrl(c, rep) ? '' : 'preview-missing'}`} title={displayNameFor(c)} draggable={canInsert && canCurrent} onDragStart={(e) => onDragStart(e, c)}>
@@ -929,7 +1040,7 @@ This is NOT saved until you click Save All Edits.`,
             </div>
           );
         })}
-        {!visibleCards.length && <div className="libv2-empty">No matching components.</div>}
+        {!sectionCards.length && section !== 'assemblies' && section !== 'advanced' && <div className="libv2-empty">No matching components.</div>}
       </div>
 
       {showDashboard && (

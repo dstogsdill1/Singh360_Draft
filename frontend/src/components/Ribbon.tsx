@@ -28,6 +28,7 @@ interface Props {
   lastWorkbookSync?: string;
   dirtyDomains: DirtyDomain[];
   saveError?: string;
+  saveStatusLabel?: string;
   onRetrySave: () => void;
   hasProject: boolean;
   view: ViewControls;
@@ -97,6 +98,7 @@ interface Props {
   onManagePageTemplates: () => void;
   onInsertSymbolLegend: () => void;
   onOpenSymbolMapper: () => void;
+  onSaveSelectionAssembly: () => void;
   onArchiveCurrentProject: () => void;
   renumberBadge?: boolean;
   theme: 'dark' | 'light';
@@ -135,6 +137,7 @@ export default function Ribbon({
   lastWorkbookSync,
   dirtyDomains,
   saveError,
+  saveStatusLabel,
   onRetrySave,
   hasProject,
   view,
@@ -167,6 +170,7 @@ export default function Ribbon({
   onManagePageTemplates,
   onInsertSymbolLegend,
   onOpenSymbolMapper,
+  onSaveSelectionAssembly,
   onArchiveCurrentProject,
   renumberBadge,
   theme,
@@ -257,6 +261,7 @@ export default function Ribbon({
             dirtyDomains={dirtyDomains}
             error={saveError}
             onRetry={onRetrySave}
+            labelOverride={saveStatusLabel}
           />
         </div>
       </div>
@@ -321,6 +326,7 @@ export default function Ribbon({
             <Group title="Group">
               <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.group} title="Group selected objects">Group</button>
               <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.ungroup} title="Ungroup selected group">Ungroup</button>
+              <button className="ribbon-btn" disabled={!hasSelection} data-help-id="assembly.saveSelection" onClick={onSaveSelectionAssembly}>Save Selection as Assembly</button>
               <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.unlockAll} title="Unlock all objects on this page">Unlock All</button>
             </Group>
           </>

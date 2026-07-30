@@ -401,6 +401,7 @@ def main() -> int:
                 # Generated component + saved legend: actual direct insertion,
                 # local save, and reload persistence without customer assets.
                 page.get_by_role("button", name="Components", exact=False).click()
+                page.get_by_role("button", name="All Components", exact=True).click()
                 for code in symbol_codes:
                     component_card = page.locator(".libv2-card").filter(has_text=f"{code} Test Symbol")
                     component_card.wait_for(timeout=10_000)
@@ -408,6 +409,7 @@ def main() -> int:
                     if image.count() and image.evaluate("(node) => getComputedStyle(node).objectFit") != "contain":
                         raise AssertionError(f"{code} component card is cropped instead of contained")
                     component_card.get_by_role("button", name="Insert", exact=True).click()
+                page.get_by_role("button", name="Advanced / Symbol Mapper", exact=True).click()
                 saved_legend_card = page.locator(".libv2-saved-legend-card").filter(
                     has_text="Sanitized Tooltip Legend"
                 )

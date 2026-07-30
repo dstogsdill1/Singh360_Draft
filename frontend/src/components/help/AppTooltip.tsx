@@ -136,6 +136,7 @@ export default function AppTooltip({
 
   if (
     !active
+    || document.documentElement.dataset.canvasSelectionActive === 'true'
     || document.querySelector(
       'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
     )

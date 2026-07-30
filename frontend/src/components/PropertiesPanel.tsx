@@ -279,6 +279,17 @@ export default function PropertiesPanel({
                 <input id="sel-name" type="text" title="A label for this object (does not appear on the sheet)" value={selection.name} onChange={(e) => onUpdateSelection({ name: e.target.value })} />
               </div>
             )}
+            {selection.isText && (
+              <div className="field">
+                <label htmlFor="sel-text">Text</label>
+                <textarea
+                  id="sel-text"
+                  rows={3}
+                  value={selection.text || ''}
+                  onChange={(e) => onUpdateSelection({ text: e.target.value })}
+                />
+              </div>
+            )}
             <div className="field-row">
               <div className="field">
                 <label htmlFor="sel-x" title="Horizontal position on the sheet (pixels from the left)">X Position</label>

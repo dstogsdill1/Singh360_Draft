@@ -18,7 +18,8 @@ import {
   type ExportWarning,
 } from './api/client';
 import type { SymbolMapperRenderResult } from './api/client';
-import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, SymbolLegendInsertConfig, ViewMode, Worksheet, ImageCropPlacement, ImageCropRect, ImageCropState } from './model/types';
+import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, QuickAssemblyId, SavedAssembly, SymbolLegendInsertConfig, ViewMode, Worksheet, ImageCropPlacement, ImageCropRect, ImageCropState } from './model/types';
+import { newCanvasObjectId } from './model/canvasObjectIdentity';
 import { writeRecoverySnapshot } from './model/recovery';
 import { duplicateAsAppManagedPage } from './model/pageDuplication';
 import { normalizeProjectAssetUrls } from './model/assetUrl';
@@ -167,6 +168,14 @@ export default function App() {
     stroke: '#111111', dash: 'solid', strokeWidth: 2, arrowStart: false, arrowEnd: false,
   });
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
+  useEffect(() => {
+    if (selection) document.documentElement.dataset.canvasSelectionActive = 'true';
+    else delete document.documentElement.dataset.canvasSelectionActive;
+    document.dispatchEvent(new Event('singh360:tooltip-context-changed'));
+    return () => {
+      delete document.documentElement.dataset.canvasSelectionActive;
+    };
+  }, [selection]);
   const [renumberOpen, setRenumberOpen] = useState(initialTool === 'renumber');
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
@@ -899,6 +908,82 @@ export default function App() {
     if (!isCanvasContext()) return;
     setOverlayMode(true);
     canvasApiRef.current?.addComponent(url, name, label, undefined, meta);
+  };
+
+  const insertQuickAssembly = (kind: QuickAssemblyId) => {
+    if (!isCanvasContext()) return;
+    setOverlayMode(true);
+    if (kind === 'signage-legend') {
+      canvasApiRef.current?.addSymbolLegend({
+        title: 'SIGNAGE LEGEND',
+        frame: true,
+        rows: [
+          { label: 'Leak detected / do not enter', acronym: 'DNE', symbolUrl: '/api/lib/asset/symbols/symbols_markers/rdm_sign_leak_dne.svg' },
+          { label: 'Person trapped', acronym: 'PT', symbolUrl: '/api/lib/asset/symbols/symbols_markers/rdm_sign_person_trapped.svg' },
+          { label: 'Help / trapped', acronym: 'HELP', symbolUrl: '/api/lib/asset/symbols/symbols_markers/rdm_sign_help_trapped.svg' },
+        ],
+      });
+      return;
+    }
+    if (kind === 'generated-symbol-key') {
+      const rows: SymbolLegendInsertConfig['rows'] = [];
+      const seen = new Set<string>();
+      const visit = (objects: Record<string, unknown>[]) => {
+        objects.forEach((object) => {
+          const sourceUrl = String(object.sourceUrl || object.src || '').trim();
+          const name = String(object.objName || object.symAcronym || 'Symbol').replace(/^Legend\s+/i, '');
+          if (sourceUrl && !/^Legend\s/i.test(String(object.objName || ''))) {
+            const key = `${sourceUrl}|${name}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              rows.push({
+                label: name,
+                acronym: String(object.symAcronym || ''),
+                category: String(object.symCategory || ''),
+                symbolUrl: sourceUrl,
+              });
+            }
+          }
+          if (Array.isArray(object.objects)) visit(object.objects as Record<string, unknown>[]);
+        });
+      };
+      visit(activePageRef.current?.canvasObjects || []);
+      if (!rows.length) {
+        window.alert('Insert at least one component symbol on this page before generating its symbol key.');
+        return;
+      }
+      canvasApiRef.current?.addSymbolLegend({ title: 'GENERATED SYMBOL KEY', frame: true, rows });
+      return;
+    }
+    void canvasApiRef.current?.addQuickAssembly(kind);
+  };
+
+  const saveSelectionAsAssembly = () => {
+    const object = canvasApiRef.current?.captureSelectedAssembly();
+    if (!object) {
+      window.alert('Select multiple objects and Group them before saving an assembly.');
+      return;
+    }
+    const proposed = String(object.objName || object.assemblyName || 'Saved Assembly');
+    const name = window.prompt('Assembly name', proposed)?.trim();
+    if (!name) return;
+    const assembly: SavedAssembly = {
+      id: newCanvasObjectId(),
+      name,
+      createdAt: new Date().toISOString(),
+      object,
+    };
+    setProjectSync((current) => current ? {
+      ...current,
+      savedAssemblies: [...(current.savedAssemblies || []), assembly],
+    } : current);
+    void confirmLatestProjectSaved(15_000);
+  };
+
+  const insertSavedAssembly = (assembly: SavedAssembly) => {
+    if (!isCanvasContext()) return;
+    setOverlayMode(true);
+    void canvasApiRef.current?.addSavedAssembly(assembly);
   };
 
   const onDropComponent = (
@@ -2061,6 +2146,15 @@ export default function App() {
       lastWorkbookSync={lastWorkbookSync}
       dirtyDomains={dirtyDomains}
       saveError={saveError}
+      saveStatusLabel={
+        saveStatus === 'localSavedSyncPending'
+        && (
+          /layout[\s_-]*(sandbox|only)/i.test(project?.metadata.projectName || '')
+          || /layout[\s_-]*only/i.test(project?.sourceWorkbookName || '')
+        )
+          ? 'GENERATED WORKBOOK UPDATE PENDING'
+          : undefined
+      }
       onRetrySave={() => { void saveNow(); }}
       hasProject={!!project}
       view={view}
@@ -2141,6 +2235,7 @@ export default function App() {
       onManagePageTemplates={() => { setTemplateLibManageOnly(true); setTemplateLibOpen(true); }}
       onInsertSymbolLegend={() => setSymbolLegendOpen(true)}
       onOpenSymbolMapper={() => setSymbolMapperOpen(true)}
+      onSaveSelectionAssembly={saveSelectionAsAssembly}
       onArchiveCurrentProject={() => void onArchiveCurrentProject()}
       theme={theme}
       onSetTheme={setThemeState}
@@ -2257,6 +2352,11 @@ export default function App() {
               canInsert={canvasEnabled}
               activePageType={activePage?.pageType}
               onOpenLegendEditor={() => setSymbolLegendOpen(true)}
+              onOpenSymbolMapper={() => setSymbolMapperOpen(true)}
+              savedAssemblies={project.savedAssemblies}
+              onInsertSavedAssembly={insertSavedAssembly}
+              onSaveSelectionAssembly={saveSelectionAsAssembly}
+              onInsertQuickAssembly={insertQuickAssembly}
             />
           </CollapsibleSection>
         </>

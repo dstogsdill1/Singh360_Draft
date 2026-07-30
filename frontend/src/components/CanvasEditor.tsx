@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
-import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, filters, type FabricObject } from 'fabric';
-import type { BusOptions, CanvasApi, CanvasSelection, ImageCropPlacement, ImageCropRect, ImageCropState, LineStyle, SymbolLegendInsertConfig } from '../model/types';
+import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, filters, util, type FabricObject } from 'fabric';
+import type { BusOptions, CanvasApi, CanvasSelection, ImageCropPlacement, ImageCropRect, ImageCropState, LineStyle, QuickAssemblyId, SavedAssembly, SymbolLegendInsertConfig } from '../model/types';
 import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
 import { BODY_W, BODY_H } from '../model/sheetGeometry';
 import { normalizeAssetUrl, normalizeCanvasObjects } from '../model/assetUrl';
 import { loadSafeFabricImage, repairSerializedComponentSvgImages } from '../model/fabricImageLoader';
 import { scaleImageToSize, standardSymbolSize, SYMBOL_SIZE_SMALL } from '../model/symbolSizing';
+import { assignFreshCanvasObjectIds, newCanvasObjectId } from '../model/canvasObjectIdentity';
 
 interface Props {
   serialized: Record<string, unknown>[];
@@ -22,7 +23,14 @@ interface Props {
 const CANVAS_W = BODY_W;
 const CANVAS_H = BODY_H;
 const SNAP = 16;
-const SER_PROPS = ['objName', 'sourceUrl', 'symCategory', 'symAcronym', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented', 'textBoxFill', 'textBoxFillOpacity', 'textBoxStroke', 'textBoxStrokeWidth', 'textBoxPadding', 'textBoxRadius'];
+const SER_PROPS = ['objectId', 'assemblyId', 'assemblyName', 'objName', 'sourceUrl', 'symCategory', 'symAcronym', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented', 'textBoxFill', 'textBoxFillOpacity', 'textBoxStroke', 'textBoxStrokeWidth', 'textBoxPadding', 'textBoxRadius'];
+
+function ensureFabricObjectIds(object: FabricObject, fresh = false): void {
+  const record = object as unknown as Record<string, unknown>;
+  if (fresh || typeof record.objectId !== 'string' || !record.objectId) record.objectId = newCanvasObjectId();
+  const children = (object as unknown as { getObjects?: () => FabricObject[] }).getObjects?.() || [];
+  children.forEach((child) => ensureFabricObjectIds(child, fresh));
+}
 
 // S360 POWERPOINT TEXT BOX FORMATTING V1
 type S360PowerPointTextBox = Textbox & {
@@ -130,6 +138,7 @@ function summarize(obj: FabricObject): CanvasSelection {
     underline: anyObj.underline === true,
     textAlign: typeof anyObj.textAlign === 'string' ? (anyObj.textAlign as string) : undefined,
     isText,
+    text: isText && typeof anyObj.text === 'string' ? anyObj.text : undefined,
     isTextBox,
     textBoxFill: typeof anyObj.textBoxFill === 'string' ? anyObj.textBoxFill : 'transparent',
     textBoxFillOpacity: typeof anyObj.textBoxFillOpacity === 'number' ? anyObj.textBoxFillOpacity : 1,
@@ -346,6 +355,11 @@ type RenderedImageAudit = {
 
 type RenderAuditWindow = Window & typeof globalThis & {
   __S360_CANVAS_RENDER_AUDIT__?: () => RenderedImageAudit[];
+  __S360_LAYOUT_WORKFLOW_AUDIT__?: {
+    objects: () => Record<string, unknown>[];
+    selectByName: (name: string) => boolean;
+    selectAllByName: (name: string) => number;
+  };
 };
 
 function renderedSvgImageAudit(objects: FabricObject[]): RenderedImageAudit[] {
@@ -456,6 +470,7 @@ export default function CanvasEditor({
   // never added as objects, so they cannot interfere with click hit-testing.
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
   const objectClipboardRef = useRef<FabricObject | null>(null);
+  const lastAssemblySelectionRef = useRef<FabricObject | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -473,8 +488,36 @@ export default function CanvasEditor({
     fabricRef.current = canvas;
     const auditWindow = window as RenderAuditWindow;
     const renderAuditEnabled = new URLSearchParams(window.location.search).get('renderAudit') === '1';
+    const workflowAuditEnabled = new URLSearchParams(window.location.search).get('workflowAudit') === '1';
     if (renderAuditEnabled) {
       auditWindow.__S360_CANVAS_RENDER_AUDIT__ = () => renderedSvgImageAudit(canvas.getObjects());
+    }
+    if (workflowAuditEnabled) {
+      auditWindow.__S360_LAYOUT_WORKFLOW_AUDIT__ = {
+        objects: () => normalizeCanvasObjects((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]),
+        selectByName: (name: string) => {
+          const object = canvas.getObjects().find((candidate) =>
+            String((candidate as unknown as Record<string, unknown>).objName || '') === name,
+          );
+          if (!object) return false;
+          canvas.setActiveObject(object);
+          canvas.requestRenderAll();
+          onSelRef.current(summarize(object));
+          return true;
+        },
+        selectAllByName: (name: string) => {
+          const objects = canvas.getObjects().filter((candidate) =>
+            String((candidate as unknown as Record<string, unknown>).objName || '') === name,
+          );
+          if (!objects.length) return 0;
+          const active = objects.length === 1 ? objects[0] : new ActiveSelection(objects, { canvas });
+          canvas.setActiveObject(active);
+          canvas.requestRenderAll();
+          lastAssemblySelectionRef.current = active;
+          onSelRef.current(summarize(active));
+          return objects.length;
+        },
+      };
     }
 
     // Robust pointer → scene mapping. The sheet is rendered inside a CSS
@@ -543,7 +586,10 @@ export default function CanvasEditor({
         });
         await canvas.loadFromJSON({ version: '6', objects: liveObjects });
         if (isTearingDown) return;
-        canvas.getObjects().forEach((o) => styleForSelection(o));
+        canvas.getObjects().forEach((o) => {
+          ensureFabricObjectIds(o);
+          styleForSelection(o);
+        });
         canvas.renderAll();
         historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
         histIdxRef.current = 0;
@@ -561,15 +607,25 @@ export default function CanvasEditor({
     }
 
     canvas.on('object:modified', onChanged);
-    canvas.on('object:added', (e) => { if (isTearingDown || isGuideObj(e?.target)) return; onChanged(); });
+    canvas.on('object:added', (e) => {
+      if (isTearingDown || isGuideObj(e?.target)) return;
+      if (e?.target) ensureFabricObjectIds(e.target);
+      onChanged();
+    });
     canvas.on('object:removed', (e) => { if (isTearingDown || isGuideObj(e?.target)) return; onChanged(); });
     canvas.on('selection:created', () => {
       const o = canvas.getActiveObject();
-      if (o) onSelRef.current(summarize(o));
+      if (o) {
+        if (o.type === 'group' || o.type === 'activeselection') lastAssemblySelectionRef.current = o;
+        onSelRef.current(summarize(o));
+      }
     });
     canvas.on('selection:updated', () => {
       const o = canvas.getActiveObject();
-      if (o) onSelRef.current(summarize(o));
+      if (o) {
+        if (o.type === 'group' || o.type === 'activeselection') lastAssemblySelectionRef.current = o;
+        onSelRef.current(summarize(o));
+      }
     });
     canvas.on('selection:cleared', () => onSelRef.current(null));
 
@@ -973,6 +1029,7 @@ export default function CanvasEditor({
       window.removeEventListener('keydown', onKeyDown);
       canvas.upperCanvasEl?.removeEventListener('dblclick', onDblClick);
       if (renderAuditEnabled) delete auditWindow.__S360_CANVAS_RENDER_AUDIT__;
+      if (workflowAuditEnabled) delete auditWindow.__S360_LAYOUT_WORKFLOW_AUDIT__;
       void canvas.dispose();
       fabricRef.current = null;
     };
@@ -1629,10 +1686,114 @@ export default function CanvasEditor({
           originY: 'top',
           subTargetCheck: true,
         });
-        (group as unknown as Record<string, unknown>).objName = 'Singh360 Symbol Legend';
+        (group as unknown as Record<string, unknown>).objName =
+          title === 'GENERATED SYMBOL KEY'
+            ? 'Generated Symbol Key'
+            : title === 'SIGNAGE LEGEND'
+              ? 'Signage Legend'
+              : 'Singh360 Symbol Legend';
         styleForSelection(group);
         c.add(group);
         c.setActiveObject(group);
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+      },
+      addQuickAssembly: async (kind: QuickAssemblyId) => {
+        const c = fabricRef.current;
+        if (!c || kind === 'generated-symbol-key' || kind === 'signage-legend') return;
+        const parts: FabricObject[] = [];
+        let name = '';
+        if (kind === 'signage-marker-trio') {
+          name = 'Signage Marker Trio';
+          const urls = [
+            '/api/lib/asset/symbols/symbols_markers/rdm_sign_leak_dne.svg',
+            '/api/lib/asset/symbols/symbols_markers/rdm_sign_person_trapped.svg',
+            '/api/lib/asset/symbols/symbols_markers/rdm_sign_help_trapped.svg',
+          ];
+          const loaded = await Promise.all(urls.map(async (url, index) => {
+            try {
+              const image = await loadSafeFabricImage(url);
+              const scale = scaleImageToSize(image.width || 1, image.height || 1, 92, 92);
+              image.set({ left: index * 116, top: 0, scaleX: scale, scaleY: scale });
+              Object.assign(image as unknown as Record<string, unknown>, {
+                objName: `Signage Marker ${index + 1}`,
+                sourceUrl: url,
+                symCategory: 'symbols_markers',
+              });
+              return image as FabricObject;
+            } catch {
+              const fallback = new Rect({ left: index * 116, top: 0, width: 92, height: 92, fill: '#fff8cc', stroke: '#d12b2b', strokeWidth: 4 });
+              (fallback as unknown as Record<string, unknown>).objName = `Signage Marker ${index + 1}`;
+              return fallback;
+            }
+          }));
+          parts.push(...loaded);
+        } else if (kind === 'callout-block') {
+          name = 'Callout Block';
+          const number = new Textbox('1', { left: 0, top: 0, width: 48, height: 48, fontSize: 25, fontWeight: 'bold', textAlign: 'center', fill: '#111', editable: true });
+          const ring = new Circle({ left: 0, top: 0, radius: 24, fill: '#fff', stroke: '#111', strokeWidth: 2 });
+          number.set({ top: 9 });
+          const note = new Textbox('EDIT CALLOUT NOTE', { left: 68, top: 4, width: 260, fontSize: 16, fill: '#111', editable: true });
+          const leader = new Connector([24, 50, 24, 112, 170, 112], { stroke: '#111', strokeWidth: 2, arrowEnd: true, connectorKind: 'elbow' });
+          Object.assign(number as unknown as Record<string, unknown>, { objName: 'Callout Number' });
+          Object.assign(note as unknown as Record<string, unknown>, { objName: 'Callout Note' });
+          Object.assign(leader as unknown as Record<string, unknown>, { objName: 'Callout Leader' });
+          parts.push(ring, number, note, leader);
+        } else {
+          name = 'WICP Annotation Pack';
+          const title = new Textbox('WICP ANNOTATION', { left: 0, top: 0, width: 310, fontSize: 19, fontWeight: 'bold', fill: '#12539b', editable: true });
+          const note = new Textbox('EDIT WICP NOTE', { left: 0, top: 40, width: 310, fontSize: 15, fill: '#111', editable: true });
+          const box = new Rect({ left: -10, top: -10, width: 340, height: 112, fill: '#fff', stroke: '#12539b', strokeWidth: 2, rx: 5, ry: 5 });
+          const leader = new Connector([160, 102, 160, 166, 245, 166], { stroke: '#12539b', strokeWidth: 2, arrowEnd: true, connectorKind: 'elbow' });
+          Object.assign(title as unknown as Record<string, unknown>, { objName: 'WICP Annotation Title' });
+          Object.assign(note as unknown as Record<string, unknown>, { objName: 'WICP Annotation Note' });
+          Object.assign(leader as unknown as Record<string, unknown>, { objName: 'WICP Annotation Leader' });
+          parts.push(box, title, note, leader);
+        }
+        const group = new Group(parts, { left: CANVAS_W * 0.42, top: CANVAS_H * 0.18, subTargetCheck: true });
+        Object.assign(group as unknown as Record<string, unknown>, {
+          objName: name,
+          assemblyId: kind,
+          assemblyName: name,
+        });
+        ensureFabricObjectIds(group, true);
+        styleForSelection(group);
+        c.add(group);
+        c.setActiveObject(group);
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+      },
+      captureSelectedAssembly: () => {
+        const c = fabricRef.current;
+        const active = c?.getActiveObject() || lastAssemblySelectionRef.current;
+        if (!c || !active) return null;
+        if (active.type !== 'group' && active.type !== 'activeselection') return null;
+        return normalizeCanvasObjects([
+          active.toObject(SER_PROPS) as Record<string, unknown>,
+        ])[0] || null;
+      },
+      addSavedAssembly: async (assembly: SavedAssembly) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const serialized = assignFreshCanvasObjectIds(assembly.object);
+        const [object] = await util.enlivenObjects([serialized]) as FabricObject[];
+        if (!object) return;
+        object.set({
+          left: Math.max(24, (object.left ?? 0) + 24),
+          top: Math.max(24, (object.top ?? 0) + 24),
+          selectable: true,
+          evented: true,
+        });
+        Object.assign(object as unknown as Record<string, unknown>, {
+          assemblyId: assembly.id,
+          assemblyName: assembly.name,
+          objName: assembly.name,
+        });
+        ensureFabricObjectIds(object, true);
+        styleForSelection(object);
+        object.setCoords();
+        c.add(object);
+        c.setActiveObject(object);
         c.requestRenderAll();
         onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
@@ -1707,6 +1868,7 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         if (!c || !objectClipboardRef.current) return;
         void objectClipboardRef.current.clone(SER_PROPS).then((pasted: FabricObject) => {
+          ensureFabricObjectIds(pasted, true);
           pasted.set({ left: (pasted.left ?? 0) + 24, top: (pasted.top ?? 0) + 24 });
           styleForSelection(pasted);
           c.add(pasted);
@@ -1727,6 +1889,7 @@ export default function CanvasEditor({
           return;
         }
         void o.clone(SER_PROPS).then((clone: FabricObject) => {
+          ensureFabricObjectIds(clone, true);
           clone.set({ left: (o.left ?? 0) + 12, top: (o.top ?? 0) + 12 });
           (clone as unknown as Record<string, unknown>).objName = (o as unknown as Record<string, unknown>).objName;
           styleForSelection(clone);
@@ -1761,6 +1924,7 @@ export default function CanvasEditor({
             return;
           }
           const grp = new Group(objs);
+          ensureFabricObjectIds(grp);
           objs.forEach((o) => c.remove(o));
           c.add(grp);
           c.setActiveObject(grp);
@@ -1941,6 +2105,10 @@ export default function CanvasEditor({
         if (patch.strokeWidth !== undefined) o.set('strokeWidth', patch.strokeWidth);
         if (patch.opacity !== undefined) o.set('opacity', patch.opacity);
         if (patch.name !== undefined) anyO.objName = patch.name;
+        if (patch.text !== undefined && 'text' in o) {
+          o.set('text', patch.text);
+          if (typeof anyO.initDimensions === 'function') (anyO.initDimensions as () => void)();
+        }
         if (patch.x !== undefined) o.set('left', patch.x);
         if (patch.y !== undefined) o.set('top', patch.y);
         if (patch.angle !== undefined) o.set('angle', patch.angle);

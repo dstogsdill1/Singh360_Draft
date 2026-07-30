@@ -13,6 +13,7 @@ export default function SaveStateIndicator({
   dirtyDomains,
   error,
   onRetry,
+  labelOverride,
 }: {
   state: SaveState;
   lastLocalSave?: string;
@@ -20,6 +21,7 @@ export default function SaveStateIndicator({
   dirtyDomains: DirtyDomain[];
   error?: string;
   onRetry: () => void;
+  labelOverride?: string;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const dirty = state === 'dirtyLocal' || state === 'dirtyWorkspace' || state === 'saveFailed';
@@ -35,7 +37,7 @@ export default function SaveStateIndicator({
         onClick={state === 'saveFailed' ? onRetry : () => setDetailsOpen((value) => !value)}
         aria-expanded={detailsOpen}
       >
-        {SAVE_STATE_LABELS[state]}
+        {labelOverride || SAVE_STATE_LABELS[state]}
       </button>
       <div className="save-state-times">
         {lastLocalSave && (

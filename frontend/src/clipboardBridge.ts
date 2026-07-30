@@ -5,10 +5,17 @@ import {
   util,
   type FabricObject,
 } from 'fabric';
+import { assignFreshCanvasObjectIds, newCanvasObjectId } from './model/canvasObjectIdentity';
 
 const CLIPBOARD_PREFIX = 'SINGH360_CANVAS_V1:';
 const SERIAL_PROPS = [
+  'objectId',
+  'assemblyId',
+  'assemblyName',
   'objName',
+  'sourceUrl',
+  'symCategory',
+  'symAcronym',
   'arrowStart',
   'arrowEnd',
   'connectorKind',
@@ -144,7 +151,9 @@ async function addSerializedPayload(
   if (!payload.objects.length) return false;
 
   try {
-    const objects = await util.enlivenObjects(payload.objects) as FabricObject[];
+    const objects = await util.enlivenObjects(
+      payload.objects.map((object) => assignFreshCanvasObjectIds(object)),
+    ) as FabricObject[];
     if (!objects.length) return false;
 
     const added: FabricObject[] = [];
@@ -193,6 +202,7 @@ async function addImageBlob(canvas: Canvas, blob: Blob): Promise<boolean> {
       evented: true,
     });
     (image as unknown as Record<string, unknown>).objName = 'Clipboard image';
+    (image as unknown as Record<string, unknown>).objectId = newCanvasObjectId();
     canvas.add(image);
     canvas.setActiveObject(image);
     canvas.requestRenderAll();

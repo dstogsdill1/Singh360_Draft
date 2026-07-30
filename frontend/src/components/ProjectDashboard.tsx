@@ -87,6 +87,11 @@ export default function ProjectDashboard({ project }: Props) {
     () => project ? readWorkspaceState(project.id) : null,
   );
   const newWorkbookRef = useRef<HTMLInputElement | null>(null);
+  const layoutOnly = Boolean(
+    /layout[\s_-]*(sandbox|only)/i.test(project?.metadata.projectName || '')
+    || /layout[\s_-]*only/i.test(project?.sourceWorkbookName || ''),
+  );
+  const generatedWorkbookPath = String(link?.path || project?.workbookSync?.workbook || '').trim();
 
   const reload = async () => {
     const list = await listProjects();
@@ -589,7 +594,9 @@ export default function ProjectDashboard({ project }: Props) {
                     <p>G:, Google Drive for Desktop, OneDrive, network, or local Excel workbook</p>
                   </div>
                   <span className={`sync-badge ${link?.status || 'not_linked'}`}>
-                    {link?.status === 'in_sync' && !workbookVerified
+                    {layoutOnly && ['app_changed', 'pending'].includes(link?.status || '')
+                      ? 'GENERATED WORKBOOK UPDATE PENDING'
+                      : link?.status === 'in_sync' && !workbookVerified
                       ? 'Verification required'
                       : statusLabel[link?.status || 'not_linked'] || link?.status}
                   </span>
@@ -633,6 +640,28 @@ export default function ProjectDashboard({ project }: Props) {
                     </div>
                   )}
                 </div>
+                {layoutOnly && (
+                  <div className="workbook-selection-pending generated-workbook-path">
+                    <strong>Generated Workbook Path</strong>
+                    <code data-testid="generated-workbook-path">{generatedWorkbookPath || 'Not generated yet'}</code>
+                    <div className="workbook-action-row">
+                      <button type="button" disabled={!project || !generatedWorkbookPath} onClick={() => project && void openLinkedWorkbook(project.id)}>Open Workbook</button>
+                      <button type="button" disabled={!project || !generatedWorkbookPath} onClick={() => project && void revealLinkedWorkbook(project.id)}>Open Folder</button>
+                      <button
+                        type="button"
+                        disabled={!generatedWorkbookPath}
+                        data-help-id="workbook.copyPath"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(generatedWorkbookPath)
+                            .then(() => setMessage('Generated workbook path copied.'))
+                            .catch(() => setMessage('Copy Path failed. Select and copy the displayed path.'));
+                        }}
+                      >
+                        Copy Path
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="workbook-action-row">
                   <button type="button" disabled={!project || !!busy} onClick={() => void browseWorkbook()}>Change Workbook</button>
                   <button type="button" className="primary" disabled={!project || !!busy || !link?.path} onClick={() => void reviewSync()}>

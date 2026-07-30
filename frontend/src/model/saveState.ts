@@ -19,7 +19,8 @@ export type DirtyDomain =
   | 'canvas objects'
   | 'Excel Layout tables'
   | 'title block or project metadata'
-  | 'component/legend placement';
+  | 'component/legend placement'
+  | 'saved assemblies';
 
 export const SAVE_STATE_LABELS: Record<SaveState, string> = {
   cleanLocal: 'PROJECT SAVED',
@@ -89,6 +90,7 @@ export function classifyProjectChanges(
   if (!saved || !current) return [];
   const domains = new Set<DirtyDomain>();
   if (stable(saved.metadata) !== stable(current.metadata)) domains.add('title block or project metadata');
+  if (stable(saved.savedAssemblies) !== stable(current.savedAssemblies)) domains.add('saved assemblies');
   const savedPages = saved.pages || [];
   const currentPages = current.pages || [];
   if (

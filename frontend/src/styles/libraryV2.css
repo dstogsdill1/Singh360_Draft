@@ -1,5 +1,10 @@
 /* Milestone 4A â€” Component Library V2 panel styles. */
 .libv2 { display: flex; flex-direction: column; gap: 6px; font-size: 12px; min-width: 0; overflow-x: hidden; }
+.libv2-quick-insert, .libv2-assemblies, .libv2-advanced-actions { display: grid; gap: 8px; padding: 10px; border-bottom: 1px solid #d8dee8; }
+.libv2-quick-insert-grid, .libv2-section-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.libv2-section-nav { padding: 10px; border-bottom: 1px solid #d8dee8; }
+.libv2-section-nav button:last-child { grid-column: 1 / -1; }
+.libv2-section-nav button.active { color: #fff; background: #12539b; }
 .libv2-controls { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .libv2-row { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .libv2-row.wrap { flex-wrap: wrap; }

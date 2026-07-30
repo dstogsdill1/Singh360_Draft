@@ -15,6 +15,10 @@ function modalIsOpen(): boolean {
   ));
 }
 
+function tooltipIsSuppressed(): boolean {
+  return modalIsOpen() || document.documentElement.dataset.canvasSelectionActive === 'true';
+}
+
 function withDescription(target: HTMLElement): void {
   const ids = new Set((target.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
   ids.add(APP_TOOLTIP_ID);
@@ -70,7 +74,7 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
     if (registryErrors.length) console.error('Singh360 tooltip registry errors', registryErrors);
 
     const observer = new MutationObserver((mutations) => {
-      if (modalIsOpen()) close();
+      if (tooltipIsSuppressed()) close();
       mutations.forEach((mutation) => {
         if (mutation.type === 'attributes' && mutation.target instanceof HTMLElement) {
           hydrateTooltipTargets(mutation.target);
@@ -89,7 +93,7 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
     });
 
     const onMouseOver = (event: MouseEvent) => {
-      if (modalIsOpen()) {
+      if (modalIsOpen() || tooltipIsSuppressed()) {
         close();
         return;
       }
@@ -99,7 +103,7 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
       if (activeRef.current?.target === target) return;
       if (hoverTimerRef.current !== null) window.clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = window.setTimeout(() => {
-        if (modalIsOpen()) {
+        if (tooltipIsSuppressed()) {
           close();
           return;
         }
@@ -121,7 +125,7 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
     };
 
     const onFocusIn = (event: FocusEvent) => {
-      if (modalIsOpen()) {
+      if (modalIsOpen() || tooltipIsSuppressed()) {
         close();
         return;
       }
@@ -146,6 +150,9 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
     };
 
     const onViewportChange = () => setViewportTick((value) => value + 1);
+    const onTooltipContextChanged = () => {
+      if (tooltipIsSuppressed()) close();
+    };
     document.addEventListener('mouseover', onMouseOver, true);
     document.addEventListener('mouseout', onMouseOut, true);
     document.addEventListener('focusin', onFocusIn, true);
@@ -153,6 +160,7 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
     document.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('resize', onViewportChange);
     window.addEventListener('scroll', onViewportChange, true);
+    document.addEventListener('singh360:tooltip-context-changed', onTooltipContextChanged);
 
     const auditEnabled = window.location.port !== '8766'
       || new URLSearchParams(window.location.search).get('tooltipAudit') === '1';
@@ -167,6 +175,7 @@ export default function TooltipProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('resize', onViewportChange);
       window.removeEventListener('scroll', onViewportChange, true);
+      document.removeEventListener('singh360:tooltip-context-changed', onTooltipContextChanged);
       delete window.__S360_TOOLTIP_AUDIT__;
       close();
     };
