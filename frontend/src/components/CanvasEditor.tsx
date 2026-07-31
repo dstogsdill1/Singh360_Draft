@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, filters, util, type FabricObject } from 'fabric';
-import type { BusOptions, CanvasApi, CanvasSelection, ImageCropPlacement, ImageCropRect, ImageCropState, LineStyle, QuickAssemblyId, SavedAssembly, SymbolLegendInsertConfig } from '../model/types';
+import type { BusOptions, CalloutSetConfig, CanvasApi, CanvasSelection, ImageCropPlacement, ImageCropRect, ImageCropState, LibraryComponentInsertMeta, LineStyle, PlacedSymbolEditorConfig, QuickAssemblyId, SavedAssembly, SmartComponentConfig, SmartComponentType, SymbolLegendInsertConfig } from '../model/types';
 import { Connector } from './connector';
 import { CONNECTOR_PRESETS, dashArray, type DashStyle } from '../model/connectorPresets';
 import { BODY_W, BODY_H } from '../model/sheetGeometry';
@@ -8,6 +8,10 @@ import { normalizeAssetUrl, normalizeCanvasObjects } from '../model/assetUrl';
 import { loadSafeFabricImage, repairSerializedComponentSvgImages } from '../model/fabricImageLoader';
 import { scaleImageToSize, standardSymbolSize, SYMBOL_SIZE_SMALL } from '../model/symbolSizing';
 import { assignFreshCanvasObjectIds, newCanvasObjectId } from '../model/canvasObjectIdentity';
+import { buildSmartComponent } from '../model/smartComponentFactory';
+import { normalizeSmartComponentConfig, SMART_COMPONENT_CHOICES } from '../model/smartComponents';
+import { buildCalloutSet } from '../model/calloutFactory';
+import { normalizeCalloutSetConfig } from '../model/callouts';
 
 interface Props {
   serialized: Record<string, unknown>[];
@@ -23,7 +27,10 @@ interface Props {
 const CANVAS_W = BODY_W;
 const CANVAS_H = BODY_H;
 const SNAP = 16;
-const SER_PROPS = ['objectId', 'assemblyId', 'assemblyName', 'objName', 'sourceUrl', 'symCategory', 'symAcronym', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented', 'textBoxFill', 'textBoxFillOpacity', 'textBoxStroke', 'textBoxStrokeWidth', 'textBoxPadding', 'textBoxRadius'];
+const SER_PROPS = ['objectId', 'assemblyId', 'assemblyName', 'objName', 'sourceUrl', 'symCategory', 'symAcronym', 'libraryComponentId', 'libraryCollection', 'favorite', 'placedSymbolType', 'placedSymbolConfig', 'placedSymbolRole', 'calloutComponentType', 'calloutConfig', 'calloutVersion', 'calloutRole', 'smartComponentType', 'smartConfig', 'smartComponentVersion', 'smartRole', 'smartParentId', 'smartParentType', 'smartParentConfig', 'smartParentName', 'subTargetCheck', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented', 'visible', 'textBoxFill', 'textBoxFillOpacity', 'textBoxStroke', 'textBoxStrokeWidth', 'textBoxPadding', 'textBoxRadius'];
+const SMART_COMPONENT_TYPES = new Set<SmartComponentType>(
+  SMART_COMPONENT_CHOICES.map((item) => item.kind),
+);
 
 function ensureFabricObjectIds(object: FabricObject, fresh = false): void {
   const record = object as unknown as Record<string, unknown>;
@@ -118,6 +125,23 @@ function summarize(obj: FabricObject): CanvasSelection {
   const isImage = obj.type === 'image';
   const isGroup = obj.type === 'group';
   const objectName = typeof anyObj.objName === 'string' ? anyObj.objName : '';
+  const smartComponentType = typeof anyObj.smartComponentType === 'string'
+    && SMART_COMPONENT_TYPES.has(anyObj.smartComponentType as SmartComponentType)
+    ? anyObj.smartComponentType as SmartComponentType
+    : undefined;
+  const smartConfig = smartComponentType && anyObj.smartConfig
+    ? normalizeSmartComponentConfig(anyObj.smartConfig, smartComponentType)
+    : undefined;
+  const calloutConfig = anyObj.calloutComponentType === 'callout-set' && anyObj.calloutConfig
+    ? normalizeCalloutSetConfig(anyObj.calloutConfig)
+    : undefined;
+  const placedSymbolConfig = anyObj.placedSymbolConfig && typeof anyObj.placedSymbolConfig === 'object'
+    ? anyObj.placedSymbolConfig as Record<string, unknown>
+    : {};
+  const sourceUrl = typeof anyObj.sourceUrl === 'string' ? anyObj.sourceUrl : undefined;
+  const isPlacedSymbol = anyObj.placedSymbolType === 'library-symbol'
+    || Boolean(sourceUrl)
+    || isImage;
   const isLegend = isGroup && /legend|marker/i.test(objectName);
   const dashArr = anyObj.strokeDashArray as number[] | undefined | null;
   const dash = !dashArr || dashArr.length === 0 ? 'solid'
@@ -153,6 +177,15 @@ function summarize(obj: FabricObject): CanvasSelection {
     isImage,
     isGroup,
     isLegend,
+    smartComponentType,
+    smartConfig,
+    calloutConfig,
+    sourceUrl,
+    symbolLabel: typeof placedSymbolConfig.label === 'string' ? placedSymbolConfig.label : '',
+    symCategory: typeof anyObj.symCategory === 'string' ? anyObj.symCategory : '',
+    libraryComponentId: typeof anyObj.libraryComponentId === 'string' ? anyObj.libraryComponentId : undefined,
+    favorite: anyObj.favorite === true,
+    isPlacedSymbol,
     pdfSource: typeof anyObj.pdfSource === 'string' ? (anyObj.pdfSource as string) : undefined,
     pdfPage: typeof anyObj.pdfPage === 'number' ? (anyObj.pdfPage as number) : undefined,
     pdfDpi: typeof anyObj.pdfDpi === 'number' ? (anyObj.pdfDpi as number) : undefined,
@@ -359,6 +392,9 @@ type RenderAuditWindow = Window & typeof globalThis & {
     objects: () => Record<string, unknown>[];
     selectByName: (name: string) => boolean;
     selectAllByName: (name: string) => number;
+    selectByNames: (names: string[]) => number;
+    screenPointByName: (name: string) => { x: number; y: number } | null;
+    deselect: () => void;
   };
 };
 
@@ -411,6 +447,82 @@ function renderedSvgImageAudit(objects: FabricObject[]): RenderedImageAudit[] {
   };
   visit(objects);
   return results;
+}
+
+type Bounds = { left: number; top: number; width: number; height: number };
+
+function selectedCanvasObjects(canvas: Canvas): FabricObject[] {
+  const active = canvas.getActiveObject();
+  if (!active) return [];
+  return active.type === 'activeselection'
+    ? (active as ActiveSelection).getObjects()
+    : [active];
+}
+
+function combinedBounds(objects: FabricObject[]): Bounds | null {
+  if (!objects.length) return null;
+  const boxes = objects.map((object) => object.getBoundingRect());
+  const left = Math.min(...boxes.map((box) => box.left));
+  const top = Math.min(...boxes.map((box) => box.top));
+  const right = Math.max(...boxes.map((box) => box.left + box.width));
+  const bottom = Math.max(...boxes.map((box) => box.top + box.height));
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+function moveCanvasObjects(objects: FabricObject[], dx: number, dy: number): void {
+  objects.forEach((object) => {
+    object.set({
+      left: (object.left ?? 0) + dx,
+      top: (object.top ?? 0) + dy,
+    });
+    object.setCoords();
+  });
+}
+
+function makeEditableTree(object: FabricObject): void {
+  object.set({ selectable: true, evented: true });
+  const record = object as unknown as Record<string, unknown>;
+  if (object.type === 'textbox' || object.type === 'text') record.editable = true;
+  const children = (object as unknown as { getObjects?: () => FabricObject[] }).getObjects?.() || [];
+  if (children.length) record.subTargetCheck = true;
+  children.forEach(makeEditableTree);
+}
+
+function fitObjectInsidePage(object: FabricObject, maxWidth = CANVAS_W * 0.82, maxHeight = CANVAS_H * 0.76): void {
+  const width = Math.max(1, Number(object.width || 1));
+  const height = Math.max(1, Number(object.height || 1));
+  const scale = Math.min(1, maxWidth / width, maxHeight / height);
+  object.set({ scaleX: scale, scaleY: scale });
+}
+
+function placeObjectInOpenArea(canvas: Canvas, object: FabricObject): void {
+  const width = Math.max(1, Number(object.width || 1) * Number(object.scaleX ?? 1));
+  const height = Math.max(1, Number(object.height || 1) * Number(object.scaleY ?? 1));
+  const existing = canvas.getObjects()
+    .filter((candidate) => (candidate as unknown as Record<string, unknown>).excludeFromExport !== true)
+    .map((candidate) => candidate.getBoundingRect());
+  const margin = 16;
+  const step = 32;
+  const maxLeft = Math.max(margin, CANVAS_W - width - margin);
+  const maxTop = Math.max(margin, CANVAS_H - height - margin);
+  for (let top = margin; top <= maxTop; top += step) {
+    for (let left = margin; left <= maxLeft; left += step) {
+      const overlaps = existing.some((bounds) =>
+        left < bounds.left + bounds.width + margin
+        && left + width + margin > bounds.left
+        && top < bounds.top + bounds.height + margin
+        && top + height + margin > bounds.top);
+      if (!overlaps) {
+        object.set({ left, top });
+        return;
+      }
+    }
+  }
+  const offset = canvas.getObjects().length * 18;
+  object.set({
+    left: Math.min(maxLeft, margin + (offset % Math.max(step, maxLeft))),
+    top: Math.min(maxTop, margin + (offset % Math.max(step, maxTop))),
+  });
 }
 
 export default function CanvasEditor({
@@ -517,6 +629,36 @@ export default function CanvasEditor({
           onSelRef.current(summarize(active));
           return objects.length;
         },
+        selectByNames: (names: string[]) => {
+          const wanted = new Set(names);
+          const objects = canvas.getObjects().filter((candidate) =>
+            wanted.has(String((candidate as unknown as Record<string, unknown>).objName || '')),
+          );
+          if (!objects.length) return 0;
+          const active = objects.length === 1 ? objects[0] : new ActiveSelection(objects, { canvas });
+          canvas.setActiveObject(active);
+          canvas.requestRenderAll();
+          lastAssemblySelectionRef.current = active;
+          onSelRef.current(summarize(active));
+          return objects.length;
+        },
+        screenPointByName: (name: string) => {
+          const object = canvas.getObjects().find((candidate) =>
+            String((candidate as unknown as Record<string, unknown>).objName || '') === name,
+          );
+          if (!object) return null;
+          const bounds = object.getBoundingRect();
+          const rect = canvas.upperCanvasEl.getBoundingClientRect();
+          return {
+            x: rect.left + ((bounds.left + bounds.width / 2) / CANVAS_W) * rect.width,
+            y: rect.top + ((bounds.top + bounds.height / 2) / CANVAS_H) * rect.height,
+          };
+        },
+        deselect: () => {
+          canvas.discardActiveObject();
+          canvas.requestRenderAll();
+          onSelRef.current(null);
+        },
       };
     }
 
@@ -616,18 +758,31 @@ export default function CanvasEditor({
     canvas.on('selection:created', () => {
       const o = canvas.getActiveObject();
       if (o) {
-        if (o.type === 'group' || o.type === 'activeselection') lastAssemblySelectionRef.current = o;
+        lastAssemblySelectionRef.current = o;
         onSelRef.current(summarize(o));
       }
     });
     canvas.on('selection:updated', () => {
       const o = canvas.getActiveObject();
       if (o) {
-        if (o.type === 'group' || o.type === 'activeselection') lastAssemblySelectionRef.current = o;
+        lastAssemblySelectionRef.current = o;
         onSelRef.current(summarize(o));
       }
     });
     canvas.on('selection:cleared', () => onSelRef.current(null));
+    const onCanvasContextMenu = (event: MouseEvent) => {
+      const target = canvas.findTarget(event);
+      if (target) {
+        canvas.setActiveObject(target);
+        lastAssemblySelectionRef.current = target;
+        onSelRef.current(summarize(target));
+      } else {
+        canvas.discardActiveObject();
+        onSelRef.current(null);
+      }
+      canvas.requestRenderAll();
+    };
+    canvas.upperCanvasEl?.addEventListener('contextmenu', onCanvasContextMenu);
 
     const clearGuides = () => {
       if (!guidesRef.current.length) return;
@@ -814,10 +969,12 @@ export default function CanvasEditor({
         const ol = orig.left ?? 0;
         const ot = orig.top ?? 0;
         void orig.clone(SER_PROPS).then((clone: FabricObject) => {
+          ensureFabricObjectIds(clone, true);
           clone.set({ left: ol, top: ot });
           (clone as unknown as Record<string, unknown>).objName = (orig as unknown as Record<string, unknown>).objName;
           canvas.add(clone);
           canvas.requestRenderAll();
+          persist();
         });
         // The original keeps dragging, so the copy stays at the start position.
       }
@@ -1028,6 +1185,7 @@ export default function CanvasEditor({
       isTearingDown = true;
       window.removeEventListener('keydown', onKeyDown);
       canvas.upperCanvasEl?.removeEventListener('dblclick', onDblClick);
+      canvas.upperCanvasEl?.removeEventListener('contextmenu', onCanvasContextMenu);
       if (renderAuditEnabled) delete auditWindow.__S360_CANVAS_RENDER_AUDIT__;
       if (workflowAuditEnabled) delete auditWindow.__S360_LAYOUT_WORKFLOW_AUDIT__;
       void canvas.dispose();
@@ -1371,12 +1529,12 @@ export default function CanvasEditor({
         name: string,
         label: string | null,
         at?: { clientX: number; clientY: number },
-        meta?: { category?: string; defaultWidth?: number; defaultHeight?: number; acronym?: string },
+        meta?: LibraryComponentInsertMeta,
       ) => {
         const c = fabricRef.current;
-        if (!c) return;
+        if (!c) return Promise.resolve();
         const assetUrl = normalizeAssetUrl(url) || url;
-        void loadSafeFabricImage(assetUrl).then((img) => {
+        return loadSafeFabricImage(assetUrl).then((img) => {
           applyBwIfRequested(img, assetUrl);
           const size = standardSymbolSize({
             category: meta?.category,
@@ -1403,37 +1561,71 @@ export default function CanvasEditor({
           left = Math.max(0, Math.min(Math.max(0, CANVAS_W - renderW), left));
           top = Math.max(0, Math.min(Math.max(0, CANVAS_H - renderH), top));
           img.set({
-            left,
-            top,
+            left: 0,
+            top: 0,
             scaleX: scale,
             scaleY: scale,
             originX: 'left',
             originY: 'top',
           });
-          (img as unknown as Record<string, unknown>).objName = name;
-(img as unknown as Record<string, unknown>).sourceUrl = assetUrl;
+          Object.assign(img as unknown as Record<string, unknown>, {
+            objName: `${name} Image`,
+            sourceUrl: assetUrl,
+            placedSymbolRole: 'placed-symbol-image',
+          });
           if (meta?.category) (img as unknown as Record<string, unknown>).symCategory = meta.category;
           if (meta?.acronym) (img as unknown as Record<string, unknown>).symAcronym = meta.acronym;
-          styleForSelection(img);
-          c.add(img);
-          if (label) {
-            const lbl = new Textbox(label, {
-              left,
-              top: top + renderH + 6,
-              width: Math.max(120, renderW),
-              fontSize: 14,
-              fontFamily: 'Arial',
-              textAlign: 'center',
-              fill: '#111',
-            });
-            (lbl as unknown as Record<string, unknown>).objName = `${name} Label`;
-            c.add(lbl);
-          }
-          c.setActiveObject(img);
+          const lbl = new Textbox(label || '', {
+            left: 0,
+            top: renderH + 6,
+            width: Math.max(120, renderW),
+            fontSize: 14,
+            fontFamily: 'Arial',
+            textAlign: 'center',
+            fill: '#111',
+            editable: true,
+            visible: Boolean(label),
+          });
+          Object.assign(lbl as unknown as Record<string, unknown>, {
+            objName: `${name} Label`,
+            placedSymbolRole: 'placed-symbol-label',
+          });
+          const placed = new Group([img, lbl], {
+            left,
+            top,
+            originX: 'left',
+            originY: 'top',
+            subTargetCheck: true,
+          });
+          Object.assign(placed as unknown as Record<string, unknown>, {
+            objName: name,
+            sourceUrl: assetUrl,
+            symCategory: meta?.category || '',
+            symAcronym: meta?.acronym || '',
+            libraryComponentId: meta?.libraryComponentId || '',
+            libraryCollection: meta?.collection || '',
+            favorite: meta?.favorite === true,
+            placedSymbolType: 'library-symbol',
+            placedSymbolConfig: {
+              name,
+              label: label || '',
+              category: meta?.category || '',
+            },
+          });
+          ensureFabricObjectIds(placed, true);
+          makeEditableTree(placed);
+          styleForSelection(placed);
+          c.add(placed);
+          c.setActiveObject(placed);
+          lastAssemblySelectionRef.current = placed;
           c.requestRenderAll();
+          onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+          onSelRef.current(summarize(placed));
         }).catch((err) => {
           console.error('Component image load failed', { name, assetUrl, err });
           window.alert(`Could not load component "${name}". Refresh the library or replace its source image.`);
+          c.discardActiveObject();
+          onSelRef.current(null);
         });
       },
       addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => {
@@ -1763,14 +1955,187 @@ export default function CanvasEditor({
         c.requestRenderAll();
         onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
+      addSmartComponent: (config: SmartComponentConfig) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const normalized = normalizeSmartComponentConfig(config, config.kind);
+        const object = buildSmartComponent(normalized);
+        ensureFabricObjectIds(object, true);
+        makeEditableTree(object);
+        fitObjectInsidePage(object);
+        placeObjectInOpenArea(c, object);
+        object.setCoords();
+        styleForSelection(object);
+        c.add(object);
+        c.setActiveObject(object);
+        lastAssemblySelectionRef.current = object;
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+        onSelRef.current(summarize(object));
+      },
+      updateSelectedSmartComponent: (config: SmartComponentConfig) => {
+        const c = fabricRef.current;
+        const active = c?.getActiveObject();
+        if (!c || !active) return;
+        const activeRecord = active as unknown as Record<string, unknown>;
+        if (
+          typeof activeRecord.smartComponentType !== 'string'
+          || !SMART_COMPONENT_TYPES.has(activeRecord.smartComponentType as SmartComponentType)
+        ) {
+          window.alert('Select one grouped smart component first.');
+          return;
+        }
+        if (active.lockMovementX || active.lockScalingX || active.lockRotation) {
+          window.alert('Unlock the smart component before editing its parameters.');
+          return;
+        }
+        const center = active.getCenterPoint();
+        const oldObjectId = typeof activeRecord.objectId === 'string' ? activeRecord.objectId : '';
+        const normalized = normalizeSmartComponentConfig(config, config.kind);
+        const replacement = buildSmartComponent(normalized);
+        ensureFabricObjectIds(replacement, true);
+        if (oldObjectId) {
+          (replacement as unknown as Record<string, unknown>).objectId = oldObjectId;
+        }
+        makeEditableTree(replacement);
+        fitObjectInsidePage(replacement);
+        replacement.set({
+          angle: active.angle ?? 0,
+          opacity: active.opacity ?? 1,
+        });
+        replacement.setPositionByOrigin(center, 'center', 'center');
+        replacement.setCoords();
+        styleForSelection(replacement);
+        c.remove(active);
+        c.add(replacement);
+        c.setActiveObject(replacement);
+        lastAssemblySelectionRef.current = replacement;
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+        onSelRef.current(summarize(replacement));
+      },
+      addCalloutSet: (config: CalloutSetConfig) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const normalized = normalizeCalloutSetConfig(config, config.family);
+        const object = buildCalloutSet(normalized);
+        ensureFabricObjectIds(object, true);
+        makeEditableTree(object);
+        fitObjectInsidePage(object);
+        placeObjectInOpenArea(c, object);
+        object.setCoords();
+        styleForSelection(object);
+        c.add(object);
+        c.setActiveObject(object);
+        lastAssemblySelectionRef.current = object;
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+        onSelRef.current(summarize(object));
+      },
+      updateSelectedCalloutSet: (config: CalloutSetConfig) => {
+        const c = fabricRef.current;
+        const active = c?.getActiveObject();
+        if (!c || !active) return;
+        const record = active as unknown as Record<string, unknown>;
+        if (record.calloutComponentType !== 'callout-set' || !record.calloutConfig) {
+          window.alert('Select one editable callout set or block first.');
+          return;
+        }
+        if (active.lockMovementX || active.lockScalingX || active.lockRotation) {
+          window.alert('Unlock the callout before editing it.');
+          return;
+        }
+        const center = active.getCenterPoint();
+        const objectId = typeof record.objectId === 'string' ? record.objectId : '';
+        const normalized = normalizeCalloutSetConfig(config, config.family);
+        const replacement = buildCalloutSet(normalized);
+        ensureFabricObjectIds(replacement, true);
+        if (objectId) {
+          (replacement as unknown as Record<string, unknown>).objectId = objectId;
+        }
+        makeEditableTree(replacement);
+        fitObjectInsidePage(replacement);
+        replacement.set({
+          angle: active.angle ?? 0,
+          opacity: active.opacity ?? 1,
+        });
+        replacement.setPositionByOrigin(center, 'center', 'center');
+        replacement.setCoords();
+        styleForSelection(replacement);
+        c.remove(active);
+        c.add(replacement);
+        c.setActiveObject(replacement);
+        lastAssemblySelectionRef.current = replacement;
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+        onSelRef.current(summarize(replacement));
+      },
+      updateSelectedPlacedSymbol: (config: PlacedSymbolEditorConfig) => {
+        const c = fabricRef.current;
+        const active = c?.getActiveObject();
+        if (!c || !active) return;
+        if (active.lockMovementX || active.lockScalingX || active.lockRotation) {
+          window.alert('Unlock the symbol before editing it.');
+          return;
+        }
+        const record = active as unknown as Record<string, unknown>;
+        const previousName = String(record.objName || 'Placed Symbol');
+        const children = (active as unknown as { getObjects?: () => FabricObject[] }).getObjects?.() || [];
+        const labelObject = children.find((child) =>
+          (child as unknown as Record<string, unknown>).placedSymbolRole === 'placed-symbol-label',
+        );
+        if (labelObject && (labelObject.type === 'textbox' || labelObject.type === 'text')) {
+          labelObject.set({
+            text: config.label,
+            visible: Boolean(config.label),
+          });
+          const labelRecord = labelObject as unknown as Record<string, unknown>;
+          labelRecord.objName = `${config.name} Label`;
+          if (typeof labelRecord.initDimensions === 'function') {
+            (labelRecord.initDimensions as () => void)();
+          }
+          labelObject.set('dirty', true);
+        } else if (active.type === 'image') {
+          const legacyLabel = c.getObjects().find((candidate) =>
+            String((candidate as unknown as Record<string, unknown>).objName || '') === `${previousName} Label`,
+          );
+          if (legacyLabel && (legacyLabel.type === 'textbox' || legacyLabel.type === 'text')) {
+            legacyLabel.set({ text: config.label, visible: Boolean(config.label) });
+            (legacyLabel as unknown as Record<string, unknown>).objName = `${config.name} Label`;
+            legacyLabel.setCoords();
+          }
+        }
+        Object.assign(record, {
+          objName: config.name,
+          symCategory: config.category,
+          favorite: config.favorite,
+          placedSymbolConfig: {
+            name: config.name,
+            label: config.label,
+            category: config.category,
+          },
+        });
+        if (active.width) active.set('scaleX', config.width / active.width);
+        if (active.height) active.set('scaleY', config.height / active.height);
+        active.set('opacity', config.opacity);
+        active.set('dirty', true);
+        active.setCoords();
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+        onSelRef.current(summarize(active));
+      },
       captureSelectedAssembly: () => {
         const c = fabricRef.current;
         const active = c?.getActiveObject() || lastAssemblySelectionRef.current;
         if (!c || !active) return null;
-        if (active.type !== 'group' && active.type !== 'activeselection') return null;
-        return normalizeCanvasObjects([
-          active.toObject(SER_PROPS) as Record<string, unknown>,
-        ])[0] || null;
+        const serialized = active.toObject(SER_PROPS) as Record<string, unknown>;
+        if (active.type === 'activeselection') {
+          serialized.type = 'Group';
+          serialized.objName = String(serialized.objName || 'Selection Assembly');
+          serialized.assemblyName = String(serialized.assemblyName || serialized.objName);
+          serialized.subTargetCheck = true;
+        }
+        return normalizeCanvasObjects([serialized])[0] || null;
       },
       addSavedAssembly: async (assembly: SavedAssembly) => {
         const c = fabricRef.current;
@@ -1790,6 +2155,7 @@ export default function CanvasEditor({
           objName: assembly.name,
         });
         ensureFabricObjectIds(object, true);
+        makeEditableTree(object);
         styleForSelection(object);
         object.setCoords();
         c.add(object);
@@ -1867,8 +2233,17 @@ export default function CanvasEditor({
       pasteCopied: () => {
         const c = fabricRef.current;
         if (!c || !objectClipboardRef.current) return;
-        void objectClipboardRef.current.clone(SER_PROPS).then((pasted: FabricObject) => {
+        const serialized = objectClipboardRef.current.toObject(SER_PROPS) as Record<string, unknown>;
+        if (objectClipboardRef.current.type === 'activeselection') {
+          serialized.type = 'Group';
+          serialized.subTargetCheck = true;
+        }
+        const fresh = assignFreshCanvasObjectIds(serialized);
+        void util.enlivenObjects([fresh]).then((objects) => {
+          const pasted = (objects as FabricObject[])[0];
+          if (!pasted) return;
           ensureFabricObjectIds(pasted, true);
+          makeEditableTree(pasted);
           pasted.set({ left: (pasted.left ?? 0) + 24, top: (pasted.top ?? 0) + 24 });
           styleForSelection(pasted);
           c.add(pasted);
@@ -1888,8 +2263,17 @@ export default function CanvasEditor({
           window.alert('Locked objects were not duplicated. Unlock them first.');
           return;
         }
-        void o.clone(SER_PROPS).then((clone: FabricObject) => {
+        const serialized = o.toObject(SER_PROPS) as Record<string, unknown>;
+        if (o.type === 'activeselection') {
+          serialized.type = 'Group';
+          serialized.subTargetCheck = true;
+        }
+        const fresh = assignFreshCanvasObjectIds(serialized);
+        void util.enlivenObjects([fresh]).then((objects) => {
+          const clone = (objects as FabricObject[])[0];
+          if (!clone) return;
           ensureFabricObjectIds(clone, true);
+          makeEditableTree(clone);
           clone.set({ left: (o.left ?? 0) + 12, top: (o.top ?? 0) + 12 });
           (clone as unknown as Record<string, unknown>).objName = (o as unknown as Record<string, unknown>).objName;
           styleForSelection(clone);
@@ -1925,9 +2309,32 @@ export default function CanvasEditor({
           }
           const grp = new Group(objs);
           ensureFabricObjectIds(grp);
+          const childRecords = objs.map((object) => object as unknown as Record<string, unknown>);
+          const smartParentIds = new Set(
+            childRecords.map((record) => String(record.smartParentId || '')).filter(Boolean),
+          );
+          if (smartParentIds.size === 1 && childRecords.every((record) => record.smartParentConfig)) {
+            const source = childRecords[0];
+            Object.assign(grp as unknown as Record<string, unknown>, {
+              smartComponentType: source.smartParentType,
+              smartConfig: source.smartParentConfig,
+              smartComponentVersion: 1,
+              objName: source.smartParentName,
+              assemblyId: `smart:${String(source.smartParentType || '')}`,
+              assemblyName: source.smartParentName,
+              subTargetCheck: true,
+            });
+            childRecords.forEach((record) => {
+              delete record.smartParentId;
+              delete record.smartParentType;
+              delete record.smartParentConfig;
+              delete record.smartParentName;
+            });
+          }
           objs.forEach((o) => c.remove(o));
           c.add(grp);
           c.setActiveObject(grp);
+          lastAssemblySelectionRef.current = grp;
           c.requestRenderAll();
           onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         }
@@ -1937,14 +2344,30 @@ export default function CanvasEditor({
         if (!c) return;
         const active = c.getActiveObject();
         if (!active || active.type !== 'group') {
-          window.alert('Select a grouped marker or legend first.');
+          window.alert('Select a group, assembly, or smart component first.');
           return;
         }
 
         const group = active as Group & { toActiveSelection?: () => ActiveSelection };
+        const groupRecord = group as unknown as Record<string, unknown>;
+        if (
+          typeof groupRecord.smartComponentType === 'string'
+          && groupRecord.smartConfig
+        ) {
+          const parentId = String(groupRecord.objectId || newCanvasObjectId());
+          group.getObjects().forEach((object) => {
+            Object.assign(object as unknown as Record<string, unknown>, {
+              smartParentId: parentId,
+              smartParentType: groupRecord.smartComponentType,
+              smartParentConfig: groupRecord.smartConfig,
+              smartParentName: groupRecord.objName || groupRecord.assemblyName || 'Smart Component',
+            });
+          });
+        }
         if (typeof group.toActiveSelection === 'function') {
           const selection = group.toActiveSelection();
           c.setActiveObject(selection);
+          lastAssemblySelectionRef.current = selection;
           c.requestRenderAll();
           onSelRef.current({
             ...summarize(selection),
@@ -1968,6 +2391,7 @@ export default function CanvasEditor({
         });
         const selection = new ActiveSelection(items as FabricObject[], { canvas: c });
         c.setActiveObject(selection);
+        lastAssemblySelectionRef.current = selection;
         c.requestRenderAll();
         onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
@@ -1995,15 +2419,23 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         if (!c) return;
         const active = c.getActiveObject();
-        const objs = active?.type === 'activeselection'
-          ? (active as unknown as { getObjects: () => FabricObject[] }).getObjects()
-          : active ? [active] : [];
+        const objs = selectedCanvasObjects(c);
         if (!objs.length) return;
         const bbs = objs.map((o) => ({ o, b: o.getBoundingRect() }));
-        if (direction === 'page-center-h') {
-          objs.forEach((o) => { const b = o.getBoundingRect(); o.set('left', CANVAS_W / 2 - b.width / 2); o.setCoords(); });
-        } else if (direction === 'page-center-v') {
-          objs.forEach((o) => { const b = o.getBoundingRect(); o.set('top', CANVAS_H / 2 - b.height / 2); o.setCoords(); });
+        if (
+          direction === 'page-center-h'
+          || direction === 'page-center-v'
+          || direction === 'page-center-both'
+        ) {
+          const bounds = combinedBounds(objs);
+          if (!bounds) return;
+          const dx = direction === 'page-center-v'
+            ? 0
+            : CANVAS_W / 2 - (bounds.left + bounds.width / 2);
+          const dy = direction === 'page-center-h'
+            ? 0
+            : CANVAS_H / 2 - (bounds.top + bounds.height / 2);
+          moveCanvasObjects(objs, dx, dy);
         } else if (direction === 'left') {
           const minL = Math.min(...bbs.map(({ b }) => b.left));
           bbs.forEach(({ o, b }) => { o.set('left', minL + (o.left ?? 0) - b.left); o.setCoords(); });
@@ -2027,6 +2459,7 @@ export default function CanvasEditor({
           const midY = (minT + maxB) / 2;
           bbs.forEach(({ o, b }) => { o.set('top', (o.top ?? 0) + (midY - (b.top + b.height / 2))); o.setCoords(); });
         }
+        active?.setCoords();
         c.requestRenderAll();
         onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },
@@ -2034,29 +2467,150 @@ export default function CanvasEditor({
         const c = fabricRef.current;
         if (!c) return;
         const active = c.getActiveObject();
-        const objs = active?.type === 'activeselection'
-          ? (active as unknown as { getObjects: () => FabricObject[] }).getObjects()
-          : [];
+        const objs = selectedCanvasObjects(c);
         if (objs.length < 3) return;
         const sorted = direction === 'horizontal'
-          ? [...objs].sort((a, b) => (a.left ?? 0) - (b.left ?? 0))
-          : [...objs].sort((a, b) => (a.top ?? 0) - (b.top ?? 0));
+          ? [...objs].sort((a, b) => {
+            const ab = a.getBoundingRect();
+            const bb = b.getBoundingRect();
+            return (ab.left + ab.width / 2) - (bb.left + bb.width / 2);
+          })
+          : [...objs].sort((a, b) => {
+            const ab = a.getBoundingRect();
+            const bb = b.getBoundingRect();
+            return (ab.top + ab.height / 2) - (bb.top + bb.height / 2);
+          });
         const bbs = sorted.map((o) => ({ o, b: o.getBoundingRect() }));
         if (direction === 'horizontal') {
-          const total = bbs.reduce((s, { b }) => s + b.width, 0);
-          const last = bbs[bbs.length - 1];
-          const span = (last.b.left + last.b.width) - bbs[0].b.left;
-          const gap = (span - total) / (bbs.length - 1);
-          let x = bbs[0].b.left;
-          bbs.forEach(({ o, b }) => { o.set('left', (o.left ?? 0) + (x - b.left)); o.setCoords(); x += b.width + gap; });
+          const firstCenter = bbs[0].b.left + bbs[0].b.width / 2;
+          const lastBox = bbs[bbs.length - 1].b;
+          const lastCenter = lastBox.left + lastBox.width / 2;
+          const step = (lastCenter - firstCenter) / (bbs.length - 1);
+          bbs.slice(1, -1).forEach(({ o, b }, index) => {
+            const targetCenter = firstCenter + step * (index + 1);
+            o.set('left', (o.left ?? 0) + targetCenter - (b.left + b.width / 2));
+            o.setCoords();
+          });
         } else {
-          const total = bbs.reduce((s, { b }) => s + b.height, 0);
-          const last = bbs[bbs.length - 1];
-          const span = (last.b.top + last.b.height) - bbs[0].b.top;
-          const gap = (span - total) / (bbs.length - 1);
-          let y = bbs[0].b.top;
-          bbs.forEach(({ o, b }) => { o.set('top', (o.top ?? 0) + (y - b.top)); o.setCoords(); y += b.height + gap; });
+          const firstCenter = bbs[0].b.top + bbs[0].b.height / 2;
+          const lastBox = bbs[bbs.length - 1].b;
+          const lastCenter = lastBox.top + lastBox.height / 2;
+          const step = (lastCenter - firstCenter) / (bbs.length - 1);
+          bbs.slice(1, -1).forEach(({ o, b }, index) => {
+            const targetCenter = firstCenter + step * (index + 1);
+            o.set('top', (o.top ?? 0) + targetCenter - (b.top + b.height / 2));
+            o.setCoords();
+          });
         }
+        active?.setCoords();
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+      },
+      equalSpaceObjects: (direction) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const active = c.getActiveObject();
+        const objs = selectedCanvasObjects(c);
+        if (objs.length < 3) return;
+        const bbs = objs
+          .map((object) => ({ object, bounds: object.getBoundingRect() }))
+          .sort((a, b) => direction === 'horizontal'
+            ? a.bounds.left - b.bounds.left
+            : a.bounds.top - b.bounds.top);
+        if (direction === 'horizontal') {
+          const totalWidth = bbs.reduce((sum, item) => sum + item.bounds.width, 0);
+          const first = bbs[0].bounds;
+          const last = bbs[bbs.length - 1].bounds;
+          const span = last.left + last.width - first.left;
+          const gap = (span - totalWidth) / (bbs.length - 1);
+          let cursor = first.left;
+          bbs.forEach(({ object, bounds }) => {
+            object.set('left', (object.left ?? 0) + cursor - bounds.left);
+            object.setCoords();
+            cursor += bounds.width + gap;
+          });
+        } else {
+          const totalHeight = bbs.reduce((sum, item) => sum + item.bounds.height, 0);
+          const first = bbs[0].bounds;
+          const last = bbs[bbs.length - 1].bounds;
+          const span = last.top + last.height - first.top;
+          const gap = (span - totalHeight) / (bbs.length - 1);
+          let cursor = first.top;
+          bbs.forEach(({ object, bounds }) => {
+            object.set('top', (object.top ?? 0) + cursor - bounds.top);
+            object.setCoords();
+            cursor += bounds.height + gap;
+          });
+        }
+        active?.setCoords();
+        c.requestRenderAll();
+        onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
+      },
+      centerInPanel: (direction) => {
+        const c = fabricRef.current;
+        if (!c) return;
+        const active = c.getActiveObject();
+        const selected = selectedCanvasObjects(c);
+        if (!selected.length) return;
+        const isPanel = (object: FabricObject) =>
+          (object as unknown as Record<string, unknown>).smartComponentType === 'panel-enclosure';
+        const availablePanels = c.getObjects().filter(isPanel);
+        let panel = selected.find(isPanel);
+        const targets = selected.filter((object) => object !== panel);
+        if (!panel) {
+          const targetBounds = combinedBounds(targets);
+          if (targetBounds) {
+            const targetCenter = {
+              x: targetBounds.left + targetBounds.width / 2,
+              y: targetBounds.top + targetBounds.height / 2,
+            };
+            panel = availablePanels.find((candidate) => {
+              const bounds = candidate.getBoundingRect();
+              return targetCenter.x >= bounds.left
+                && targetCenter.x <= bounds.left + bounds.width
+                && targetCenter.y >= bounds.top
+                && targetCenter.y <= bounds.top + bounds.height;
+            }) || [...availablePanels].sort((a, b) => {
+              const ab = a.getBoundingRect();
+              const bb = b.getBoundingRect();
+              const ad = Math.hypot(
+                ab.left + ab.width / 2 - targetCenter.x,
+                ab.top + ab.height / 2 - targetCenter.y,
+              );
+              const bd = Math.hypot(
+                bb.left + bb.width / 2 - targetCenter.x,
+                bb.top + bb.height / 2 - targetCenter.y,
+              );
+              return ad - bd;
+            })[0];
+          }
+        }
+        if (!panel || !targets.length) {
+          window.alert('Select one or more devices and a Panel Enclosure, or place the devices over a panel first.');
+          return;
+        }
+        const targetBounds = combinedBounds(targets);
+        if (!targetBounds) return;
+        const panelBounds = panel.getBoundingRect();
+        const panelRecord = panel as unknown as Record<string, unknown>;
+        const panelConfig = normalizeSmartComponentConfig(panelRecord.smartConfig, 'panel-enclosure');
+        const headerRatio = panelConfig.kind === 'panel-enclosure'
+          ? Math.min(0.35, 58 / Math.max(1, panelConfig.height))
+          : 0;
+        const interior = {
+          left: panelBounds.left,
+          top: panelBounds.top + panelBounds.height * headerRatio,
+          width: panelBounds.width,
+          height: panelBounds.height * (1 - headerRatio),
+        };
+        const dx = direction === 'vertical'
+          ? 0
+          : interior.left + interior.width / 2 - (targetBounds.left + targetBounds.width / 2);
+        const dy = direction === 'horizontal'
+          ? 0
+          : interior.top + interior.height / 2 - (targetBounds.top + targetBounds.height / 2);
+        moveCanvasObjects(targets, dx, dy);
+        active?.setCoords();
         c.requestRenderAll();
         onSerRef.current(normalizeCanvasObjects((c.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
       },

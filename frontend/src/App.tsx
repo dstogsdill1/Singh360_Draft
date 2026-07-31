@@ -13,12 +13,13 @@ import {
   saveProject,
   resolveWorkbookLink,
   savePageRebuildBackup,
+  updateLibV2Component,
   uploadAssetDataUrl,
   uploadAssetFile,
   type ExportWarning,
 } from './api/client';
 import type { SymbolMapperRenderResult } from './api/client';
-import type { BusOptions, CanvasApi, CanvasSelection, LineStyle, PageBlock, PageModel, ProjectModel, QuickAssemblyId, SavedAssembly, SymbolLegendInsertConfig, ViewMode, Worksheet, ImageCropPlacement, ImageCropRect, ImageCropState } from './model/types';
+import type { BusOptions, CalloutFamily, CalloutSetConfig, CanvasApi, CanvasSelection, LibraryComponentInsertMeta, LineStyle, PageBlock, PageModel, PlacedSymbolEditorConfig, ProjectModel, QuickAssemblyId, SavedAssembly, SmartComponentConfig, SmartComponentType, SymbolLegendInsertConfig, ViewMode, Worksheet, ImageCropPlacement, ImageCropRect, ImageCropState } from './model/types';
 import { newCanvasObjectId } from './model/canvasObjectIdentity';
 import { writeRecoverySnapshot } from './model/recovery';
 import { duplicateAsAppManagedPage } from './model/pageDuplication';
@@ -58,11 +59,17 @@ import SymbolMapperModal from './components/SymbolMapperModal';
 import { buildSymbolCountSummaryArtifacts, type SymbolMapperCountPageRequest } from './model/symbolCountSummary';
 import BackupRecoveryModal from './components/BackupRecoveryModal';
 import BusModal from './components/BusModal';
+import SmartComponentModal from './components/SmartComponentModal';
+import CalloutEditorModal from './components/CalloutEditorModal';
+import PlacedSymbolEditorModal from './components/PlacedSymbolEditorModal';
 import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 import HelpCenter from './components/HelpCenter';
 import ProjectDashboard from './components/ProjectDashboard';
 import ProjectFilesPage from './components/ProjectFilesPage';
+import { defaultSmartComponentConfig, normalizeSmartComponentConfig } from './model/smartComponents';
+import { defaultCalloutSetConfig, normalizeCalloutSetConfig } from './model/callouts';
+import { isClipboardEditingContext } from './model/clipboardFocus';
 import {
   classifyProjectChanges,
   confirmedProjectSaveState,
@@ -191,6 +198,15 @@ export default function App() {
   const [symbolMapperOpen, setSymbolMapperOpen] = useState(initialTool === 'symbol-mapper');
   const [backupOpen, setBackupOpen] = useState(initialTool === 'backups');
   const [busOpen, setBusOpen] = useState(false);
+  const [smartComponentEditor, setSmartComponentEditor] = useState<{
+    mode: 'insert' | 'edit';
+    config: SmartComponentConfig;
+  } | null>(null);
+  const [calloutEditor, setCalloutEditor] = useState<{
+    mode: 'insert' | 'edit';
+    config: CalloutSetConfig;
+  } | null>(null);
+  const [placedSymbolEditor, setPlacedSymbolEditor] = useState<PlacedSymbolEditorConfig | null>(null);
   const [addSheetPending, setAddSheetPending] = useState<{ refId: string; where: 'before' | 'after' } | null>(null);
   const [importWsOpen, setImportWsOpen] = useState<{
     afterPageId?: string;
@@ -903,11 +919,11 @@ export default function App() {
     name: string,
     url: string,
     label: string | null,
-    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number; acronym?: string },
-  ) => {
-    if (!isCanvasContext()) return;
+    meta?: LibraryComponentInsertMeta,
+  ): Promise<void> => {
+    if (!isCanvasContext()) return Promise.resolve();
     setOverlayMode(true);
-    canvasApiRef.current?.addComponent(url, name, label, undefined, meta);
+    return canvasApiRef.current?.addComponent(url, name, label, undefined, meta) ?? Promise.resolve();
   };
 
   const insertQuickAssembly = (kind: QuickAssemblyId) => {
@@ -958,10 +974,134 @@ export default function App() {
     void canvasApiRef.current?.addQuickAssembly(kind);
   };
 
+  const openSmartComponent = (kind: SmartComponentType) => {
+    if (!isCanvasContext()) return;
+    setSmartComponentEditor({
+      mode: 'insert',
+      config: defaultSmartComponentConfig(kind),
+    });
+  };
+
+  const editSelectedSmartComponent = () => {
+    if (!selection?.smartComponentType || !selection.smartConfig) {
+      window.alert('Select one grouped smart component first.');
+      return;
+    }
+    setSmartComponentEditor({
+      mode: 'edit',
+      config: normalizeSmartComponentConfig(selection.smartConfig, selection.smartComponentType),
+    });
+  };
+
+  const insertSingleCallout = (family: Extract<CalloutFamily, 'round' | 'square'>) => {
+    if (!isCanvasContext()) return;
+    const config = defaultCalloutSetConfig(family);
+    config.setName = `${family === 'round' ? 'Round' : 'Square'} Callout 1`;
+    config.entries = [{
+      callout: '1',
+      label: '',
+      description: '',
+      text: '',
+    }];
+    setOverlayMode(true);
+    canvasApiRef.current?.addCalloutSet(config);
+  };
+
+  const openCalloutBuilder = (family: CalloutFamily) => {
+    if (!isCanvasContext()) return;
+    setCalloutEditor({
+      mode: 'insert',
+      config: defaultCalloutSetConfig(family),
+    });
+  };
+
+  const editSelectedCallout = () => {
+    if (!selection?.calloutConfig) {
+      window.alert('Select one editable callout set or block first.');
+      return;
+    }
+    setCalloutEditor({
+      mode: 'edit',
+      config: normalizeCalloutSetConfig(
+        selection.calloutConfig,
+        selection.calloutConfig.family,
+      ),
+    });
+  };
+
+  const placedSymbolConfig = (): PlacedSymbolEditorConfig | null => {
+    if (!selection) return null;
+    return {
+      name: selection.name || 'Placed Symbol',
+      label: selection.symbolLabel || '',
+      width: Math.max(16, selection.width || 96),
+      height: Math.max(16, selection.height || 96),
+      category: selection.symCategory || 'custom',
+      opacity: selection.opacity ?? 1,
+      favorite: selection.favorite === true,
+    };
+  };
+
+  const editPlacedSelection = () => {
+    if (selection?.calloutConfig) {
+      editSelectedCallout();
+      return;
+    }
+    if (selection?.smartComponentType) {
+      editSelectedSmartComponent();
+      return;
+    }
+    const config = placedSymbolConfig();
+    if (!config) {
+      window.alert('Select a placed symbol or component first.');
+      return;
+    }
+    setPlacedSymbolEditor(config);
+  };
+
+  const renamePlacedSelection = () => {
+    if (!selection) return;
+    const nextName = window.prompt('Rename placed object', selection.name || 'Placed Symbol')?.trim();
+    if (!nextName) return;
+    if (selection.calloutConfig) {
+      canvasApiRef.current?.updateSelectedCalloutSet({
+        ...selection.calloutConfig,
+        setName: nextName,
+      });
+      return;
+    }
+    if (selection.isPlacedSymbol) {
+      const config = placedSymbolConfig();
+      if (config) canvasApiRef.current?.updateSelectedPlacedSymbol({ ...config, name: nextName });
+      return;
+    }
+    canvasApiRef.current?.updateSelected({ name: nextName });
+  };
+
+  const movePlacedSelectionToCategory = () => {
+    const config = placedSymbolConfig();
+    if (!selection || !config) return;
+    const category = window.prompt('Move placed symbol to category', config.category)?.trim();
+    if (!category) return;
+    canvasApiRef.current?.updateSelectedPlacedSymbol({ ...config, category });
+  };
+
+  const togglePlacedSelectionFavorite = () => {
+    const config = placedSymbolConfig();
+    if (!selection || !config) return;
+    const favorite = !config.favorite;
+    canvasApiRef.current?.updateSelectedPlacedSymbol({ ...config, favorite });
+    if (selection.libraryComponentId) {
+      void updateLibV2Component(selection.libraryComponentId, { favorite })
+        .then(() => window.dispatchEvent(new CustomEvent('singh360:library-changed')))
+        .catch((error) => window.alert(`Could not update the library favorite: ${String(error)}`));
+    }
+  };
+
   const saveSelectionAsAssembly = () => {
     const object = canvasApiRef.current?.captureSelectedAssembly();
     if (!object) {
-      window.alert('Select multiple objects and Group them before saving an assembly.');
+      window.alert('Select any completed object or multi-selection before saving an assembly.');
       return;
     }
     const proposed = String(object.objName || object.assemblyName || 'Saved Assembly');
@@ -986,13 +1126,47 @@ export default function App() {
     void canvasApiRef.current?.addSavedAssembly(assembly);
   };
 
+  const updateSavedAssembly = (id: string, patch: Partial<SavedAssembly>) => {
+    setProjectSync((current) => current ? {
+      ...current,
+      savedAssemblies: (current.savedAssemblies || []).map((assembly) =>
+        assembly.id === id ? { ...assembly, ...patch } : assembly),
+    } : current);
+    void confirmLatestProjectSaved(15_000);
+  };
+
+  const deleteSavedAssembly = (id: string) => {
+    setProjectSync((current) => current ? {
+      ...current,
+      savedAssemblies: (current.savedAssemblies || []).filter((assembly) => assembly.id !== id),
+    } : current);
+    void confirmLatestProjectSaved(15_000);
+  };
+
+  const duplicateSavedAssembly = (assembly: SavedAssembly, proposedName?: string) => {
+    const name = proposedName || window.prompt('Assembly copy name', `${assembly.name} Copy`)?.trim();
+    if (!name) return;
+    const duplicate: SavedAssembly = {
+      ...assembly,
+      id: newCanvasObjectId(),
+      name,
+      createdAt: new Date().toISOString(),
+      object: structuredClone(assembly.object),
+    };
+    setProjectSync((current) => current ? {
+      ...current,
+      savedAssemblies: [...(current.savedAssemblies || []), duplicate],
+    } : current);
+    void confirmLatestProjectSaved(15_000);
+  };
+
   const onDropComponent = (
     url: string,
     name: string,
     label: string | null,
     clientX: number,
     clientY: number,
-    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number },
+    meta?: LibraryComponentInsertMeta,
   ) => {
     if (!isCanvasContext()) return;
     setOverlayMode(true);
@@ -1033,6 +1207,7 @@ export default function App() {
   // Priority: image/png > image/* > SVG from text/html > HTML table → text box > text/plain
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
+      if (isClipboardEditingContext(e.target)) return;
       if (!isCanvasContext()) return;
       if (activePageRef.current?.excelLayout) return;
       const items = e.clipboardData?.items;
@@ -1125,6 +1300,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
+      if (isClipboardEditingContext(e.target)) return;
       if (viewModeRef.current === 'source' && (e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
         e.preventDefault();
         if (k === 'z') sourceUndoRef.current();
@@ -1141,8 +1317,6 @@ export default function App() {
         pageRebuildUndoRef.current();
         return;
       }
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (!isCanvasContext()) return;
       if (e.key === 'Delete') {
         canvasApiRef.current?.deleteSelected();
@@ -2201,6 +2375,8 @@ export default function App() {
         sendToBack: () => canvasApiRef.current?.sendToBack(),
         alignObjects: (d) => canvasApiRef.current?.alignObjects(d),
         distributeObjects: (d) => canvasApiRef.current?.distributeObjects(d),
+        equalSpaceObjects: (d) => canvasApiRef.current?.equalSpaceObjects(d),
+        centerInPanel: (d) => canvasApiRef.current?.centerInPanel(d),
         matchObjectSize: (w) => canvasApiRef.current?.matchObjectSize(w),
         addLegend: (ids) => { setOverlayMode(true); canvasApiRef.current?.addLegend(ids); },
         addSymbolLegend: (config: SymbolLegendInsertConfig) => { setOverlayMode(true); canvasApiRef.current?.addSymbolLegend(config); },
@@ -2357,6 +2533,12 @@ export default function App() {
               onInsertSavedAssembly={insertSavedAssembly}
               onSaveSelectionAssembly={saveSelectionAsAssembly}
               onInsertQuickAssembly={insertQuickAssembly}
+              onInsertSmartComponent={openSmartComponent}
+              onInsertSingleCallout={insertSingleCallout}
+              onCreateCalloutSet={openCalloutBuilder}
+              onUpdateSavedAssembly={updateSavedAssembly}
+              onDuplicateSavedAssembly={duplicateSavedAssembly}
+              onDeleteSavedAssembly={deleteSavedAssembly}
             />
           </CollapsibleSection>
         </>
@@ -2522,6 +2704,10 @@ export default function App() {
             onConnectorAddVertex={() => canvasApiRef.current?.addVertexToSelected()}
             onConnectorDeleteVertex={() => canvasApiRef.current?.deleteVertexFromSelected()}
             onConnectorReverse={() => canvasApiRef.current?.reverseConnectorDirection()}
+            onEditSmartComponent={editSelectedSmartComponent}
+            onExplodeSmartComponent={() => canvasApiRef.current?.ungroup()}
+            onEditCallout={editSelectedCallout}
+            onEditPlacedSymbol={editPlacedSelection}
             projectDisplayName={project.projectDisplayName ?? project.metadata.projectName}
             projectFolder={project.projectFolder}
             onRenameProject={(name) => void onRenameProject(name)}
@@ -2645,6 +2831,58 @@ export default function App() {
         }}
       />
     )}
+    {smartComponentEditor && (
+      <SmartComponentModal
+        key={`${smartComponentEditor.mode}:${smartComponentEditor.config.kind}`}
+        initialConfig={smartComponentEditor.config}
+        mode={smartComponentEditor.mode}
+        onApply={(config) => {
+          setOverlayMode(true);
+          if (smartComponentEditor.mode === 'edit') {
+            canvasApiRef.current?.updateSelectedSmartComponent(config);
+          } else {
+            canvasApiRef.current?.addSmartComponent(config);
+          }
+          setSmartComponentEditor(null);
+        }}
+        onCancel={() => setSmartComponentEditor(null)}
+      />
+    )}
+    {calloutEditor && (
+      <CalloutEditorModal
+        key={`${calloutEditor.mode}:${calloutEditor.config.family}:${activePage.id}:${calloutEditor.config.setName}`}
+        initialConfig={calloutEditor.config}
+        mode={calloutEditor.mode}
+        projectId={project.id}
+        pageId={activePage.id}
+        onApply={(config, action) => {
+          setOverlayMode(true);
+          if (calloutEditor.mode === 'edit' && action === 'update') {
+            canvasApiRef.current?.updateSelectedCalloutSet(config);
+          } else {
+            canvasApiRef.current?.addCalloutSet(config);
+          }
+          setCalloutEditor(null);
+        }}
+        onCancel={() => setCalloutEditor(null)}
+      />
+    )}
+    {placedSymbolEditor && (
+      <PlacedSymbolEditorModal
+        initialConfig={placedSymbolEditor}
+        sourceUrl={selection?.sourceUrl}
+        onApply={(config) => {
+          canvasApiRef.current?.updateSelectedPlacedSymbol(config);
+          if (selection?.libraryComponentId && config.favorite !== selection.favorite) {
+            void updateLibV2Component(selection.libraryComponentId, { favorite: config.favorite })
+              .then(() => window.dispatchEvent(new CustomEvent('singh360:library-changed')))
+              .catch((error) => window.alert(`Could not update the library favorite: ${String(error)}`));
+          }
+          setPlacedSymbolEditor(null);
+        }}
+        onCancel={() => setPlacedSymbolEditor(null)}
+      />
+    )}
     {saveTemplateOpen && activePage && (
       <SavePageTemplateModal
         page={activePage}
@@ -2708,6 +2946,13 @@ export default function App() {
         y={ctxMenu.y}
         onClose={() => setCtxMenu(null)}
         actions={[
+          { label: selection?.calloutConfig?.family === 'block' ? 'Edit Callout Block' : 'Edit', disabled: !selection, onClick: editPlacedSelection, hint: 'Open the active editor for this symbol, smart component, or callout' },
+          { label: 'Rename', disabled: !selection, onClick: renamePlacedSelection },
+          { label: 'Duplicate', disabled: !selection, onClick: () => canvasApiRef.current?.duplicateSelected() },
+          { label: 'Delete', disabled: !selection, onClick: () => canvasApiRef.current?.deleteSelected() },
+          { label: 'Move to Category', disabled: !selection, onClick: movePlacedSelectionToCategory },
+          { label: selection?.favorite ? 'Remove from Favorites' : 'Add to Favorites', disabled: !selection, onClick: togglePlacedSelectionFavorite },
+          { label: 'Save as Assembly', disabled: !selection, onClick: saveSelectionAsAssembly },
           { label: 'Paste Image (Ctrl+V)', onClick: () => void pasteImageFromClipboard(), hint: 'Paste a screenshot from the clipboard' },
           { label: 'Insert Text Box', divider: true, onClick: () => { setOverlayMode(true); canvasApiRef.current?.addText(); } },
           { label: 'Insert Arrow', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addArrow(); } },
@@ -2719,16 +2964,16 @@ export default function App() {
           { label: 'Import Worksheet from Excel', divider: true, onClick: () => setImportWsOpen({ afterPageId: activePageId ?? undefined }) },
           { label: 'Add Blank Sheet After', onClick: () => activePageId && addPage(activePageId, 'after') },
           { label: 'Duplicate Current Sheet', onClick: () => activePageId && duplicatePage(activePageId) },
-          { label: 'Duplicate', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.duplicateSelected() },
-          { label: 'Copy', disabled: !selection, onClick: () => canvasApiRef.current?.copySelected() },
+          { label: 'Copy', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.copySelected() },
           { label: 'Paste', onClick: () => canvasApiRef.current?.pasteCopied() },
-          { label: 'Delete', disabled: !selection, onClick: () => canvasApiRef.current?.deleteSelected() },
           { label: 'Normalize Symbol Size', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.normalizeSymbolSize() },
           { label: 'Crop / Fit Selected Image', divider: true, disabled: !selection?.isImage, onClick: openSelectedImageCrop, hint: 'Choose the visible crop and optionally fit/fill the drawing area' },
           { label: 'Fit Selected Image to Page', disabled: !selection?.isImage, onClick: () => placeSelectedImageOnPage('fit') },
           { label: 'Fill Page with Selected Image', disabled: !selection?.isImage, onClick: () => placeSelectedImageOnPage('fill') },
           { label: 'Group Selected Objects', disabled: !selection, onClick: () => canvasApiRef.current?.group() },
           { label: selection?.isLegend ? 'Edit Legend / Marker' : 'Edit Group (Ungroup)', disabled: !selection?.isGroup, onClick: () => canvasApiRef.current?.ungroup(), hint: 'Break the grouped marker into editable text, symbols, and lines' },
+          { label: 'Edit Smart Component', disabled: !selection?.smartComponentType, onClick: editSelectedSmartComponent, hint: 'Change the selected smart component parameters and regenerate its editable vector parts' },
+          { label: 'Explode Smart Component', disabled: !selection?.smartComponentType, onClick: () => canvasApiRef.current?.ungroup(), hint: 'Break the smart component into independent editable shapes and labels' },
           { label: 'Bring to Front', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.bringToFront() },
           { label: 'Send to Back', disabled: !selection, onClick: () => canvasApiRef.current?.sendToBack() },
           { label: 'Add Vertex', divider: true, disabled: !selection?.isConnector, onClick: () => canvasApiRef.current?.addVertexToSelected() },

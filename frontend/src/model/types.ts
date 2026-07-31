@@ -413,7 +413,147 @@ export interface SavedAssembly {
   name: string;
   createdAt: string;
   object: Record<string, unknown>;
+  category?: string;
+  favorite?: boolean;
 }
+
+export type CalloutFamily = 'round' | 'square' | 'block';
+export type CalloutLayout = 'horizontal' | 'vertical' | 'grid';
+export type CalloutMarkerShape = 'round' | 'square' | 'pill' | 'none';
+
+export interface CalloutEntry {
+  callout: string;
+  label: string;
+  description: string;
+  /** Legacy serialized description retained for backward-compatible project loads. */
+  text?: string;
+}
+
+export interface CalloutSetConfig {
+  kind: 'callout-set';
+  family: CalloutFamily;
+  setName: string;
+  title: string;
+  entries: CalloutEntry[];
+  markerShape: CalloutMarkerShape;
+  layout: CalloutLayout;
+  gridColumns: number;
+  markerSize: number;
+  spacing: number;
+  fill: string;
+  stroke: string;
+  textColor: string;
+}
+
+export interface LibraryComponentInsertMeta {
+  category?: string;
+  defaultWidth?: number;
+  defaultHeight?: number;
+  acronym?: string;
+  libraryComponentId?: string;
+  collection?: string;
+  favorite?: boolean;
+}
+
+export interface PlacedSymbolEditorConfig {
+  name: string;
+  label: string;
+  width: number;
+  height: number;
+  category: string;
+  opacity: number;
+  favorite: boolean;
+}
+
+export type SmartComponentType =
+  | 'panel-enclosure'
+  | 'contactor-bank'
+  | 'relay-bank'
+  | 'power-monitor-pack'
+  | 'terminal-bank'
+  | 'labeled-device';
+
+export type SmartBankLayout = 'horizontal' | 'vertical' | 'grid';
+
+export interface SmartPanelEnclosureConfig {
+  kind: 'panel-enclosure';
+  panelType: 'WICP' | 'LCP' | 'PCP' | 'CCP' | 'REMS' | 'CUSTOM';
+  customPanelType: string;
+  title: string;
+  width: number;
+  height: number;
+  header: string;
+  deviceRows: number;
+  deviceColumns: number;
+  deviceLabels: string[];
+}
+
+export interface SmartContactorBankConfig {
+  kind: 'contactor-bank';
+  prefix: string;
+  startNumber: number;
+  numberedCount: number;
+  spareCount: number;
+  spareLabel: string;
+  customLabels: string[];
+  /** Automatically derived from custom labels or numbered + spare counts. */
+  quantity: number;
+  physicalPoles: '1P' | '2P' | '3P';
+  scheduledPoles: string;
+  layout: SmartBankLayout;
+  gridColumns: number;
+  spacing: number;
+  autoNumber: boolean;
+}
+
+export interface SmartRelayBankConfig {
+  kind: 'relay-bank';
+  prefix: string;
+  startNumber: number;
+  quantity: number;
+  layout: SmartBankLayout;
+  gridColumns: number;
+  spacing: number;
+  autoNumber: boolean;
+}
+
+export interface SmartPowerMonitorPackConfig {
+  kind: 'power-monitor-pack';
+  model: 'PS48' | 'PS24' | 'PS12' | 'PS3';
+  mount: 'WALL' | 'DIN';
+  terminalBank: string;
+  customTerminalBank: string;
+  ctQuantity: number;
+  ctType: 'Split-core' | 'Solid-core' | 'Rogowski' | 'Custom';
+  customCtType: string;
+}
+
+export interface SmartTerminalBankConfig {
+  kind: 'terminal-bank';
+  label: string;
+  prefix: string;
+  startNumber: number;
+  quantity: number;
+  layout: 'horizontal' | 'vertical';
+  spacing: number;
+}
+
+export interface SmartLabeledDeviceConfig {
+  kind: 'labeled-device';
+  label: string;
+  secondaryLabel: string;
+  width: number;
+  height: number;
+  terminalCount: number;
+}
+
+export type SmartComponentConfig =
+  | SmartPanelEnclosureConfig
+  | SmartContactorBankConfig
+  | SmartRelayBankConfig
+  | SmartPowerMonitorPackConfig
+  | SmartTerminalBankConfig
+  | SmartLabeledDeviceConfig;
 
 export type QuickAssemblyId =
   | 'signage-marker-trio'
@@ -453,6 +593,15 @@ export interface CanvasSelection {
   isImage?: boolean;
   isGroup?: boolean;
   isLegend?: boolean;
+  smartComponentType?: SmartComponentType;
+  smartConfig?: SmartComponentConfig;
+  calloutConfig?: CalloutSetConfig;
+  sourceUrl?: string;
+  symbolLabel?: string;
+  symCategory?: string;
+  libraryComponentId?: string;
+  favorite?: boolean;
+  isPlacedSymbol?: boolean;
   pdfSource?: string;
   pdfPage?: number;
   pdfDpi?: number;
@@ -567,12 +716,17 @@ export interface CanvasApi {
     name: string,
     label: string | null,
     at?: { clientX: number; clientY: number },
-    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number; acronym?: string },
-  ) => void;
+    meta?: LibraryComponentInsertMeta,
+  ) => Promise<void>;
   addComponentPair: (sourceUrl: string, symbolUrl: string, name: string, label: string | null, at?: { clientX: number; clientY: number }) => void;
   addLegend: (presetIds?: string[]) => void;
   addSymbolLegend: (config: SymbolLegendInsertConfig) => void;
   addQuickAssembly: (kind: QuickAssemblyId) => Promise<void> | void;
+  addSmartComponent: (config: SmartComponentConfig) => void;
+  updateSelectedSmartComponent: (config: SmartComponentConfig) => void;
+  addCalloutSet: (config: CalloutSetConfig) => void;
+  updateSelectedCalloutSet: (config: CalloutSetConfig) => void;
+  updateSelectedPlacedSymbol: (config: PlacedSymbolEditorConfig) => void;
   captureSelectedAssembly: () => Record<string, unknown> | null;
   addSavedAssembly: (assembly: SavedAssembly) => Promise<void> | void;
   normalizeSymbolSize: () => void;
@@ -592,8 +746,10 @@ export interface CanvasApi {
   sendBackward: () => void;
   bringToFront: () => void;
   sendToBack: () => void;
-  alignObjects: (direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'page-center-h' | 'page-center-v') => void;
+  alignObjects: (direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'page-center-h' | 'page-center-v' | 'page-center-both') => void;
   distributeObjects: (direction: 'horizontal' | 'vertical') => void;
+  equalSpaceObjects: (direction: 'horizontal' | 'vertical') => void;
+  centerInPanel: (direction: 'horizontal' | 'vertical' | 'both') => void;
   matchObjectSize: (which: 'width' | 'height' | 'both') => void;
   updateSelected: (patch: Partial<CanvasSelection>) => void;
   reverseConnectorDirection: () => void;

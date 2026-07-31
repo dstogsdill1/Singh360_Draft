@@ -836,12 +836,13 @@ def synchronize_project_to_workbook(
                     app_hash=app_hash,
                 )
             )
-            # A controlling 00_INDEX worksheet may also be the base Sheet Index
-            # drawing. Include each physical worksheet object exactly once.
-            if matched_sheet.title not in {
-                "00_PROJECT_META",
-                "00_HELP",
-            }:
+            # A published 00_INDEX may also be the package Sheet Index drawing
+            # and therefore participates in drawing order. When its app page is
+            # excluded, keep the same physical sheet only in the control block.
+            if (
+                matched_sheet.title not in {"00_PROJECT_META", "00_HELP"}
+                and (matched_sheet.title != index_ws.title or include)
+            ):
                 app_sheet_objects.append(matched_sheet)
             used_sheet_objects.add(id(matched_sheet))
 
@@ -873,7 +874,7 @@ def synchronize_project_to_workbook(
         for control_name in ("00_PROJECT_META", index_ws.title, "00_HELP"):
             if control_name in wb.sheetnames:
                 sheet = wb[control_name]
-                if id(sheet) not in used_sheet_objects and sheet not in controls:
+                if sheet not in app_sheet_objects and sheet not in controls:
                     controls.append(sheet)
         if "00_HELP" in wb.sheetnames:
             wb["00_HELP"].sheet_properties.tabColor = TAB_COLORS["help"]

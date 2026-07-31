@@ -1226,11 +1226,45 @@ export interface LibV2Data {
 
 export const libV2AssetUrl = (rel: string) => `/api/lib/asset/${rel}`;
 
-export async function getLibV2(includeLegacy: boolean = true): Promise<LibV2Data> {
-  const q = includeLegacy ? '?includeLegacy=1' : '';
-  const res = await fetch(`/api/lib${q}`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+async function requestLibraryJson<T>(path: string, init?: RequestInit, retries = 1): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    try {
+      const res = await fetch(path, { ...init, signal: controller.signal });
+      if (!res.ok) {
+        const detail = await res.text();
+        if (res.status >= 500 && attempt < retries) {
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
+          continue;
+        }
+        throw new Error(detail || `Component library request failed (${res.status}).`);
+      }
+      return await res.json() as T;
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries && (!(error instanceof DOMException) || error.name !== 'AbortError')) {
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        continue;
+      }
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+  const detail = lastError instanceof Error ? lastError.message : String(lastError || 'unknown error');
+  throw new Error(`Component library server request failed after retry: ${detail}`);
+}
+
+export async function getLibV2(
+  includeLegacy: boolean = true,
+  includeRetired: boolean = false,
+): Promise<LibV2Data> {
+  const params = new URLSearchParams();
+  if (includeLegacy) params.set('includeLegacy', '1');
+  if (includeRetired) params.set('includeRetired', '1');
+  const query = params.toString();
+  return requestLibraryJson<LibV2Data>(`/api/lib${query ? `?${query}` : ''}`);
 }
 
 export async function refreshLibV2(): Promise<{ ok: boolean; scanned: number; added: number; skipped: number; duplicates: number }> {
@@ -1299,10 +1333,28 @@ export async function restoreLibV2History(name: string): Promise<{ ok: boolean; 
   return res.json();
 }
 
+export async function restoreLibV2Component(id: string): Promise<{ ok: boolean; component?: LibV2Component; error?: string }> {
+  return requestLibraryJson(`/api/lib/components/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+}
+
 export async function duplicateLibV2Component(id: string): Promise<{ ok: boolean; component: LibV2Component; error?: string }> {
   const res = await fetch(`/api/lib/components/${id}/duplicate`, { method: 'POST' });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export async function archiveLibV2Component(id: string): Promise<{ ok: boolean; component?: LibV2Component; error?: string }> {
+  return requestLibraryJson(`/api/lib/components/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+}
+
+export async function createLibV2Component(
+  file: File,
+  metadata: Partial<LibV2Component>,
+): Promise<{ ok: boolean; component: LibV2Component; snapshot?: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('metadata', JSON.stringify(metadata));
+  return requestLibraryJson('/api/lib/components', { method: 'POST', body: form }, 0);
 }
 
 export async function replaceLibV2Asset(

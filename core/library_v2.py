@@ -165,6 +165,8 @@ class LibraryV2:
         self.archive = self.docs / "archive"
         self.projects = self.docs / "projects"
         self.exports = self.docs / "exports"
+        self._variant_index_cache: dict[tuple[str, str], dict[str, str]] | None = None
+        self._asset_exists_cache: dict[str, bool] = {}
 
     # ---- scaffolding -----------------------------------------------------
     def ensure(self) -> None:
@@ -191,6 +193,48 @@ class LibraryV2:
         data.setdefault("version", MANIFEST_VERSION)
         data.setdefault("components", [])
         return data
+
+    def _read_legacy_index(self) -> list[dict]:
+        """Read the older metadata index that shares this same library root.
+
+        The file is not a second library: it is an older index for assets under
+        ``.docs/library``.  Keeping it in the effective read model preserves
+        stable component IDs while manifest overrides provide modern edits.
+        """
+        path = self.root / "library.json"
+        if not path.is_file():
+            return []
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except Exception:  # noqa: BLE001
+            return []
+        entries = payload.get("components") if isinstance(payload, dict) else []
+        return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
+
+    def _legacy_index_record(self, raw: dict) -> dict:
+        """Translate one legacy-index entry without changing its stable ID."""
+        status = str(raw.get("status") or "").strip()
+        retired = bool(raw.get("retired") or raw.get("hidden")) or status.lower() in {
+            "retired", "archive", "archived", "duplicate", "junk", "hidden",
+        }
+        category_raw = str(raw.get("category") or "custom").strip().lower()
+        category = LEGACY_CATEGORY_MAP.get(category_raw, category_raw)
+        if category not in LIBRARY_CATEGORIES:
+            category = "custom"
+        source_file = raw.get("sourceFile") or raw.get("assetPath") or ""
+        thumbnail_file = raw.get("thumbnailFile") or raw.get("thumbnailPath") or ""
+        return {
+            **raw,
+            "id": str(raw.get("id") or raw.get("componentId") or "").strip(),
+            "category": category,
+            "categories": raw.get("categories") or [category],
+            "sourceFile": source_file,
+            "thumbnailFile": thumbnail_file,
+            "contentHash": raw.get("contentHash") or raw.get("sha256") or "",
+            "retired": retired,
+            "status": status or ("retired" if retired else "approved"),
+            "origin": "legacy_index",
+        }
 
     def _write_manifest(self, data: dict) -> None:
         data["updatedAt"] = _now()
@@ -304,6 +348,14 @@ class LibraryV2:
 
     def _rel(self, path: Path) -> str:
         return path.relative_to(self.root).as_posix()
+
+    def _asset_exists(self, relative: str) -> bool:
+        normalized = str(relative or "").replace("\\", "/").lstrip("/")
+        if not normalized:
+            return False
+        if normalized not in self._asset_exists_cache:
+            self._asset_exists_cache[normalized] = (self.root / normalized).is_file()
+        return self._asset_exists_cache[normalized]
 
     def _approved_symbol_for(self, category: str, source_file_rel: str) -> str:
         """Return library-relative approved symbol path for a source file if present.
@@ -964,71 +1016,81 @@ class LibraryV2:
     def load(self, include_legacy: bool = False, include_retired: bool = False) -> dict:
         self.ensure()
         export = self._load_builder_export()
+        manifest = self._read_manifest()
+        variant_index = self._build_variant_index()
+        override_by_id = {
+            str(component.get("id") or ""): component
+            for component in manifest.get("components", [])
+            if component.get("id")
+        }
         legacy_count = 0
+        comps: list[dict] = []
+        visible_ids: set[str] = set()
+        visible_keys: set[str] = set()
+
+        def overlay(base: dict, override: dict | None) -> dict:
+            merged = dict(base)
+            if not override:
+                return merged
+            if self._canonical_standard_key(override):
+                merged.update(override)
+                merged["origin"] = "manifest_canonical"
+                return merged
+            for key in EDITABLE_FIELDS:
+                # Presence in an override is authoritative, including cleared values.
+                if key in override:
+                    merged[key] = override[key]
+            return merged
+
+        def add_component(payload: dict, *, weak_dedupe: bool = True) -> bool:
+            nonlocal legacy_count
+            component_id = str(payload.get("id") or "").strip()
+            retired = bool(payload.get("retired"))
+            if not component_id or (retired and not include_retired):
+                return False
+            if component_id in visible_ids:
+                return False
+            identity = self._identity_keys(payload)
+            strong_identity = {
+                key for key in identity
+                if key.startswith("id:") or key.startswith("hash:")
+            }
+            # Retired records remain visible in the manager even when they are a
+            # duplicate candidate; that is what makes restore/review recoverable.
+            duplicate = False if (retired and include_retired) else bool(
+                (identity if weak_dedupe else strong_identity) & visible_keys
+            )
+            if duplicate:
+                return False
+            comps.append(payload)
+            visible_ids.add(component_id)
+            visible_keys.update(identity)
+            return True
+
         if export is not None:
-            manifest = self._read_manifest()
-            override_by_id = {c.get("id"): c for c in manifest.get("components", [])}
+            for component in export:
+                merged = overlay(component, override_by_id.get(str(component.get("id") or "")))
+                add_component(self._compose_component_payload(merged, variant_index), weak_dedupe=False)
 
-            approved: list[dict] = []
-            approved_keys: set[str] = set()
-            for c in export:
-                merged = dict(c)
-                ov = override_by_id.get(c.get("id"))
-                if ov:
-                    if self._canonical_standard_key(ov):
-                        # Stable Singh360 canonical metadata is authoritative over a stale
-                        # Component Builder export with the same id. Preserve extra builder
-                        # fields, but never let it erase renderer/source/sort identity.
-                        merged.update(ov)
-                        merged["origin"] = "manifest_canonical"
-                    else:
-                        for key in EDITABLE_FIELDS:
-                            # Presence in an override is authoritative, even when cleared.
-                            if key in ov:
-                                merged[key] = ov[key]
-                        if ov.get("favorite"):
-                            merged["favorite"] = True
-                payload = self._compose_component_payload(merged)
-                if payload.get("retired") and not include_retired:
-                    continue
-                approved.append(payload)
-                approved_keys.update(self._identity_keys(payload))
+        for raw in manifest.get("components", []):
+            if export is not None and raw.get("origin") == "override":
+                continue
+            payload = self._compose_component_payload(raw, variant_index)
+            # Stable canonical symbols may share short labels, so only strong
+            # identity hides them. Other stale manifest duplicates retain the
+            # established weak-identity suppression.
+            add_component(payload, weak_dedupe=not bool(self._canonical_standard_key(payload)))
 
-            legacy_candidates: list[dict] = []
-            for raw in manifest.get("components", []):
-                if raw.get("origin") == "override":
-                    continue
-                payload = self._compose_component_payload(raw)
-                if payload.get("retired") and not include_retired:
-                    continue
-                legacy_candidates.append(payload)
+        if include_legacy:
+            legacy_entries = self._read_legacy_index()
+            for raw in legacy_entries:
+                normalized = self._legacy_index_record(raw)
+                component_id = str(normalized.get("id") or "")
+                merged = overlay(normalized, override_by_id.get(component_id))
+                payload = self._compose_component_payload(merged, variant_index)
+                if add_component(payload, weak_dedupe=True):
+                    legacy_count += 1
 
-            stale_hidden = 0
-            legacy_visible: list[dict] = []
-            for c in legacy_candidates:
-                identity = self._identity_keys(c)
-                if self._canonical_standard_key(c):
-                    # Canonical symbols intentionally share short codes (the two S rows).
-                    # Only exact stable id/hash collisions may hide one; weak name, part,
-                    # or alias collisions from a stale builder export must not suppress it.
-                    strong_identity = {
-                        key for key in identity
-                        if key.startswith("id:") or key.startswith("hash:")
-                    }
-                    duplicate = bool(strong_identity & approved_keys)
-                else:
-                    duplicate = bool(identity & approved_keys)
-                if duplicate:
-                    stale_hidden += 1
-                    continue
-                legacy_visible.append(c)
-
-            legacy_count = stale_hidden + len(legacy_visible)
-            # The manifest and component-builder export are both active metadata sources. Always return their non-duplicate active union so the Draft sidebar, full catalog, legend picker, and publisher show the same components.
-            comps = approved + legacy_visible
-        else:
-            manifest = self._read_manifest()
-            comps = [self._compose_component_payload(c) for c in manifest["components"] if include_retired or not c.get("retired")]
         counts: dict[str, int] = {}
         for c in comps:
             primary = c.get("category", "custom")
@@ -1165,16 +1227,52 @@ class LibraryV2:
         rel_clean = (rel or "").replace("\\", "/").lstrip("/")
         return f"/api/lib/asset/{quote(rel_clean, safe='/-_.~')}" if rel_clean else ""
 
-    def _variant_candidates(self, category: str, symbol_rel: str, source_rel: str) -> dict[str, str]:
+    def _build_variant_index(self) -> dict[tuple[str, str], dict[str, str]]:
+        """Index symbol variants once for an entire library load.
+
+        The old implementation scanned a OneDrive-backed category directory for
+        every component.  With hundreds of components that turned one API read
+        into thousands of repeated NTFS stats and could leave the browser with a
+        network-level fetch failure.  This index touches each symbol file once.
+        """
+        if self._variant_index_cache is not None:
+            return self._variant_index_cache
+        index: dict[tuple[str, str], dict[str, str]] = {}
+        if not self.symbols.is_dir():
+            self._variant_index_cache = index
+            return index
+        for category_dir in self.symbols.iterdir():
+            if not category_dir.is_dir() or category_dir.name.startswith("."):
+                continue
+            category = category_dir.name
+            for path in category_dir.rglob("*"):
+                if not path.is_file():
+                    continue
+                stem = path.stem
+                match = re.match(r"^(.*?)__([a-z0-9_-]+)$", stem, flags=re.IGNORECASE)
+                if match:
+                    base = match.group(1)
+                    variant = match.group(2).lower()
+                else:
+                    base = stem
+                    variant = "device"
+                index.setdefault((category, base.casefold()), {}).setdefault(variant, self._rel(path))
+        self._variant_index_cache = index
+        return index
+
+    def _variant_candidates(
+        self,
+        category: str,
+        symbol_rel: str,
+        source_rel: str,
+        variant_index: dict[tuple[str, str], dict[str, str]] | None = None,
+    ) -> dict[str, str]:
         out: dict[str, str] = {}
         if symbol_rel:
-            v = _variant_from_symbol(symbol_rel)
-            if v:
-                out[v] = symbol_rel
+            variant = _variant_from_symbol(symbol_rel)
+            if variant:
+                out[variant] = symbol_rel
         if not category:
-            return out
-        cat_dir = self.symbols / category
-        if not cat_dir.exists():
             return out
 
         base = ""
@@ -1185,17 +1283,24 @@ class LibraryV2:
         if not base:
             return out
 
-        for p in cat_dir.iterdir():
-            if not p.is_file():
+        if variant_index is not None:
+            for name, rel in variant_index.get((category, base.casefold()), {}).items():
+                out.setdefault(name, rel)
+            return out
+
+        cat_dir = self.symbols / category
+        if not cat_dir.exists():
+            return out
+        for path in cat_dir.iterdir():
+            if not path.is_file():
                 continue
-            stem = p.stem
+            stem = path.stem
             if stem == base:
-                out.setdefault("device", self._rel(p))
+                out.setdefault("device", self._rel(path))
                 continue
-            m = re.match(rf"^{re.escape(base)}__([a-z0-9_-]+)$", stem, flags=re.IGNORECASE)
-            if not m:
-                continue
-            out.setdefault(m.group(1).lower(), self._rel(p))
+            match = re.match(rf"^{re.escape(base)}__([a-z0-9_-]+)$", stem, flags=re.IGNORECASE)
+            if match:
+                out.setdefault(match.group(1).lower(), self._rel(path))
         return out
 
     @staticmethod
@@ -1243,8 +1348,13 @@ class LibraryV2:
             keys.add(f"hash:{ch}")
         return keys
 
-    def _compose_component_payload(self, raw: dict) -> dict:
-        category = (raw.get("category") or "custom").lower()
+    def _compose_component_payload(
+        self,
+        raw: dict,
+        variant_index: dict[tuple[str, str], dict[str, str]] | None = None,
+    ) -> dict:
+        category_raw = (raw.get("category") or "custom").lower()
+        category = LEGACY_CATEGORY_MAP.get(category_raw, category_raw)
         if category not in LIBRARY_CATEGORIES:
             category = "custom"
 
@@ -1266,23 +1376,28 @@ class LibraryV2:
         bw_override = self._rel_from_any(raw.get("bwFile") or "")
         symbol_rel = self._rel_from_any(raw.get("symbolFile") or raw.get("symbol") or "")
 
-        has_source = bool(source_rel) and (self.root / source_rel).exists()
+        has_source = self._asset_exists(source_rel)
         if not has_source:
             source_rel = ""
 
-        has_symbol = bool(symbol_rel) and (self.root / symbol_rel).exists()
+        has_symbol = self._asset_exists(symbol_rel)
         if not has_symbol:
             symbol_rel = ""
 
-        if edge_override and not (self.root / edge_override).exists():
+        if edge_override and not self._asset_exists(edge_override):
             edge_override = ""
-        if bw_override and not (self.root / bw_override).exists():
+        if bw_override and not self._asset_exists(bw_override):
             bw_override = ""
 
         # Variant scanning is an inference fallback for manifest-only items. When
         # the builder export supplies explicit representation paths we trust them
         # verbatim and never infer Edge from a procedural symbol.
-        variants = {} if is_export else self._variant_candidates(category, symbol_rel, source_rel)
+        variants = {} if is_export else self._variant_candidates(
+            category,
+            symbol_rel,
+            source_rel,
+            variant_index,
+        )
         chosen_variant = str(raw.get("chosenVariant") or "").strip().lower()
         preferred_variant = str(raw.get("preferredEdgeVariant") or "").strip().lower()
 
@@ -1321,7 +1436,7 @@ class LibraryV2:
             can_bw_fallback = True
 
         thumb_rel = self._rel_from_any(raw.get("thumbnailFile") or "")
-        if not thumb_rel or not (self.root / thumb_rel).exists():
+        if not thumb_rel or not self._asset_exists(thumb_rel):
             thumb_rel = source_rel
 
         source_url = self._url_for_asset(source_rel)
@@ -1380,10 +1495,15 @@ class LibraryV2:
         }
 
     def duplicate_component(self, comp_id: str) -> dict:
-        source = next((c for c in self.load(include_legacy=True).get("components", []) if c.get("id") == comp_id), None)
+        source = next((
+            component
+            for component in self.load(include_legacy=True, include_retired=True).get("components", [])
+            if component.get("id") == comp_id
+        ), None)
         if not source:
             return {"ok": False, "error": "Component not found."}
         manifest = self._read_manifest()
+        snapshot = self._snapshot_manifest(f"before-duplicate-{comp_id}")
         new_id = f"{_slug(source.get('id') or 'component')}_{uuid.uuid4().hex[:6]}"
         clone = {
             "id": new_id,
@@ -1403,7 +1523,88 @@ class LibraryV2:
         }
         manifest.setdefault("components", []).append(clone)
         self._write_manifest(manifest)
-        return {"ok": True, "component": self._compose_component_payload(clone)}
+        return {
+            "ok": True,
+            "component": self._compose_component_payload(clone, self._build_variant_index()),
+            "snapshot": snapshot,
+        }
+
+    def create_component(self, filename: str, data: bytes, metadata: dict | None = None) -> dict:
+        """Create one manifest-backed component and preserve a pre-change snapshot."""
+        self.ensure()
+        metadata = metadata if isinstance(metadata, dict) else {}
+        extension = Path(filename or "").suffix.lower()
+        if extension not in SOURCE_EXTS:
+            return {"ok": False, "error": "Unsupported component image type."}
+        if not data:
+            return {"ok": False, "error": "The component image is empty."}
+
+        category_raw = str(metadata.get("category") or "custom").strip().lower()
+        category = LEGACY_CATEGORY_MAP.get(category_raw, category_raw)
+        if category not in LIBRARY_CATEGORIES:
+            category = "custom"
+        display_name = str(metadata.get("displayName") or Path(filename).stem or "Component").strip()
+        display_name = display_name or "Component"
+
+        manifest = self._read_manifest()
+        digest = hashlib.sha256(data).hexdigest()
+        for component in manifest.get("components", []):
+            if component.get("contentHash") == digest:
+                return {
+                    "ok": False,
+                    "error": f"That image already exists as {component.get('displayName') or component.get('id')}.",
+                }
+
+        component_id = f"cmp_{uuid.uuid4().hex[:12]}"
+        known_ids = {str(component.get("id") or "") for component in manifest.get("components", [])}
+        while component_id in known_ids:
+            component_id = f"cmp_{uuid.uuid4().hex[:12]}"
+
+        directory = self.components / category
+        directory.mkdir(parents=True, exist_ok=True)
+        stem = _slug(display_name)
+        destination = directory / f"{stem}{extension}"
+        suffix = 2
+        while destination.exists():
+            destination = directory / f"{stem}-{suffix}{extension}"
+            suffix += 1
+
+        snapshot = self._snapshot_manifest("before-create-component")
+        try:
+            destination.write_bytes(data)
+            entry = {
+                "id": component_id,
+                "displayName": display_name,
+                "shortName": str(metadata.get("shortName") or "").strip(),
+                "category": category,
+                "categories": metadata.get("categories") or [category],
+                "collection": str(metadata.get("collection") or "").strip(),
+                "tags": [str(tag).strip() for tag in (metadata.get("tags") or []) if str(tag).strip()],
+                "sourceFile": self._rel(destination),
+                "contentHash": digest,
+                "perceptualHash": self.perceptual_hash(destination),
+                "defaultLabel": str(metadata.get("defaultLabel") or display_name).strip(),
+                "defaultWidth": metadata.get("defaultWidth") or category_default(category).width,
+                "defaultHeight": metadata.get("defaultHeight") or category_default(category).height,
+                "favorite": bool(metadata.get("favorite")),
+                "approved": True,
+                "needsReview": bool(metadata.get("needsReview", False)),
+                "retired": False,
+                "status": "approved",
+                "origin": "component_builder",
+                "createdAt": _now(),
+            }
+            manifest.setdefault("components", []).append(entry)
+            self._write_manifest(manifest)
+        except Exception:
+            destination.unlink(missing_ok=True)
+            raise
+
+        return {
+            "ok": True,
+            "component": self._compose_component_payload(entry, self._build_variant_index()),
+            "snapshot": snapshot,
+        }
 
     def replace_component_asset(self, comp_id: str, target: str, filename: str, data: bytes) -> dict:
         target = (target or "").strip().lower()
@@ -1442,6 +1643,9 @@ class LibraryV2:
                 dest = out_dir / f"{stem}__bw-{i}{ext}"
             i += 1
         dest.write_bytes(data)
+        self._asset_exists_cache[self._rel(dest)] = True
+        if target in {"edge", "bw"}:
+            self._variant_index_cache = None
         rel = self._rel(dest)
 
         patch: dict = {}

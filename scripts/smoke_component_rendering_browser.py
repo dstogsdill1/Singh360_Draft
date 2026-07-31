@@ -372,86 +372,55 @@ def main() -> int:
                 page.locator(".panel-left").wait_for(timeout=10_000)
                 page.locator(".nav-section-head").filter(has_text=re.compile("Components", re.IGNORECASE)).click()
 
-                section_nav = page.locator(".libv2-section-nav")
+                component_browser = page.locator(".libv2-browser")
                 try:
-                    section_nav.wait_for(timeout=15_000)
+                    component_browser.wait_for(timeout=15_000)
+                    page.get_by_text("Component library ready", exact=True).wait_for(timeout=30_000)
                 except Exception:
                     page.screenshot(path=evidence / "component-sidebar-open-failure.png", full_page=True)
                     raise AssertionError(
                         f"Component Library sidebar did not open; console={console_errors}; "
                         f"body={page.locator('body').inner_text()[:4000]!r}"
                     )
-                all_shortcut = section_nav.locator("button").filter(has_text="All Components")
-                all_shortcut.wait_for(timeout=15_000)
+                cards = component_browser.locator(".libv2-browser-card")
                 page.wait_for_function(
-                    """() => {
-                      const button = [...document.querySelectorAll('.libv2-section-nav button')]
-                        .find((node) => node.textContent?.includes('All Components'));
-                      const count = Number((button?.getAttribute('aria-label') || '').split(':').pop());
-                      return count > 0 && document.querySelectorAll('.libv2-card').length === count;
-                    }""",
+                    "() => document.querySelectorAll('.libv2-browser-card').length > 0",
                     timeout=15_000,
                 )
-                if all_shortcut.get_attribute("aria-pressed") != "true":
-                    raise AssertionError(
-                        "Component Library did not default to All Components: "
-                        f"aria={all_shortcut.get_attribute('aria-pressed')!r}, "
-                        f"class={all_shortcut.get_attribute('class')!r}, "
-                        f"buttons={section_nav.locator('button').all_inner_texts()!r}"
-                    )
-                active_count = int((all_shortcut.get_attribute("aria-label") or "").rsplit(":", 1)[1])
-                if page.locator(".libv2-card").count() != active_count:
-                    raise AssertionError(
-                        f"All Components count/card mismatch: shortcut={active_count}, "
-                        f"cards={page.locator('.libv2-card').count()}"
-                    )
+                active_count = cards.count()
+                category_filter = page.get_by_role("combobox", name="Component category")
+                collection_filter = page.get_by_role("combobox", name="Component collection")
+                if category_filter.input_value() != "all":
+                    raise AssertionError("Component Browser did not default to All Components")
+                for removed_text in (
+                    "Smart Components", "Quick Insert", "Recently Used", "Favorites",
+                    "Source", "Edge", "B/W", "Open Symbol Mapper", "Rebuild Previews",
+                ):
+                    if component_browser.get_by_text(removed_text, exact=True).count():
+                        raise AssertionError(f"normal Component Browser still exposes {removed_text!r}")
 
-                highlighted = page.get_by_role(
-                    "button", name="Highlighted Symbols: 2", exact=True
-                )
-                highlighted.click()
-                if page.get_by_role("combobox", name="Filter by collection").input_value() != "Refrigeration Controls Symbols":
-                    raise AssertionError("Highlighted Symbols did not select its exact collection")
-                if page.locator(".libv2-card").count() != 2:
-                    raise AssertionError("Highlighted Symbols count and displayed cards disagree")
-                for name in ("Highlighted Alpha", "Highlighted Beta"):
-                    page.locator(".libv2-card").filter(has_text=name).wait_for()
-
-                plan_markers = page.get_by_role("button", name="Plan Markers: 2", exact=True)
-                plan_markers.click()
-                if page.get_by_role("combobox", name="Filter by collection").input_value() != "Singh360 Plan Markers":
-                    raise AssertionError("Plan Markers did not select its exact collection")
-                if page.locator(".libv2-card").count() != 2:
-                    raise AssertionError("Plan Markers count and displayed cards disagree")
-
-                all_shortcut.click()
-                general_card = page.locator(".libv2-card").filter(has_text="General Fixture")
-                favorite_button = general_card.get_by_role("button", name="Favorite General Fixture", exact=True)
-                favorite_button.click()
-                page.get_by_role("button", name="Favorites: 1", exact=True).click()
-                page.locator(".libv2-card").filter(has_text="General Fixture").wait_for()
-                if page.locator(".libv2-card").count() != 1:
-                    raise AssertionError("Favorites shortcut count and displayed cards disagree")
-
-                page.get_by_role("button", name="Saved Assemblies: 0", exact=True).click()
-                page.get_by_text("Active filter: Saved Assemblies", exact=True).wait_for()
-                page.get_by_role("button", name="Show All Components", exact=True).click()
+                collection_filter.select_option(label="Refrigeration Controls Symbols")
                 page.wait_for_function(
-                    "count => document.querySelectorAll('.libv2-card').length === count",
+                    "() => document.querySelectorAll('.libv2-browser-card').length === 2",
+                    timeout=10_000,
+                )
+                for name in ("Highlighted Alpha", "Highlighted Beta"):
+                    component_browser.locator(".libv2-browser-card").filter(has_text=name).wait_for()
+                category_filter.select_option("all")
+                if collection_filter.input_value() != "all":
+                    raise AssertionError("All Components retained a hidden collection filter")
+                page.wait_for_function(
+                    "count => document.querySelectorAll('.libv2-browser-card').length === count",
                     arg=active_count,
                     timeout=10_000,
                 )
-                if all_shortcut.get_attribute("aria-pressed") != "true":
-                    raise AssertionError("empty Saved Assemblies recovery did not restore All Components")
-                if page.locator(".libv2-card").count() != active_count:
-                    raise AssertionError("Show All Components did not restore every active card")
 
-                card = page.locator(".libv2-card").filter(has_text=COMPONENT_NAME)
+                card = component_browser.locator(".libv2-browser-card").filter(has_text=COMPONENT_NAME)
                 card.wait_for(timeout=15_000)
                 preview = card.locator("img").first
                 if preview.count() and preview.evaluate("(node) => getComputedStyle(node).objectFit") != "contain":
                     raise AssertionError("component library preview is not contain-sized")
-                card.get_by_role("button", name="Insert", exact=True).click()
+                card.click()
                 page.wait_for_function(
                     """name => (window.__S360_CANVAS_RENDER_AUDIT__?.() || [])
                       .some(item => item.name.includes(name))""",
@@ -460,15 +429,69 @@ def main() -> int:
                 )
                 direct = matching(render_audit(page), COMPONENT_NAME)
                 assert_visible(direct, "direct insertion")
-                page.get_by_role("button", name="Recently Used: 1", exact=True).click()
-                if page.locator(".libv2-card").count() != 1:
-                    raise AssertionError("Recently Used count and displayed cards disagree")
-                page.locator(".libv2-card").filter(has_text=COMPONENT_NAME).wait_for()
                 page.screenshot(path=evidence / "02-direct-insert-visible.png", full_page=True)
 
+                card.drag_to(page.locator(".sheet-viewport"), target_position={"x": 700, "y": 430})
+                page.wait_for_function(
+                    """name => (window.__S360_CANVAS_RENDER_AUDIT__?.() || [])
+                      .filter(item => item.name.includes(name)).length >= 2""",
+                    arg=COMPONENT_NAME,
+                    timeout=20_000,
+                )
+
+                page.get_by_role("button", name="Component Builder", exact=True).click()
+                builder = page.get_by_role("dialog", name="Component Builder")
+                builder.wait_for(timeout=15_000)
+                builder.get_by_placeholder("Search existing components…").fill(COMPONENT_NAME)
+                builder.locator(".libv2-builder-picker-list > button").filter(has_text=COMPONENT_NAME).click()
+                renamed_component = f"{COMPONENT_NAME} Renamed"
+                builder.get_by_label("Component name", exact=True).fill(renamed_component)
+                builder.get_by_role("button", name="Save Component", exact=True).click()
+                builder.get_by_label("Component name", exact=True).wait_for()
+                if builder.get_by_label("Component name", exact=True).input_value() != renamed_component:
+                    raise AssertionError("Component Builder rename did not refresh immediately")
+                page.once("dialog", lambda dialog: dialog.accept())
+                builder.get_by_role("button", name="Retire", exact=True).click()
+                builder.get_by_role("button", name="Restore", exact=True).wait_for(timeout=15_000)
+                builder.get_by_role("button", name="Restore", exact=True).click()
+                builder.get_by_role("button", name="Retire", exact=True).wait_for(timeout=15_000)
+                builder.get_by_role("button", name="Close", exact=True).click()
+                component_browser.get_by_placeholder("Search components…").fill(renamed_component)
+                component_browser.locator(".libv2-browser-card").filter(has_text=renamed_component).wait_for(timeout=15_000)
+
+                component_browser.get_by_placeholder("Search components…").fill("")
                 page.get_by_role("button", name="Manage Library", exact=True).click()
-                page.get_by_role("button", name="Saved Legends (1)", exact=True).click()
-                page.get_by_role("heading", name="Build / Insert Symbol Legend").wait_for(timeout=15_000)
+                manager = page.get_by_role("dialog", name="Manage Library")
+                manager.wait_for(timeout=15_000)
+                manager.get_by_placeholder("Search review cards…").fill(renamed_component)
+                # The editable name lives in an input value, not a text node,
+                # so a has_text locator cannot identify the matching review card.
+                review_card = manager.locator(
+                    f'.libv2-review-card:has(input[value="{renamed_component}"])'
+                )
+                review_card.wait_for(timeout=15_000)
+                managed_name = f"{renamed_component} Managed"
+                review_card.get_by_label("Name", exact=True).fill(managed_name)
+                manager.get_by_role("button", name=re.compile(r"^Save Changes \(1\)$")).click()
+                manager.get_by_text("History Snapshots", exact=True).wait_for()
+                manager.get_by_role("button", name="Close", exact=True).click()
+                component_browser.get_by_placeholder("Search components…").fill(managed_name)
+                component_browser.locator(".libv2-browser-card").filter(has_text=managed_name).wait_for(timeout=15_000)
+
+                page.get_by_role("button", name="Component Builder", exact=True).click()
+                builder = page.get_by_role("dialog", name="Component Builder")
+                builder.get_by_placeholder("Search existing components…").fill(managed_name)
+                builder.locator(".libv2-builder-picker-list > button").filter(has_text=managed_name).click()
+                builder.get_by_text("Advanced insertion and library tools", exact=True).click()
+                builder.get_by_role("button", name="Saved Legends (1)", exact=True).click()
+                legend_dialog = page.locator(".symbol-legend-builder-modal")
+                legend_dialog.wait_for(timeout=15_000)
+                legend_dialog.get_by_label("Legend source").select_option(
+                    label="V40 Visible Render Legend (1)"
+                )
+                legend_dialog.get_by_text(
+                    re.compile(r"V40 Visible Render Legend loaded.+1 symbols")
+                ).wait_for(timeout=15_000)
                 page.get_by_role("button", name="Insert legend", exact=True).click()
                 page.wait_for_function(
                     """() => (window.__S360_CANVAS_RENDER_AUDIT__?.() || [])
@@ -516,12 +539,11 @@ def main() -> int:
                 if not page.locator(".panel-left").is_visible():
                     page.locator(".panel-rail-left").click()
                     page.locator(".panel-left").wait_for(timeout=10_000)
-                if not page.locator(".libv2-section-nav").is_visible():
+                if not page.locator(".libv2-browser").is_visible():
                     page.locator(".nav-section-head").filter(has_text=re.compile("Components", re.IGNORECASE)).click()
-                page.get_by_role("button", name="Favorites: 1", exact=True).click()
-                page.locator(".libv2-card").filter(has_text="General Fixture").wait_for()
-                page.get_by_role("button", name="Recently Used: 1", exact=True).click()
-                page.locator(".libv2-card").filter(has_text=COMPONENT_NAME).wait_for()
+                page.get_by_text("Component library ready", exact=True).wait_for(timeout=30_000)
+                page.locator(".libv2-browser").get_by_placeholder("Search components…").fill(managed_name)
+                page.locator(".libv2-browser-card").filter(has_text=managed_name).wait_for()
                 page.screenshot(path=evidence / "04-save-reload-visible.png", full_page=True)
 
                 report["initialAudit"] = initial

@@ -121,6 +121,17 @@ class LibraryStore:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.index_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def _snapshot_index(self, reason: str) -> str:
+        if not self.index_path.is_file():
+            return ""
+        history = self.dir / "history"
+        history.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        safe_reason = re.sub(r"[^A-Za-z0-9._-]+", "-", reason).strip("-")[:60] or "library-change"
+        target = history / f"legacy_library_{stamp}__{safe_reason}.json"
+        shutil.copy2(self.index_path, target)
+        return target.name
+
     def _read_config(self) -> dict:
         self.ensure()
         try:
@@ -545,10 +556,13 @@ class LibraryStore:
         return None
 
     def retire_component(self, comp_id: str) -> bool:
-        data = self.load()
+        data = self._raw_load()
         found = False
         for c in data.get("components", []):
             if c.get("id") == comp_id:
+                if str(c.get("status") or "").lower() == "retired":
+                    return True
+                self._snapshot_index(f"before-retire-{comp_id}")
                 c["status"] = "retired"
                 found = True
                 break
@@ -557,10 +571,13 @@ class LibraryStore:
         return found
 
     def restore_component(self, comp_id: str) -> bool:
-        data = self.load()
+        data = self._raw_load()
         found = False
         for c in data.get("components", []):
             if c.get("id") == comp_id:
+                if str(c.get("status") or "").lower() == "approved":
+                    return True
+                self._snapshot_index(f"before-restore-{comp_id}")
                 c["status"] = "approved"
                 found = True
                 break

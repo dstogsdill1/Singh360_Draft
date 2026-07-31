@@ -1803,7 +1803,13 @@ legend_templates.ensure()
 def lib2_get():
     include_legacy = request.args.get("includeLegacy", "0") in {"1", "true", "True", "yes"}
     include_retired = request.args.get("includeRetired", "0") in {"1", "true", "True", "yes"}
-    return jsonify(lib2.load(include_legacy=include_legacy, include_retired=include_retired))
+    try:
+        response = jsonify(lib2.load(include_legacy=include_legacy, include_retired=include_retired))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("component library load failed")
+        return jsonify(_err("Component library load failed.", str(exc))), 500
 
 
 @app.post("/api/lib/refresh")
@@ -1883,6 +1889,25 @@ def lib2_add_file():
         app.logger.error("lib2 add file failed: %s", exc)
         return jsonify(_err("Add file failed.", str(exc))), 500
     return jsonify(result)
+
+
+@app.post("/api/lib/components")
+def lib2_create_component():
+    upload = request.files.get("file")
+    if upload is None or not upload.filename:
+        return jsonify(_err("A component image is required.")), 400
+    try:
+        metadata_raw = request.form.get("metadata") or "{}"
+        metadata = json.loads(metadata_raw)
+        if not isinstance(metadata, dict):
+            raise ValueError("metadata must be a JSON object")
+        result = lib2.create_component(upload.filename, upload.read(), metadata)
+    except (ValueError, json.JSONDecodeError) as exc:
+        return jsonify(_err("Invalid component metadata.", str(exc))), 400
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("lib2 create component failed")
+        return jsonify(_err("Create component failed.", str(exc))), 500
+    return jsonify(result), (200 if result.get("ok") else 400)
 
 
 @app.patch("/api/lib/components/<comp_id>")

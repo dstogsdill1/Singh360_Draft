@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  archiveLibV2Component,
   batchUpdateLibV2Components,
   cleanLibV2PhysicalDuplicates,
+  createLibV2Component,
   duplicateLibV2Component,
   getLibV2,
   libV2AssetUrl,
@@ -11,6 +13,7 @@ import {
   rebuildLibV2Thumbnails,
   refreshLibV2,
   replaceLibV2Asset,
+  restoreLibV2Component,
   restoreLibV2History,
   updateLibV2Component,
   type LegendTemplateEntry,
@@ -18,8 +21,16 @@ import {
   type LibV2Data,
   type LibV2HistoryEntry,
 } from '../api/client';
+import type {
+  CalloutFamily,
+  LibraryComponentInsertMeta,
+  QuickAssemblyId,
+  SavedAssembly,
+  SmartComponentType,
+} from '../model/types';
+import { SMART_COMPONENT_CHOICES } from '../model/smartComponents';
 import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
-import type { QuickAssemblyId, SavedAssembly } from '../model/types';
+import SheetContextMenu from './SheetContextMenu';
 import '../styles/libraryV2.css';
 
 interface Props {
@@ -27,8 +38,8 @@ interface Props {
     name: string,
     url: string,
     label: string | null,
-    meta?: { category?: string; defaultWidth?: number; defaultHeight?: number; acronym?: string },
-  ) => void;
+    meta?: LibraryComponentInsertMeta,
+  ) => Promise<void> | void;
   canInsert: boolean;
   activePageType?: string;
   onOpenLegendEditor?: () => void;
@@ -37,1402 +48,968 @@ interface Props {
   onInsertSavedAssembly?: (assembly: SavedAssembly) => void;
   onSaveSelectionAssembly?: () => void;
   onInsertQuickAssembly?: (kind: QuickAssemblyId) => void;
+  onInsertSmartComponent?: (kind: SmartComponentType) => void;
+  onInsertSingleCallout?: (family: Extract<CalloutFamily, 'round' | 'square'>) => void;
+  onCreateCalloutSet?: (family: CalloutFamily) => void;
+  onUpdateSavedAssembly?: (id: string, patch: Partial<SavedAssembly>) => void;
+  onDuplicateSavedAssembly?: (assembly: SavedAssembly, name?: string) => void;
+  onDeleteSavedAssembly?: (id: string) => void;
 }
 
-type ViewRep = 'source' | 'edge' | 'bw';
-type SortKey = 'displayName' | 'category' | 'collection' | 'partNumber' | 'status';
-type AnyComp = LibV2Component & Record<string, any>;
-
-const NO_LABEL_CATS = new Set(['logos', 'symbols_markers', 'reference_pages']);
+type AnyComponent = LibV2Component & Record<string, unknown>;
+type Representation = 'source' | 'edge' | 'bw';
+type Workbench = 'builder' | 'manager' | null;
+type ManagerView = 'active' | 'needs-review' | 'retired' | 'all';
 
 const CATEGORY_PRESETS = [
-  { id: 'controllers', label: 'Controllers' },
-  { id: 'expansion_modules', label: 'Expansion Modules' },
-  { id: 'panels_enclosures', label: 'Panels / Enclosures' },
-  { id: 'electrical_power', label: 'Electrical / Power' },
-  { id: 'power_metering', label: 'Power Metering' },
-  { id: 'network_data', label: 'Network / Data' },
-  { id: 'sensors_transducers', label: 'Sensors / Transducers' },
-  { id: 'alarms_safety', label: 'Alarms / Safety' },
-  { id: 'refrigeration', label: 'Refrigeration' },
-  { id: 'hvac', label: 'HVAC' },
-  { id: 'lighting', label: 'Lighting' },
-  { id: 'symbols_markers', label: 'Symbols / Markers' },
-  { id: 'legends', label: 'Legends' },
-  { id: 'logos', label: 'Logos' },
-  { id: 'custom', label: 'Custom' },
-];
-
-const STATUS_OPTIONS = [
-  { id: '', label: 'Blank / Active' },
-  { id: 'approved', label: 'Approved' },
-  { id: 'needsReview', label: 'Needs Review' },
-  { id: 'reference', label: 'Reference' },
-  { id: 'retired', label: 'Retired' },
-  { id: 'duplicate', label: 'Duplicate' },
-  { id: 'junk', label: 'Junk' },
-];
-
-const MAPPER_SYMBOL_COLLECTION = 'Refrigeration Controls Symbols';
-const PLAN_MARKER_COLLECTION = 'Singh360 Plan Markers';
-
-const COLLECTION_PRESETS = [
-  'Controllers',
-  'RDM / Network',
-  'WICP Safety / Alarms',
-  'Signage / Safety',
-  'Power Metering',
-  'Electrical Power',
-  'Panels / Enclosures',
-  'Sensors / Transducers',
-  'Refrigeration Controls',
-  'HVAC / BACnet',
-  'Lighting',
-  'Symbols / Markers',
-  'Refrigeration Controls Symbols',
-  'Singh360 Plan Markers',
-  'Safety Signage',
-  'Callout Numbers',
-  'Needs Review',
-];
-
-function asAny(c: LibV2Component | null | undefined): AnyComp {
-  return (c || {}) as AnyComp;
-}
-
-function csvToArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map((x) => String(x).trim()).filter(Boolean);
-  return String(value || '')
-    .split(',')
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
-function arrayToCsv(value: unknown): string {
-  if (Array.isArray(value)) return value.join(', ');
-  return String(value || '');
-}
-
-function categoriesFor(c: LibV2Component): string[] {
-  const x = asAny(c);
-  const values = Array.isArray(x.categories) ? x.categories : [x.category || 'custom'];
-  return Array.from(new Set([x.category || 'custom', ...values].map((v) => String(v || '').trim()).filter(Boolean)));
-}
-
-function editedCategories(c: LibV2Component, edits: Record<string, Partial<AnyComp>>): string[] {
-  const raw = patchValue(c, edits, 'categories', categoriesFor(c));
-  const values = csvToArray(raw);
-  const primary = String(patchValue(c, edits, 'category', c.category || 'custom'));
-  return Array.from(new Set([primary, ...values].filter(Boolean)));
-}
-
-function normalizeText(value: unknown): string {
-  return String(value || '').trim();
-}
-
-function niceCategoryLabel(id: string): string {
-  const preset = CATEGORY_PRESETS.find((c) => c.id === id);
-  if (preset) return preset.label;
-  return id.replace(/[_-]+/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-function displayNameFor(c: LibV2Component): string {
-  const raw = (c.displayName || '').trim();
-  if (!raw) return 'Component';
-  return raw.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function sourceUrl(c: LibV2Component): string {
-  const x = asAny(c);
-  return x.sourceUrl || (x.sourceFile ? libV2AssetUrl(x.sourceFile) : '') || (x.assetPath ? libV2AssetUrl(x.assetPath) : '');
-}
-
-function edgeUrl(c: LibV2Component): string {
-  const x = asAny(c);
-  return x.edgeUrl || (x.edgeFile ? libV2AssetUrl(x.edgeFile) : '');
-}
-
-function bwUrl(c: LibV2Component): string {
-  const x = asAny(c);
-  return x.bwUrl || (x.bwFile ? libV2AssetUrl(x.bwFile) : '');
-}
-
-function previewUrl(c: LibV2Component, rep: ViewRep): string {
-  const x = asAny(c);
-  if (rep === 'edge') return edgeUrl(c) || sourceUrl(c);
-  if (rep === 'bw') return bwUrl(c) || edgeUrl(c) || sourceUrl(c);
-  return x.thumbnailUrl || sourceUrl(c) || edgeUrl(c) || bwUrl(c);
-}
-
-function variantUrl(c: LibV2Component, rep: ViewRep): string {
-  if (rep === 'edge') return edgeUrl(c);
-  if (rep === 'bw') return bwUrl(c);
-  return sourceUrl(c);
-}
-
-function labelFor(c: LibV2Component): string | null {
-  const cat = String(c.category || '').toLowerCase();
-  if (NO_LABEL_CATS.has(cat)) return null;
-
-  const x = asAny(c);
-  const candidates = [x.defaultLabel, x.partNumber, x.displayName, x.shortName];
-
-  for (const item of candidates) {
-    const val = String(item || '').trim();
-    if (!val) continue;
-    if (/[0-9a-f]{10,}/i.test(val) || /^controller_/i.test(val)) continue;
-    return val;
-  }
-
-  return null;
-}
-
-function isRetired(c: LibV2Component): boolean {
-  const x = asAny(c);
-  const status = String(x.status || '').toLowerCase();
-  return !!x.retired || !!x.hidden || ['retired', 'duplicate', 'junk', 'hidden'].includes(status);
-}
-
-function statusFor(c: LibV2Component): string {
-  const x = asAny(c);
-  if (isRetired(c)) return String(x.status || 'retired');
-  return String(x.status || '');
-}
-
-function collectionFor(c: LibV2Component): string {
-  const x = asAny(c);
-  return String(x.collection || x.family || '').trim();
-}
-
-function pathFor(c: LibV2Component): string {
-  const x = asAny(c);
-  return String(x.sourceFile || x.edgeFile || x.bwFile || x.assetPath || x.thumbnailPath || '').trim();
-}
-
-function defaultRepForPage(pageType: string | undefined, data: LibV2Data | null): ViewRep {
-  const hasAnyEdge = !!data?.components?.some((c) => !!edgeUrl(c));
-  const drawingPages = new Set(['canvas', 'hybrid', 'underlay']);
-  if (pageType && drawingPages.has(pageType) && hasAnyEdge) return 'edge';
-  return 'source';
-}
-
-function patchValue<T = unknown>(c: LibV2Component, edits: Record<string, Partial<AnyComp>>, key: string, fallback: T): T {
-  const row = edits[c.id];
-  if (row && Object.prototype.hasOwnProperty.call(row, key)) return row[key] as T;
-  const x = asAny(c);
-  return (x[key] ?? fallback) as T;
-}
-
-function componentSearchBlob(c: LibV2Component, edits: Record<string, Partial<AnyComp>>): string {
-  const x = asAny(c);
-  const edit = edits[c.id] || {};
-  return [
-    edit.displayName ?? x.displayName,
-    edit.defaultLabel ?? x.defaultLabel,
-    edit.partNumber ?? x.partNumber,
-    edit.category ?? x.category,
-    arrayToCsv(edit.categories ?? x.categories),
-    edit.collection ?? x.collection,
-    edit.shortName ?? x.shortName,
-    edit.status ?? x.status,
-    arrayToCsv(edit.aliases ?? x.aliases),
-    arrayToCsv(edit.tags ?? x.tags),
-    edit.notes ?? x.notes,
-    pathFor(c),
-  ].join(' ').toLowerCase();
-}
-
-function defaultSizeLabel(c: LibV2Component): string {
-  const x = asAny(c);
-  const w = x.defaultWidth || x.width;
-  const h = x.defaultHeight || x.height;
-  if (!w && !h) return '';
-  return `${w || '?'} × ${h || '?'}`;
-}
-
-function insertMetaFor(c: LibV2Component): {
-  category?: string;
-  defaultWidth?: number;
-  defaultHeight?: number;
-  acronym?: string;
-} {
-  const x = asAny(c);
-  const width = Number(x.defaultWidth || x.width || 0);
-  const height = Number(x.defaultHeight || x.height || 0);
-  const acronym = String(x.shortName || x.defaultLabel || '').trim();
-  return {
-    category: String(c.category || '').trim() || undefined,
-    defaultWidth: width > 0 ? width : undefined,
-    defaultHeight: height > 0 ? height : undefined,
-    acronym: acronym || undefined,
-  };
-}
-
-function CardPreview({ c, rep, small = false }: { c: LibV2Component; rep: ViewRep; small?: boolean }) {
-  const url = previewUrl(c, rep);
-  const [broken, setBroken] = useState(false);
-  useEffect(() => setBroken(false), [url]);
-
-  if (!url || broken) {
-    return (
-      <div className={small ? 'libv2-mini-preview empty' : 'libv2-preview empty'}>
-        <span className="libv2-preview-fallback-name">{displayNameFor(c)}</span>
-        <span className="libv2-preview-fallback-reason">{url ? 'Preview failed to load' : 'No preview file'}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={small ? 'libv2-mini-preview' : 'libv2-preview'}>
-      <img
-        src={url}
-        alt={displayNameFor(c)}
-        title={displayNameFor(c)}
-        loading="lazy"
-        draggable={false}
-        onError={() => setBroken(true)}
-      />
-    </div>
-  );
-}
-
-type LibrarySection = 'recent' | 'favorites' | 'highlighted' | 'plan-markers' | 'assemblies' | 'callouts' | 'signage' | 'lcp' | 'all';
-
-const LIBRARY_SECTIONS: Array<{ id: LibrarySection; label: string }> = [
-  { id: 'recent', label: 'Recently Used' },
-  { id: 'favorites', label: 'Favorites' },
-  { id: 'highlighted', label: 'Highlighted Symbols' },
-  { id: 'plan-markers', label: 'Plan Markers' },
-  { id: 'assemblies', label: 'Saved Assemblies' },
-  { id: 'callouts', label: 'Callouts' },
-  { id: 'signage', label: 'Safety Signage' },
-  { id: 'lcp', label: 'LCP Components' },
-  { id: 'all', label: 'All Components' },
-];
-
-const RECENT_COMPONENTS_KEY = 'singh360-recent-component-ids';
-const MAX_RECENT_COMPONENTS = 24;
+  ['controllers', 'Controllers'],
+  ['expansion_modules', 'Expansion Modules'],
+  ['panels_enclosures', 'Panels / Enclosures'],
+  ['electrical_power', 'Electrical / Power'],
+  ['power_metering', 'Power Metering'],
+  ['network_data', 'Network / Data'],
+  ['sensors_transducers', 'Sensors / Transducers'],
+  ['alarms_safety', 'Alarms / Safety'],
+  ['refrigeration', 'Refrigeration'],
+  ['hvac', 'HVAC'],
+  ['lighting', 'Lighting'],
+  ['symbols_markers', 'Symbols / Markers'],
+  ['legends', 'Legends'],
+  ['logos', 'Logos'],
+  ['reference_pages', 'Reference Pages'],
+  ['custom', 'Custom'],
+] as const;
 
 const QUICK_ASSEMBLIES: Array<{ id: QuickAssemblyId; label: string }> = [
   { id: 'signage-marker-trio', label: 'Signage Marker Trio' },
   { id: 'signage-legend', label: 'Signage Legend' },
-  { id: 'callout-block', label: 'Callout Block' },
   { id: 'generated-symbol-key', label: 'Generated Symbol Key' },
   { id: 'wicp-annotation-pack', label: 'WICP Annotation Pack' },
 ];
 
-export default function LibraryPanelV2({
-  onInsert,
-  canInsert,
-  activePageType,
-  onOpenLegendEditor,
-  onOpenSymbolMapper,
-  savedAssemblies = [],
-  onInsertSavedAssembly,
-  onSaveSelectionAssembly,
-  onInsertQuickAssembly,
-}: Props) {
+const RETIRED_STATUSES = new Set(['retired', 'archive', 'archived', 'duplicate', 'junk', 'hidden']);
+const NO_LABEL_CATEGORIES = new Set(['logos', 'symbols_markers', 'reference_pages']);
+
+function asAny(component: LibV2Component | null | undefined): AnyComponent {
+  return (component || {}) as AnyComponent;
+}
+
+function friendlyCategory(category: string): string {
+  return CATEGORY_PRESETS.find(([id]) => id === category)?.[1]
+    || category.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function displayName(component: LibV2Component): string {
+  const normalized = String(component.displayName || 'Component').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
+  return /^electrical generator monitor$/i.test(normalized) ? 'Generator Monitor' : normalized || 'Component';
+}
+
+function collectionFor(component: LibV2Component): string {
+  const value = asAny(component).collection ?? asAny(component).family ?? '';
+  return String(value).trim();
+}
+
+function categoriesFor(component: LibV2Component): string[] {
+  const primary = String(component.category || 'custom');
+  const extra = Array.isArray(component.categories) ? component.categories.map(String) : [];
+  return Array.from(new Set([primary, ...extra].filter(Boolean)));
+}
+
+function isRetired(component: LibV2Component): boolean {
+  const status = String(component.status || '').trim().toLowerCase();
+  return Boolean(component.retired || asAny(component).hidden || RETIRED_STATUSES.has(status));
+}
+
+function needsReview(component: LibV2Component): boolean {
+  const status = String(component.status || '').trim().toLowerCase().replace(/[_\s-]+/g, '');
+  return Boolean(component.needsReview || status === 'needsreview' || status === 'review');
+}
+
+function sourceUrl(component: LibV2Component): string {
+  return String(component.sourceUrl || (component.sourceFile ? libV2AssetUrl(component.sourceFile) : ''));
+}
+
+function edgeUrl(component: LibV2Component): string {
+  return String(component.edgeUrl || (component.edgeFile ? libV2AssetUrl(component.edgeFile) : ''));
+}
+
+function bwUrl(component: LibV2Component): string {
+  return String(component.bwUrl || (component.bwFile ? libV2AssetUrl(component.bwFile) : ''));
+}
+
+function previewUrl(component: LibV2Component): string {
+  return String(component.thumbnailUrl || sourceUrl(component) || edgeUrl(component) || bwUrl(component));
+}
+
+function representationUrl(component: LibV2Component, representation: Representation): string {
+  if (representation === 'edge') return edgeUrl(component) || sourceUrl(component);
+  if (representation === 'bw') return bwUrl(component) || edgeUrl(component) || sourceUrl(component);
+  return sourceUrl(component) || edgeUrl(component) || bwUrl(component);
+}
+
+function defaultRepresentation(component: LibV2Component, pageType?: string): Representation {
+  if (pageType && new Set(['canvas', 'hybrid', 'underlay']).has(pageType) && edgeUrl(component)) return 'edge';
+  return 'source';
+}
+
+function labelFor(component: LibV2Component): string | null {
+  if (NO_LABEL_CATEGORIES.has(String(component.category || '').toLowerCase())) return null;
+  for (const candidate of [component.defaultLabel, component.partNumber, component.shortName, component.displayName]) {
+    const value = String(candidate || '').trim();
+    if (value && !/[0-9a-f]{10,}/i.test(value)) return value;
+  }
+  return null;
+}
+
+function insertMeta(component: LibV2Component): LibraryComponentInsertMeta {
+  const width = Number(component.defaultWidth || 0);
+  const height = Number(component.defaultHeight || 0);
+  return {
+    category: component.category || undefined,
+    defaultWidth: width > 0 ? width : undefined,
+    defaultHeight: height > 0 ? height : undefined,
+    acronym: String(component.shortName || component.defaultLabel || '').trim() || undefined,
+    libraryComponentId: component.id,
+    collection: collectionFor(component) || undefined,
+    favorite: component.favorite === true,
+  };
+}
+
+function searchBlob(component: LibV2Component): string {
+  return [
+    displayName(component),
+    component.shortName,
+    component.defaultLabel,
+    component.partNumber,
+    component.category,
+    categoriesFor(component).join(' '),
+    collectionFor(component),
+    (component.aliases || []).join(' '),
+    (component.tags || []).join(' '),
+    component.notes,
+  ].join(' ').toLowerCase();
+}
+
+function parseTags(value: string): string[] {
+  return Array.from(new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean)));
+}
+
+function tagsText(value: unknown): string {
+  return Array.isArray(value) ? value.map(String).join(', ') : String(value || '');
+}
+
+function numericOrUndefined(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function ComponentPreview({ component, compact = false }: { component: LibV2Component; compact?: boolean }) {
+  const url = previewUrl(component);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  return (
+    <span className={`libv2-component-preview ${compact ? 'compact' : ''} ${!url || failed ? 'missing' : ''}`}>
+      {url && !failed ? (
+        <img src={url} alt="" loading="lazy" draggable={false} onError={() => setFailed(true)} />
+      ) : (
+        <span>{displayName(component)}</span>
+      )}
+    </span>
+  );
+}
+
+export default function LibraryPanelV2(props: Props) {
+  const {
+    onInsert,
+    canInsert,
+    activePageType,
+  } = props;
   const [data, setData] = useState<LibV2Data | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [collection, setCollection] = useState('all');
-  const [rep, setRep] = useState<ViewRep>('source');
-  const [showDashboard, setShowDashboard] = useState(false);
-  const [showLegacyItems, setShowLegacyItems] = useState(true);
-  const [section, setSection] = useState<LibrarySection>('all');
-  const [recentIds, setRecentIds] = useState<string[]>(() => {
+  const [workbench, setWorkbench] = useState<Workbench>(null);
+  const [builderInitialId, setBuilderInitialId] = useState('');
+  const [insertingId, setInsertingId] = useState('');
+  const requestSequence = useRef(0);
+  const eventSource = useRef(`library-panel-${Math.random().toString(36).slice(2)}`);
+
+  const loadLibrary = useCallback(async (quiet = false): Promise<LibV2Data | null> => {
+    const sequence = ++requestSequence.current;
+    if (quiet) setRefreshing(true);
+    else setLoading(true);
     try {
-      const value = JSON.parse(localStorage.getItem(RECENT_COMPONENTS_KEY) || '[]');
-      return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [builderQuery, setBuilderQuery] = useState('');
-  const [builderCategory, setBuilderCategory] = useState('all');
-  const [builderCollection, setBuilderCollection] = useState('all');
-  const [builderStatus, setBuilderStatus] = useState('active');
-  const [showRetired, setShowRetired] = useState(false);
-  const [showNeedsReview, setShowNeedsReview] = useState(true);
-  const [sortKey, setSortKey] = useState<SortKey>('category');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-
-  const [selectedId, setSelectedId] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [edits, setEdits] = useState<Record<string, Partial<AnyComp>>>({});
-  const [bulkCategory, setBulkCategory] = useState('');
-  const [bulkCollection, setBulkCollection] = useState('');
-  const [bulkStatus, setBulkStatus] = useState('');
-
-  const [legendTemplates, setLegendTemplates] = useState<LegendTemplateEntry[]>([]);
-  const [libraryHistory, setLibraryHistory] = useState<LibV2HistoryEntry[]>([]);
-  const [bulkUndo, setBulkUndo] = useState<Record<string, Partial<AnyComp>> | null>(null);
-
-  const replaceSourceRef = useRef<HTMLInputElement>(null);
-  const replaceEdgeRef = useRef<HTMLInputElement>(null);
-  const replaceBwRef = useRef<HTMLInputElement>(null);
-  const addFilesRef = useRef<HTMLInputElement>(null);
-
-  const load = async (includeLegacy = true) => {
-    setLoading(true);
-    setLoadError('');
-    try {
-      const [lib, legends, history] = await Promise.all([
-        getLibV2(includeLegacy),
-        listLegendTemplates(),
-        listLibV2History(),
-      ]);
-      setData(lib);
-      setLegendTemplates(legends);
-      setLibraryHistory(history);
-      setSelectedId((prev) => prev || lib.components?.[0]?.id || '');
+      const result = await getLibV2(true, true);
+      if (!result.ok || !Array.isArray(result.components)) {
+        throw new Error('The server returned an invalid component library payload.');
+      }
+      if (sequence === requestSequence.current) {
+        setData(result);
+        setLoadError('');
+      }
+      return result;
     } catch (error) {
-      setLoadError(String(error));
+      if (sequence === requestSequence.current) setLoadError(error instanceof Error ? error.message : String(error));
+      return null;
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  };
+  }, []);
 
-  useEffect(() => { void load(true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
-  useEffect(() => { setRep(defaultRepForPage(activePageType, data)); }, [activePageType, data]);
+  useEffect(() => { void loadLibrary(false); }, [loadLibrary]);
+  useEffect(() => {
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ source?: string }>).detail;
+      if (detail?.source !== eventSource.current) void loadLibrary(true);
+    };
+    window.addEventListener('singh360:library-changed', onChanged);
+    return () => window.removeEventListener('singh360:library-changed', onChanged);
+  }, [loadLibrary]);
 
-  const components = data?.components ?? [];
-  const activeComponents = useMemo(() => components.filter((component) => !isRetired(component)), [components]);
-  const previewReady = useMemo(() => activeComponents.filter((component) => !!previewUrl(component, rep)).length, [activeComponents, rep]);
+  const notifyChanged = useCallback(async (preferredId?: string): Promise<LibV2Data | null> => {
+    const result = await loadLibrary(true);
+    window.dispatchEvent(new CustomEvent('singh360:library-changed', {
+      detail: { source: eventSource.current, preferredId },
+    }));
+    return result;
+  }, [loadLibrary]);
 
-  const selected = useMemo(() => {
-    return components.find((c) => c.id === selectedId) || components.find((c) => selectedIds.includes(c.id)) || null;
-  }, [components, selectedId, selectedIds]);
-
+  const allComponents = data?.components || [];
+  const activeComponents = useMemo(
+    () => allComponents.filter((component) => !isRetired(component)),
+    [allComponents],
+  );
   const categories = useMemo(() => {
     const ids = new Set<string>();
-    CATEGORY_PRESETS.forEach((c) => ids.add(c.id));
-    activeComponents.forEach((c) => { categoriesFor(c).forEach((id) => ids.add(id)); });
-    const counts = new Map<string, number>();
-    activeComponents.forEach((c) => {
-      categoriesFor(c).forEach((id) => counts.set(id, (counts.get(id) || 0) + 1));
-    });
-    return Array.from(ids).sort().map((id) => ({
-      id,
-      label: niceCategoryLabel(id),
-      count: counts.get(id) || 0,
-    }));
+    activeComponents.forEach((component) => categoriesFor(component).forEach((id) => ids.add(id)));
+    return Array.from(ids).sort((left, right) => friendlyCategory(left).localeCompare(friendlyCategory(right)));
   }, [activeComponents]);
+  const collections = useMemo(() => Array.from(new Set(
+    activeComponents.map(collectionFor).filter(Boolean),
+  )).sort((left, right) => left.localeCompare(right)), [activeComponents]);
 
-  const collections = useMemo(() => {
-    const set = new Set<string>();
-    COLLECTION_PRESETS.forEach((x) => set.add(x));
-    activeComponents.forEach((c) => {
-      const val = collectionFor(c);
-      if (val) set.add(val);
+  const visibleComponents = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (category === 'all' && collection === 'all' && !normalizedQuery) return activeComponents;
+    return activeComponents.filter((component) => {
+      if (category !== 'all' && !categoriesFor(component).includes(category)) return false;
+      if (collection !== 'all' && collectionFor(component) !== collection) return false;
+      return !normalizedQuery || searchBlob(component).includes(normalizedQuery);
     });
-    return Array.from(set).sort();
-  }, [activeComponents]);
-  const collectionCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    activeComponents.forEach((component) => {
-      const value = collectionFor(component);
-      if (value) counts.set(value, (counts.get(value) || 0) + 1);
-    });
-    return counts;
-  }, [activeComponents]);
+  }, [activeComponents, category, collection, query]);
 
-  const isLcpComponent = (component: LibV2Component) => {
-    const x = asAny(component);
-    const blob = [
-      displayNameFor(component),
-      collectionFor(component),
-      x.partNumber,
-      x.shortName,
-      ...(Array.isArray(x.tags) ? x.tags : []),
-    ].join(' ').toLowerCase();
-    return /\blcp\b/.test(blob) || blob.includes('lighting control panel');
-  };
-
-  const sectionBaseCards = useMemo(() => {
-    if (section === 'assemblies') return [];
-    if (section === 'favorites') return activeComponents.filter((component) => Boolean(asAny(component).favorite));
-    if (section === 'highlighted') return activeComponents.filter((component) => collectionFor(component) === MAPPER_SYMBOL_COLLECTION);
-    if (section === 'plan-markers') return activeComponents.filter((component) => collectionFor(component) === PLAN_MARKER_COLLECTION);
-    if (section === 'callouts') return activeComponents.filter((component) => collectionFor(component) === 'Callout Numbers');
-    if (section === 'signage') return activeComponents.filter((component) => collectionFor(component) === 'Safety Signage');
-    if (section === 'lcp') return activeComponents.filter(isLcpComponent);
-    if (section === 'recent') {
-      const order = new Map(recentIds.map((id, index) => [id, index]));
-      return activeComponents
-        .filter((component) => order.has(component.id))
-        .sort((a, b) => (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER));
-    }
-    return activeComponents;
-  }, [activeComponents, recentIds, section]);
-
-  const visibleCards = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const rows = sectionBaseCards.filter((c) => {
-      if (category !== 'all' && !categoriesFor(c).includes(category)) return false;
-      if (collection !== 'all' && collectionFor(c) !== collection) return false;
-      if (!q) return true;
-      return componentSearchBlob(c, edits).includes(q);
-    });
-
-    if (collection !== 'all') {
-      rows.sort((a, b) => {
-        const aOrder = Number(asAny(a).sortOrder || Number.MAX_SAFE_INTEGER);
-        const bOrder = Number(asAny(b).sortOrder || Number.MAX_SAFE_INTEGER);
-        if (aOrder !== bOrder) return aOrder - bOrder;
-        return displayNameFor(a).localeCompare(displayNameFor(b), undefined, {
-          numeric: true,
-          sensitivity: 'base',
-        });
-      });
-    }
-    return rows;
-  }, [sectionBaseCards, query, category, collection, edits]);
-
-  const shortcutCounts = useMemo<Record<LibrarySection, number>>(() => ({
-    recent: activeComponents.filter((component) => recentIds.includes(component.id)).length,
-    favorites: activeComponents.filter((component) => Boolean(asAny(component).favorite)).length,
-    highlighted: activeComponents.filter((component) => collectionFor(component) === MAPPER_SYMBOL_COLLECTION).length,
-    'plan-markers': activeComponents.filter((component) => collectionFor(component) === PLAN_MARKER_COLLECTION).length,
-    assemblies: savedAssemblies.length,
-    callouts: activeComponents.filter((component) => collectionFor(component) === 'Callout Numbers').length,
-    signage: activeComponents.filter((component) => collectionFor(component) === 'Safety Signage').length,
-    lcp: activeComponents.filter(isLcpComponent).length,
-    all: activeComponents.length,
-  }), [activeComponents, recentIds, savedAssemblies.length]);
-  const activeFilterLabel = LIBRARY_SECTIONS.find((item) => item.id === section)?.label || 'All Components';
-
-  const dashboardRows = useMemo(() => {
-    const q = builderQuery.trim().toLowerCase();
-
-    const rows = components.filter((c) => {
-      const x = asAny(c);
-      const retired = isRetired(c);
-      const status = String(patchValue(c, edits, 'status', x.status || '') || '').toLowerCase();
-      const cats = editedCategories(c, edits);
-      const collection = String(patchValue(c, edits, 'collection', collectionFor(c)) || '');
-
-      if (!showRetired && retired) return false;
-      if (!showNeedsReview && status === 'needsreview') return false;
-      if (builderCategory !== 'all' && !cats.includes(builderCategory)) return false;
-      if (builderCollection !== 'all' && collection !== builderCollection) return false;
-
-      if (builderStatus === 'active' && retired) return false;
-      if (builderStatus === 'approved' && status !== 'approved') return false;
-      if (builderStatus === 'needsReview' && status !== 'needsreview') return false;
-      if (builderStatus === 'retired' && !retired) return false;
-      if (builderStatus === 'blank' && status) return false;
-
-      if (!q) return true;
-      return componentSearchBlob(c, edits).includes(q);
-    });
-
-    rows.sort((a, b) => {
-      const av = String(sortComparable(a, edits, sortKey)).toLowerCase();
-      const bv = String(sortComparable(b, edits, sortKey)).toLowerCase();
-      const res = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
-      return sortDir === 'asc' ? res : -res;
-    });
-
-    return rows;
-  }, [components, builderQuery, builderCategory, builderCollection, builderStatus, showRetired, showNeedsReview, edits, sortKey, sortDir]);
-
-  const dirtyIds = useMemo(() => Object.keys(edits).filter((id) => Object.keys(edits[id] || {}).length), [edits]);
-  const visibleSelectedCount = selectedIds.filter((id) => dashboardRows.some((r) => r.id === id)).length;
-
-  const setEdit = (id: string, key: string, value: unknown) => {
-    setEdits((prev) => ({
-      ...prev,
-      [id]: {
-        ...(prev[id] || {}),
-        [key]: value,
-      },
-    }));
-  };
-
-  const clearEditsFor = (id: string) => {
-    setEdits((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  };
-
-  const toggleSelected = (id: string) => {
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-    setSelectedId(id);
-  };
-
-  const selectVisible = () => {
-    setSelectedIds(dashboardRows.map((c) => c.id));
-    if (dashboardRows[0]) setSelectedId(dashboardRows[0].id);
-  };
-
-  const clearSelected = () => setSelectedIds([]);
-
-  const canInsertRep = (c: LibV2Component, which: ViewRep): boolean => {
-    return !!variantUrl(c, which);
-  };
-
-  const rememberRecent = (id: string) => {
-    setRecentIds((current) => {
-      const next = [id, ...current.filter((value) => value !== id)].slice(0, MAX_RECENT_COMPONENTS);
-      try {
-        localStorage.setItem(RECENT_COMPONENTS_KEY, JSON.stringify(next));
-      } catch {
-        // Recent shortcuts remain usable for this session when storage is unavailable.
-      }
-      return next;
-    });
-  };
-
-  const insertAs = (c: LibV2Component, which: ViewRep, withLabel = true) => {
-    if (!canInsert) return;
-    const url = variantUrl(c, which) || previewUrl(c, which);
-    if (!url) return;
-    rememberRecent(c.id);
-    onInsert(displayNameFor(c), url, withLabel ? labelFor(c) : null, insertMetaFor(c));
-  };
-
-  const onDragStart = (e: React.DragEvent, c: LibV2Component) => {
-    const url = variantUrl(c, rep) || previewUrl(c, rep);
-    if (!url) return;
-    rememberRecent(c.id);
-    e.dataTransfer.setData(COMPONENT_DRAG_TYPE, JSON.stringify({
-      name: displayNameFor(c),
-      url,
-      label: labelFor(c),
-      ...insertMetaFor(c),
-    }));
-    e.dataTransfer.effectAllowed = 'copy';
-  };
-
-  const showAllComponents = () => {
-    setSection('all');
+  const clearFilters = () => {
     setQuery('');
     setCategory('all');
     setCollection('all');
   };
 
-  const selectSection = (next: LibrarySection) => {
-    setSection(next);
-    setQuery('');
-    setCategory('all');
-    if (next === 'highlighted') setCollection(MAPPER_SYMBOL_COLLECTION);
-    else if (next === 'plan-markers') setCollection(PLAN_MARKER_COLLECTION);
-    else if (next === 'callouts') setCollection('Callout Numbers');
-    else if (next === 'signage') setCollection('Safety Signage');
-    else setCollection('all');
-  };
-
-  const toggleFavorite = async (component: LibV2Component) => {
-    const favorite = !Boolean(asAny(component).favorite);
-    setLoadError('');
-    setData((current) => current ? {
-      ...current,
-      components: current.components.map((row) => row.id === component.id ? { ...row, favorite } : row),
-    } : current);
-    try {
-      const result = await updateLibV2Component(component.id, { favorite });
-      setData((current) => current ? {
-        ...current,
-        components: current.components.map((row) => row.id === component.id ? result.component : row),
-      } : current);
-    } catch (error) {
-      setData((current) => current ? {
-        ...current,
-        components: current.components.map((row) => row.id === component.id ? component : row),
-      } : current);
-      setLoadError(`Favorite update failed: ${String(error)}`);
-    }
-  };
-
-  const doRefresh = async () => {
-    setLoading(true);
-    try {
-      await refreshLibV2();
-      await load(showLegacyItems);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const rebuildPreviews = async () => {
-    setLoading(true);
-    setLoadError('');
-    try {
-      await rebuildLibV2Thumbnails();
-      await load(showLegacyItems);
-    } catch (error) {
-      setLoadError(String(error));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const reloadFromDisk = async () => {
-    if (dirtyIds.length && !window.confirm(
-      `Discard ${dirtyIds.length} unsaved component edit${dirtyIds.length === 1 ? '' : 's'} and reload the saved library?`,
-    )) return;
-    setEdits({});
-    setBulkUndo(null);
-    setSelectedIds([]);
-    setBulkCategory('');
-    setBulkCollection('');
-    setBulkStatus('');
-    await doRefresh();
-  };
-
-  const discardStagedEdits = () => {
-    if (!dirtyIds.length) return;
-    if (!window.confirm(`Discard all ${dirtyIds.length} unsaved edits? Nothing saved on disk will change.`)) return;
-    setBulkUndo(structuredClone(edits));
-    setEdits({});
-    setBulkCategory('');
-    setBulkCollection('');
-    setBulkStatus('');
-  };
-
-  const undoStagedBulk = () => {
-    if (!bulkUndo) return;
-    setEdits(bulkUndo);
-    setBulkUndo(null);
-  };
-
-  const undoLastSavedLibraryChange = async () => {
-    const latest = libraryHistory[0];
-    if (!latest) {
-      window.alert('No saved library history exists yet.');
+  const insertComponent = async (component: LibV2Component, representation?: Representation) => {
+    if (!canInsert) return;
+    const selectedRepresentation = representation || defaultRepresentation(component, activePageType);
+    const url = representationUrl(component, selectedRepresentation);
+    if (!url) {
+      setActionError(`No insertable image is available for ${displayName(component)}.`);
       return;
     }
+    setActionError('');
+    setInsertingId(component.id);
+    try {
+      await onInsert(displayName(component), url, labelFor(component), insertMeta(component));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setInsertingId('');
+    }
+  };
+
+  const startDrag = (event: React.DragEvent, component: LibV2Component) => {
+    const representation = defaultRepresentation(component, activePageType);
+    const url = representationUrl(component, representation);
+    if (!url) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.setData(COMPONENT_DRAG_TYPE, JSON.stringify({
+      name: displayName(component),
+      url,
+      label: labelFor(component),
+      ...insertMeta(component),
+    }));
+    event.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const openBuilder = (componentId = '') => {
+    setBuilderInitialId(componentId);
+    setWorkbench('builder');
+  };
+
+  return (
+    <div className="libv2-browser" aria-label="Component Browser">
+      <div className="libv2-browser-filters">
+        <label className="libv2-visually-hidden" htmlFor="libv2-component-search">Search components</label>
+        <input
+          id="libv2-component-search"
+          type="search"
+          placeholder="Search components…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <label>
+          <span>Category</span>
+          <select
+            aria-label="Component category"
+            value={category}
+            onChange={(event) => {
+              const next = event.target.value;
+              setCategory(next);
+              setCollection('all');
+              if (next === 'all') setQuery('');
+            }}
+          >
+            <option value="all">All Components</option>
+            {categories.map((id) => <option key={id} value={id}>{friendlyCategory(id)}</option>)}
+          </select>
+        </label>
+        {collections.length > 0 ? (
+          <label>
+            <span>Collection</span>
+            <select
+              aria-label="Component collection"
+              value={collection}
+              onChange={(event) => {
+                setCollection(event.target.value);
+                setCategory('all');
+              }}
+            >
+              <option value="all">All Collections</option>
+              {collections.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+        ) : null}
+      </div>
+
+      <div className="libv2-browser-status" role="status" aria-live="polite">
+        {loading && !data ? 'Loading component library…' : null}
+        {refreshing ? 'Refreshing component library…' : null}
+        {!loading && !refreshing && data && !loadError ? 'Component library ready' : null}
+      </div>
+
+      {loadError ? (
+        <div className={`libv2-browser-message error ${data ? 'compact' : ''}`} role="alert">
+          <strong>{data ? 'Refresh failed; showing the last loaded library.' : 'Component library could not load.'}</strong>
+          <span>{loadError}</span>
+          <button type="button" onClick={() => void loadLibrary(Boolean(data))} disabled={loading || refreshing}>Retry</button>
+        </div>
+      ) : null}
+      {actionError ? <div className="libv2-browser-message error compact" role="alert">{actionError}</div> : null}
+
+      {!loading && data && activeComponents.length === 0 ? (
+        <div className="libv2-browser-message">
+          <strong>No active components are available.</strong>
+          <span>Retired components remain available in Manage Library.</span>
+          <button type="button" onClick={() => void loadLibrary(true)}>Refresh</button>
+        </div>
+      ) : null}
+
+      {activeComponents.length > 0 && visibleComponents.length === 0 ? (
+        <div className="libv2-browser-message">
+          <strong>No components match the visible filters.</strong>
+          <button type="button" onClick={clearFilters}>Show All Components</button>
+          <button type="button" onClick={() => void loadLibrary(true)}>Refresh</button>
+        </div>
+      ) : null}
+
+      <div className="libv2-browser-grid" aria-busy={loading || refreshing}>
+        {visibleComponents.map((component) => {
+          const insertable = Boolean(representationUrl(component, defaultRepresentation(component, activePageType)));
+          return (
+            <button
+              key={component.id}
+              type="button"
+              className="libv2-browser-card"
+              title={`Insert ${displayName(component)}`}
+              disabled={!canInsert || !insertable || insertingId === component.id}
+              draggable={canInsert && insertable}
+              onDragStart={(event) => startDrag(event, component)}
+              onClick={() => void insertComponent(component)}
+            >
+              <ComponentPreview component={component} />
+              <span className="libv2-browser-card-name">{displayName(component)}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="libv2-browser-footer">
+        <button type="button" onClick={() => openBuilder()}>Component Builder</button>
+        <button type="button" onClick={() => setWorkbench('manager')}>Manage Library</button>
+      </div>
+
+      {workbench === 'builder' && data ? (
+        <ComponentBuilderWorkbench
+          data={data}
+          initialId={builderInitialId}
+          props={props}
+          onInsert={insertComponent}
+          onChanged={notifyChanged}
+          onOpenManager={() => setWorkbench('manager')}
+          onClose={() => setWorkbench(null)}
+        />
+      ) : null}
+      {workbench === 'manager' && data ? (
+        <ManageLibraryWorkbench
+          data={data}
+          onChanged={notifyChanged}
+          onOpenBuilder={(id) => openBuilder(id)}
+          onClose={() => setWorkbench(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+interface BuilderProps {
+  data: LibV2Data;
+  initialId: string;
+  props: Props;
+  onInsert: (component: LibV2Component, representation?: Representation) => Promise<void>;
+  onChanged: (preferredId?: string) => Promise<LibV2Data | null>;
+  onOpenManager: () => void;
+  onClose: () => void;
+}
+
+function ComponentBuilderWorkbench({
+  data,
+  initialId,
+  props,
+  onInsert,
+  onChanged,
+  onOpenManager,
+  onClose,
+}: BuilderProps) {
+  const components = data.components;
+  const firstActive = components.find((component) => !isRetired(component))?.id || components[0]?.id || '';
+  const [selectedId, setSelectedId] = useState(initialId === '__new__' ? '' : initialId || firstActive);
+  const [query, setQuery] = useState('');
+  const [showRetired, setShowRetired] = useState(false);
+  const [creating, setCreating] = useState(initialId === '__new__');
+  const [draft, setDraft] = useState<Record<string, unknown>>({});
+  const [undoDraft, setUndoDraft] = useState<Record<string, unknown> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [representation, setRepresentation] = useState<Representation>('source');
+  const [history, setHistory] = useState<LibV2HistoryEntry[]>([]);
+  const [historyError, setHistoryError] = useState('');
+  const [legends, setLegends] = useState<LegendTemplateEntry[]>([]);
+  const [assemblyMenu, setAssemblyMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const [createFile, setCreateFile] = useState<File | null>(null);
+  const [createDraft, setCreateDraft] = useState<Record<string, unknown>>({
+    displayName: '', category: 'custom', collection: '', tags: '', defaultWidth: 96, defaultHeight: 72,
+  });
+  const sourceInput = useRef<HTMLInputElement>(null);
+  const edgeInput = useRef<HTMLInputElement>(null);
+  const bwInput = useRef<HTMLInputElement>(null);
+
+  const selected = components.find((component) => component.id === selectedId) || null;
+  const contextAssembly = (props.savedAssemblies || []).find((assembly) => assembly.id === assemblyMenu?.id) || null;
+  const categoryIds = useMemo(() => Array.from(new Set([
+    ...CATEGORY_PRESETS.map(([id]) => id),
+    ...components.flatMap(categoriesFor),
+  ])).sort((left, right) => friendlyCategory(left).localeCompare(friendlyCategory(right))), [components]);
+  const collectionNames = useMemo(() => Array.from(new Set(components.map(collectionFor).filter(Boolean))).sort(), [components]);
+
+  useEffect(() => {
+    if (!selected) return;
+    setDraft({
+      displayName: displayName(selected),
+      shortName: selected.shortName || '',
+      defaultLabel: selected.defaultLabel || '',
+      defaultWidth: selected.defaultWidth || '',
+      defaultHeight: selected.defaultHeight || '',
+      category: selected.category || 'custom',
+      collection: collectionFor(selected),
+      tags: tagsText(selected.tags),
+      notes: selected.notes || '',
+      favorite: selected.favorite === true,
+    });
+    setUndoDraft(null);
+    setRepresentation(defaultRepresentation(selected, props.activePageType));
+  }, [selectedId, selected?.displayName, asAny(selected).updatedAt]);
+
+  useEffect(() => {
+    void Promise.allSettled([listLibV2History(), listLegendTemplates()]).then(([historyResult, legendResult]) => {
+      if (historyResult.status === 'fulfilled') setHistory(historyResult.value);
+      else setHistoryError(String(historyResult.reason));
+      if (legendResult.status === 'fulfilled') setLegends(legendResult.value);
+    });
+  }, []);
+
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return components.filter((component) => {
+      if (!showRetired && isRetired(component)) return false;
+      return !normalized || searchBlob(component).includes(normalized);
+    });
+  }, [components, query, showRetired]);
+
+  const updateDraft = (patch: Record<string, unknown>) => {
+    setUndoDraft((current) => current || structuredClone(draft));
+    setDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError('');
+    try {
+      await action();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renameAssembly = (assembly: SavedAssembly) => {
+    const name = window.prompt('Rename saved assembly', assembly.name)?.trim();
+    if (name && name !== assembly.name) props.onUpdateSavedAssembly?.(assembly.id, { name });
+  };
+
+  const moveAssemblyCategory = (assembly: SavedAssembly) => {
+    const category = window.prompt(
+      'Move saved assembly to category',
+      assembly.category || 'Saved Assemblies',
+    )?.trim();
+    if (category) props.onUpdateSavedAssembly?.(assembly.id, { category });
+  };
+
+  const deleteAssembly = (assembly: SavedAssembly) => {
     if (!window.confirm(
-      `Restore the library to the snapshot from ${latest.savedAt}?\n\n${latest.reason}\n\nThe current manifest will be backed up first.`,
+      `Delete saved assembly "${assembly.name}"?\n\nPlaced copies on drawing pages will remain unchanged.`,
     )) return;
-    setLoading(true);
-    try {
-      await restoreLibV2History(latest.name);
-      setEdits({});
-      setBulkUndo(null);
-      setSelectedIds([]);
-      await load(showLegacyItems);
-      window.alert('The last saved library change was undone.');
-    } finally {
-      setLoading(false);
-    }
+    props.onDeleteSavedAssembly?.(assembly.id);
   };
 
-  const saveDirty = async () => {
-    const ids = Object.keys(edits).filter((id) => Object.keys(edits[id] || {}).length);
-    if (!ids.length) return;
-
-    if (ids.length > 10 && !window.confirm(
-      `Save ${ids.length} component edits to disk?
-
-One automatic undo snapshot will be created first.`,
-    )) return;
-
-    const updates = ids.map((id) => {
-      const patch = { ...edits[id] } as AnyComp;
-      if (Object.prototype.hasOwnProperty.call(patch, 'aliases')) patch.aliases = csvToArray(patch.aliases);
-      if (Object.prototype.hasOwnProperty.call(patch, 'tags')) patch.tags = csvToArray(patch.tags);
-      if (Object.prototype.hasOwnProperty.call(patch, 'categories')) patch.categories = csvToArray(patch.categories);
-      if (patch.status === 'retired' || patch.status === 'duplicate' || patch.status === 'junk') {
-        patch.retired = true;
-      } else if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
-        patch.retired = false;
-      }
-      return { id, patch };
-    });
-
-    setLoading(true);
-    try {
-      const result = await batchUpdateLibV2Components(
-        updates,
-        `dashboard-save-${ids.length}-components`,
-      );
-      setEdits({});
-      setBulkUndo(null);
-      setSelectedIds([]);
-      await load(showLegacyItems);
-      window.alert(
-        `Saved ${result.updated} component edits.
-Undo snapshot: ${result.snapshot || 'created'}`,
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const saveSingle = async (c: LibV2Component) => {
-    const patch = edits[c.id];
-    if (!patch || !Object.keys(patch).length) return;
-    await updateLibV2Component(c.id, {
-      ...patch,
-      aliases: Object.prototype.hasOwnProperty.call(patch, 'aliases') ? csvToArray(patch.aliases) : undefined,
-      tags: Object.prototype.hasOwnProperty.call(patch, 'tags') ? csvToArray((patch as AnyComp).tags) : undefined,
-      categories: Object.prototype.hasOwnProperty.call(patch, 'categories') ? csvToArray((patch as AnyComp).categories) : undefined,
-      retired: ['retired', 'duplicate', 'junk'].includes(String((patch as AnyComp).status || '').toLowerCase()) ? true : undefined,
-    } as any);
-    clearEditsFor(c.id);
-    await load(showLegacyItems);
-  };
-
-  const applyBulk = () => {
-    if (!selectedIds.length) return;
-    if (!bulkCategory && !bulkCollection && !bulkStatus) {
-      window.alert('Choose a bulk category, collection, or status first.');
-      return;
-    }
-
-    const changes = [
-      bulkCategory ? `category = ${niceCategoryLabel(bulkCategory)}` : '',
-      bulkCollection ? `collection = ${bulkCollection}` : '',
-      bulkStatus ? `status = ${bulkStatus || 'blank'}` : '',
-    ].filter(Boolean).join(', ');
-
-    if (selectedIds.length > 10 && !window.confirm(
-      `Stage bulk changes for ${selectedIds.length} selected components?
-
-${changes}
-
-This is NOT saved until you click Save All Edits.`,
-    )) return;
-
-    setBulkUndo(structuredClone(edits));
-    const selectedSet = new Set(selectedIds);
-    setEdits((prev) => {
-      const next = { ...prev };
-      for (const c of components) {
-        if (!selectedSet.has(c.id)) continue;
-        const row = { ...(next[c.id] || {}) } as AnyComp;
-        if (bulkCategory) {
-          row.category = bulkCategory;
-          row.categories = Array.from(new Set([bulkCategory, ...categoriesFor(c)]));
-        }
-        if (bulkCollection) row.collection = bulkCollection;
-        if (bulkStatus) {
-          row.status = bulkStatus;
-          row.retired = ['retired', 'duplicate', 'junk'].includes(bulkStatus);
-        }
-        next[c.id] = row;
-      }
-      return next;
-    });
-  };
-
-  const normalizeSelectedNames = () => {
-    if (!selectedIds.length) return;
-    if (selectedIds.length > 10 && !window.confirm(
-      `Stage cleaned display names for ${selectedIds.length} selected components?`,
-    )) return;
-    setBulkUndo(structuredClone(edits));
-    const selectedSet = new Set(selectedIds);
-
-    setEdits((prev) => {
-      const next = { ...prev };
-      for (const c of components) {
-        if (!selectedSet.has(c.id)) continue;
-        const row = { ...(next[c.id] || {}) };
-        const current = String(row.displayName ?? c.displayName ?? '');
-        row.displayName = current
-          .replace(/^sym[_\s-]+/i, '')
-          .replace(/^symbol[_\s-]+/i, '')
-          .replace(/[_]+/g, ' ')
-          .replace(/\s+/g, ' ')
-          .replace(/\b(li|da|ls|lsc|es|ea|idf|mdf|wicp|lcp|rdm|ems|cat6|oat|ct|eev|llv)\b/gi, (m) => {
-            const map: Record<string, string> = {
-              li: 'LI', da: 'DA', ls: 'LS', lsc: 'LSc', es: 'ES', ea: 'EA',
-              idf: 'IDF', mdf: 'MDF', wicp: 'WICP', lcp: 'LCP', rdm: 'RDM',
-              ems: 'EMS', cat6: 'CAT6', oat: 'OAT', ct: 'CT', eev: 'EEV', llv: 'LLV',
-            };
-            return map[m.toLowerCase()] || m;
-          })
-          .trim();
-        next[c.id] = row;
-      }
-      return next;
+  const saveSelected = async () => {
+    if (!selected) return;
+    await run(async () => {
+      await updateLibV2Component(selected.id, {
+        displayName: String(draft.displayName || '').trim() || displayName(selected),
+        shortName: String(draft.shortName || '').trim(),
+        defaultLabel: String(draft.defaultLabel || '').trim(),
+        defaultWidth: numericOrUndefined(draft.defaultWidth),
+        defaultHeight: numericOrUndefined(draft.defaultHeight),
+        category: String(draft.category || 'custom'),
+        categories: Array.from(new Set([String(draft.category || 'custom'), ...categoriesFor(selected)])),
+        collection: String(draft.collection || '').trim(),
+        tags: parseTags(String(draft.tags || '')),
+        notes: String(draft.notes || ''),
+        favorite: draft.favorite === true,
+      });
+      await onChanged(selected.id);
+      setUndoDraft(null);
     });
   };
 
   const duplicateSelected = async () => {
     if (!selected) return;
-    await duplicateLibV2Component(selected.id);
-    await load(showLegacyItems);
-  };
-
-  const replaceAsset = async (target: 'source' | 'edge' | 'bw', file: File | null) => {
-    if (!selected || !file) return;
-    await replaceLibV2Asset(selected.id, target, file);
-    await load(showLegacyItems);
-  };
-
-  const addFilesToLibrary = async (files: FileList | null) => {
-    if (!files || !files.length) return;
-    const categoryToUse = builderCategory !== 'all' ? builderCategory : 'custom';
-    const collectionToUse = builderCollection !== 'all' ? builderCollection : '';
-
-    setLoading(true);
-    try {
-      for (const file of Array.from(files)) {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('category', categoryToUse);
-        if (collectionToUse) fd.append('collection', collectionToUse);
-        const res = await fetch('/api/lib/add-file', { method: 'POST', body: fd });
-        if (!res.ok) throw new Error(await res.text());
-      }
-      await doRefresh();
-    } finally {
-      setLoading(false);
-      if (addFilesRef.current) addFilesRef.current.value = '';
-    }
-  };
-
-  const exportCsv = () => {
-    const header = ['id', 'displayName', 'category', 'categories', 'collection', 'partNumber', 'shortName', 'status', 'defaultLabel', 'aliases', 'tags', 'notes', 'path'];
-    const rows = dashboardRows.map((c) => {
-      const x = asAny(c);
-      const e = edits[c.id] || {};
-      return [
-        c.id,
-        e.displayName ?? x.displayName ?? '',
-        e.category ?? x.category ?? '',
-        arrayToCsv((e as AnyComp).categories ?? x.categories ?? categoriesFor(c)),
-        e.collection ?? collectionFor(c),
-        e.partNumber ?? x.partNumber ?? '',
-        e.shortName ?? x.shortName ?? '',
-        e.status ?? x.status ?? '',
-        e.defaultLabel ?? x.defaultLabel ?? '',
-        arrayToCsv(e.aliases ?? x.aliases),
-        arrayToCsv((e as AnyComp).tags ?? x.tags),
-        e.notes ?? x.notes ?? '',
-        pathFor(c),
-      ];
+    await run(async () => {
+      const result = await duplicateLibV2Component(selected.id);
+      await onChanged(result.component.id);
+      setSelectedId(result.component.id);
+      setShowRetired(true);
     });
-    downloadText('singh360_component_library_view.csv', toCsv([header, ...rows]));
   };
 
-  const downloadJson = () => {
-    const merged = components.map((c) => ({ ...asAny(c), ...(edits[c.id] || {}) }));
-    downloadText('singh360_component_library_edited_view.json', JSON.stringify({ components: merged }, null, 2));
+  const setRetired = async (retire: boolean) => {
+    if (!selected) return;
+    if (retire && !window.confirm(`Retire "${displayName(selected)}"?\n\nThe component and its assets remain recoverable.`)) return;
+    await run(async () => {
+      if (retire) await archiveLibV2Component(selected.id);
+      else await restoreLibV2Component(selected.id);
+      await onChanged(selected.id);
+      setShowRetired(true);
+    });
   };
 
-  const openSavedLegend = (templateId?: string) => {
-    try {
-      if (templateId) localStorage.setItem('singh360-symbol-legend-template-id', templateId);
-      else localStorage.removeItem('singh360-symbol-legend-template-id');
-    } catch {
-      // The modal still opens the live standard when browser storage is unavailable.
+  const replaceAsset = async (target: Representation, file: File | null) => {
+    if (!selected || !file) return;
+    await run(async () => {
+      await replaceLibV2Asset(selected.id, target, file);
+      await onChanged(selected.id);
+    });
+  };
+
+  const createComponent = async () => {
+    if (!createFile) {
+      setError('Choose an image before creating a component.');
+      return;
     }
-    setShowDashboard(false);
-    onOpenLegendEditor?.();
+    await run(async () => {
+      const result = await createLibV2Component(createFile, {
+        displayName: String(createDraft.displayName || '').trim() || createFile.name.replace(/\.[^.]+$/, ''),
+        category: String(createDraft.category || 'custom'),
+        categories: [String(createDraft.category || 'custom')],
+        collection: String(createDraft.collection || '').trim(),
+        tags: parseTags(String(createDraft.tags || '')),
+        defaultWidth: numericOrUndefined(createDraft.defaultWidth),
+        defaultHeight: numericOrUndefined(createDraft.defaultHeight),
+      });
+      await onChanged(result.component.id);
+      setSelectedId(result.component.id);
+      setCreating(false);
+      setCreateFile(null);
+    });
   };
 
-  const preferredLegendTemplate = legendTemplates.find((template) => template.id === 'singh360-plan-marker-legend')
-    || legendTemplates.find((template) => template.id === 'singh360-refrigeration-symbols-standard')
-    || legendTemplates[0];
+  const undoLastSave = async () => {
+    const latest = history[0];
+    if (!latest || !window.confirm(`Restore snapshot ${latest.name}?\n\nThe current manifest is backed up first.`)) return;
+    await run(async () => {
+      await restoreLibV2History(latest.name);
+      await onChanged(selectedId);
+      setHistory(await listLibV2History());
+    });
+  };
 
-  const runAdvanced = async (kind: 'thumbs' | 'clean' | 'migrate') => {
-    setLoading(true);
-    try {
-      if (kind === 'thumbs') {
-        await rebuildLibV2Thumbnails();
-        window.alert('Thumbnail rebuild complete.');
-      }
-      if (kind === 'clean') {
-        const preview = await cleanLibV2PhysicalDuplicates(true);
-        window.alert(`Duplicate groups: ${preview.duplicateGroups || 0}\nDuplicates: ${preview.duplicates || 0}\nDry-run only.`);
-      }
-      if (kind === 'migrate') {
-        const preview = await migrateLegacyLibV2(true);
-        if (preview.willCopy && window.confirm(`Migrate ${preview.willCopy} legacy files into V2 components?`)) {
-          await migrateLegacyLibV2(false);
-        }
-      }
-      await load(showLegacyItems);
-    } finally {
-      setLoading(false);
-    }
+  const refreshFromDisk = async () => {
+    await run(async () => {
+      await refreshLibV2();
+      await onChanged(selectedId);
+    });
   };
 
   return (
-    <div className="libv2">
-      <section className="libv2-quick-insert" aria-label="Quick Insert assemblies">
-        <strong>Quick Insert</strong>
-        <div className="libv2-quick-insert-grid">
-          {QUICK_ASSEMBLIES.map((assembly) => (
-            <button
-              key={assembly.id}
-              type="button"
-              disabled={!canInsert}
-              data-help-id={`assembly.${assembly.id}`}
-              onClick={() => onInsertQuickAssembly?.(assembly.id)}
-            >
-              {assembly.label}
-            </button>
-          ))}
-        </div>
-      </section>
-      <nav className="libv2-section-nav" aria-label="Component categories">
-        {LIBRARY_SECTIONS.map((item) => {
-          const displayedCount = item.id === section
-            ? (item.id === 'assemblies' ? savedAssemblies.length : visibleCards.length)
-            : shortcutCounts[item.id];
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={section === item.id ? 'active' : undefined}
-              aria-pressed={section === item.id}
-              aria-label={`${item.label}: ${displayedCount}`}
-              onClick={() => selectSection(item.id)}
-            >
-              <span>{item.label}</span>
-              <strong>{displayedCount}</strong>
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          aria-label="Manage Library"
-          data-help-id="library.manage"
-          onClick={() => setShowDashboard(true)}
-        >
-          <span>Manage Library</span>
-        </button>
-      </nav>
-      {section === 'assemblies' && (
-        <section className="libv2-assemblies" aria-label="Saved assemblies">
-          <div className="libv2-saved-legends-head">
-            <strong>Saved Assemblies</strong>
-            <button type="button" disabled={!canInsert} data-help-id="assembly.saveSelection" onClick={onSaveSelectionAssembly}>
-              Save Selection as Assembly
-            </button>
+    <div className="libv2-workbench-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="libv2-workbench" role="dialog" aria-modal="true" aria-label="Component Builder" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="libv2-workbench-header">
+          <div><strong>Component Builder</strong><span>Create and edit reusable components without changing placed copies.</span></div>
+          <div>
+            <button type="button" onClick={onOpenManager}>Manage Library</button>
+            <button type="button" onClick={onClose}>Close</button>
           </div>
-          <div className="libv2-saved-legends-grid">
-            {savedAssemblies.map((assembly) => (
-              <button
-                key={assembly.id}
-                type="button"
-                className="libv2-saved-legend-card"
-                disabled={!canInsert}
-                onClick={() => onInsertSavedAssembly?.(assembly)}
-              >
-                <strong>{assembly.name}</strong>
-                <span>Editable persistent group</span>
-                <em>Insert</em>
-              </button>
-            ))}
-            {!savedAssemblies.length && (
-              <div className="libv2-empty libv2-empty-recovery">
-                <strong>Active filter: Saved Assemblies</strong>
-                <span>No saved assemblies are available for this project.</span>
-                <button type="button" onClick={showAllComponents}>Show All Components</button>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-      <div className="libv2-controls">
-        <input
-          className="libv2-search"
-          type="search"
-          placeholder="Search components…"
-          value={query}
-          onChange={(e) => {
-            setSection('all');
-            setQuery(e.target.value);
-            setCategory('all');
-            setCollection('all');
-          }}
-        />
-        <div className="libv2-row">
-          <select
-            className="libv2-grow"
-            aria-label="Filter by category"
-            value={category}
-            onChange={(e) => {
-              setSection('all');
-              setQuery('');
-              setCategory(e.target.value);
-              setCollection('all');
-            }}
-          >
-            <option value="all">All categories</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.label} ({c.count})</option>)}
-          </select>
-          <select
-            className="libv2-grow"
-            aria-label="Filter by collection"
-            value={collection}
-            onChange={(e) => {
-              setSection('all');
-              setQuery('');
-              setCollection(e.target.value);
-              setCategory('all');
-            }}
-          >
-            <option value="all">All collections</option>
-            {collections.map((value) => (
-              <option key={value} value={value}>{value} ({collectionCounts.get(value) || 0})</option>
-            ))}
-          </select>
-        </div>
-        <div className="libv2-row libv2-modes">
-          {(['source', 'edge', 'bw'] as ViewRep[]).map((r) => (
-            <button key={r} className={rep === r ? 'active' : undefined} onClick={() => setRep(r)}>
-              {r === 'source' ? 'Source' : r === 'edge' ? 'Edge' : 'B/W'}
-            </button>
-          ))}
-        </div>
-        <div className="libv2-row">
-          <button onClick={() => onOpenSymbolMapper?.()}>Open Symbol Mapper</button>
-          <button onClick={() => openSavedLegend(preferredLegendTemplate?.id)}>Saved Symbol Legends</button>
-          <button onClick={() => void doRefresh()} disabled={loading}>Refresh</button>
-          <button onClick={() => void rebuildPreviews()} disabled={loading}>Rebuild Previews</button>
-        </div>
-      </div>
+        </header>
+        {error ? <div className="libv2-workbench-alert" role="alert">{error}</div> : null}
+        <div className="libv2-builder-layout">
+          <aside className="libv2-builder-picker">
+            <button type="button" className="primary" onClick={() => setCreating(true)}>Create Component</button>
+            <input type="search" placeholder="Search existing components…" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <label className="libv2-inline-check"><input type="checkbox" checked={showRetired} onChange={(event) => setShowRetired(event.target.checked)} /> Include retired</label>
+            <div className="libv2-builder-picker-list">
+              {visible.map((component) => (
+                <button key={component.id} type="button" className={selectedId === component.id && !creating ? 'active' : ''} onClick={() => { setCreating(false); setSelectedId(component.id); }}>
+                  <ComponentPreview component={component} compact />
+                  <span><strong>{displayName(component)}</strong><small>{friendlyCategory(component.category)}{isRetired(component) ? ' · Retired' : ''}</small></span>
+                </button>
+              ))}
+            </div>
+          </aside>
 
-      <div className={`libv2-health ${loadError ? 'error' : ''}`}>
-        {loadError
-          ? `Library error: ${loadError}`
-          : loading
-            ? 'Loading component library…'
-            : `${activeFilterLabel}: ${section === 'assemblies' ? savedAssemblies.length : visibleCards.length} shown · ${activeComponents.length} active · ${previewReady} previews ready`}
-      </div>
-
-      <div className="libv2-grid">
-        {visibleCards.map((c) => {
-          const canCurrent = !!(variantUrl(c, rep) || previewUrl(c, rep));
-          const favorite = Boolean(asAny(c).favorite);
-          return (
-            <div key={c.id} className={`libv2-card ${previewUrl(c, rep) ? '' : 'preview-missing'}`} title={displayNameFor(c)} draggable={canInsert && canCurrent} onDragStart={(e) => onDragStart(e, c)}>
-              <button
-                type="button"
-                className={`libv2-favorite-star ${favorite ? 'active' : ''}`}
-                aria-label={`${favorite ? 'Unfavorite' : 'Favorite'} ${displayNameFor(c)}`}
-                aria-pressed={favorite}
-                data-help-id="library.favorite"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void toggleFavorite(c);
-                }}
-              >
-                {favorite ? '★' : '☆'}
-              </button>
-              <CardPreview c={c} rep={rep} />
-              <div className="libv2-meta">
-                <div className="libv2-name">{displayNameFor(c)}</div>
-                <div className="libv2-part">{asAny(c).partNumber || asAny(c).defaultLabel || ''}</div>
-                <div className="libv2-actions">
-                  <button onClick={() => insertAs(c, rep)} disabled={!canInsert || !canCurrent}>Insert</button>
-                  <details className="libv2-insert-menu">
-                    <summary>▼</summary>
-                    <div>
-                      <button onClick={() => insertAs(c, 'source')} disabled={!canInsertRep(c, 'source')}>Insert Source</button>
-                      <button onClick={() => insertAs(c, 'edge')} disabled={!canInsertRep(c, 'edge')}>Insert Edge</button>
-                      <button onClick={() => insertAs(c, 'bw')} disabled={!canInsertRep(c, 'bw')}>Insert B/W</button>
-                      <button onClick={() => { setSelectedId(c.id); setShowDashboard(true); }}>Edit in Dashboard</button>
-                    </div>
-                  </details>
+          <main className="libv2-builder-editor">
+            {creating ? (
+              <div className="libv2-builder-form">
+                <h2>Create Component</h2>
+                <label>Image<input type="file" accept="image/*,.svg,.pdf" onChange={(event) => setCreateFile(event.target.files?.[0] || null)} /></label>
+                <label>Name<input value={String(createDraft.displayName || '')} onChange={(event) => setCreateDraft((current) => ({ ...current, displayName: event.target.value }))} /></label>
+                <div className="libv2-form-columns">
+                  <label>Category<select value={String(createDraft.category)} onChange={(event) => setCreateDraft((current) => ({ ...current, category: event.target.value }))}>{categoryIds.map((id) => <option key={id} value={id}>{friendlyCategory(id)}</option>)}</select></label>
+                  <label>Collection<input list="libv2-builder-collections" value={String(createDraft.collection || '')} onChange={(event) => setCreateDraft((current) => ({ ...current, collection: event.target.value }))} /></label>
                 </div>
+                <label>Tags<input placeholder="comma, separated" value={String(createDraft.tags || '')} onChange={(event) => setCreateDraft((current) => ({ ...current, tags: event.target.value }))} /></label>
+                <div className="libv2-form-columns">
+                  <label>Default width<input type="number" min="1" value={String(createDraft.defaultWidth || '')} onChange={(event) => setCreateDraft((current) => ({ ...current, defaultWidth: event.target.value }))} /></label>
+                  <label>Default height<input type="number" min="1" value={String(createDraft.defaultHeight || '')} onChange={(event) => setCreateDraft((current) => ({ ...current, defaultHeight: event.target.value }))} /></label>
+                </div>
+                <div className="libv2-form-actions"><button type="button" onClick={() => setCreating(false)}>Cancel</button><button type="button" className="primary" disabled={busy} onClick={() => void createComponent()}>Create Component</button></div>
               </div>
-            </div>
-          );
-        })}
-        {!visibleCards.length && section !== 'assemblies' && (
-          <div className="libv2-empty libv2-empty-recovery">
-            <strong>Active filter: {activeFilterLabel}</strong>
-            <span>No components match the active view and filters.</span>
-            <button type="button" onClick={showAllComponents}>Show All Components</button>
-          </div>
-        )}
-      </div>
-
-      {showDashboard && (
-        <div className="libv2-modal-backdrop" onClick={() => setShowDashboard(false)}>
-          <div className="libv2-modal libv2-dashboard-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="libv2-dashboard-head">
-              <div>
-                <strong>Component Library Dashboard</strong>
-                <span className="libv2-dashboard-sub">One-screen rename, categorize, approve, retire, and insert.</span>
+            ) : selected ? (
+              <div className="libv2-builder-form">
+                <div className="libv2-builder-selected-head">
+                  <ComponentPreview component={selected} />
+                  <div><span>Stable ID</span><code>{selected.id}</code><span>{isRetired(selected) ? 'Retired — hidden from Component Browser' : 'Active in Component Browser'}</span></div>
+                </div>
+                <label>Component name<input aria-label="Component name" value={String(draft.displayName || '')} onChange={(event) => updateDraft({ displayName: event.target.value })} /></label>
+                <div className="libv2-form-columns">
+                  <label>Short name<input value={String(draft.shortName || '')} onChange={(event) => updateDraft({ shortName: event.target.value })} /></label>
+                  <label>Default label<input value={String(draft.defaultLabel || '')} onChange={(event) => updateDraft({ defaultLabel: event.target.value })} /></label>
+                </div>
+                <div className="libv2-form-columns">
+                  <label>Default width<input type="number" min="1" value={String(draft.defaultWidth || '')} onChange={(event) => updateDraft({ defaultWidth: event.target.value })} /></label>
+                  <label>Default height<input type="number" min="1" value={String(draft.defaultHeight || '')} onChange={(event) => updateDraft({ defaultHeight: event.target.value })} /></label>
+                </div>
+                <div className="libv2-form-columns">
+                  <label>Category<select value={String(draft.category || 'custom')} onChange={(event) => updateDraft({ category: event.target.value })}>{categoryIds.map((id) => <option key={id} value={id}>{friendlyCategory(id)}</option>)}</select></label>
+                  <label>Collection<input list="libv2-builder-collections" value={String(draft.collection || '')} onChange={(event) => updateDraft({ collection: event.target.value })} /></label>
+                </div>
+                <label>Tags<input value={String(draft.tags || '')} onChange={(event) => updateDraft({ tags: event.target.value })} /></label>
+                <label>Notes<textarea value={String(draft.notes || '')} onChange={(event) => updateDraft({ notes: event.target.value })} /></label>
+                <label className="libv2-inline-check"><input type="checkbox" checked={draft.favorite === true} onChange={(event) => updateDraft({ favorite: event.target.checked })} /> Favorite</label>
+                <datalist id="libv2-builder-collections">{collectionNames.map((name) => <option key={name} value={name} />)}</datalist>
+                <div className="libv2-form-actions wrap">
+                  <button type="button" disabled={!undoDraft || busy} onClick={() => { if (undoDraft) setDraft(undoDraft); setUndoDraft(null); }}>Undo Unsaved</button>
+                  <button type="button" disabled={busy} onClick={() => void duplicateSelected()}>Duplicate</button>
+                  <button type="button" disabled={busy} onClick={() => sourceInput.current?.click()}>Replace Image</button>
+                  {isRetired(selected) ? <button type="button" disabled={busy} onClick={() => void setRetired(false)}>Restore</button> : <button type="button" className="danger" disabled={busy} onClick={() => void setRetired(true)}>Retire</button>}
+                  <button type="button" className="primary" disabled={busy} onClick={() => void saveSelected()}>Save Component</button>
+                </div>
+                <input ref={sourceInput} hidden type="file" accept="image/*,.svg,.pdf" onChange={(event) => { void replaceAsset('source', event.target.files?.[0] || null); event.target.value = ''; }} />
+                <input ref={edgeInput} hidden type="file" accept="image/*,.svg" onChange={(event) => { void replaceAsset('edge', event.target.files?.[0] || null); event.target.value = ''; }} />
+                <input ref={bwInput} hidden type="file" accept="image/*,.svg" onChange={(event) => { void replaceAsset('bw', event.target.files?.[0] || null); event.target.value = ''; }} />
               </div>
-              <div className="libv2-dashboard-actions">
-                <button onClick={() => openSavedLegend(preferredLegendTemplate?.id)} disabled={loading} title="Open the saved editable refrigeration legend">Saved Legends ({legendTemplates.length})</button>
-                <button onClick={() => void undoLastSavedLibraryChange()} disabled={!libraryHistory.length || loading}>Undo Last Save</button>
-                <button onClick={() => void reloadFromDisk()} disabled={loading}>Reload / Discard</button>
-                <button className="primary" onClick={() => void saveDirty()} disabled={!dirtyIds.length || loading}>Save All Edits ({dirtyIds.length})</button>
-                <button onClick={() => setShowDashboard(false)}>Close</button>
-              </div>
-            </div>
+            ) : <div className="libv2-workbench-empty">Select a component or create a new one.</div>}
 
-            <div className="libv2-dashboard-toolbar">
-              <input
-                type="search"
-                placeholder="Search name / part / alias / notes / path…"
-                value={builderQuery}
-                onChange={(e) => setBuilderQuery(e.target.value)}
-              />
-              <select value={builderCategory} onChange={(e) => setBuilderCategory(e.target.value)} title="Category">
-                <option value="all">All categories</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.label} ({c.count})</option>)}
-              </select>
-              <select value={builderStatus} onChange={(e) => setBuilderStatus(e.target.value)} title="Status">
-                <option value="active">Active / visible</option>
-                <option value="all">All statuses</option>
-                <option value="blank">Blank status</option>
-                <option value="approved">Approved</option>
-                <option value="needsReview">Needs Review</option>
-                <option value="retired">Retired / hidden</option>
-              </select>
-              <select value={builderCollection} onChange={(e) => setBuilderCollection(e.target.value)} title="Collection">
-                <option value="all">All collections</option>
-                {collections.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <label className="libv2-check"><input type="checkbox" checked={showRetired} onChange={(e) => setShowRetired(e.target.checked)} /> retired/reference</label>
-              <label className="libv2-check"><input type="checkbox" checked={showNeedsReview} onChange={(e) => setShowNeedsReview(e.target.checked)} /> needs review</label>
-              <button onClick={() => addFilesRef.current?.click()}>Add Files</button>
-              <button onClick={exportCsv}>Export CSV</button>
-              <button onClick={downloadJson}>Download JSON</button>
-              <input ref={addFilesRef} hidden type="file" multiple onChange={(e) => void addFilesToLibrary(e.target.files)} />
-            </div>
-
-            <div className="libv2-dashboard-stats">
-              <span>Total: <strong>{components.length}</strong></span>
-              <span>Visible: <strong>{dashboardRows.length}</strong></span>
-              <span>Selected: <strong>{visibleSelectedCount}</strong></span>
-              <span>Dirty: <strong>{dirtyIds.length}</strong></span>
-              <span>Active source: <strong>{showLegacyItems ? 'legacy included' : 'normal'}</strong></span>
-            </div>
-
-            {dirtyIds.length > 0 && (
-              <div className={`libv2-unsaved-warning ${dirtyIds.length > 20 ? 'danger' : ''}`}>
-                <strong>{dirtyIds.length} unsaved edit{dirtyIds.length === 1 ? '' : 's'}.</strong> Nothing has changed on disk until you click <strong>Save All Edits</strong>.
-              </div>
-            )}
-
-            <div className="libv2-bulkbar">
-              <button onClick={selectVisible}>Select Visible ({dashboardRows.length})</button>
-              <button onClick={clearSelected}>Clear Selected</button>
-              <button onClick={undoStagedBulk} disabled={!bulkUndo}>Undo Staged Bulk</button>
-              <button onClick={discardStagedEdits} disabled={!dirtyIds.length}>Discard Unsaved</button>
-              <select value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} title="Bulk category">
-                <option value="">Bulk category…</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </select>
-              <input placeholder="Bulk collection…" list="libv2-collections" value={bulkCollection} onChange={(e) => setBulkCollection(e.target.value)} />
-              <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)} title="Bulk status">
-                <option value="">Bulk status…</option>
-                {STATUS_OPTIONS.map((s) => <option key={s.id || 'blank'} value={s.id}>{s.label}</option>)}
-              </select>
-              <button onClick={applyBulk} disabled={!selectedIds.length}>Apply to Selected</button>
-              <button onClick={normalizeSelectedNames} disabled={!selectedIds.length}>Clean Selected Names</button>
-              <datalist id="libv2-collections">
-                {collections.map((c) => <option key={c} value={c} />)}
-              </datalist>
-            </div>
-
-            <div className="libv2-dashboard-body">
-              <div className="libv2-dashboard-tablewrap">
-                <table className="libv2-dashboard-table">
-                  <thead>
-                    <tr>
-                      <th className="sel">Use</th>
-                      <SortableHeader label="Preview" sortKey="displayName" active={sortKey} dir={sortDir} onSort={setSortKeyDir} />
-                      <SortableHeader label="Display Name" sortKey="displayName" active={sortKey} dir={sortDir} onSort={setSortKeyDir} />
-                      <SortableHeader label="Category" sortKey="category" active={sortKey} dir={sortDir} onSort={setSortKeyDir} />
-                      <SortableHeader label="Collection" sortKey="collection" active={sortKey} dir={sortDir} onSort={setSortKeyDir} />
-                      <SortableHeader label="Part #" sortKey="partNumber" active={sortKey} dir={sortDir} onSort={setSortKeyDir} />
-                      <th>Short / Label</th>
-                      <SortableHeader label="Status" sortKey="status" active={sortKey} dir={sortDir} onSort={setSortKeyDir} />
-                      <th>Aliases</th>
-                      <th>Tags</th>
-                      <th>Notes</th>
-                      <th>Path</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dashboardRows.map((c) => {
-                      const x = asAny(c);
-                      const rowDirty = !!edits[c.id] && Object.keys(edits[c.id] || {}).length > 0;
-                      const rowSelected = selectedIds.includes(c.id);
-                      const retired = isRetired(c);
-                      return (
-                        <tr key={c.id} className={`${selectedId === c.id ? 'is-active' : ''} ${rowDirty ? 'is-dirty' : ''} ${retired ? 'is-retired' : ''}`} onClick={() => setSelectedId(c.id)}>
-                          <td className="sel"><input type="checkbox" checked={rowSelected} onChange={() => toggleSelected(c.id)} onClick={(e) => e.stopPropagation()} /></td>
-                          <td className="preview"><CardPreview c={c} rep={rep} small /></td>
-                          <td><input value={String(patchValue(c, edits, 'displayName', x.displayName || ''))} onChange={(e) => setEdit(c.id, 'displayName', e.target.value)} /></td>
-                          <td>
-                            <select value={String(patchValue(c, edits, 'category', x.category || 'custom'))} onChange={(e) => { const primary = e.target.value; setEdit(c.id, 'category', primary); setEdit(c.id, 'categories', Array.from(new Set([primary, ...editedCategories(c, edits)]))); }}>
-                              {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.label}</option>)}
-                            </select>
-                          </td>
-                          <td><input list="libv2-collections" value={String(patchValue(c, edits, 'collection', collectionFor(c)))} onChange={(e) => setEdit(c.id, 'collection', e.target.value)} /></td>
-                          <td><input value={String(patchValue(c, edits, 'partNumber', x.partNumber || ''))} onChange={(e) => setEdit(c.id, 'partNumber', e.target.value)} /></td>
-                          <td className="two-input">
-                            <input placeholder="Short" value={String(patchValue(c, edits, 'shortName', x.shortName || ''))} onChange={(e) => setEdit(c.id, 'shortName', e.target.value)} />
-                            <input placeholder="Default label" value={String(patchValue(c, edits, 'defaultLabel', x.defaultLabel || ''))} onChange={(e) => setEdit(c.id, 'defaultLabel', e.target.value)} />
-                          </td>
-                          <td>
-                            <select value={String(patchValue(c, edits, 'status', x.status || ''))} onChange={(e) => setEdit(c.id, 'status', e.target.value)}>
-                              {STATUS_OPTIONS.map((s) => <option key={s.id || 'blank'} value={s.id}>{s.label}</option>)}
-                            </select>
-                          </td>
-                          <td><input value={arrayToCsv(patchValue(c, edits, 'aliases', x.aliases || []))} onChange={(e) => setEdit(c.id, 'aliases', e.target.value)} /></td>
-                          <td><input value={arrayToCsv(patchValue(c, edits, 'tags', x.tags || []))} onChange={(e) => setEdit(c.id, 'tags', e.target.value)} /></td>
-                          <td><textarea value={String(patchValue(c, edits, 'notes', x.notes || ''))} onChange={(e) => setEdit(c.id, 'notes', e.target.value)} /></td>
-                          <td className="path" title={pathFor(c)}>{pathFor(c)}</td>
-                          <td className="actions">
-                            <button onClick={(e) => { e.stopPropagation(); insertAs(c, rep); }} disabled={!canInsert}>Insert</button>
-                            <button onClick={(e) => { e.stopPropagation(); void saveSingle(c); }} disabled={!rowDirty}>Save</button>
-                            <button onClick={(e) => { e.stopPropagation(); setEdit(c.id, 'status', 'retired'); setEdit(c.id, 'retired', true); }}>Retire</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                {!dashboardRows.length && <div className="libv2-dashboard-empty">No rows match the current filters. Try All statuses and retired/reference.</div>}
-              </div>
-
-              <aside className="libv2-inspector">
-                <h3>Selected Component</h3>
-                {selected ? (
-                  <>
-                    <CardPreview c={selected} rep={rep} />
-                    <strong>{displayNameFor(selected)}</strong>
-                    <div className="libv2-inspector-line">{asAny(selected).partNumber || asAny(selected).defaultLabel || 'No part number'}</div>
-                    <div className="libv2-inspector-line">{categoriesFor(selected).map(niceCategoryLabel).join(' / ')} · {collectionFor(selected) || 'No collection'}</div>
-                    <div className="libv2-inspector-line">Default size: {defaultSizeLabel(selected) || 'not set'}</div>
-                    <div className="libv2-inspector-variants">
-                      <button onClick={() => insertAs(selected, 'source')} disabled={!canInsert || !sourceUrl(selected)}>Insert Source</button>
-                      <button onClick={() => insertAs(selected, 'edge')} disabled={!canInsert || !edgeUrl(selected)}>Insert Edge</button>
-                      <button onClick={() => insertAs(selected, 'bw')} disabled={!canInsert || !bwUrl(selected)}>Insert B/W</button>
-                    </div>
-                    <div className="libv2-inspector-variants">
-                      <button onClick={() => replaceSourceRef.current?.click()}>Replace Source</button>
-                      <button onClick={() => replaceEdgeRef.current?.click()}>Replace Edge</button>
-                      <button onClick={() => replaceBwRef.current?.click()}>Replace B/W</button>
-                      <input ref={replaceSourceRef} hidden type="file" accept="image/*,.svg" onChange={(e) => void replaceAsset('source', e.target.files?.[0] || null)} />
-                      <input ref={replaceEdgeRef} hidden type="file" accept="image/*,.svg" onChange={(e) => void replaceAsset('edge', e.target.files?.[0] || null)} />
-                      <input ref={replaceBwRef} hidden type="file" accept="image/*,.svg" onChange={(e) => void replaceAsset('bw', e.target.files?.[0] || null)} />
-                    </div>
-                    <div className="libv2-inspector-variants">
-                      <button onClick={() => void duplicateSelected()}>Duplicate</button>
-                      <button onClick={() => { setEdit(selected.id, 'status', 'approved'); setEdit(selected.id, 'retired', false); }}>Approve</button>
-                      <button onClick={() => { setEdit(selected.id, 'status', 'needsReview'); setEdit(selected.id, 'retired', false); }}>Needs Review</button>
-                      <button onClick={() => { setEdit(selected.id, 'status', 'retired'); setEdit(selected.id, 'retired', true); }}>Retire</button>
-                    </div>
-                    <div className="libv2-inspector-categories">
-                      <strong>Show in categories</strong>
-                      {categories.map((cat) => {
-                        const current = editedCategories(selected, edits);
-                        const checked = current.includes(cat.id);
-                        return (
-                          <label key={cat.id} className="libv2-check">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                const primary = String(patchValue(selected, edits, 'category', selected.category || 'custom'));
-                                const next = e.target.checked
-                                  ? Array.from(new Set([primary, ...current, cat.id]))
-                                  : current.filter((id) => id !== cat.id || id === primary);
-                                setEdit(selected.id, 'categories', next);
-                              }}
-                            />
-                            {cat.label}
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <textarea
-                      className="libv2-inspector-notes"
-                      placeholder="Notes…"
-                      value={String(patchValue(selected, edits, 'notes', asAny(selected).notes || ''))}
-                      onChange={(e) => setEdit(selected.id, 'notes', e.target.value)}
-                    />
-                  </>
-                ) : (
-                  <p>No component selected.</p>
-                )}
-                <hr />
-                <h3>Advanced</h3>
-                <label className="libv2-check"><input type="checkbox" checked={showLegacyItems} onChange={(e) => { setShowLegacyItems(e.target.checked); void load(e.target.checked); }} /> include legacy items</label>
-                <button onClick={() => void runAdvanced('thumbs')}>Rebuild Thumbnails</button>
-                <button onClick={() => void runAdvanced('clean')}>Dry-Run Duplicate Cleanup</button>
-                <button onClick={() => void runAdvanced('migrate')}>Migrate Legacy Library</button>
-              </aside>
-            </div>
-          </div>
+            <details className="libv2-advanced-workbench">
+              <summary>Advanced insertion and library tools</summary>
+              {selected ? (
+                <section>
+                  <h3>Representations</h3>
+                  <div className="libv2-segmented">{(['source', 'edge', 'bw'] as Representation[]).map((value) => <button key={value} type="button" className={representation === value ? 'active' : ''} onClick={() => setRepresentation(value)}>{value === 'source' ? 'Source' : value === 'edge' ? 'Edge' : 'B/W'}</button>)}</div>
+                  <div className="libv2-form-actions wrap"><button type="button" disabled={!props.canInsert} onClick={() => void onInsert(selected, representation)}>Insert Selected</button><button type="button" onClick={() => edgeInput.current?.click()}>Replace Edge</button><button type="button" onClick={() => bwInput.current?.click()}>Replace B/W</button></div>
+                </section>
+              ) : null}
+              <section><h3>Smart Components</h3><div className="libv2-tool-grid">{SMART_COMPONENT_CHOICES.map((choice) => <button key={choice.kind} type="button" disabled={!props.canInsert} onClick={() => { onClose(); props.onInsertSmartComponent?.(choice.kind); }}>{choice.label}</button>)}</div></section>
+              <section><h3>Quick Insert</h3><div className="libv2-tool-grid">{QUICK_ASSEMBLIES.map((assembly) => <button key={assembly.id} type="button" disabled={!props.canInsert} onClick={() => { onClose(); props.onInsertQuickAssembly?.(assembly.id); }}>{assembly.label}</button>)}</div></section>
+              <section>
+                <h3>Callouts and Assemblies</h3>
+                <div className="libv2-tool-grid">
+                  <button type="button" disabled={!props.canInsert} onClick={() => { onClose(); props.onInsertSingleCallout?.('round'); }}>Round Callout</button>
+                  <button type="button" disabled={!props.canInsert} onClick={() => { onClose(); props.onCreateCalloutSet?.('round'); }}>Generate Round Callouts</button>
+                  <button type="button" disabled={!props.canInsert} onClick={() => { onClose(); props.onInsertSingleCallout?.('square'); }}>Square Callout</button>
+                  <button type="button" disabled={!props.canInsert} onClick={() => { onClose(); props.onCreateCalloutSet?.('square'); }}>Generate Square Callouts</button>
+                  <button type="button" disabled={!props.canInsert} onClick={() => { onClose(); props.onCreateCalloutSet?.('block'); }}>Callout Block / List</button>
+                  <button type="button" disabled={!props.canInsert} onClick={() => { onClose(); props.onSaveSelectionAssembly?.(); }}>Save Selection as Assembly</button>
+                </div>
+                {(props.savedAssemblies || []).length ? (
+                  <div className="libv2-saved-assembly-grid" aria-label="Saved assemblies">
+                    {(props.savedAssemblies || []).map((assembly) => (
+                      <button
+                        key={assembly.id}
+                        type="button"
+                        className="libv2-saved-assembly-card"
+                        disabled={!props.canInsert}
+                        onClick={() => { onClose(); props.onInsertSavedAssembly?.(assembly); }}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setAssemblyMenu({ x: event.clientX, y: event.clientY, id: assembly.id });
+                        }}
+                      >
+                        <strong>{assembly.name}</strong>
+                        <span>{assembly.category || 'Saved Assemblies'}{assembly.favorite ? ' · Favorite' : ''}</span>
+                        <small>Click to insert · right-click to manage</small>
+                      </button>
+                    ))}
+                  </div>
+                ) : <small>No saved assemblies in this project.</small>}
+              </section>
+              <section><h3>Specialized Tools</h3><div className="libv2-form-actions wrap"><button type="button" onClick={() => { onClose(); props.onOpenSymbolMapper?.(); }}>Symbol Mapper</button><button type="button" onClick={() => { onClose(); props.onOpenLegendEditor?.(); }}>Saved Legends ({legends.length})</button><button type="button" disabled={busy} onClick={() => void refreshFromDisk()}>Refresh from Disk</button><button type="button" disabled={busy} onClick={() => void run(async () => { await rebuildLibV2Thumbnails(); await onChanged(selectedId); })}>Rebuild Previews</button><button type="button" disabled={!history.length || busy} onClick={() => void undoLastSave()}>Undo Last Save</button></div>{historyError ? <small>{historyError}</small> : null}</section>
+            </details>
+          </main>
         </div>
-      )}
+        {assemblyMenu && contextAssembly ? (
+          <SheetContextMenu
+            x={assemblyMenu.x}
+            y={assemblyMenu.y}
+            onClose={() => setAssemblyMenu(null)}
+            actions={[
+              { label: 'Edit', disabled: !props.canInsert, onClick: () => { onClose(); props.onInsertSavedAssembly?.(contextAssembly); }, hint: 'Insert an editable copy on the active page' },
+              { label: 'Rename', onClick: () => renameAssembly(contextAssembly) },
+              { label: 'Duplicate', onClick: () => props.onDuplicateSavedAssembly?.(contextAssembly) },
+              { label: 'Delete', onClick: () => deleteAssembly(contextAssembly), hint: 'Placed copies remain unchanged' },
+              { label: 'Move to Category', onClick: () => moveAssemblyCategory(contextAssembly) },
+              { label: contextAssembly.favorite ? 'Remove from Favorites' : 'Add to Favorites', onClick: () => props.onUpdateSavedAssembly?.(contextAssembly.id, { favorite: !contextAssembly.favorite }) },
+              { label: 'Save as Assembly', onClick: () => props.onDuplicateSavedAssembly?.(contextAssembly, `${contextAssembly.name} Copy`) },
+            ]}
+          />
+        ) : null}
+      </section>
     </div>
   );
+}
 
-  function setSortKeyDir(key: SortKey) {
-    if (sortKey === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    else {
-      setSortKey(key);
-      setSortDir('asc');
+interface ManagerProps {
+  data: LibV2Data;
+  onChanged: (preferredId?: string) => Promise<LibV2Data | null>;
+  onOpenBuilder: (id: string) => void;
+  onClose: () => void;
+}
+
+function ManageLibraryWorkbench({ data, onChanged, onOpenBuilder, onClose }: ManagerProps) {
+  const components = data.components;
+  const [view, setView] = useState<ManagerView>('active');
+  const [query, setQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
+  const [undoEdits, setUndoEdits] = useState<Record<string, Record<string, unknown>> | null>(null);
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkCollection, setBulkCollection] = useState('');
+  const [bulkAction, setBulkAction] = useState('');
+  const [history, setHistory] = useState<LibV2HistoryEntry[]>([]);
+  const [historyError, setHistoryError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const categoryIds = useMemo(() => Array.from(new Set([
+    ...CATEGORY_PRESETS.map(([id]) => id),
+    ...components.flatMap(categoriesFor),
+  ])).sort((left, right) => friendlyCategory(left).localeCompare(friendlyCategory(right))), [components]);
+
+  useEffect(() => {
+    void listLibV2History().then(setHistory).catch((caught) => setHistoryError(String(caught)));
+  }, []);
+
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return components.filter((component) => {
+      if (view === 'active' && isRetired(component)) return false;
+      if (view === 'retired' && !isRetired(component)) return false;
+      if (view === 'needs-review' && !needsReview(component)) return false;
+      return !normalized || searchBlob(component).includes(normalized);
+    });
+  }, [components, query, view]);
+
+  const setEdit = (id: string, patch: Record<string, unknown>) => {
+    setEdits((current) => ({ ...current, [id]: { ...(current[id] || {}), ...patch } }));
+  };
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError('');
+    try { await action(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { setBusy(false); }
+  };
+
+  const toggleSelected = (id: string) => setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  const selectVisible = () => setSelectedIds(visible.map((component) => component.id));
+
+  const applyBulk = () => {
+    if (!selectedIds.length) return;
+    if (!bulkCategory && !bulkCollection && !bulkAction) {
+      setError('Choose a bulk category, collection, or action.');
+      return;
     }
-  }
-}
+    setUndoEdits(structuredClone(edits));
+    const selected = new Set(selectedIds);
+    setEdits((current) => {
+      const next = { ...current };
+      components.forEach((component) => {
+        if (!selected.has(component.id)) return;
+        const patch = { ...(next[component.id] || {}) };
+        if (bulkCategory) Object.assign(patch, { category: bulkCategory, categories: [bulkCategory] });
+        if (bulkCollection) patch.collection = bulkCollection;
+        if (bulkAction === 'approve' || bulkAction === 'restore') Object.assign(patch, { status: 'approved', retired: false, needsReview: false });
+        if (bulkAction === 'needs-review') Object.assign(patch, { status: 'needsReview', retired: false, needsReview: true });
+        if (bulkAction === 'retire') Object.assign(patch, { status: 'retired', retired: true, needsReview: false });
+        if (bulkAction === 'favorite') patch.favorite = true;
+        if (bulkAction === 'unfavorite') patch.favorite = false;
+        next[component.id] = patch;
+      });
+      return next;
+    });
+  };
 
-function sortComparable(c: LibV2Component, edits: Record<string, Partial<AnyComp>>, key: SortKey): string {
-  const x = asAny(c);
-  if (key === 'displayName') return String(patchValue(c, edits, 'displayName', x.displayName || ''));
-  if (key === 'category') return String(patchValue(c, edits, 'category', x.category || ''));
-  if (key === 'collection') return String(patchValue(c, edits, 'collection', collectionFor(c)));
-  if (key === 'partNumber') return String(patchValue(c, edits, 'partNumber', x.partNumber || ''));
-  if (key === 'status') return String(patchValue(c, edits, 'status', statusFor(c)));
-  return '';
-}
+  const saveEdits = async () => {
+    const updates = Object.entries(edits).filter(([, patch]) => Object.keys(patch).length).map(([id, rawPatch]) => {
+      const patch = { ...rawPatch };
+      if (Object.prototype.hasOwnProperty.call(patch, 'tags')) patch.tags = parseTags(String(patch.tags || ''));
+      return { id, patch };
+    });
+    if (!updates.length) return;
+    await run(async () => {
+      await batchUpdateLibV2Components(updates, `visual-review-save-${updates.length}`);
+      setEdits({});
+      setUndoEdits(null);
+      setSelectedIds([]);
+      await onChanged();
+      setHistory(await listLibV2History());
+    });
+  };
 
-function SortableHeader({
-  label,
-  sortKey,
-  active,
-  dir,
-  onSort,
-}: {
-  label: string;
-  sortKey: SortKey;
-  active: SortKey;
-  dir: 'asc' | 'desc';
-  onSort: (key: SortKey) => void;
-}) {
+  const restoreSnapshot = async (entry: LibV2HistoryEntry) => {
+    if (!window.confirm(`Restore ${entry.name}?\n\nThe current manifest will be snapshotted first.`)) return;
+    await run(async () => {
+      await restoreLibV2History(entry.name);
+      await onChanged();
+      setHistory(await listLibV2History());
+    });
+  };
+
+  const advanced = async (action: 'refresh' | 'previews' | 'duplicates' | 'migrate') => {
+    await run(async () => {
+      if (action === 'refresh') await refreshLibV2();
+      if (action === 'previews') await rebuildLibV2Thumbnails();
+      if (action === 'duplicates') {
+        const result = await cleanLibV2PhysicalDuplicates(true);
+        window.alert(`Dry run: ${result.duplicateGroups || 0} duplicate groups, ${result.duplicates || 0} duplicate files.`);
+      }
+      if (action === 'migrate') {
+        const preview = await migrateLegacyLibV2(true);
+        window.alert(`Dry run only: ${preview.willCopy || 0} files would be copied; ${preview.willSkipDuplicates || 0} duplicates would be skipped.`);
+      }
+      await onChanged();
+    });
+  };
+
   return (
-    <th>
-      <button className="libv2-sort-button" onClick={() => onSort(sortKey)}>
-        {label} {active === sortKey ? (dir === 'asc' ? '▲' : '▼') : ''}
-      </button>
-    </th>
+    <div className="libv2-workbench-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="libv2-workbench manager" role="dialog" aria-modal="true" aria-label="Manage Library" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="libv2-workbench-header">
+          <div><strong>Manage Library</strong><span>Visual review, bulk actions, retired recovery, needs-review triage, and history snapshots.</span></div>
+          <div><button type="button" onClick={() => onOpenBuilder('__new__')}>Component Builder</button><button type="button" onClick={onClose}>Close</button></div>
+        </header>
+        {error ? <div className="libv2-workbench-alert" role="alert">{error}</div> : null}
+        <div className="libv2-manager-toolbar">
+          <input type="search" placeholder="Search review cards…" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <select aria-label="Library review view" value={view} onChange={(event) => setView(event.target.value as ManagerView)}><option value="active">Active</option><option value="needs-review">Needs Review</option><option value="retired">Retired</option><option value="all">All Components</option></select>
+          <button type="button" onClick={selectVisible}>Select Visible</button>
+          <button type="button" onClick={() => setSelectedIds([])}>Clear Selection</button>
+          <span>{selectedIds.length} selected</span>
+        </div>
+        <div className="libv2-manager-bulk">
+          <select value={bulkCategory} onChange={(event) => setBulkCategory(event.target.value)}><option value="">Bulk category…</option>{categoryIds.map((id) => <option key={id} value={id}>{friendlyCategory(id)}</option>)}</select>
+          <input placeholder="Bulk collection…" value={bulkCollection} onChange={(event) => setBulkCollection(event.target.value)} />
+          <select value={bulkAction} onChange={(event) => setBulkAction(event.target.value)}><option value="">Bulk action…</option><option value="approve">Approve</option><option value="needs-review">Needs Review</option><option value="retire">Retire</option><option value="restore">Restore</option><option value="favorite">Favorite</option><option value="unfavorite">Unfavorite</option></select>
+          <button type="button" disabled={!selectedIds.length} onClick={applyBulk}>Stage Bulk Action</button>
+          <button type="button" disabled={!undoEdits} onClick={() => { if (undoEdits) setEdits(undoEdits); setUndoEdits(null); }}>Undo Staged</button>
+          <button type="button" className="primary" disabled={!Object.keys(edits).length || busy} onClick={() => void saveEdits()}>Save Changes ({Object.keys(edits).length})</button>
+        </div>
+        <div className="libv2-manager-layout">
+          <div className="libv2-review-grid">
+            {visible.map((component) => {
+              const patch = edits[component.id] || {};
+              const selected = selectedIds.includes(component.id);
+              return (
+                <article key={component.id} className={`libv2-review-card ${selected ? 'selected' : ''} ${isRetired(component) ? 'retired' : ''}`}>
+                  <label className="libv2-review-select"><input type="checkbox" checked={selected} onChange={() => toggleSelected(component.id)} /> Select</label>
+                  <ComponentPreview component={component} />
+                  <label>Name<input value={String(patch.displayName ?? displayName(component))} onChange={(event) => setEdit(component.id, { displayName: event.target.value })} /></label>
+                  <label>Category<select value={String(patch.category ?? component.category ?? 'custom')} onChange={(event) => setEdit(component.id, { category: event.target.value, categories: [event.target.value] })}>{categoryIds.map((id) => <option key={id} value={id}>{friendlyCategory(id)}</option>)}</select></label>
+                  <label>Collection<input value={String(patch.collection ?? collectionFor(component))} onChange={(event) => setEdit(component.id, { collection: event.target.value })} /></label>
+                  <label>Tags<input value={String(patch.tags ?? tagsText(component.tags))} onChange={(event) => setEdit(component.id, { tags: event.target.value })} /></label>
+                  <div className="libv2-review-card-foot"><span>{isRetired(component) ? 'Retired' : needsReview(component) ? 'Needs Review' : 'Active'}</span><button type="button" onClick={() => onOpenBuilder(component.id)}>Edit in Builder</button></div>
+                </article>
+              );
+            })}
+            {!visible.length ? <div className="libv2-workbench-empty">No review cards match this view.</div> : null}
+          </div>
+          <aside className="libv2-history-panel">
+            <h2>History Snapshots</h2>
+            <p>Every save and retire action creates a recoverable manifest snapshot.</p>
+            {historyError ? <div className="libv2-workbench-alert">{historyError}</div> : null}
+            <div>{history.slice(0, 20).map((entry) => <button key={entry.name} type="button" disabled={busy} onClick={() => void restoreSnapshot(entry)}><strong>{entry.savedAt}</strong><span>{entry.reason}</span><small>{entry.componentCount} records</small></button>)}</div>
+            {!history.length && !historyError ? <p>No snapshots yet.</p> : null}
+            <details className="libv2-manager-advanced"><summary>Advanced maintenance</summary><button type="button" onClick={() => void advanced('refresh')}>Refresh from Disk</button><button type="button" onClick={() => void advanced('previews')}>Rebuild Previews</button><button type="button" onClick={() => void advanced('duplicates')}>Duplicate Cleanup Dry Run</button><button type="button" onClick={() => void advanced('migrate')}>Legacy Migration Dry Run</button></details>
+          </aside>
+        </div>
+      </section>
+    </div>
   );
 }
-
-function toCsv(rows: unknown[][]): string {
-  return rows.map((row) => row.map((cell) => {
-    const text = String(cell ?? '');
-    if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-    return text;
-  }).join(',')).join('\n');
-}
-
-function downloadText(filename: string, text: string) {
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-// S360 WORKSPACE UX V10

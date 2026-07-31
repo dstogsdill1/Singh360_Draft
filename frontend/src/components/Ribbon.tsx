@@ -66,8 +66,10 @@ interface Props {
     sendBackward: () => void;
     bringToFront: () => void;
     sendToBack: () => void;
-    alignObjects: (d: 'left'|'center'|'right'|'top'|'middle'|'bottom'|'page-center-h'|'page-center-v') => void;
+    alignObjects: (d: 'left'|'center'|'right'|'top'|'middle'|'bottom'|'page-center-h'|'page-center-v'|'page-center-both') => void;
     distributeObjects: (d: 'horizontal'|'vertical') => void;
+    equalSpaceObjects: (d: 'horizontal'|'vertical') => void;
+    centerInPanel: (d: 'horizontal'|'vertical'|'both') => void;
     matchObjectSize: (w: 'width'|'height'|'both') => void;
     addLegend: (presetIds?: string[]) => void;
     addSymbolLegend: (config: SymbolLegendInsertConfig) => void;
@@ -325,8 +327,8 @@ export default function Ribbon({
             </Group>
             <Group title="Group">
               <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.group} title="Group selected objects">Group</button>
-              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.ungroup} title="Ungroup selected group">Ungroup</button>
-              <button className="ribbon-btn" disabled={!hasSelection} data-help-id="assembly.saveSelection" onClick={onSaveSelectionAssembly}>Save Selection as Assembly</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={canvas.ungroup} title="Ungroup or explode the selected group into editable parts">Ungroup</button>
+              <button className="ribbon-btn" disabled={!cx} data-help-id="assembly.saveSelection" onClick={onSaveSelectionAssembly}>Save Selection as Assembly</button>
               <button className="ribbon-btn" disabled={!historyEnabled} onClick={canvas.unlockAll} title="Unlock all objects on this page">Unlock All</button>
             </Group>
           </>
@@ -437,10 +439,20 @@ export default function Ribbon({
             <Group title="Page Center">
               <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('page-center-h')} title="Center on page horizontally">⇔ Horiz</button>
               <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('page-center-v')} title="Center on page vertically">⇕ Vert</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.alignObjects('page-center-both')} title="Center the completed selection on the page">◎ Both</button>
+            </Group>
+            <Group title="Panel Center">
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.centerInPanel('horizontal')} title="Center the selection horizontally inside the nearest selected or containing panel">⇔ Panel</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.centerInPanel('vertical')} title="Center the selection vertically inside the nearest selected or containing panel">⇕ Panel</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.centerInPanel('both')} title="Center the selection in the editable body of the nearest panel">◎ Panel</button>
             </Group>
             <Group title="Distribute">
               <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.distributeObjects('horizontal')} title="Distribute objects horizontally (need 3+)">↔ Horiz</button>
               <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.distributeObjects('vertical')} title="Distribute objects vertically (need 3+)">↕ Vert</button>
+            </Group>
+            <Group title="Equal Spacing">
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.equalSpaceObjects('horizontal')} title="Make horizontal edge gaps equal while keeping the outer objects fixed (need 3+)">= H Gaps</button>
+              <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.equalSpaceObjects('vertical')} title="Make vertical edge gaps equal while keeping the outer objects fixed (need 3+)">= V Gaps</button>
             </Group>
             <Group title="Match Size">
               <button className="ribbon-btn" disabled={!hasSelection} onClick={() => canvas.matchObjectSize('width')} title="Match width to the first selected object">= Width</button>

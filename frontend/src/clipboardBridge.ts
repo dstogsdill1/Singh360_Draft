@@ -6,6 +6,7 @@ import {
   type FabricObject,
 } from 'fabric';
 import { assignFreshCanvasObjectIds, newCanvasObjectId } from './model/canvasObjectIdentity';
+import { isClipboardEditingContext } from './model/clipboardFocus';
 
 const CLIPBOARD_PREFIX = 'SINGH360_CANVAS_V1:';
 const SERIAL_PROPS = [
@@ -16,6 +17,25 @@ const SERIAL_PROPS = [
   'sourceUrl',
   'symCategory',
   'symAcronym',
+  'libraryComponentId',
+  'libraryCollection',
+  'favorite',
+  'placedSymbolType',
+  'placedSymbolConfig',
+  'placedSymbolRole',
+  'calloutComponentType',
+  'calloutConfig',
+  'calloutVersion',
+  'calloutRole',
+  'smartComponentType',
+  'smartConfig',
+  'smartComponentVersion',
+  'smartRole',
+  'smartParentId',
+  'smartParentType',
+  'smartParentConfig',
+  'smartParentName',
+  'subTargetCheck',
   'arrowStart',
   'arrowEnd',
   'connectorKind',
@@ -39,6 +59,7 @@ const SERIAL_PROPS = [
   'editable',
   'selectable',
   'evented',
+  'visible',
 ];
 
 interface SinghClipboardPayload {
@@ -124,12 +145,15 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 function activePayload(canvas: Canvas): SinghClipboardPayload | null {
   const active = canvas.getActiveObject();
   if (!active) return null;
+  const serialized = active.toObject(SERIAL_PROPS) as Record<string, unknown>;
+  if (active.type === 'activeselection') {
+    serialized.type = 'Group';
+    serialized.subTargetCheck = true;
+  }
 
   return {
     version: 1,
-    objects: [
-      active.toObject(SERIAL_PROPS) as Record<string, unknown>,
-    ],
+    objects: [serialized],
   };
 }
 
@@ -320,18 +344,7 @@ function installKeyboardBridge(): void {
   window.addEventListener('keydown', (event) => {
     const key = event.key.toLowerCase();
     if (!(event.ctrlKey || event.metaKey)) return;
-
-    const target = event.target as HTMLElement | null;
-    if (
-      target
-      && (
-        target.tagName === 'INPUT'
-        || target.tagName === 'TEXTAREA'
-        || target.isContentEditable
-      )
-    ) {
-      return;
-    }
+    if (isClipboardEditingContext(event.target)) return;
 
     if (key === 'c' && currentCanvas()?.getActiveObject()) {
       event.preventDefault();
@@ -346,6 +359,7 @@ function installKeyboardBridge(): void {
   }, true);
 
   window.addEventListener('paste', (event) => {
+    if (isClipboardEditingContext(event.target)) return;
     const text = event.clipboardData?.getData('text/plain') || '';
     const payload = parsePayload(text);
     if (!payload) return;

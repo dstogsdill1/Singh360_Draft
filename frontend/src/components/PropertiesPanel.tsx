@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CanvasSelection, PageModel } from '../model/types';
 import { PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
 import { BODY_H, BODY_W } from '../model/sheetGeometry';
+import { SMART_COMPONENT_LABELS } from '../model/smartComponents';
 
 interface Props {
   page: PageModel;
@@ -19,6 +20,10 @@ interface Props {
   onConnectorAddVertex?: () => void;
   onConnectorDeleteVertex?: () => void;
   onConnectorReverse?: () => void;
+  onEditSmartComponent?: () => void;
+  onExplodeSmartComponent?: () => void;
+  onEditCallout?: () => void;
+  onEditPlacedSymbol?: () => void;
 }
 
 export default function PropertiesPanel({
@@ -37,6 +42,10 @@ export default function PropertiesPanel({
   onConnectorAddVertex,
   onConnectorDeleteVertex,
   onConnectorReverse,
+  onEditSmartComponent,
+  onExplodeSmartComponent,
+  onEditCallout,
+  onEditPlacedSymbol,
 }: Props) {
   const [renameValue, setRenameValue] = useState('');
   return (
@@ -241,7 +250,7 @@ export default function PropertiesPanel({
           <>
             <div className="field">
               <label htmlFor="sel-type">Object Type</label>
-              <input id="sel-type" title="What kind of object is selected" value={selection.isConnector ? (selection.connectorKind === 'elbow' ? 'Elbow Connector' : selection.connectorKind === 'polyline' ? 'Polyline' : selection.connectorKind === 'arrow' ? 'Arrow' : 'Line') : selection.isText ? 'Text' : selection.isImage ? 'Image' : selection.type} readOnly />
+              <input id="sel-type" title="What kind of object is selected" value={selection.calloutConfig ? 'Editable Callout Set' : selection.smartComponentType ? `Smart ${SMART_COMPONENT_LABELS[selection.smartComponentType]}` : selection.isPlacedSymbol ? 'Placed Symbol / Component' : selection.isConnector ? (selection.connectorKind === 'elbow' ? 'Elbow Connector' : selection.connectorKind === 'polyline' ? 'Polyline' : selection.connectorKind === 'arrow' ? 'Arrow' : 'Line') : selection.isText ? 'Text' : selection.isImage ? 'Image' : selection.type} readOnly />
             </div>
             {selection.isConnector && (
               <div className="field">
@@ -290,6 +299,46 @@ export default function PropertiesPanel({
                 />
               </div>
             )}
+            {selection.smartComponentType && selection.smartConfig ? (
+              <div className="props-subgroup">
+                <div className="field">
+                  <label>Smart Component</label>
+                  <input value={SMART_COMPONENT_LABELS[selection.smartComponentType]} readOnly />
+                </div>
+                <p className="props-note">
+                  Parameter edits regenerate the grouped vector component. Explode keeps every child shape and label independently editable.
+                </p>
+                <div className="field-row">
+                  <button className="props-btn" type="button" onClick={onEditSmartComponent}>
+                    Edit Smart Component
+                  </button>
+                  <button className="props-btn" type="button" onClick={onExplodeSmartComponent}>
+                    Explode Smart Component
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {selection.calloutConfig ? (
+              <div className="props-subgroup">
+                <div className="field">
+                  <label>Callout Family</label>
+                  <input value={selection.calloutConfig.family === 'round' ? 'Round Callouts' : selection.calloutConfig.family === 'square' ? 'Square Callouts' : 'Callout Blocks / Lists'} readOnly />
+                </div>
+                <button className="props-btn" type="button" onClick={onEditCallout}>
+                  Edit Callout Set
+                </button>
+              </div>
+            ) : null}
+            {selection.isPlacedSymbol && !selection.calloutConfig ? (
+              <div className="props-subgroup">
+                <p className="props-note">
+                  Category: {selection.symCategory || 'custom'}{selection.favorite ? ' · Favorite' : ''}
+                </p>
+                <button className="props-btn" type="button" onClick={onEditPlacedSymbol}>
+                  Edit Symbol / Component
+                </button>
+              </div>
+            ) : null}
             <div className="field-row">
               <div className="field">
                 <label htmlFor="sel-x" title="Horizontal position on the sheet (pixels from the left)">X Position</label>
