@@ -56,7 +56,10 @@ export const BUILTIN_SYMBOL_LEGEND_TEMPLATES: SymbolLegendTemplate[] = [
     rows: [
       row('li', 'LI - Leak Indicator Horn/Strobe', ['LI Leak Indicator Horn/Strobe', 'refrigerant leak horn strobe'], 'LI'),
       row('da', 'DA - Door Open Horn/Strobe', ['DA Door Open Horn/Strobe', 'door open horn strobe'], 'DA'),
-      row('ls', 'LS - Leak Sensor', ['LS Leak Sensor', 'HFC leak sensor', 'CO2 leak sensor', 'LSB', 'LSG', 'LSC', 'HSC'], 'LS'),
+      row('lsc', 'LSc — CO2 Refrigerant Leak Detector', ['LSc', 'LS2', 'LS₂', 'CO2 leak sensor', 'CT1O-A3D', 'Senva'], 'LSc'),
+      row('lsg', 'LSg — Produce Prep Area HFC Sensor (Refrigerant Specific)', ['LSg', 'GG-R513A', 'CTI'], 'LSg'),
+      row('ls', 'LS — Leak Sensor for HFCs', ['LS', 'REF-LK-832', 'EMC'], 'LS'),
+      row('lsb', 'LSb — Leak Sensor for HFCs, w/metal enclosure (produce/market coolers)', ['LSb', 'REF-LK-832-MTL', 'EMC'], 'LSb'),
       row('es', 'ES - Entrapment Switch', ['ES Entrapment Switch', 'entrapment switch'], 'ES'),
       row('ea', 'EA - Entrapment Horn/Strobe', ['EA Entrapment Horn/Strobe', 'entrapment horn strobe'], 'EA'),
       row('hs', 'HS - Horn Silencer Button', ['HS Horn Silencer Button', 'horn silencer', 'leak silencer'], 'HS'),

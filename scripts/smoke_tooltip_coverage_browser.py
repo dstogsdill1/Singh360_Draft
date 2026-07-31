@@ -248,7 +248,7 @@ def main() -> int:
         project_dir = store.dir_for(project["id"], project)
         WorkbookDocumentStore(project_dir).save(project, 0, workspace_document())
         library = LibraryV2(docs)
-        symbol_codes = ["TS", "DA", "LS", "LS2", "LI", "LI2"]
+        symbol_codes = ["TS", "DA", "LSc", "LSg", "LS", "LSb", "LI", "LI2"]
         for code in symbol_codes:
             component_path = library.components / "custom" / f"{code}_Test_Symbol.svg"
             component_path.parent.mkdir(parents=True, exist_ok=True)
@@ -402,16 +402,23 @@ def main() -> int:
                 # Generated component + saved legend: actual direct insertion,
                 # local save, and reload persistence without customer assets.
                 page.get_by_role("button", name="Components", exact=False).click()
-                page.get_by_role("button", name=re.compile(r"^All Components: \d+$")).click()
+                browser_panel = page.locator(".libv2-browser")
+                browser_panel.wait_for(timeout=15_000)
+                page.get_by_text("Component library ready", exact=True).wait_for(timeout=30_000)
+                component_search = browser_panel.get_by_placeholder("Search components…")
                 for code in symbol_codes:
-                    component_card = page.locator(".libv2-card").filter(has_text=f"{code} Test Symbol")
+                    component_search.fill(f"{code} Test Symbol")
+                    component_card = browser_panel.locator(".libv2-browser-card").filter(has_text=f"{code} Test Symbol")
                     component_card.wait_for(timeout=10_000)
                     image = component_card.locator("img").first
                     if image.count() and image.evaluate("(node) => getComputedStyle(node).objectFit") != "contain":
                         raise AssertionError(f"{code} component card is cropped instead of contained")
-                    component_card.get_by_role("button", name="Insert", exact=True).click()
-                page.get_by_role("button", name="Manage Library", exact=True).click()
-                page.get_by_role("button", name=re.compile(r"^Saved Legends \(\d+\)$")).click()
+                    component_card.click()
+                component_search.fill("")
+                page.get_by_role("button", name="Component Builder", exact=True).click()
+                builder = page.get_by_role("dialog", name="Component Builder")
+                builder.get_by_text("Advanced insertion and library tools", exact=True).click()
+                builder.get_by_role("button", name=re.compile(r"^Saved Legends \(\d+\)$")).click()
                 page.get_by_role("heading", name="Build / Insert Symbol Legend").wait_for(timeout=10_000)
                 results["savedLegendModal"] = assert_audit(page, "Saved Legend modal")
                 results["savedLegendModal"]["exercisedTooltips"] = 0

@@ -12,6 +12,7 @@ import { buildSmartComponent } from '../model/smartComponentFactory';
 import { normalizeSmartComponentConfig, SMART_COMPONENT_CHOICES } from '../model/smartComponents';
 import { buildCalloutSet } from '../model/calloutFactory';
 import { normalizeCalloutSetConfig } from '../model/callouts';
+import { normalizeLeakSensorCanvasObjects } from '../model/leakSensorStandard';
 
 interface Props {
   serialized: Record<string, unknown>[];
@@ -713,7 +714,8 @@ export default function CanvasEditor({
       restoringRef.current = true;
       void (async () => {
         const normalized = normalizeCanvasObjects(serialized);
-        const componentRepair = await repairSerializedComponentSvgImages(normalized);
+        const leakSensorRepair = normalizeLeakSensorCanvasObjects(normalized);
+        const componentRepair = await repairSerializedComponentSvgImages(leakSensorRepair.objects);
         if (isTearingDown) return;
         let repairedPdfObjects = false;
         const liveObjects = componentRepair.objects.map((raw) => {
@@ -736,7 +738,7 @@ export default function CanvasEditor({
         historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
         histIdxRef.current = 0;
         restoringRef.current = false;
-        if (repairedPdfObjects || componentRepair.repaired > 0) {
+        if (repairedPdfObjects || componentRepair.repaired > 0 || leakSensorRepair.repaired > 0) {
           onSerRef.current(normalizeCanvasObjects((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         }
       })().catch((error) => {

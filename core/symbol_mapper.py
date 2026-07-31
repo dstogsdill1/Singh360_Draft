@@ -122,7 +122,9 @@ def _template_key(code: Any, label: Any) -> str:
 def _normalize_template_symbol(raw: Any) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
-    code = str(raw.get("code") or "").strip().upper()[:16]
+    # Preserve canonical display casing (for example LSc/LSg/LSb) while all
+    # recognition comparisons continue to use uppercase normalized forms.
+    code = str(raw.get("code") or "").strip()[:16]
     label = str(raw.get("label") or "").strip()[:180]
     if not code or not label:
         return None
@@ -141,11 +143,17 @@ def _normalize_template_symbol(raw: Any) -> dict[str, Any] | None:
     glyph = str(raw.get("glyph") or "").strip()[:16]
     if not glyph:
         glyph = "$" if re.search(r"\bCLEAN\s+SWITCH\b", label, re.IGNORECASE) else code
+    aliases = []
+    for value in raw.get("aliases") or []:
+        alias = str(value or "").strip()[:80]
+        if alias and alias.upper() != code.upper() and alias not in aliases:
+            aliases.append(alias)
     return {
         "key": _template_key(code, label),
         "code": code,
         "glyph": glyph,
         "label": label,
+        "aliases": aliases,
         "enabled": bool(raw.get("enabled", True)),
         "paletteId": palette_id,
         "color": _hex_color(raw.get("color"), "#ffd400"),
@@ -249,6 +257,7 @@ def _normalize_class(raw: Any, index: int, page_rect: "fitz.Rect") -> dict[str, 
         re.search(r"\bCLEAN\s+SWITCH\b", label, re.IGNORECASE)
     )
     match_texts = {code.upper()} if code else set()
+    match_texts.update(str(value or "").strip().upper() for value in (raw.get("aliases") or []) if str(value or "").strip())
     if plain_auto_accept:
         # The H-E-B source legend commonly calls this row S / CLEAN SWITCH while
         # the plan glyph itself may be S, $, CS, or CCS. Keep the alias list
