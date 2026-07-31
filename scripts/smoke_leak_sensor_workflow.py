@@ -159,9 +159,20 @@ def main() -> int:
                 collection.select_option(label="Refrigeration Controls Symbols")
                 search = browser_panel.get_by_placeholder("Search components…")
                 for sensor in SENSORS:
-                    for term in (sensor["code"], sensor["part"], sensor["supplier"]):
+                    for term in (
+                        sensor["code"],
+                        sensor["description"],
+                        sensor["part"],
+                        sensor["supplier"],
+                    ):
                         search.fill(term)
-                        expected = 4 if term == "LS" else 2 if term in {"EMC", "REF-LK-832"} else 1
+                        expected = (
+                            4
+                            if term == "LS"
+                            else 2
+                            if term in {"EMC", "REF-LK-832", "Leak Sensor for HFCs"}
+                            else 1
+                        )
                         page.wait_for_function(
                             "count => document.querySelectorAll('.libv2-browser-card').length === count",
                             arg=expected, timeout=15_000,
