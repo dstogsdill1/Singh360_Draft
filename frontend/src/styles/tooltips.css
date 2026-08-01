@@ -122,15 +122,11 @@
   cursor: pointer;
 }
 
-.status-pill.cleanLocal,
-.status-pill.savedAndSynced { color: #7fd39b; border-color: #2f6f45; }
+.status-pill.cleanLocal { color: #7fd39b; border-color: #2f6f45; }
 .status-pill.dirtyLocal,
 .status-pill.dirtyWorkspace,
-.status-pill.localSavedSyncPending,
-.status-pill.writingWorkbook,
 .status-pill.savingLocal { color: #f0c37a; border-color: #7a5a1e; }
 .status-pill.saveFailed,
-.status-pill.syncFailed,
 .status-pill.conflict { color: #f19a99; border-color: #7a2b2a; background: #3a2726; }
 
 .save-state-times {

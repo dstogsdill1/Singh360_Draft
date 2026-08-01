@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import type { PageModel, ProjectModel } from '../../model/types';
-import { cleanIndexNote, indexPageTypeLabel } from '../../model/packageIndex';
+import { cleanIndexNote, indexPageTypeLabel, isCoverPage, isSheetIndexPage } from '../../model/packageIndex';
 
 interface Props {
   project: ProjectModel;
@@ -99,33 +99,35 @@ export default function GeneratedIndexRenderer({ project, page, onPatchPage }: P
           </tr>
         </thead>
         <tbody>
-          {included.map((page) => (
+          {included.map((page) => {
+            const managed = isCoverPage(page) || isSheetIndexPage(page);
+            return (
             <tr key={page.id} className={page.generatedContinuation ? 'ni-cont' : ''}>
               <td className="ni-pg">{page.pageNumber ?? '—'}</td>
               <td
                 className="ni-code"
-                contentEditable
+                contentEditable={!managed}
                 suppressContentEditableWarning
-                tabIndex={0}
+                tabIndex={managed ? -1 : 0}
                 data-page-id={page.id}
                 data-field="code"
-                title="Edit the actual sheet code. Enter commits; Esc cancels."
+                title={managed ? 'App-managed sheet code' : 'Edit the actual sheet code. Enter commits; Esc cancels.'}
                 onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onBlur={(e) => commitCode(page, e.currentTarget.textContent ?? '')}
+                onBlur={(e) => { if (!managed) commitCode(page, e.currentTarget.textContent ?? ''); }}
                 onKeyDown={(e) => onKeyDown(e, page, 'code')}
               >
                 {page.displaySheetCode || page.sheetCode || '—'}
               </td>
               <td
                 className="ni-title"
-                contentEditable
+                contentEditable={!managed}
                 suppressContentEditableWarning
-                tabIndex={0}
+                tabIndex={managed ? -1 : 0}
                 data-page-id={page.id}
                 data-field="title"
-                title="Edit the actual page title. Enter commits; Esc cancels."
+                title={managed ? 'App-managed page title' : 'Edit the actual page title. Enter commits; Esc cancels.'}
                 onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onBlur={(e) => commitTitle(page, e.currentTarget.textContent ?? '')}
+                onBlur={(e) => { if (!managed) commitTitle(page, e.currentTarget.textContent ?? ''); }}
                 onKeyDown={(e) => onKeyDown(e, page, 'title')}
               >
                 {page.sheetTitle.replace(/\s*[—-]\s*CONTINUED\s*$/i, '').trim()}
@@ -134,7 +136,7 @@ export default function GeneratedIndexRenderer({ project, page, onPatchPage }: P
               <td className="ni-type">{indexPageTypeLabel(page)}</td>
               <td className="ni-notes">{cleanIndexNote(page)}</td>
             </tr>
-          ))}
+          );})}
         </tbody>
       </table>
     </div>

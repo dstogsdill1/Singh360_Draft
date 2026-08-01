@@ -25,6 +25,10 @@ export const PAGE_TEMPLATES: PageTemplate[] = [
   'Underlay / Reference',
 ];
 
+export const USER_PAGE_TEMPLATES: PageTemplate[] = PAGE_TEMPLATES.filter(
+  (template) => template !== 'Cover' && template !== 'Sheet Index',
+);
+
 /** Internal engine pageType for each friendly template. */
 function pageTypeForTemplate(t: PageTemplate): PageType {
   switch (t) {
@@ -58,6 +62,8 @@ export function templateForPage(page: PageModel): PageTemplate {
     case 'index':
       return 'Sheet Index';
     case 'canvas':
+    case 'pdf':
+    case 'image':
       return 'Image / Layout';
     case 'hybrid':
       return 'Hybrid Sheet';

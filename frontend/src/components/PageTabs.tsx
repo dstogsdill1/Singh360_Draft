@@ -77,6 +77,7 @@ export default function PageTabs({
   };
 
   const startEdit = (page: PageModel) => {
+    if (isCoverPage(page) || isSheetIndexPage(page)) return;
     setEditId(page.id);
     setEditValue(page.sheetTitle);
   };
@@ -141,7 +142,7 @@ export default function PageTabs({
               if (event.key === 'Enter' || event.key === ' ') onSelect(page.id);
               else if (event.key === 'F2') startEdit(page);
             }}
-            title={`${page.include ? 'Included' : 'Excluded'} · ${pageIssueLabel(page.issueStatus)} · Page ${page.pageNumber ?? '—'} · ${page.displaySheetCode || page.sheetCode} ${page.sheetTitle} — double-click to rename`}
+            title={`${page.include ? 'Included' : 'Excluded'} · ${pageIssueLabel(page.issueStatus)} · Page ${page.pageNumber ?? '—'} · ${page.displaySheetCode || page.sheetCode} ${page.sheetTitle}${isCoverPage(page) || isSheetIndexPage(page) ? ' — app-managed' : ' — double-click to rename'}`}
             draggable={!isCoverPage(page) && !isSheetIndexPage(page) && editId !== page.id}
             onDragStart={(event) => {
               if (isCoverPage(page) || isSheetIndexPage(page)) return;

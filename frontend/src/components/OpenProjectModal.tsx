@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { deleteProject, listProjects, type ProjectListItem } from '../api/client';
+import { archiveProject, listProjects, type ProjectListItem } from '../api/client';
 
 interface Props {
   currentId?: string;
@@ -15,9 +15,7 @@ function fmtDate(s?: string): string {
 }
 
 /**
- * Open Project browser. Projects can be opened or permanently deleted here.
- * Deletion requires an explicit browser confirmation and the backend also
- * requires confirm=true, so an accidental raw DELETE request cannot remove data.
+ * Open active projects or archive them recoverably.
  */
 export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props) {
   const [rows, setRows] = useState<ProjectListItem[]>([]);
@@ -54,23 +52,19 @@ export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props)
 
   const removeProject = async (row: ProjectListItem) => {
     const name = row.projectName || row.packageFile || row.id;
-    const confirmed = window.confirm(
-      `Permanently delete project "${name}"?\n\n` +
-      'This removes the project folder, source workbook copy, assets, backups, and exports. ' +
-      'This cannot be undone.',
-    );
+    const confirmed = window.confirm(`Archive project "${name}"?\n\nThe complete project package remains available under Archived Projects.`);
     if (!confirmed) return;
 
     setDeletingId(row.id);
     setError('');
     try {
-      await deleteProject(row.id);
+      await archiveProject(row.id);
       setRows((prev) => prev.filter((r) => r.id !== row.id));
       if (row.id === currentId) {
         window.location.assign('/app');
       }
     } catch (e) {
-      setError(`Delete failed: ${String(e)}`);
+      setError(`Archive failed: ${String(e)}`);
     } finally {
       setDeletingId('');
     }
@@ -80,7 +74,7 @@ export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props)
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Open or Delete Project</h2>
+          <h2>Open Active Project</h2>
           <button className="modal-x" onClick={onCancel} title="Close">×</button>
         </div>
 
@@ -107,7 +101,7 @@ export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props)
           <input
             className="op-search"
             type="text"
-            placeholder="Search name, package file, workbook or ID…"
+            placeholder="Search project name, package file, or ID…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -122,7 +116,6 @@ export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props)
                 <tr>
                   <th>Project Name</th>
                   <th>Package File</th>
-                  <th>Source Workbook</th>
                   <th>Last Saved</th>
                   <th>ID</th>
                   <th>Actions</th>
@@ -136,7 +129,6 @@ export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props)
                       {r.duplicateFolders ? <span className="op-dup" title={`${r.duplicateFolders} duplicate folder(s)`}> ⚠</span> : null}
                     </td>
                     <td>{r.packageFile || '—'}</td>
-                    <td>{r.sourceWorkbook || '—'}</td>
                     <td>{fmtDate(r.modified || r.lastSavedAt)}</td>
                     <td className="op-id" title={r.folder || ''}>{r.id}</td>
                     <td>
@@ -147,9 +139,9 @@ export default function OpenProjectModal({ currentId, onOpen, onCancel }: Props)
                           style={{ color: '#b42318', borderColor: '#b42318' }}
                           disabled={deletingId === r.id}
                           onClick={() => void removeProject(r)}
-                          title="Permanently delete this project after confirmation"
+                          title="Move this project to Archived Projects"
                         >
-                          {deletingId === r.id ? 'Deleting…' : 'Delete'}
+                          {deletingId === r.id ? 'Archiving…' : 'Archive'}
                         </button>
                       </div>
                     </td>

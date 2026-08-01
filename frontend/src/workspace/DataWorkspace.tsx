@@ -36,8 +36,6 @@ type WorkspaceStatus =
   | 'clean'
   | 'dirty'
   | 'saving'
-  | 'project_saved_workbook_sync_pending'
-  | 'project_and_workbook_match'
   | 'conflict'
   | 'error';
 
@@ -109,8 +107,6 @@ function strictValidationDetail(
 function sharedStateFor(status: WorkspaceStatus): Parameters<typeof publishWorkspaceState>[1] {
   if (status === 'dirty' || status === 'error') return 'DIRTY';
   if (status === 'conflict') return 'CONFLICT';
-  if (status === 'project_saved_workbook_sync_pending') return 'PROJECT_SAVED_WORKBOOK_SYNC_PENDING';
-  if (status === 'project_and_workbook_match') return 'PROJECT_AND_WORKBOOK_MATCH';
   return 'CLEAN';
 }
 
@@ -119,9 +115,7 @@ const WORKSPACE_STATUS_LABELS: Record<WorkspaceStatus, string> = {
   clean: 'PROJECT SAVED',
   dirty: 'UNSAVED WORKSPACE EDITS',
   saving: 'SAVING PROJECT…',
-  project_saved_workbook_sync_pending: 'PROJECT SAVED · WORKBOOK SYNC PENDING',
-  project_and_workbook_match: 'PROJECT SAVED · WORKBOOK SYNCED',
-  conflict: 'PROJECT / WORKBOOK CONFLICT',
+  conflict: 'WORKSPACE EDIT CONFLICT',
   error: 'SAVE FAILED',
 };
 
@@ -437,8 +431,8 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
         signal('DIRTY');
         return null;
       }
-      await restoreDocument(saved, 'project_saved_workbook_sync_pending');
-      setMessage(`Project-local revision ${saved.revision} saved. Excel sync remains pending.`);
+      await restoreDocument(saved, 'clean');
+      setMessage(`Project-local revision ${saved.revision} saved.`);
       return saved;
     } catch (reason) {
       const conflict = String(reason).toLowerCase().includes('conflict');
@@ -456,14 +450,12 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
       document = await save();
       if (!document) return;
     }
-    if (statusRef.current !== 'project_saved_workbook_sync_pending'
-      && statusRef.current !== 'clean'
-      && statusRef.current !== 'project_and_workbook_match') {
+    if (statusRef.current !== 'clean') {
       setMessage('Save the local Data Workspace before updating drawings.');
       return;
     }
     setStatus('saving');
-    setMessage('Regenerating drawing pages from the saved local workbook…');
+    setMessage('Regenerating drawing pages from saved project-local table data…');
     try {
       const next = updateProjectDrawingsFromWorkbook(projectRef.current, document);
       next.dataWorkspace = {
@@ -472,13 +464,13 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
         appliedRevision: document.revision,
       };
       projectRef.current = await saveProject(next);
-      setStatus('project_saved_workbook_sync_pending');
-      setMessage('Drawing pages updated. The linked Excel workbook was not written.');
-      signal('PROJECT_SAVED_WORKBOOK_SYNC_PENDING');
+      setStatus('clean');
+      setMessage('Drawing pages updated and saved inside the Singh360 project.');
+      signal('CLEAN');
     } catch (reason) {
-      setStatus('project_saved_workbook_sync_pending');
-      setMessage(`Drawing update failed; Excel was not written. ${String(reason)}`);
-      signal('PROJECT_SAVED_WORKBOOK_SYNC_PENDING');
+      setStatus('error');
+      setMessage(`Drawing update failed. Project-local table data remains saved. ${String(reason)}`);
+      signal('DIRTY');
     }
   }, [save, setStatus, signal, snapshot]);
 
@@ -644,32 +636,15 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
         readyRef.current = true;
         setWorkspaceReady(true);
         const shared = readWorkspaceState(project.id);
-        const workbookMatches = (
-          (project.workbookSync?.status || project.workbookSync?.state) === 'in_sync'
-          && project.workbookSync?.verified === true
-          && project.workbookSync?.verification?.status === 'verified'
-        );
         if (shared?.state === 'DIRTY' && shared.instanceId !== instanceIdRef.current) {
           setStatus('conflict');
           setMessage('Another Data Workspace instance reports unsaved edits. Resolve that instance before saving here.');
           signal('CONFLICT');
-        } else if (workbookMatches) {
-          confirmedStatusRef.current = 'project_and_workbook_match';
-          setStatus('project_and_workbook_match');
-          setMessage(`${document.sheets.length} project sheet${document.sheets.length === 1 ? '' : 's'} loaded. Saved project and workbook signatures match.`);
-          signal('PROJECT_AND_WORKBOOK_MATCH');
         } else {
-          const syncPending = project.workbookSync?.status === 'app_changed'
-            || project.workbookSync?.status === 'pending'
-            || Boolean(project.workbookSync?.warning);
-          confirmedStatusRef.current = syncPending ? 'project_saved_workbook_sync_pending' : 'clean';
-          setStatus(confirmedStatusRef.current);
-          setMessage(
-            syncPending
-              ? `${document.sheets.length} project sheets loaded. Local project is saved; Excel sync remains pending.`
-              : `${document.sheets.length} project sheet${document.sheets.length === 1 ? '' : 's'} loaded. Excel was not written.`,
-          );
-          signal(sharedStateFor(confirmedStatusRef.current));
+          confirmedStatusRef.current = 'clean';
+          setStatus('clean');
+          setMessage(`${document.sheets.length} project-local table sheet${document.sheets.length === 1 ? '' : 's'} loaded.`);
+          signal('CLEAN');
         }
       }, 750);
     }).catch((reason) => {
@@ -692,10 +667,6 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
     markDirty,
     project.id,
     project.metadata.projectName,
-    project.workbookSync?.state,
-    project.workbookSync?.status,
-    project.workbookSync?.verified,
-    project.workbookSync?.verification?.status,
     setStatus,
     signal,
     snapshot,
@@ -753,11 +724,11 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
     data-workspace-state={status === 'error' ? 'error' : workspaceReady ? 'ready' : 'loading'}
   >
     <header className="data-toolbar">
-      <button type="button" data-help-id="nav.projectHome" onClick={() => requestNavigation(`/app?project=${project.id}`)}>Project Home</button>
+      <button type="button" data-help-id="nav.projectHome" onClick={() => requestNavigation('/app')}>Project Home</button>
       <strong>Data Workspace</strong>
       <span
         className={`workspace-status ${status}`}
-        data-help-id={status === 'dirty' ? 'workspace.unsavedBadge' : status === 'error' ? 'save.retry' : status === 'conflict' ? 'status.conflict' : status === 'project_saved_workbook_sync_pending' ? 'status.syncPending' : 'workspace.savedBadge'}
+        data-help-id={status === 'dirty' ? 'workspace.unsavedBadge' : status === 'error' ? 'save.retry' : status === 'conflict' ? 'status.conflict' : 'workspace.savedBadge'}
         data-status-chip="true"
       >{statusLabel}</span>
       <div />
@@ -783,7 +754,7 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
           onChange={(event) => setWorkspaceView(event.target.value as 'drawing' | 'all')}
         >
           <option value="drawing">Drawing Pages</option>
-          <option value="all">All Workbook Tabs</option>
+          <option value="all">All Imported Tables</option>
         </select>
       </label>
       {workspaceView === 'drawing' && <div
@@ -812,18 +783,18 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
         </button>)}
       </div>}
       {workspaceView === 'all' && <span className="workspace-view-note">
-        Drawing tabs remain first and contiguous; control and source tabs follow in the workbook tab bar.
+        Drawing tables remain first; additional project-local imported or source tables follow.
       </span>}
     </nav>
     <main className={`data-workspace-main ${activeIsSource ? 'with-setup' : ''}`}>
       <div
         ref={containerRef}
         className="univer-host"
-        aria-label="Project schedule workbook"
+        aria-label="Project-local imported table workspace"
       />
       {activeIsSource && activeDocumentSheet && <aside className="sheet-setup-panel" aria-label="Sheet Setup">
         <h2>Sheet Setup <span className="lock-indicator">Locked</span></h2>
-        <p className="sheet-authority">Authority: {setup?.authority || '00_INDEX'}</p>
+        <p className="sheet-authority">Imported metadata: {setup?.authority || 'Project-local table setup'}</p>
         <dl>
           <dt>Sheet</dt><dd>{setup?.sheetCode || activeDocumentSheet.name}</dd>
           <dt>Title</dt><dd>{setup?.title || activeDocumentSheet.name}</dd>

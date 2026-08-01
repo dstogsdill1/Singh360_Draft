@@ -25,7 +25,6 @@ import TextBoxFormatControls from './TextBoxFormatControls';
 interface Props {
   saveStatus: SaveState;
   savedAt?: string;
-  lastWorkbookSync?: string;
   dirtyDomains: DirtyDomain[];
   saveError?: string;
   saveStatusLabel?: string;
@@ -79,14 +78,11 @@ interface Props {
     fillImageToPage: () => void;
     addBus: () => void;
   };
-  onUploadFile: (file: File) => void;
   onUploadCsv: (file: File) => void;
   onInsertImage: (file: File) => void;
   onInsertPdfPage: () => void;
   onSaveNow: () => void;
-  // S360 SAVE + WRITE EXCEL BUTTON V26
-  onWriteExcel: () => void;
-  writeExcelBusy?: boolean;
+  onProjectSettings: () => void;
   onOpenBackups: () => void;
   onExportPdf: () => void;
   onExportPackage: () => void;
@@ -95,6 +91,7 @@ interface Props {
   onOpenHome: () => void;
   onCleanWorkspace: () => void;
   onImportWorksheet: () => void;
+  canSavePageTemplate: boolean;
   onSavePageTemplate: () => void;
   onInsertPageTemplate: () => void;
   onManagePageTemplates: () => void;
@@ -136,7 +133,6 @@ function PlaceholderBtn({ label }: { label: string }) {
 export default function Ribbon({
   saveStatus,
   savedAt,
-  lastWorkbookSync,
   dirtyDomains,
   saveError,
   saveStatusLabel,
@@ -152,13 +148,11 @@ export default function Ribbon({
   overlayMode,
   onToggleOverlay,
   canvas,
-  onUploadFile,
   onUploadCsv,
   onInsertImage,
   onInsertPdfPage,
   onSaveNow,
-  onWriteExcel,
-  writeExcelBusy,
+  onProjectSettings,
   onOpenBackups,
   onExportPdf,
   onExportPackage,
@@ -167,6 +161,7 @@ export default function Ribbon({
   onOpenHome,
   onCleanWorkspace,
   onImportWorksheet,
+  canSavePageTemplate,
   onSavePageTemplate,
   onInsertPageTemplate,
   onManagePageTemplates,
@@ -207,22 +202,6 @@ export default function Ribbon({
   const undoEnabled = sourceMode ? !!sourceCanUndo : cx;
   const redoEnabled = sourceMode ? !!sourceCanRedo : cx;
 
-  const uploadBtn = (
-    <label className="ribbon-btn file-ribbon-btn" title="Upload Workbook">
-      Upload Workbook
-      <input
-        type="file"
-        accept=".xlsx,.xlsm"
-        title="Upload Workbook"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.currentTarget.value = '';
-          if (file) onUploadFile(file);
-        }}
-      />
-    </label>
-  );
-
   const csvBtn = (
     <label className={`ribbon-btn file-ribbon-btn ${hasProject ? '' : 'disabled'}`} title="Attach CSV">
       Attach CSV
@@ -245,21 +224,16 @@ export default function Ribbon({
         </div>
         <div className="ribbon-appbar-right">
           <button type="button" className="ribbon-btn ribbon-home-btn" onClick={onOpenHome}>Project Home</button>
-          {/* S360 SAVE + WRITE EXCEL BUTTON V26 */}
-          <button
-            type="button"
-            className="ribbon-btn ribbon-write-excel-btn"
-            disabled={!hasProject || writeExcelBusy || saveStatus === 'savingLocal' || saveStatus === 'writingWorkbook'}
-            onClick={onWriteExcel}
-            data-help-id="save.writeExcel"
-            data-disabled-reason={!hasProject ? 'Open a project and link its verified workbook first.' : undefined}
-          >
-            {writeExcelBusy ? 'WRITING EXCEL…' : 'SAVE + WRITE EXCEL'}
-          </button>
+          <button type="button" className="ribbon-btn" disabled={!hasProject} onClick={onProjectSettings}>Project Settings</button>
+          <button type="button" className="ribbon-btn" disabled={!hasProject} onClick={onInsertPdfPage}>Add / Import Page</button>
+          <button type="button" className="ribbon-btn ribbon-primary-save" disabled={!hasProject || saveStatus === 'savingLocal'} onClick={onSaveNow}>Save Project</button>
+          <button type="button" className="ribbon-btn" disabled={!undoEnabled} onClick={canvas.undo}>Undo</button>
+          <button type="button" className="ribbon-btn" disabled={!redoEnabled} onClick={canvas.redo}>Redo</button>
+          <button type="button" className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf}>Export PDF</button>
+          <button type="button" className="ribbon-btn" disabled={!hasProject} onClick={onOpenBackups}>Backups / Recover</button>
           <SaveStateIndicator
             state={saveStatus}
             lastLocalSave={savedAt}
-            lastWorkbookSync={lastWorkbookSync}
             dirtyDomains={dirtyDomains}
             error={saveError}
             onRetry={onRetrySave}
@@ -268,6 +242,8 @@ export default function Ribbon({
         </div>
       </div>
 
+      <details className="ribbon-advanced">
+        <summary>Advanced Tools</summary>
       <div className="ribbon-tabs">
         {TABS.map((t) => (
           <button key={t} className={`ribbon-tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
@@ -279,19 +255,18 @@ export default function Ribbon({
       <div className="ribbon-groups">
         {tab === 'File' && (
           <>
-            <Group title="Workbook">{uploadBtn}</Group>
-            <Group title="Data">{csvBtn}</Group>
+            <Group title="Import">{csvBtn}</Group>
             <Group title="Project">
               <button className="ribbon-btn" onClick={onOpenProject} title="Browse and open a saved project">Open Project</button>
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow} title="Save the project now">Save Now</button>
-              <button className="ribbon-btn ribbon-write-excel-btn" disabled={!hasProject || writeExcelBusy} onClick={onWriteExcel} title="Save locally and immediately mirror the project structure to the linked Excel workbook">{writeExcelBusy ? 'Writing Excel…' : 'Save + Write Excel'}</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onSaveNow} title="Save the current standalone project">Save Project</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onInsertPdfPage} title="Create or import a drawing page">Add / Import Page</button>
               <button className={`ribbon-btn ${renumberBadge ? 'badge-warn' : ''}`} disabled={!hasProject} onClick={onRenumber} title="Preview and apply new engineering sheet codes">
                 Renumber Sheet Codes{renumberBadge ? ' ⚠' : ''}
               </button>
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onImportWorksheet} title="Import one or more worksheets from another Excel workbook">Import Worksheet</button>
+              <button className="ribbon-btn" disabled={!hasProject} onClick={onImportWorksheet} title="Copy one Excel worksheet into this project as editable table data">Import Excel Table</button>
             </Group>
             <Group title="Templates">
-              <button className="ribbon-btn" disabled={!hasProject} onClick={onSavePageTemplate} title="Save the active page layout as a reusable template">Save Page as Template</button>
+              <button className="ribbon-btn" disabled={!hasProject || !canSavePageTemplate} onClick={onSavePageTemplate} title="Save the active page layout as a reusable template">Save Page as Template</button>
               <button className="ribbon-btn" disabled={!hasProject} onClick={onInsertPageTemplate} title="Insert a saved page template">Insert Page Template</button>
               <button className="ribbon-btn" onClick={onManagePageTemplates} title="Rename or delete saved page templates">Manage Page Templates</button>
             </Group>
@@ -589,6 +564,7 @@ export default function Ribbon({
           </>
         )}
       </div>
+      </details>
     </div>
   );
 }

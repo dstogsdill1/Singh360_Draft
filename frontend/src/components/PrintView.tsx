@@ -64,19 +64,42 @@ export default function PrintView({ project }: Props) {
 
   useEffect(() => {
     if (!project) return;
-    // Mark ready after paint AND a short settle delay so async Fabric overlay
-    // images (pasted screenshots / embedded workbook images) finish loading
-    // before the PDF exporter captures the page.
+    document.body.removeAttribute('data-print-ready');
+    document.body.removeAttribute('data-print-error');
+    let cancelled = false;
     let timer: number | undefined;
-    const raf = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        timer = window.setTimeout(() => {
-          document.body.setAttribute('data-print-ready', '1');
-        }, 600);
-      });
+
+    const afterPaint = () => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
+    const checkReady = async () => {
+      try {
+        await document.fonts?.ready;
+        const deadline = Date.now() + 20_000;
+        while (!cancelled && Date.now() < deadline) {
+          const shells = [...document.querySelectorAll<HTMLElement>('.print-page')];
+          const images = [...document.images];
+          const canvases = [...document.querySelectorAll<HTMLElement>('.canvas-wrap')];
+          const shellsReady = shells.length === includedPages.length;
+          const imagesReady = images.every((image) => image.complete && (!image.src || image.naturalWidth > 0));
+          const canvasesReady = canvases.every((canvas) => canvas.dataset.canvasHydrated === '1');
+          if (shellsReady && imagesReady && canvasesReady) {
+            await afterPaint();
+            if (!cancelled) document.body.setAttribute('data-print-ready', '1');
+            return;
+          }
+          await new Promise<void>((resolve) => {
+            timer = window.setTimeout(resolve, 50);
+          });
+        }
+        if (!cancelled) document.body.setAttribute('data-print-error', 'Timed out waiting for fonts, images, or drawing canvases.');
+      } catch (error) {
+        if (!cancelled) document.body.setAttribute('data-print-error', error instanceof Error ? error.message : String(error));
+      }
+    };
+    void checkReady();
     return () => {
-      cancelAnimationFrame(raf);
+      cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
   }, [project, includedPages.length]);
@@ -93,7 +116,11 @@ export default function PrintView({ project }: Props) {
         const worksheet = project.worksheets.find((w) => w.id === page.linkedWorksheetId);
         return (
           <PrintPageShell pageId={page.id} key={page.id} wPx={wPx} hPx={hPx} scale={scale}>
-              <SheetFrame titleBlock={<TitleBlock project={project} page={page} />}>
+              <SheetFrame
+                titleBlock={<TitleBlock project={project} page={page} />}
+                fullSheet={page.pdfPlacementMode === 'full_sheet' || page.suppressTitleBlock}
+                fullSheetPageLabel={page.pageNumber ? `Page ${page.pageNumber} of ${page.pageTotal ?? includedPages.length}` : ''}
+              >
                 <PageRenderer
                   page={page}
                   worksheet={worksheet}

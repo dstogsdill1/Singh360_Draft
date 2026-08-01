@@ -80,12 +80,12 @@ export default function ImportWorksheetModal({
           {step === 'pick' && (
             <div className="iw-pick">
               <p className="cw-note">
-                Choose the workbook that already contains the finished sheet. Nothing else in the project is rebuilt.
+                Choose an Excel file and copy one worksheet into this project. The original file is never linked or written back.
               </p>
               <input
                 ref={fileRef}
                 type="file"
-                accept=".xlsx,.xlsm,.xls"
+                accept=".xlsx,.xlsm"
                 style={{ display: 'none' }}
                 onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   const picked = event.target.files?.[0];
@@ -139,11 +139,11 @@ export default function ImportWorksheetModal({
 
               <label className="lib-showretired" style={{ marginTop: 12 }}>
                 <input type="checkbox" checked={preserveExact} onChange={(event: ChangeEvent<HTMLInputElement>) => setPreserveExact(event.target.checked)} />
-                {' '}Keep the Excel styling exactly and force it onto one Singh360 page
+                {' '}Preserve the imported worksheet geometry and styling
               </label>
               <p className="cw-note">
                 {preserveExact
-                  ? 'Uses the worksheet print area, merged cells, fills, borders, fonts, row heights, column widths, formulas, and embedded images. It will not auto-split into additional pages.'
+                  ? 'Uses the worksheet print area, merged cells, fills, borders, fonts, row heights, column widths, formulas, and embedded images. Overflow creates readable project-local continuation pages.'
                   : 'Uses the normal Singh360 page classifier and may normalize the worksheet.'}
               </p>
 
@@ -157,7 +157,7 @@ export default function ImportWorksheetModal({
               <input
                 ref={fileRef}
                 type="file"
-                accept=".xlsx,.xlsm,.xls"
+                accept=".xlsx,.xlsm"
                 style={{ display: 'none' }}
                 onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   const picked = event.target.files?.[0];

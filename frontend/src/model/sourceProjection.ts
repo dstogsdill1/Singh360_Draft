@@ -102,6 +102,10 @@ export function projectPageFromWorksheet(
   worksheets: Worksheet[] = [],
 ): PageModel {
   if (!worksheet) return page;
+  // Server-composed imported pages are validated source snapshots. Replacing
+  // their blocks client-side would give browser and PDF different pagination
+  // math. Source edits are incorporated by the per-page Excel Layout rebuild.
+  if (page.layoutProfile === 'semantic_excel_table' || page.layoutProfile === 'exact_source_excel') return page;
   const previous = (page.blocks ?? []).find((block) => block.type === 'excelRange');
   if (page.renderMode !== 'excel_exact' || (isIdfNetworkPage(page) && !previous?.canonicalDataSource)) {
     return rebuildSinglePageFromSource(page, worksheet);
@@ -149,6 +153,12 @@ export function projectForWorksheetRender(
   worksheet?: Worksheet,
 ): { project: ProjectModel; page: PageModel } {
   if (!worksheet) return { project, page };
+  // Standalone project settings are authoritative for the Cover. A retained
+  // linkedWorksheetId is migration provenance only and must never overwrite
+  // current project metadata in the editor or exported PDF.
+  if (project.projectMode === 'standalone_layout' && page.pageType === 'cover') {
+    return { project, page };
+  }
   if (isCoverWorksheet(project, worksheet.id)) {
     const projectedProject = applyCoverSourceTruth(project, worksheet.id);
     return {

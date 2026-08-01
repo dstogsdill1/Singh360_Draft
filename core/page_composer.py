@@ -368,7 +368,11 @@ def _gold_section_starts(block: dict[str, Any]) -> list[tuple[int, int]]:
         if start_row != end_row or start_row < 0:
             continue
         span = m.get("endCol", 0) - m.get("startCol", 0) + 1
-        if span < max(2, ncols // 2):
+        # A source-faithful page may also contain a separate schedule to the
+        # right. Its full-width controller band can therefore span the entire
+        # primary table while covering less than half of the combined source
+        # columns. One third is still wide enough to exclude ordinary cells.
+        if span < max(4, ncols // 3):
             continue
         anchor_fill = (styles.get(f"{start_row}:{m.get('startCol', 0)}") or {}).get("fill")
         if is_gold_fill(anchor_fill):
@@ -380,7 +384,7 @@ def _gold_section_starts(block: dict[str, Any]) -> list[tuple[int, int]]:
             pairs.append((r, r + 1))
             continue
         gold_cols = sum(1 for c in range(ncols) if is_gold_fill((styles.get(f"{r}:{c}") or {}).get("fill")))
-        if gold_cols >= max(2, ncols // 2):
+        if gold_cols >= max(4, ncols // 3):
             pairs.append((r, r + 1))
     return pairs
 
@@ -610,7 +614,15 @@ def _excel_data_chunks(block: dict[str, Any], data_rows: list[int], header_h: fl
     # the range genuinely cannot fit even at min scale (Phase C rule 1: scale
     # before split; SAFE_BODY_BUDGET keeps the bottom-gap margin either way).
     min_scale = max(_block_min_scale(block), 0.2)
-    budget = SAFE_BODY_BUDGET / min_scale
+    try:
+        safe_body_height = float(block.get("safeBodyHeight") or SAFE_BODY_BUDGET)
+    except (TypeError, ValueError):
+        safe_body_height = SAFE_BODY_BUDGET
+    try:
+        height_safety = max(1.0, float(block.get("heightSafetyFactor") or 1.0))
+    except (TypeError, ValueError):
+        height_safety = 1.0
+    budget = min(SAFE_BODY_BUDGET, max(100.0, safe_body_height)) / min_scale / height_safety
 
     # 1) Greedy pass → minimum page count.
     n_pages = 0
@@ -630,7 +642,10 @@ def _excel_data_chunks(block: dict[str, Any], data_rows: list[int], header_h: fl
         return [list(data_rows)]
 
     logical = _logical_section_chunks(block, list(data_rows))
-    if logical and len(logical) == n_pages:
+    if logical and len(logical) == n_pages and all(
+        header_h + sum(h(row) for row in chunk) <= budget
+        for chunk in logical
+    ):
         return logical
 
     # 2) Gold+gray controller/module sections (Phase F): never cut strictly
@@ -855,6 +870,8 @@ def _append_continuation_pages(
                 "id": f"{group_id}_c{ci}",
                 "order": base.get("order", 0),
                 "include": base.get("include", True),
+                "issueStatus": base.get("issueStatus", "draft"),
+                "publishStatus": base.get("publishStatus", ""),
                 "sheetCode": code,
                 "displaySheetCode": code,
                 "sheetTitle": cont_title,
@@ -862,6 +879,8 @@ def _append_continuation_pages(
                 "pageType": base.get("pageType", "data-grid"),
                 "pageFamily": base.get("pageFamily", "table"),
                 "layoutProfile": base.get("layoutProfile", "front_matter_table"),
+                "layoutOverride": base.get("layoutOverride", "auto"),
+                "tableLayout": "side_by_side" if len(grp) == 2 else "single",
                 "twoUp": False,
                 "renderMode": base.get("renderMode", "normalized"),
                 "renderProfile": base.get("renderProfile", "singh360_standard_table"),
@@ -1136,6 +1155,22 @@ def compose_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 else:
                     base = deepcopy(page)
                     _append_continuation_pages(composed, base, [[p] for p in parts], used_codes)
+            elif excel_blocks and len(excel_blocks) == len(blocks):
+                split_groups = [_split_excel_range_block(block) for block in excel_blocks]
+                if page.get("tableLayout") == "stacked" or page.get("layoutOverride") == "continue_blocks":
+                    groups = [[part] for parts in split_groups for part in parts]
+                else:
+                    page_count = max(len(parts) for parts in split_groups)
+                    groups = [
+                        [parts[index] for parts in split_groups if index < len(parts)]
+                        for index in range(page_count)
+                    ]
+                if len(groups) <= 1:
+                    page["blocks"] = groups[0] if groups else []
+                    composed.append(page)
+                else:
+                    base = deepcopy(page)
+                    _append_continuation_pages(composed, base, groups, used_codes)
             else:
                 composed.append(page)
             continue

@@ -10,7 +10,7 @@ def utcnow_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-PROJECT_SCHEMA_VERSION = 1
+PROJECT_SCHEMA_VERSION = 2
 
 
 def _clean_scalar(value: Any) -> Any:
@@ -70,20 +70,29 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
     return {
         "id": project_id or uuid4().hex[:16],
         "schemaVersion": PROJECT_SCHEMA_VERSION,
+        "projectMode": "standalone_layout",
+        "managedPagePolicy": "automatic",
         "metadata": {
             "projectName": "",
             "storeNumber": "",
             "client": "",
             "location": "",
             "address": "",
-            "createdBy": "Singh360 Inc.",
-            "createdDate": created,
+            "createdBy": "",
+            "createdDate": "",
             "sourceFile": "",
             "version": "",
             "templateVersion": "",
             "revision": "",
             "status": "Draft",
             "purpose": "",
+            "projectType": "",
+            "drawingSetTitle": "",
+            "preparedBy": "",
+            "checkedBy": "",
+            "notes": "",
+            "drawingPackageFileName": "",
+            "customerLogoAsset": "",
         },
         "sources": [],
         "worksheets": [],
@@ -103,7 +112,13 @@ def default_project(project_id: str | None = None) -> dict[str, Any]:
         "modified": created,
         "importWarnings": [],
         "archivedPages": [],
-        "workbookSync": {},
+        "archived": False,
+        "archivedAt": "",
+        "archivedReason": "",
+        "legacyWorkbookReference": {},
+        "coverSettings": {"managed": True, "include": True},
+        "indexSettings": {"managed": True, "rowsPerPage": 46},
+        "workbookSync": {"mode": "disabled", "status": "disabled", "warning": ""},
         "dataWorkspace": {},
     }
 
@@ -131,7 +146,7 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
     if isinstance(project.get("metadata"), dict):
         merged["metadata"].update(project["metadata"])
 
-    for key in ("sources", "worksheets", "pages", "templates", "assets", "revisionLog", "revisionHistory", "savedAssemblies"):
+    for key in ("sources", "worksheets", "pages", "templates", "assets", "revisionLog", "revisionHistory", "savedAssemblies", "archivedPages"):
         if isinstance(project.get(key), list):
             merged[key] = project[key]
     # Preserve string identity fields set by the project store / rename flow.
@@ -141,6 +156,8 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
         "projectRoot",
         "linkedProjectRoot",
         "projectFilesMode",
+        "projectMode",
+        "managedPagePolicy",
     ):
         if isinstance(project.get(key), str) and project[key]:
             merged[key] = project[key]
@@ -150,6 +167,12 @@ def ensure_project_shape(project: dict[str, Any]) -> dict[str, Any]:
         merged["workbookSync"] = project["workbookSync"]
     if "dataWorkspace" in project and isinstance(project["dataWorkspace"], dict):
         merged["dataWorkspace"] = project["dataWorkspace"]
+    for key in ("legacyWorkbookReference", "coverSettings", "indexSettings"):
+        if isinstance(project.get(key), dict):
+            merged[key] = project[key]
+    for key in ("archived", "archivedAt", "archivedReason"):
+        if key in project:
+            merged[key] = project[key]
 
     merged = sanitize_json(merged)
     merged["modified"] = utcnow_iso()

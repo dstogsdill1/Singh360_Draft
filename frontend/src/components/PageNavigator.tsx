@@ -79,7 +79,11 @@ function LazyPagePreview({
       {visible ? (
         <div className="page-nav-preview-centering">
           <div className="page-nav-preview-sheet" style={{ transform: `scale(${PREVIEW_SCALE})` }}>
-            <SheetFrame titleBlock={<TitleBlock project={project} page={page} />}>
+            <SheetFrame
+              titleBlock={<TitleBlock project={project} page={page} />}
+              fullSheet={page.pdfPlacementMode === 'full_sheet' || page.suppressTitleBlock}
+              fullSheetPageLabel={page.pageNumber ? `Page ${page.pageNumber} of ${page.pageTotal ?? project.pages.filter((candidate) => candidate.include).length}` : ''}
+            >
               <PageRenderer
                 page={page}
                 worksheet={worksheet}
@@ -224,7 +228,7 @@ export default function PageNavigator({
           <div>
             <div className="page-nav-eyebrow">PAGE ACTIONS</div>
             <h3>{actionPage.displaySheetCode || actionPage.sheetCode || 'NO CODE'} — {actionPage.sheetTitle}</h3>
-            <p>Edit, duplicate, add, include/exclude, or delete without leaving the Visual Page Manager.</p>
+            <p>Manage this drawing page without leaving the Visual Page Manager.</p>
           </div>
           <button type="button" onClick={() => setActions(null)}>Close</button>
         </header>
@@ -236,6 +240,7 @@ export default function PageNavigator({
               Sheet code
               <input
                 value={actions.code}
+                disabled={isCoverPage(actionPage) || isSheetIndexPage(actionPage)}
                 onChange={(event) => setActions((current) => current ? { ...current, code: event.target.value } : current)}
               />
             </label>
@@ -243,6 +248,7 @@ export default function PageNavigator({
               Sheet title
               <input
                 value={actions.title}
+                disabled={isCoverPage(actionPage) || isSheetIndexPage(actionPage)}
                 onChange={(event) => setActions((current) => current ? { ...current, title: event.target.value } : current)}
               />
             </label>
@@ -250,6 +256,7 @@ export default function PageNavigator({
               <button
                 type="button"
                 className="primary"
+                disabled={isCoverPage(actionPage) || isSheetIndexPage(actionPage)}
                 onClick={() => {
                   onEditCode(actionPage.id, actions.code.trim());
                   onRenameTitle(actionPage.id, actions.title.trim() || 'Untitled Sheet');
@@ -270,6 +277,7 @@ export default function PageNavigator({
               </button>
               <button
                 type="button"
+                disabled={isCoverPage(actionPage) || isSheetIndexPage(actionPage)}
                 onClick={() => {
                   onToggleInclude(actionPage.id);
                   setActions(null);
@@ -300,6 +308,7 @@ export default function PageNavigator({
               <button
                 type="button"
                 className="primary"
+                disabled={isCoverPage(actionPage) || isSheetIndexPage(actionPage)}
                 onClick={() => {
                   onDuplicatePage(
                     actionPage.id,
@@ -313,6 +322,7 @@ export default function PageNavigator({
               </button>
               <button
                 type="button"
+                disabled={isCoverPage(actionPage) || isSheetIndexPage(actionPage)}
                 onClick={() => {
                   onCreateBlankPage(
                     actionPage.id,
@@ -327,6 +337,7 @@ export default function PageNavigator({
               </button>
               <button
                 type="button"
+                disabled={isCoverPage(actionPage) || isSheetIndexPage(actionPage)}
                 onClick={() => {
                   onCreateBlankPage(
                     actionPage.id,
@@ -343,26 +354,24 @@ export default function PageNavigator({
           </section>
 
           <section className="page-nav-action-section danger">
-            <h4>Delete</h4>
-            <p>This removes the page from the local project. Use Backups / Recover if you need to restore it.</p>
+            <h4>Archive</h4>
+            <p>This recoverably moves the page to Archived Pages. No project asset is deleted.</p>
             <button
               type="button"
               disabled={isCoverPage(actionPage) || isSheetIndexPage(actionPage)}
               onClick={() => {
                 const label = `${actionPage.displaySheetCode || actionPage.sheetCode} ${actionPage.sheetTitle}`.trim();
-                if (!window.confirm(`Delete "${label}" from this project?`)) return;
+                if (!window.confirm(`Archive "${label}"? It can be restored from Archived Pages.`)) return;
                 onDeletePage(actionPage.id);
                 setActions(null);
               }}
             >
-              Delete Page
+              Archive Page
             </button>
           </section>
         </div>
 
-        <footer>
-          Local edits autosave. Click <b>SAVE + WRITE EXCEL</b> when you want new or renamed pages mirrored to 00_INDEX and workbook tabs.
-        </footer>
+        <footer>Local edits autosave inside this Singh360 project. Use <b>Save Project</b> to confirm the latest drawing state.</footer>
       </section>
     </div>,
     document.body,
@@ -382,7 +391,7 @@ export default function PageNavigator({
             <div className="page-nav-eyebrow">VISUAL PAGE MANAGER</div>
             <h2>All Drawing Pages</h2>
             <p>
-              {pages.filter((page) => page.include).length} published · {pages.length} total ·
+              {pages.filter((page) => page.include).length} included · {pages.length} total ·
               click to open · drag to reorder · right-click for page actions
             </p>
           </div>
@@ -403,9 +412,9 @@ export default function PageNavigator({
               checked={showExcluded}
               onChange={(event) => setShowExcluded(event.target.checked)}
             />
-            Show excluded/source-only pages
+            Show excluded pages
           </label>
-          <span className="page-nav-drag-help">Right-click any card to edit, duplicate, add, include/exclude, or delete.</span>
+          <span className="page-nav-drag-help">Right-click any card to edit, duplicate, add, include/exclude, or archive.</span>
         </div>
 
         <div className="page-nav-card-grid">
@@ -475,7 +484,7 @@ export default function PageNavigator({
                 </button>
                 <footer className="page-nav-card-footer">
                   <span className={page.include ? 'published' : 'source-only'}>
-                    {page.include ? 'Published' : 'Excluded'}
+                    {page.include ? 'Included' : 'Excluded'}
                   </span>
                   {page.generatedContinuation || page.continuationOf ? <span>Continuation</span> : null}
                   <span className={locked ? 'locked' : 'movable'}>

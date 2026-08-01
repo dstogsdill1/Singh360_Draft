@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from 'react';
 import type { PageModel } from '../model/types';
 import { PAGE_ISSUE_STATUSES, normalizePageIssueStatus, pageStatusClass } from '../model/pageStatus';
-import { PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
+import { USER_PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
 import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
 
 interface Props {
@@ -27,10 +27,15 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
   const move = (idx: number, dir: -1 | 1) => {
     const t = idx + dir;
     if (t < 0 || t >= pages.length) return;
+    if (
+      isCoverPage(pages[idx])
+      || isSheetIndexPage(pages[idx])
+      || isCoverPage(pages[t])
+      || isSheetIndexPage(pages[t])
+    ) return;
     const clone = [...pages];
     [clone[idx], clone[t]] = [clone[t], clone[idx]];
-    clone.forEach((p, i) => (p.order = i + 1));
-    onUpdate(clone);
+    onUpdate(clone.map((page, index) => ({ ...page, order: index + 1 })));
   };
 
 
@@ -77,6 +82,7 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
     <>
       {pages.map((p, idx) => {
         const isCont = !!p.continuationOf || !!p.generatedContinuation;
+        const managed = isCoverPage(p) || isSheetIndexPage(p);
         return (
           <div
             key={p.id}
@@ -104,14 +110,14 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
             <div className="sheet-item-head">
               <button
                 type="button"
-                className={`sheet-drag-handle ${isCoverPage(p) || isSheetIndexPage(p) ? 'locked' : ''}`}
-                draggable={!isCoverPage(p) && !isSheetIndexPage(p)}
-                disabled={isCoverPage(p) || isSheetIndexPage(p)}
-                title={isCoverPage(p) || isSheetIndexPage(p) ? 'Cover and Sheet Index stay first' : 'Drag this page to a new package position'}
+                className={`sheet-drag-handle ${managed ? 'locked' : ''}`}
+                draggable={!managed}
+                disabled={managed}
+                title={managed ? 'Cover and Sheet Index are app-managed and stay first' : 'Drag this page to a new package position'}
                 aria-label={`Drag ${p.sheetTitle}`}
                 onClick={(event) => event.stopPropagation()}
                 onDragStart={(event: DragEvent<HTMLButtonElement>) => {
-                  if (isCoverPage(p) || isSheetIndexPage(p)) return;
+                  if (managed) return;
                   event.stopPropagation();
                   event.dataTransfer.effectAllowed = 'move';
                   event.dataTransfer.setData('text/plain', p.id);
@@ -147,6 +153,7 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
                   title="Double-click to edit sheet code"
                   onDoubleClick={(e) => {
                     e.stopPropagation();
+                    if (managed) return;
                     setEdit({ id: p.id, field: 'code', value: p.displaySheetCode || p.sheetCode });
                   }}
                 >
@@ -175,6 +182,7 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
                   title="Double-click to edit sheet title"
                   onDoubleClick={(e) => {
                     e.stopPropagation();
+                    if (managed) return;
                     setEdit({ id: p.id, field: 'title', value: p.sheetTitle });
                   }}
                 >
@@ -183,8 +191,8 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
                 </span>
               )}
               <div className="sheet-item-actions" onClick={(e) => e.stopPropagation()}>
-                <button className="reorder-btn" title="Move up" onClick={() => move(idx, -1)}>↑</button>
-                <button className="reorder-btn" title="Move down" onClick={() => move(idx, 1)}>↓</button>
+                <button className="reorder-btn" title={managed ? 'App-managed pages stay first' : 'Move up'} disabled={managed} onClick={() => move(idx, -1)}>↑</button>
+                <button className="reorder-btn" title={managed ? 'App-managed pages stay first' : 'Move down'} disabled={managed} onClick={() => move(idx, 1)}>↓</button>
               </div>
             </div>
 
@@ -194,6 +202,7 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
                 <button
                   className="cont-convert-btn"
                   title="Convert this continuation into an independent page with its own sheet code"
+                  disabled={managed}
                   onClick={() => patch(idx, { continuationOf: null, generatedContinuation: false, continuationIndex: undefined })}
                 >
                   Make independent
@@ -206,6 +215,7 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
                 className="sheet-status-select"
                 title="Page issue status"
                 value={normalizePageIssueStatus(p.issueStatus)}
+                disabled={managed}
                 onChange={(e) => patch(idx, {
                   issueStatus: e.target.value as PageModel['issueStatus'],
                   statusUpdatedAt: new Date().toISOString(),
@@ -222,6 +232,7 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
                 <input
                   type="checkbox"
                   checked={p.include}
+                  disabled={managed}
                   onChange={() => onToggleInclude(p.id)}
                 />
                 include in drawing set
@@ -230,9 +241,10 @@ export default function SheetManager({ pages, activePageId, onSelect, onUpdate, 
                 className="sheet-item-type"
                 title="Page template"
                 value={templateForPage(p)}
+                disabled={managed}
                 onChange={(e) => onUpdate(pages.map((pg, i) => (i === idx ? applyTemplate(pg, e.target.value as PageTemplate) : pg)))}
               >
-                {PAGE_TEMPLATES.map((t) => (
+                {(managed ? [templateForPage(p)] : USER_PAGE_TEMPLATES).map((t) => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>

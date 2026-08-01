@@ -4,18 +4,19 @@ import type { ExportWarning } from '../api/client';
 interface Props {
   warnings: ExportWarning[];
   onClose: () => void;
-  onExportAnyway: () => void;
+  onExportAnyway: () => Promise<void>;
 }
 
 export default function ExportWarningsModal({ warnings, onClose, onExportAnyway }: Props) {
   const [acknowledged, setAcknowledged] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => { if (!exporting) onClose(); }}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>Export Warnings — Review Before PDF</h2>
-          <button className="modal-x" onClick={onClose} title="Close">×</button>
+          <button className="modal-x" onClick={onClose} title="Close" disabled={exporting}>×</button>
         </div>
         <div className="modal-body">
           <p className="cw-note">
@@ -46,22 +47,28 @@ export default function ExportWarningsModal({ warnings, onClose, onExportAnyway 
             <input
               type="checkbox"
               checked={acknowledged}
+              disabled={exporting}
               onChange={(e) => setAcknowledged(e.target.checked)}
             />
             <span>I understand these warnings and want to export anyway.</span>
           </label>
         </div>
         <div className="modal-foot">
-          <button className="btn" onClick={onClose}>Cancel / Go Back</button>
+          <button className="btn" onClick={onClose} disabled={exporting}>Cancel / Go Back</button>
           <button
             className="btn btn-primary"
-            disabled={!acknowledged}
-            onClick={() => {
+            disabled={!acknowledged || exporting}
+            onClick={async () => {
               if (!acknowledged) return;
-              onExportAnyway();
+              setExporting(true);
+              try {
+                await onExportAnyway();
+              } finally {
+                setExporting(false);
+              }
             }}
           >
-            Export Anyway
+            {exporting ? 'Saving and Rechecking…' : 'Export Anyway'}
           </button>
         </div>
       </div>

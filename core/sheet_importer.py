@@ -16,8 +16,11 @@ from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
 from core.project_model import classify_page_type, sanitize_json
 from core.page_normalizer import normalize_page
-from core.page_composer import page_family
+from core.page_composer import compose_pages, page_family
+from core.spreadsheet_layout import canonical_layout_override, exact_source_layout
 from core.workbook_importer import (
+    EXCEL_MIN_SCALE,
+    _excel_range_block,
     _extract_embedded_images,
     _parse_index,
     _safe_name,
@@ -104,6 +107,8 @@ def _slice_payload_to_print_area(payload: dict[str, Any]) -> dict[str, Any]:
     out["grid"] = [list(row[sc : ec + 1]) for row in grid[sr : er + 1]]
     out["colWidthsPx"] = list((payload.get("colWidthsPx") or [])[sc : ec + 1])
     out["rowHeightsPx"] = list((payload.get("rowHeightsPx") or [])[sr : er + 1])
+    out["hiddenRows"] = [row - sr for row in (payload.get("hiddenRows") or []) if sr <= row <= er]
+    out["hiddenColumns"] = [col - sc for col in (payload.get("hiddenColumns") or []) if sc <= col <= ec]
 
     styles: dict[str, Any] = {}
     for key, style in (payload.get("styles") or {}).items():
@@ -137,28 +142,85 @@ def _slice_payload_to_print_area(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _exact_excel_block(ws_data: dict[str, Any], ws_id: str) -> dict[str, Any]:
+    """Compatibility wrapper returning the exact-source base block."""
+    blocks, _diagnostics = _exact_excel_layout(ws_data, ws_id)
+    return blocks[0]
+
+
+def _exact_excel_layout(
+    ws_data: dict[str, Any],
+    ws_id: str,
+    *,
+    layout_override: str = "exact_source",
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     data = _slice_payload_to_print_area(ws_data)
-    return {
-        "id": f"{ws_id}_excel_exact",
-        "type": "excelRange",
-        "sourceWorksheetId": ws_id,
-        "sourceSheet": data.get("sourceSheet") or data.get("name") or "",
-        "sourceRange": data.get("sourceRange") or "",
-        "grid": data.get("grid") or [],
-        "styles": data.get("styles") or {},
-        "mergedCells": data.get("mergedCells") or [],
-        "colWidths": data.get("colWidthsPx") or [],
-        "rowHeights": data.get("rowHeightsPx") or [],
-        "renderMode": "excel_exact",
-        "splitMode": "none",
-        "allowContinuation": False,
-        "scaleMode": "fit_body",
-        "minScale": 0.35,
-        "trimBlankRows": False,
-        "trimBlankColumns": False,
-        "editable": True,
-        "layoutProfile": "single_sheet_excel_exact",
+    full = _excel_range_block(
+        {**data, "id": ws_id},
+        f"{ws_id}_excel_exact",
+        {
+            "splitMode": "auto_rows",
+            "allowContinuation": True,
+            "scaleMode": "fit_body",
+            "minScale": max(EXCEL_MIN_SCALE, 7.5 / 9.0),
+            "trimBlankRows": False,
+            "trimBlankColumns": False,
+        },
+    )
+    canonical = canonical_layout_override(layout_override)
+    blocks, diagnostics = exact_source_layout(full, override=canonical)
+    for block in blocks:
+        block.update({
+            "sourceWorksheetId": ws_id,
+            "sourceSheet": data.get("sourceSheet") or data.get("name") or "",
+            "editable": True,
+            "layoutProfile": "semantic_excel_table" if canonical == "two_columns" else "exact_source_excel",
+        })
+    return blocks, diagnostics
+
+
+_EMS_CODE_RE = re.compile(r"^EMS\s+(\d+)(?:\.(\d+))?$", re.I)
+
+
+def _stable_import_sheet_code(
+    pages: list[dict[str, Any]],
+    insert_at: int,
+    explicit: str,
+) -> str:
+    """Use 00_INDEX when present; otherwise fill an unambiguous EMS gap."""
+    explicit = explicit.strip()
+    if explicit and explicit.upper() not in {"NEW", "TBD"}:
+        return explicit
+    used = {
+        str(page.get("displaySheetCode") or page.get("sheetCode") or "").strip().casefold()
+        for page in pages
     }
+
+    def nearest(items: list[dict[str, Any]]) -> tuple[int, int] | None:
+        for page in items:
+            match = _EMS_CODE_RE.fullmatch(
+                str(page.get("displaySheetCode") or page.get("sheetCode") or "").strip()
+            )
+            if match:
+                return int(match.group(1)), int(match.group(2) or 0)
+        return None
+
+    before = nearest(list(reversed(pages[:insert_at])))
+    after = nearest(pages[insert_at:])
+    candidates: list[tuple[int, int]] = []
+    if before and after and after[0] - before[0] >= 2:
+        candidates.append((before[0] + 1, 0))
+    if before:
+        candidates.extend((before[0], minor) for minor in range(before[1] + 1, 100))
+        candidates.append((before[0] + 1, 0))
+    if after and after[0] > 1:
+        candidates.append((after[0] - 1, 0))
+    for major, minor in candidates:
+        candidate = f"EMS {major}.{minor}"
+        if candidate.casefold() not in used:
+            return candidate
+    # No engineering sequence can be inferred safely. A stable draft identity
+    # is preferable to the temporary word NEW and does not invent project data.
+    return "DRAFT-IMPORT"
 
 
 def import_workbook_sheets(
@@ -171,9 +233,12 @@ def import_workbook_sheets(
     append: bool = False,
     template_override: str | None = None,
     preserve_exact: bool = True,
+    layout_override: str = "auto",
     assets_dir=None,
     asset_url_prefix: str | None = None,
     source_filename: str | None = None,
+    source_sha256: str = "",
+    project_local_path: str = "",
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Import only the requested worksheets; never rebuild the full package."""
     if preserve_exact and len(sheet_names) != 1:
@@ -184,14 +249,21 @@ def import_workbook_sheets(
     wb = load_workbook(filename=str(xlsx_path), data_only=False, keep_vba=keep_vba)
     wb_values = load_workbook(filename=str(xlsx_path), data_only=True, keep_vba=keep_vba)
     src_filename = source_filename or xlsx_path.name
+    imported_at = _ts()
     try:
         src_id = _new_id("src")
         project.setdefault("sources", []).append({
             "id": src_id,
             "type": "imported-workbook",
             "name": src_filename,
+            "originalFileName": src_filename,
             "path": str(xlsx_path),
-            "importedAt": _ts(),
+            "projectLocalPath": project_local_path,
+            "sha256": source_sha256,
+            "sourceType": "excel_workbook",
+            "selectedWorksheets": list(sheet_names),
+            "importMode": "one_time_editable_table",
+            "importedAt": imported_at,
         })
 
         existing_ws_names = {str(ws.get("name") or "") for ws in project.get("worksheets", [])}
@@ -201,6 +273,8 @@ def import_workbook_sheets(
             if sheet_name not in wb.sheetnames:
                 continue
             payload = _worksheet_payload(wb[sheet_name], wb_values[sheet_name])
+            if assets_dir is not None:
+                Path(assets_dir).mkdir(parents=True, exist_ok=True)
             embedded = _extract_embedded_images(wb[sheet_name], assets_dir, asset_url_prefix or "", sheet_name)
             ws_id = _new_id("ws")
             ws_id_by_name[sheet_name] = ws_id
@@ -220,47 +294,88 @@ def import_workbook_sheets(
                     "sheet": sheet_name,
                     "sourceFile": src_filename,
                     "sourcePath": str(xlsx_path),
-                    "importedAt": _ts(),
+                    "projectLocalPath": project_local_path,
+                    "sha256": source_sha256,
+                    "sourceType": "excel_workbook",
+                    "importMode": "one_time_editable_table",
+                    "importedAt": imported_at,
                 },
             })
             existing_ws_names.add(unique_name)
 
         pages: list[dict[str, Any]] = project.get("pages", [])
 
+        if insert_after_page_id:
+            ref_idx = next((i for i, page in enumerate(pages) if page.get("id") == insert_after_page_id), None)
+            insert_at = ref_idx + 1 if ref_idx is not None else len(pages)
+        elif replace_page_id:
+            insert_at = next((i for i, page in enumerate(pages) if page.get("id") == replace_page_id), len(pages))
+        else:
+            insert_at = len(pages)
+
         def build_page(sheet_name: str, ws_id: str, target: dict[str, Any] | None = None) -> dict[str, Any]:
             ws_data = next(w for w in project.get("worksheets", []) if w.get("id") == ws_id)
             meta = meta_by_name.get(sheet_name) or {}
             title = str(meta.get("sheetTitle") or (target or {}).get("sheetTitle") or sheet_name).strip()
-            code = str(meta.get("sheetCodeRaw") or (target or {}).get("displaySheetCode") or (target or {}).get("sheetCode") or "NEW").strip()
+            explicit_code = str(meta.get("sheetCodeRaw") or (target or {}).get("displaySheetCode") or (target or {}).get("sheetCode") or "").strip()
+            code = _stable_import_sheet_code(pages, insert_at, explicit_code)
             detected = template_override or classify_page_type(sheet_name, title, "")
             # A deliberately formatted worksheet is a worksheet page, even when
             # its title contains words such as Layout or Location.
             page_type = detected if detected in {"cover", "index"} else ("data-grid" if preserve_exact else detected)
             family = page_family(sheet_name, title, "")
-            blocks = [_exact_excel_block(ws_data, ws_id)] if preserve_exact else normalize_page(ws_data, ws_id, page_type, title)
+            if preserve_exact:
+                blocks, layout_diagnostics = _exact_excel_layout(
+                    ws_data,
+                    ws_id,
+                    layout_override=layout_override,
+                )
+            else:
+                blocks = normalize_page(ws_data, ws_id, page_type, title)
+                layout_diagnostics = {}
             base = dict(target or {})
             base.update({
                 "linkedWorksheetId": ws_id,
-                "sheetCode": code or "NEW",
-                "displaySheetCode": code or "NEW",
+                "sheetCode": code,
+                "displaySheetCode": code,
                 "sheetTitle": title,
                 "sheetTab": sheet_name,
                 "pageType": page_type,
                 "pageFamily": family,
                 "renderMode": "excel_exact" if preserve_exact else base.get("renderMode", "normalized"),
-                "layoutProfile": "single_sheet_excel_exact" if preserve_exact else base.get("layoutProfile", ""),
-                "splitMode": "none" if preserve_exact else base.get("splitMode", "auto_rows"),
-                "allowContinuation": False if preserve_exact else base.get("allowContinuation", True),
+                "layoutProfile": ("semantic_excel_table" if canonical_layout_override(layout_override) == "two_columns" else "exact_source_excel") if preserve_exact else base.get("layoutProfile", ""),
+                "layoutOverride": canonical_layout_override(layout_override) if preserve_exact else base.get("layoutOverride", "exact_source"),
+                "layoutDiagnostics": layout_diagnostics,
+                "tableLayout": layout_diagnostics.get("selectedArrangement", "single"),
+                "splitMode": ("none" if canonical_layout_override(layout_override) == "keep_one_page" else "auto_rows") if preserve_exact else base.get("splitMode", "auto_rows"),
+                "allowContinuation": canonical_layout_override(layout_override) != "keep_one_page" if preserve_exact else base.get("allowContinuation", True),
+                "minScale": max(EXCEL_MIN_SCALE, 7.5 / 9.0) if preserve_exact else base.get("minScale", EXCEL_MIN_SCALE),
                 "scaleMode": "fit_body",
                 "trimBlankRows": False if preserve_exact else base.get("trimBlankRows", True),
                 "trimBlankColumns": False if preserve_exact else base.get("trimBlankColumns", True),
                 "blocks": blocks,
+                "issueStatus": base.get("issueStatus") or "draft",
+                "publishStatus": base.get("publishStatus") or "",
                 "notes": str(meta.get("notes") or base.get("notes") or ""),
+                "createdAt": base.get("createdAt") or imported_at,
+                "modifiedAt": imported_at,
                 "importedFrom": {
                     "sourceFile": src_filename,
                     "sheetName": sheet_name,
-                    "importedAt": _ts(),
+                    "projectLocalPath": project_local_path,
+                    "sha256": source_sha256,
+                    "importedAt": imported_at,
                     "preservedExcelStyle": bool(preserve_exact),
+                },
+                "sourceImport": {
+                    "sourceId": src_id,
+                    "sourceType": "excel_workbook",
+                    "originalFileName": src_filename,
+                    "sha256": source_sha256,
+                    "selectedWorksheet": sheet_name,
+                    "importMode": "one_time_editable_table",
+                    "projectLocalPath": project_local_path,
+                    "importedAt": imported_at,
                 },
             })
             return base
@@ -276,17 +391,16 @@ def import_workbook_sheets(
             pages = [p for p in pages if not (p.get("generatedContinuation") and (p.get("continuationOf") == group_id or p.get("pageGroupId") == group_id) and p.get("id") != replace_page_id)]
             target_idx = next(i for i, page in enumerate(pages) if page.get("id") == replace_page_id)
             updated = build_page(sheet_name, ws_id, pages[target_idx])
-            pages[target_idx] = updated
+            updated["pageGroupId"] = updated["id"]
+            updated["continuationOf"] = None
+            updated["continuationIndex"] = 0
+            updated["generatedContinuation"] = False
+            replacements = compose_pages([updated])
+            pages[target_idx : target_idx + 1] = replacements
             for i, page in enumerate(pages): page["order"] = i + 1
             project["pages"] = pages
-            project.setdefault("importHistory", []).append({"sourceFile": src_filename, "sheetNames": sheet_names, "importedAt": _ts(), "pagesAdded": 0, "replacedPageId": replace_page_id})
-            return sanitize_json(project), [updated]
-
-        if insert_after_page_id:
-            ref_idx = next((i for i, page in enumerate(pages) if page.get("id") == insert_after_page_id), None)
-            insert_at = ref_idx + 1 if ref_idx is not None else len(pages)
-        else:
-            insert_at = len(pages)
+            project.setdefault("importHistory", []).append({"sourceFile": src_filename, "sheetNames": sheet_names, "importedAt": _ts(), "pagesAdded": max(0, len(replacements) - 1), "replacedPageId": replace_page_id})
+            return sanitize_json(project), replacements
 
         new_pages: list[dict[str, Any]] = []
         for sheet_name in sheet_names:
@@ -297,17 +411,92 @@ def import_workbook_sheets(
             page.update({
                 "id": _new_id("page"), "order": 0, "include": True,
                 "templateId": "ansi-b-standard", "canvasObjects": [], "assets": [], "underlays": [],
-                "revisionRows": [], "pageGroupId": _new_id("pg"), "continuationOf": None,
+                "revisionRows": [], "pageGroupId": "", "continuationOf": None,
                 "continuationIndex": 0, "generatedContinuation": False, "layoutWarnings": [],
             })
-            new_pages.append(page)
+            page["pageGroupId"] = page["id"]
+            new_pages.extend(compose_pages([page]))
 
         for i, page in enumerate(new_pages): pages.insert(insert_at + i, page)
         for i, page in enumerate(pages): page["order"] = i + 1
         project["pages"] = pages
         project.setdefault("importHistory", []).append({"sourceFile": src_filename, "sheetNames": sheet_names, "importedAt": _ts(), "pagesAdded": len(new_pages), "preservedExcelStyle": bool(preserve_exact)})
-        project["renumberSuggested"] = any((page.get("displaySheetCode") or "NEW") == "NEW" for page in new_pages)
+        project["renumberSuggested"] = False
         return sanitize_json(project), new_pages
     finally:
         wb.close()
         wb_values.close()
+
+
+def repair_imported_excel_page(
+    project: dict[str, Any],
+    page_id: str,
+    *,
+    layout_override: str = "exact_source",
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Recompose one source-linked imported page while preserving its identity."""
+    pages = list(project.get("pages") or [])
+    index = next((i for i, page in enumerate(pages) if page.get("id") == page_id), None)
+    if index is None:
+        raise ValueError(f"Page not found: {page_id}")
+    page = pages[index]
+    if page.get("generatedContinuation"):
+        raise ValueError("Select the base imported worksheet page, not a continuation.")
+    if not isinstance(page.get("importedFrom"), dict):
+        raise ValueError("Only an imported worksheet page can use source layout controls.")
+    worksheet_id = str(page.get("linkedWorksheetId") or "")
+    worksheet = next(
+        (item for item in project.get("worksheets") or [] if item.get("id") == worksheet_id),
+        None,
+    )
+    if worksheet is None:
+        raise ValueError("The imported source worksheet is no longer attached.")
+
+    canonical = canonical_layout_override(layout_override)
+    blocks, diagnostics = _exact_excel_layout(
+        worksheet,
+        worksheet_id,
+        layout_override=canonical,
+    )
+    code = _stable_import_sheet_code(pages, index, str(page.get("displaySheetCode") or page.get("sheetCode") or ""))
+    updated = {
+        **page,
+        "sheetCode": code,
+        "displaySheetCode": code,
+        "renderMode": "excel_exact",
+        "renderProfile": "semantic_excel_table" if canonical == "two_columns" else "exact_source_excel",
+        "layoutProfile": "semantic_excel_table" if canonical == "two_columns" else "exact_source_excel",
+        "layoutOverride": canonical,
+        "layoutDiagnostics": diagnostics,
+        "tableLayout": diagnostics.get("selectedArrangement", "single"),
+        "splitMode": "auto_rows",
+        "allowContinuation": canonical != "keep_one_page",
+        "minScale": max(EXCEL_MIN_SCALE, 7.5 / 9.0),
+        "scaleMode": "fit_body",
+        "trimBlankRows": False,
+        "trimBlankColumns": False,
+        "blocks": blocks,
+        "issueStatus": page.get("issueStatus") or "draft",
+        "publishStatus": page.get("publishStatus") or "",
+        "pageGroupId": page_id,
+        "continuationOf": None,
+        "continuationIndex": 0,
+        "generatedContinuation": False,
+        "layoutWarnings": [],
+    }
+    group_id = str(page.get("pageGroupId") or page_id)
+    pages = [
+        existing for existing in pages
+        if not (
+            existing.get("generatedContinuation")
+            and (existing.get("continuationOf") == group_id or existing.get("pageGroupId") == group_id)
+        )
+    ]
+    index = next(i for i, existing in enumerate(pages) if existing.get("id") == page_id)
+    replacements = compose_pages([updated])
+    pages[index : index + 1] = replacements
+    for order, existing in enumerate(pages, start=1):
+        existing["order"] = order
+    project["pages"] = pages
+    project["renumberSuggested"] = False
+    return sanitize_json(project), replacements

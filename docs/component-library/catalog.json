@@ -4499,7 +4499,7 @@
     },
     {
       "id": "electrical_power_2a8fad2edb",
-      "displayName": "Electrical Generator Monitor",
+      "displayName": "Generator Monitor",
       "category": "electrical_power",
       "categories": [
         "electrical_power"
@@ -4507,7 +4507,7 @@
       "collection": "",
       "manufacturer": "",
       "partNumber": "",
-      "defaultLabel": "Electrical Generator Monitor",
+      "defaultLabel": "Generator Monitor",
       "aliases": [],
       "tags": [],
       "defaultWidth": 96,

@@ -536,7 +536,7 @@ def parse_workbook(xlsx_path: str | Path) -> dict[str, Any]:
             "projectNo":   "",
             "siteAddress": "",
             "date":        "",
-            "preparedBy":  "Singh360 Inc.",
+            "preparedBy":  "",
             "status":      "Draft",
             "sheetTitle":  "",
             "sheetNumber": "",

@@ -1,4 +1,4 @@
-export type TooltipSaveScope = 'none' | 'local-project' | 'linked-workbook' | 'export-only';
+export type TooltipSaveScope = 'none' | 'local-project' | 'export-only';
 
 export type TooltipContext = {
   disabled?: boolean;
@@ -23,68 +23,57 @@ const t = (
 ): TooltipDefinition => ({ title, body, saveScope, ...extra });
 
 export const tooltipRegistry = {
-  'project.new': t('New project', 'Creates a new local Singh360 project. It does not create or modify an Excel workbook until one is linked and Save + Write Excel is used.', 'local-project'),
+  'project.new': t('New drawing project', 'Creates a self-contained Singh360 drawing set with an automatic cover and sheet index.', 'local-project'),
   'project.open': t('Open project', 'Opens the selected local Singh360 project package and its saved editor state.'),
-  'project.importWorkbook': t('Import workbook', 'Creates or refreshes a Singh360 project from a selected workbook using the controlled import workflow. The source workbook must not be edited at the same time.', 'local-project'),
-  'project.recentCard': t('Recent project', 'Opens this project. The card status describes local-save and workbook-link state.'),
+  'project.importTable': t('Import Excel table', 'Copies selected worksheet content into the current Singh360 project as one-time editable table data.', 'local-project'),
+  'project.recentCard': t('Recent project', 'Opens this project and its last confirmed local drawing state.'),
   'project.openFolder': t('Open project folder', 'Opens the local project package folder in File Explorer. This does not save or sync anything.'),
-  'project.linkWorkbook': t('Link workbook', 'Associates this Singh360 project with an Excel workbook. Linking does not write to the workbook.', 'local-project'),
-  'project.relinkWorkbook': t('Change linked workbook', 'Selects a different workbook link. Verify that the selected workbook belongs to this project before continuing.', 'local-project'),
-  'project.refreshWorkbook': t('Refresh from workbook', 'Reads eligible workbook changes into the project only when conflict rules allow it. It does not bypass two-sided conflict protection.', 'local-project'),
   'project.backup': t('Back up project', 'Creates a recoverable project-package backup before risky work.', 'export-only'),
-  'project.delete': t('Remove project', 'Removes the selected local project only after confirmation. It must not silently delete the linked workbook.', 'local-project'),
-  'project.status.noWorkbook': t('No workbook linked', 'The project can be edited locally, but Save + Write Excel is unavailable until a workbook is linked.'),
-  'project.status.linked': t('Workbook linked', 'This project has a linked workbook. Linking alone does not mean the workbook is synchronized.'),
-  'project.status.syncPending': t('Workbook sync pending', 'The local project contains confirmed saved changes that have not yet been mirrored to the linked workbook.'),
-  'project.status.conflict': t('Project/workbook conflict', 'Both the local project and workbook changed since the last confirmed sync. Do not overwrite either side until the conflict workflow resolves it.'),
+  'project.delete': t('Archive project', 'Recoverably moves the selected drawing set out of Active Projects. Its project package remains intact.', 'local-project'),
 
   'nav.projectHome': t('Project Home', 'Returns to the project dashboard. Unsaved local edits must be saved or explicitly handled before leaving.'),
   'nav.pageManager': t('Visual Page Manager', 'Opens the full-screen page organizer for inclusion, order, page codes, titles, and page actions.'),
   'nav.componentLibrary': t('Component Library', 'Opens reusable symbols, components, plan markers, callouts, safety signs, and saved legends.'),
   'nav.symbolMapper': t('Symbol Mapper', 'Finds supported symbols on an existing drawing and applies the approved map highlights.'),
   'nav.help': t('Help', 'Opens application guidance. Tooltips remain available while help is open.'),
-  'status.localSaved': t('Project saved', 'The current project state is confirmed saved locally. This does not prove the linked workbook is current.'),
+  'status.localSaved': t('Project saved', 'The current project state is confirmed saved inside the Singh360 project package.'),
   'status.unsavedProject': t('Unsaved project edits', 'One or more project edits have not yet been confirmed saved locally. Open What is unsaved? for details.'),
   'status.unsavedWorkspace': t('Unsaved workspace edits', 'Data Workspace changes exist in memory and are not yet confirmed saved to the local Singh360 project.'),
-  'status.syncPending': t('Workbook sync pending', 'The project is locally saved, but the linked workbook still needs Save + Write Excel.'),
-  'status.conflict': t('Project/workbook conflict', 'Both sides changed. Automatic overwrite is blocked to protect data.'),
+  'status.syncPending': t('Project saved', 'The current Singh360 project package is saved.'),
+  'status.conflict': t('Project recovery state', 'Use project history or recovery snapshots to resolve a local save issue.'),
   'status.whatUnsaved': t('What is unsaved?', 'Lists the actual dirty areas currently waiting for local save.'),
   'status.lastLocalSave': t('Last local save', 'Shows when the project was last confirmed saved to the local Singh360 package.'),
-  'status.lastWorkbookSync': t('Last workbook sync', 'Shows when Save + Write Excel last completed successfully.'),
-
-  'save.localProject': t('Save project', 'Saves current editor and Data Workspace changes to the local Singh360 project. It does not write the linked Excel workbook.', 'local-project', { shortcut: 'Ctrl+S' }),
+  'save.localProject': t('Save project', 'Saves current editor and imported-table changes to the local Singh360 project package.', 'local-project', { shortcut: 'Ctrl+S' }),
   'save.workspace': t('Save workspace edits', 'Saves Data Workspace cell and structure changes into the local Singh360 project. The unsaved marker clears only after confirmation.', 'local-project'),
-  'save.writeExcel': t('Save + Write Excel', 'Saves the local project first, then mirrors controlled workbook data, 00_INDEX, tabs, order, codes, titles, inclusion, status colors, and workbook-backed page data to the linked workbook. Close Excel before running it.', 'linked-workbook'),
-  'save.autosave': t('Local autosave', 'Singh360 periodically saves the local project. Workbook sync remains explicit.', 'local-project'),
+  'save.autosave': t('Local autosave', 'Singh360 periodically saves the self-contained local project.', 'local-project'),
   'save.retry': t('Retry save', 'Retries the failed local save without discarding current edits.', 'local-project'),
   'save.resolveConflict': t('Resolve conflict', 'Opens the protected conflict workflow. It must not force an overwrite.'),
-  'workbook.copyPath': t('Copy generated workbook path', 'Copies the exact generated workbook path without opening or changing the workbook.'),
   'assembly.saveSelection': t('Save selection as assembly', 'Stores the selected group as a reusable project assembly. Its parts remain editable after insertion.', 'local-project'),
   'assembly.signage-marker-trio': t('Signage Marker Trio', 'Inserts the three standard signage markers as one editable persistent group.', 'local-project'),
   'assembly.signage-legend': t('Signage Legend', 'Inserts a framed editable legend for the standard signage markers.', 'local-project'),
   'assembly.callout-block': t('Callout Block', 'Inserts an editable callout number, note, and leader as a movable group.', 'local-project'),
   'assembly.generated-symbol-key': t('Generated Symbol Key', 'Builds an editable key from component symbols currently used on the active page.', 'local-project'),
   'assembly.wicp-annotation-pack': t('WICP Annotation Pack', 'Inserts the standard WICP title, note, and leader annotation group.', 'local-project'),
-  'export.pdf': t('Export PDF', 'Creates a PDF drawing package from included published pages. It does not modify the workbook.', 'export-only'),
+  'export.pdf': t('Export PDF', 'Regenerates a PDF drawing set from the latest saved included pages and current package order.', 'export-only'),
   'export.projectPackage': t('Export project package', 'Creates a portable Singh360 project package containing the project state and approved assets.', 'export-only'),
-  'export.worksheet': t('Export worksheet', 'Creates a standalone worksheet export from the current app-managed page without changing the linked workbook.', 'export-only'),
+  'export.worksheet': t('Export imported table', 'Creates a standalone copy of the current project-local imported table.', 'export-only'),
 
   'pages.search': t('Search pages', 'Filters the page list by code, title, tab, family, type, or status.'),
   'pages.filter': t('Filter pages', 'Shows only pages matching the selected inclusion, status, family, or type filter.'),
   'pages.clearFilter': t('Clear page filters', 'Returns the sidebar to all available pages.'),
-  'pages.pagePill': t('Published page number', 'Shows the page’s published position among included drawing pages. Excluded pages do not count.'),
+  'pages.pagePill': t('Drawing-set page number', 'Shows the page’s position among included drawing pages. Excluded pages do not count.'),
   'pages.active': t('Active page', 'This is the page currently shown in the editor.'),
-  'pages.include': t('Include in drawing', 'Controls whether this base page publishes. Only explicit Include/Yes/True rows publish.', 'local-project'),
-  'pages.exclude': t('Exclude from drawing', 'Keeps the source/reference page available but removes it from the published package.', 'local-project'),
+  'pages.include': t('Include in drawing', 'Adds this page to the Sheet Index, package count, and PDF export.', 'local-project'),
+  'pages.exclude': t('Exclude from drawing', 'Keeps the page editable but removes it from the Sheet Index, package count, and PDF export.', 'local-project'),
   'pages.dragReorder': t('Reorder page', 'Drag to change base-page order. Cover remains first and Sheet Index/TOC remains second.', 'local-project'),
   'pages.previous': t('Previous page', 'Opens the previous page that matches the current filter.'),
   'pages.next': t('Next page', 'Opens the next page that matches the current filter.'),
   'pages.moreActions': t('Page actions', 'Opens rename, duplicate, include/exclude, type, status, and delete actions available for this page.'),
   'pages.duplicate': t('Duplicate page', 'Creates a new base page from this page while preserving the original.', 'local-project'),
-  'pages.delete': t('Delete app page', 'Deletes only after confirmation and must preserve protected source/reference behavior.', 'local-project'),
-  'pages.rename': t('Rename page', 'Changes the app page title and, when mirrored, the controlled workbook title fields.', 'local-project'),
-  'pages.sheetCode': t('Sheet code', 'The drawing-package code controlled by 00_INDEX for a base page.', 'local-project'),
-  'pages.sheetTab': t('Worksheet tab', 'The workbook worksheet name linked to this base page.'),
+  'pages.delete': t('Archive page', 'Recoverably moves this page to Archived Pages without deleting its project-local assets.', 'local-project'),
+  'pages.rename': t('Rename page', 'Changes the drawing page title stored in this project.', 'local-project'),
+  'pages.sheetCode': t('Sheet code', 'The stable user-editable drawing-package code for this page.', 'local-project'),
+  'pages.sheetTab': t('Imported worksheet name', 'The original worksheet name retained as source provenance when applicable.'),
 
   'view.normalized': t('Normalized view', 'Shows the Singh360 page rendering produced from structured project data.'),
   'view.source': t('Source view', 'Shows the preserved source worksheet/page representation for comparison.'),
@@ -96,8 +85,8 @@ export const tooltipRegistry = {
   'view.zoomIn': t('Zoom in', 'Magnifies the editor view without changing exported dimensions.'),
   'view.zoomOut': t('Zoom out', 'Reduces the editor view without changing exported dimensions.'),
   'view.printBoundary': t('Printable boundary', 'The dotted line marks the area intended to remain inside the printed 11 × 17 page.'),
-  'view.continuationPage': t('Continuation page', 'This page is generated from overflow. It must not create a duplicate base row in 00_INDEX.'),
-  'view.printMode': t('Print preview', 'Hides editing chrome and previews the published page output.'),
+  'view.continuationPage': t('Continuation page', 'This app-managed page is generated from table or index overflow and stays with its stable base page.'),
+  'view.printMode': t('Print preview', 'Hides editing chrome and previews the current included page output.'),
 
   'edit.undo': t('Undo', 'Reverses the most recent supported editor action.', 'local-project', { shortcut: 'Ctrl+Z' }),
   'edit.redo': t('Redo', 'Restores the most recently undone action.', 'local-project', { shortcut: 'Ctrl+Y' }),
@@ -147,8 +136,8 @@ export const tooltipRegistry = {
   'object.group': t('Group', 'Treats selected objects as one movable unit while preserving their contents.', 'local-project'),
   'object.ungroup': t('Ungroup', 'Returns a group to independently editable objects.', 'local-project'),
 
-  'workspace.open': t('Data Workspace', 'Opens workbook-backed page data for structured editing inside Singh360.'),
-  'workspace.sheetSelector': t('Workspace sheet', 'Selects the page or worksheet data being edited. Switching views does not automatically write Excel.'),
+  'workspace.open': t('Data Workspace', 'Opens project-local imported table data for structured editing inside Singh360.'),
+  'workspace.sheetSelector': t('Imported table', 'Selects the project-local table data being edited.'),
   'workspace.cell': t('Workspace cell', 'Click to select this cell. Editing changes the local workspace state until Save Workspace Edits confirms a local save.', 'local-project'),
   'workspace.cellAddress': t('Cell address', 'Shows the selected worksheet-style row and column reference.'),
   'workspace.formulaBar': t('Cell value editor', 'Edits the selected cell value or formula text supported by the workspace model.', 'local-project'),
@@ -170,11 +159,11 @@ export const tooltipRegistry = {
   'workspace.pasteTable': t('Paste table', 'Pastes Excel, HTML, CSV, or TSV cells as structured editable workspace cells.', 'local-project'),
   'workspace.reload': t('Reload saved workspace', 'Reloads the last confirmed local project state. Warn before replacing genuine unsaved edits.'),
   'workspace.discard': t('Discard workspace edits', 'Reverts only genuine unconfirmed Data Workspace edits after explicit confirmation.'),
-  'workspace.save': t('Save workspace edits', 'Saves current workspace edits into the local Singh360 project. It does not write the linked workbook.', 'local-project'),
-  'workspace.syncExcel': t('Save + Write Excel', 'Saves locally first, then mirrors approved workbook-backed changes through the protected full workbook workflow.', 'linked-workbook'),
+  'workspace.save': t('Save workspace edits', 'Saves current table edits into the local Singh360 project package.', 'local-project'),
+  'workspace.syncExcel': t('Standalone save', 'Saves editable table content into the Singh360 project package.', 'local-project'),
   'workspace.unsavedBadge': t('Unsaved workspace edits', 'This badge remains until the current workspace revision is confirmed saved locally.'),
   'workspace.savedBadge': t('Workspace saved', 'The current workspace revision is confirmed saved in the local Singh360 project.'),
-  'workspace.sourceRange': t('Source range', 'Shows the preserved workbook range associated with this workspace region when available.'),
+  'workspace.sourceRange': t('Imported source range', 'Shows the original worksheet-style range retained as provenance when available.'),
   'workspace.protectedCell': t('Protected source cell', 'This source-backed cell cannot be changed through the current workspace action. The tooltip states the actual reason.'),
 
   'excelLayout.enable': t('Enable Excel Layout', 'Converts or enables this app page for independent editable table placement on the 11 × 17 canvas.', 'local-project'),
@@ -262,7 +251,6 @@ export function getTooltipDefinition(helpId: string): TooltipDefinition | undefi
 
 export function tooltipScopeLabel(scope: TooltipSaveScope | undefined): string {
   if (scope === 'local-project') return 'Saves to: local Singh360 project';
-  if (scope === 'linked-workbook') return 'Writes: linked Excel workbook';
   if (scope === 'export-only') return 'Creates: exported file only';
   return 'Changes: none';
 }

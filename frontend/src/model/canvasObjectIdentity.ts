@@ -4,14 +4,53 @@ export function newCanvasObjectId(): string {
   return `canvas_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
 }
 
-export function assignFreshCanvasObjectIds<T extends Record<string, unknown>>(source: T): T {
-  const copy: Record<string, unknown> = { ...source, objectId: newCanvasObjectId() };
-  if (Array.isArray(source.objects)) {
-    copy['objects'] = source.objects.map((child) =>
-      child && typeof child === 'object'
-        ? assignFreshCanvasObjectIds(child as Record<string, unknown>)
-        : child,
-    );
+const INTERNAL_OBJECT_ID_REFERENCE_KEYS = new Set([
+  'smartParentId',
+]);
+
+function visitCanvasObjectTree(
+  value: unknown,
+  visit: (record: Record<string, unknown>) => void,
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((item) => visitCanvasObjectTree(item, visit));
+    return;
   }
-  return copy as T;
+  if (!value || typeof value !== 'object') return;
+
+  const record = value as Record<string, unknown>;
+  visit(record);
+  if (Array.isArray(record.objects)) {
+    record.objects.forEach((child) => visitCanvasObjectTree(child, visit));
+  }
+}
+
+/**
+ * Deep-clone one serialized Fabric object tree and give every group/child its
+ * own identity. Stable content identities (for example libraryComponentId,
+ * componentId, and assemblyId) are deliberately left unchanged. References
+ * between objects inside the cloned tree are remapped to the corresponding
+ * fresh objectId.
+ */
+export function assignFreshCanvasObjectIds<T extends Record<string, unknown>>(source: T): T {
+  const copy = structuredClone(source) as T;
+  const replacements = new Map<string, string>();
+
+  visitCanvasObjectTree(copy, (record) => {
+    const previous = typeof record.objectId === 'string' ? record.objectId : '';
+    const fresh = newCanvasObjectId();
+    record.objectId = fresh;
+    if (previous) replacements.set(previous, fresh);
+  });
+
+  visitCanvasObjectTree(copy, (record) => {
+    for (const key of INTERNAL_OBJECT_ID_REFERENCE_KEYS) {
+      const previous = record[key];
+      if (typeof previous === 'string' && replacements.has(previous)) {
+        record[key] = replacements.get(previous) as string;
+      }
+    }
+  });
+
+  return copy;
 }

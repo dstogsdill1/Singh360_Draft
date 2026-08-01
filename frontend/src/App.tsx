@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   archiveProject,
+  autoLayoutImportedPage,
   attachCsv,
   exportPackage,
   exportPdf,
@@ -11,7 +12,6 @@ import {
   previewImportWorksheets,
   renameProject,
   saveProject,
-  resolveWorkbookLink,
   savePageRebuildBackup,
   updateLibV2Component,
   uploadAssetDataUrl,
@@ -24,19 +24,18 @@ import { newCanvasObjectId } from './model/canvasObjectIdentity';
 import { writeRecoverySnapshot } from './model/recovery';
 import { duplicateAsAppManagedPage } from './model/pageDuplication';
 import { normalizeProjectAssetUrls } from './model/assetUrl';
-import ContinuationPreviewModal from './components/ContinuationPreviewModal';
-import ReimportWorkbookModal from './components/ReimportWorkbookModal';
 import { refreshBlockFromWorksheet, regenerateExcelGroup, refreshPageFromSource, applyCoverSourceTruth } from './model/excelRange';
 import { isCoverWorksheet } from './model/metadataInference';
 import { SourceWorksheetHistory } from './model/sourceWorksheetHistory';
 import { PageRebuildHistory } from './model/pageRebuildHistory';
 import { applyRebuiltPage, rebuildSinglePageFromSource } from './model/pageRebuild';
 import { validatePageRebuild } from './model/pageRebuildValidation';
-import { isSheetIndexPage, normalizePackagePages } from './model/packageIndex';
+import { isCoverPage, isSheetIndexPage, normalizePackageManifest } from './model/packageIndex';
+import { nextLogicalSheetCode } from './model/sheetCodes';
+import { reconcileLayoutRebuildResult, reconcilePdfImportResult } from './model/asyncProjectMerge';
 import RebuildValidationModal from './components/RebuildValidationModal';
 import ProjectShell from './components/ProjectShell';
 import SheetManager from './components/SheetManager';
-import WorkbookView from './components/WorkbookView';
 import LibraryPanelV2 from './components/LibraryPanelV2';
 import DocumentView, { type FitMode, MAX_SCALE, MIN_SCALE } from './components/DocumentView';
 import PropertiesPanel from './components/PropertiesPanel';
@@ -53,7 +52,7 @@ import ExportWarningsModal from './components/ExportWarningsModal';
 import SavePageTemplateModal from './components/SavePageTemplateModal';
 import PageTemplateLibraryModal, { type TemplateInsertMode } from './components/PageTemplateLibraryModal';
 import SymbolLegendModal from './components/SymbolLegendModal';
-import PdfCropModal from './components/PdfCropModal';
+import AddImportPageModal from './components/AddImportPageModal';
 import ImageCropModal from './components/ImageCropModal';
 import SymbolMapperModal from './components/SymbolMapperModal';
 import { buildSymbolCountSummaryArtifacts, type SymbolMapperCountPageRequest } from './model/symbolCountSummary';
@@ -66,6 +65,7 @@ import CollapsibleSection from './components/CollapsibleSection';
 import StatusBar from './components/StatusBar';
 import HelpCenter from './components/HelpCenter';
 import ProjectDashboard from './components/ProjectDashboard';
+import ProjectSettingsModal, { type ProjectSettingsUpdate } from './components/ProjectSettingsModal';
 import ProjectFilesPage from './components/ProjectFilesPage';
 import { defaultSmartComponentConfig, normalizeSmartComponentConfig } from './model/smartComponents';
 import { defaultCalloutSetConfig, normalizeCalloutSetConfig } from './model/callouts';
@@ -105,14 +105,40 @@ function screenshotName(): string {
 // S360 WORKSPACE UX V10: preserve a real sheet code embedded in a worksheet name.
 function suggestedSheetCode(name: string): string {
   const match = (name || '').trim().match(/^([A-Za-z]{2,8})\s*[-_ ]?\s*(\d{1,3}(?:\.\d{1,3})[A-Za-z]?)/);
-  return match ? `${match[1].toUpperCase()} ${match[2]}` : 'NEW';
+  return match ? `${match[1].toUpperCase()} ${match[2]}` : '';
 }
 
 // Canonical package order + live Page X of Y. This also keeps the generated
 // Sheet Index second, moves excluded/internal pages after package pages, and
 // counts every included physical continuation page.
 function withPageNumbers(pages: PageModel[]): PageModel[] {
-  return normalizePackagePages(pages);
+  // Page-level mutations do not own archivedPages or managed-page policy.
+  // Preserve their exact incoming order here; setProjectSync performs the
+  // project-level automatic index pass only for automatic standalone sets.
+  const total = pages.filter((page) => page.include !== false).length;
+  let pageNumber = 0;
+  return pages.map((page, index) => {
+    if (page.include === false) {
+      return { ...page, order: index + 1, pageNumber: null, pageTotal: total };
+    }
+    pageNumber += 1;
+    return { ...page, order: index + 1, pageNumber, pageTotal: total };
+  });
+}
+
+function stampPageIfChanged(prior: PageModel | undefined, page: PageModel, timestamp: string): PageModel {
+  if (!prior) return page.createdAt ? page : { ...page, createdAt: timestamp, modifiedAt: timestamp };
+  const priorContent = { ...prior, modifiedAt: undefined };
+  const nextContent = { ...page, modifiedAt: undefined };
+  return JSON.stringify(priorContent) === JSON.stringify(nextContent)
+    ? page
+    : { ...page, createdAt: page.createdAt || prior.createdAt || timestamp, modifiedAt: timestamp };
+}
+
+function stampChangedPages(previous: PageModel[], next: PageModel[]): PageModel[] {
+  const priorById = new Map(previous.map((page) => [page.id, page]));
+  const timestamp = new Date().toISOString();
+  return next.map((page) => stampPageIfChanged(priorById.get(page.id), page, timestamp));
 }
 
 export default function App() {
@@ -132,13 +158,12 @@ export default function App() {
   const [selectedWorksheetId, setSelectedWorksheetId] = useState<string | undefined>(undefined);
   const [saveStatus, setSaveStatus] = useState<SaveState>('cleanLocal');
   const [savedAt, setSavedAt] = useState<string>('');
-  const [lastWorkbookSync, setLastWorkbookSync] = useState<string>('');
   const [dirtyDomains, setDirtyDomains] = useState<DirtyDomain[]>([]);
   const [saveError, setSaveError] = useState<string>('');
   const [saveNotice, setSaveNotice] = useState<string>('');
   const [projectLoadError, setProjectLoadError] = useState<string>('');
-  // S360 SAVE + WRITE EXCEL BUTTON V26
-  const [excelWriteBusy, setExcelWriteBusy] = useState(false);
+  const [layoutRebuildBusy, setLayoutRebuildBusy] = useState(false);
+  const layoutRebuildBusyRef = useRef(false);
 
   // Viewport view-state.
   const [fitMode, setFitMode] = useState<FitMode>('page');
@@ -188,15 +213,21 @@ export default function App() {
   const [cleanWorkspaceOpen, setCleanWorkspaceOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(initialTool === 'export');
   const [exportWarnings, setExportWarnings] = useState<ExportWarning[] | null>(null);
-  const pendingExportRef = useRef<{ width: number; height: number; downloadName: string; pageIds: string[] } | null>(null);
+  const pendingExportRef = useRef<{
+    width: number;
+    height: number;
+    revisionSuffix: string;
+    pageIds: string[];
+  } | null>(null);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateLibOpen, setTemplateLibOpen] = useState(false);
   const [templateLibManageOnly, setTemplateLibManageOnly] = useState(false);
   const [symbolLegendOpen, setSymbolLegendOpen] = useState(initialTool === 'symbol-legend');
-  const [pdfCropOpen, setPdfCropOpen] = useState(initialTool === 'project-pdf');
+  const [pdfCropOpen, setPdfCropOpen] = useState(initialTool === 'project-pdf' || initialTool === 'add-import');
   const [imageCropState, setImageCropState] = useState<ImageCropState | null>(null);
   const [symbolMapperOpen, setSymbolMapperOpen] = useState(initialTool === 'symbol-mapper');
   const [backupOpen, setBackupOpen] = useState(initialTool === 'backups');
+  const [projectSettingsOpen, setProjectSettingsOpen] = useState(initialTool === 'settings');
   const [busOpen, setBusOpen] = useState(false);
   const [smartComponentEditor, setSmartComponentEditor] = useState<{
     mode: 'insert' | 'edit';
@@ -213,8 +244,6 @@ export default function App() {
     replacePageId?: string;
     replacePageTitle?: string;
   } | null>(null);
-  const [pendingWorkbookFile, setPendingWorkbookFile] = useState<File | null>(null);
-  const [pendingReimportFile, setPendingReimportFile] = useState<File | null>(null);
   const [renumberBadge, setRenumberBadge] = useState(false);
   const [theme, setThemeState] = useState<'dark' | 'light'>(() => {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('singh360-theme') : null;
@@ -238,14 +267,31 @@ export default function App() {
   const saveStatusRef = useRef(saveStatus);
   saveStatusRef.current = saveStatus;
   const savingRef = useRef(false);
+  const saveLoopRef = useRef<Promise<boolean> | null>(null);
 
   const setProjectSync = useCallback((updater: ProjectModel | null | ((prev: ProjectModel | null) => ProjectModel | null)) => {
     const rawNext = typeof updater === 'function'
       ? (updater as (prev: ProjectModel | null) => ProjectModel | null)(projectRef.current)
       : updater;
-    const next = rawNext
-      ? { ...rawNext, pages: normalizePackagePages(rawNext.pages ?? []) }
-      : rawNext;
+    let next = rawNext;
+    if (
+      rawNext
+      && rawNext.projectMode === 'standalone_layout'
+      && rawNext.managedPagePolicy === 'automatic'
+    ) {
+      const configuredRows = rawNext.indexSettings?.rowsPerPage;
+      const configuredCover = rawNext.coverSettings?.include;
+      const manifest = normalizePackageManifest(
+        rawNext.pages ?? [],
+        rawNext.archivedPages ?? [],
+        {
+          automaticManagedPages: true,
+          coverIncluded: typeof configuredCover === 'boolean' ? configuredCover : undefined,
+          indexRowsPerPage: Number.isInteger(configuredRows) ? Number(configuredRows) : undefined,
+        },
+      );
+      next = { ...rawNext, ...manifest };
+    }
     projectRef.current = next;
     setProject(next);
     return next;
@@ -257,11 +303,9 @@ export default function App() {
     lastSavedProjectRef.current = baseline;
     lastSavedJsonRef.current = JSON.stringify(baseline);
     setSavedAt(
-      baseline.workbookSync?.localProjectSavedAt
-      || baseline.lastSavedAt
+      baseline.lastSavedAt
       || new Date().toISOString(),
     );
-    setLastWorkbookSync(baseline.workbookSync?.lastSyncUtc || '');
     setDirtyDomains([]);
     setSaveError('');
     setSaveStatus(confirmedProjectSaveState(baseline));
@@ -284,35 +328,52 @@ export default function App() {
   // Persist the freshest project to the server. Returns true only when the
   // server actually confirmed the write of the CURRENT project snapshot.
   const flushSave = useCallback(async (): Promise<boolean> => {
-    const p = projectRef.current;
-    if (!p || printMode) return true;
-    const json = JSON.stringify(p);
-    if (json === lastSavedJsonRef.current) {
-      return true;
-    }
-    if (savingRef.current) {
-      return false;
-    }
-    savingRef.current = true;
-    setSaveStatus('savingLocal');
-    setSaveError('');
-    try {
-      const savedFromServer = normalizeProjectAssetUrls(await saveProject(p));
-      savingRef.current = false;
-      if (JSON.stringify(projectRef.current) !== json) {
-        // A newer local edit exists. Do not overwrite it with this older response;
-        // the next autosave will synchronize the latest Sheet Index.
-        setSaveStatus('dirtyLocal');
-        return false;
+    if (printMode) return true;
+    if (saveLoopRef.current) return saveLoopRef.current;
+
+    // One caller owns the write loop. Edits made while a request is in flight
+    // are coalesced into the next iteration, so a debounced autosave can never
+    // be lost merely because its timer fired during an older request.
+    const task = (async (): Promise<boolean> => {
+      savingRef.current = true;
+      try {
+        while (true) {
+          const snapshot = projectRef.current;
+          if (!snapshot) return false;
+          const snapshotJson = JSON.stringify(snapshot);
+          if (snapshotJson === lastSavedJsonRef.current) return true;
+
+          setSaveStatus('savingLocal');
+          setSaveError('');
+          let savedFromServer: ProjectModel;
+          try {
+            savedFromServer = normalizeProjectAssetUrls(await saveProject(snapshot));
+          } catch (error) {
+            setSaveStatus('saveFailed');
+            setSaveError(String(error));
+            writeRecoverySnapshot(projectRef.current ?? snapshot);
+            return false;
+          }
+
+          if (JSON.stringify(projectRef.current) === snapshotJson) {
+            markSaved(savedFromServer);
+            return true;
+          }
+
+          // The completed response belongs to an older snapshot. Preserve the
+          // live project and immediately loop to persist its newest revision.
+          setSaveStatus('dirtyLocal');
+        }
+      } finally {
+        savingRef.current = false;
       }
-      markSaved(savedFromServer);
-      return true;
-    } catch (error) {
-      savingRef.current = false;
-      setSaveStatus('saveFailed');
-      setSaveError(String(error));
-      writeRecoverySnapshot(p);
-      return false;
+    })();
+
+    saveLoopRef.current = task;
+    try {
+      return await task;
+    } finally {
+      if (saveLoopRef.current === task) saveLoopRef.current = null;
     }
   }, [markSaved, printMode]);
 
@@ -329,11 +390,9 @@ export default function App() {
       if (JSON.stringify(current) === lastSavedJsonRef.current) {
         return true;
       }
-      if (!savingRef.current) {
-        const ok = await flushSave();
-        if (ok) {
-          return true;
-        }
+      const ok = await flushSave();
+      if (ok) {
+        return true;
       }
       await new Promise<void>((resolve) => window.setTimeout(resolve, 150));
     }
@@ -363,11 +422,15 @@ export default function App() {
     const pageId = activePageRef.current?.id;
     if (!pageId || !projectRef.current) return projectRef.current;
     const objects = canvas?.captureCanvas();
+    const timestamp = new Date().toISOString();
+    const capturedPages = projectRef.current.pages.map((p) => (
+      p.id === pageId && objects
+        ? stampPageIfChanged(p, { ...p, canvasObjects: objects }, timestamp)
+        : p
+    ));
     const updated: ProjectModel = {
       ...projectRef.current,
-      pages: projectRef.current.pages.map((p) =>
-        p.id === pageId && objects ? { ...p, canvasObjects: objects } : p,
-      ),
+      pages: capturedPages,
     };
     // Synchronously update the mutable ref so flushSave reads the right data.
     projectRef.current = updated;
@@ -381,8 +444,8 @@ export default function App() {
   // page/project switch must call this before doing anything else.
   const captureAndSave = useCallback(async (): Promise<boolean> => {
     captureActivePageState();
-    return flushSave();
-  }, [captureActivePageState, flushSave]);
+    return confirmLatestProjectSaved(15_000);
+  }, [captureActivePageState, confirmLatestProjectSaved]);
 
   // Hard gate for navigation: do not switch pages/projects unless the current
   // active canvas has been captured AND the server confirms persistence.
@@ -402,82 +465,18 @@ export default function App() {
     const target = projectRef.current?.pages.find((page) => page.id === id);
     setActivePageId(id);
     if (target?.linkedWorksheetId) setSelectedWorksheetId(target.linkedWorksheetId);
+    else {
+      setSelectedWorksheetId(undefined);
+      setViewMode('normalized');
+    }
     setSelection(null);
   }, [ensureSavedBeforeNavigation]);
 
   // Explicit "Save Now": capture the live canvas, then contact the server.
   const saveNow = useCallback(async (): Promise<boolean> => {
     captureActivePageState(); // sync active-page capture MUST happen before any read of projectRef
-    const p = projectRef.current;
-    if (p) {
-      const wsId = activePageRef.current?.linkedWorksheetId;
-      if (wsId && isCoverWorksheet(p, wsId)) {
-        const withCoverTruth = applyCoverSourceTruth(p, wsId);
-        projectRef.current = withCoverTruth;
-        setProjectSync(withCoverTruth);
-        setSourceEditStatus('updated');
-        setSourceDirty(false);
-      }
-    }
     return confirmLatestProjectSaved(15_000);
-  }, [captureActivePageState, confirmLatestProjectSaved, setProjectSync]);
-
-  // S360 SAVE + WRITE EXCEL BUTTON V26
-  const writeProjectToExcel = useCallback(async (): Promise<boolean> => {
-    if (excelWriteBusy || printMode) return false;
-    captureActivePageState();
-    const current = projectRef.current;
-    if (!current) {
-      window.alert('Open a project before writing to Excel.');
-      return false;
-    }
-    setExcelWriteBusy(true);
-    setSaveStatus('savingLocal');
-    setSaveError('');
-    setSaveNotice('Saving project locally…');
-    let localSaveConfirmed = false;
-    try {
-      // Save Now waits through any in-flight autosave and confirms the exact
-      // latest project snapshot before workbook mirroring is allowed to begin.
-      const localSaved = await saveNow();
-      if (!localSaved) throw new Error('The local project save did not complete.');
-      localSaveConfirmed = true;
-      const latest = projectRef.current;
-      if (!latest) throw new Error('The active project disappeared before Excel synchronization.');
-      setSaveStatus('writingWorkbook');
-      setSaveNotice('Writing project to Excel…');
-      const result = await resolveWorkbookLink(latest.id, 'app_to_workbook');
-      const synced = normalizeProjectAssetUrls(result.project);
-      if (
-        synced.workbookSync?.verified !== true
-        || synced.workbookSync?.verification?.status !== 'verified'
-      ) {
-        throw new Error(
-          'Workbook write returned without verified 00_INDEX, physical tab, and Data Workspace order.',
-        );
-      }
-      markSaved(synced);
-      setSaveStatus('savedAndSynced');
-      setSaveNotice('PROJECT SAVED · WORKBOOK SYNCED');
-      window.setTimeout(() => {
-        setSaveNotice((notice) => notice === 'PROJECT SAVED · WORKBOOK SYNCED' ? '' : notice);
-      }, 6000);
-      return true;
-    } catch (error) {
-      console.error('Save + Write Excel failed', error);
-      setSaveStatus(localSaveConfirmed ? 'syncFailed' : 'saveFailed');
-      setSaveError(String(error));
-      setSaveNotice(localSaveConfirmed ? 'WORKBOOK SYNC FAILED' : 'SAVE FAILED');
-      writeRecoverySnapshot(projectRef.current ?? current);
-      window.alert(
-        `Could not write the project to Excel.\n\n${String(error)}\n\n`
-        + 'Your local Singh360 project remains saved. Close Excel and try again.',
-      );
-      return false;
-    } finally {
-      setExcelWriteBusy(false);
-    }
-  }, [captureActivePageState, excelWriteBusy, markSaved, printMode, saveNow]);
+  }, [captureActivePageState, confirmLatestProjectSaved]);
 
   const resetSourceEditState = useCallback(() => {
     sourceHistoryRef.current.clear();
@@ -698,13 +697,15 @@ export default function App() {
     pageRebuildUndo();
   }, [pageRebuildUndo]);
 
-  const replaceCurrentPageSource = useCallback(() => {
+  const replaceCurrentPageSource = useCallback(async () => {
+    const saved = await ensureSavedBeforeNavigation();
+    if (!saved) return;
     setImportWsOpen({
       afterPageId: activePageRef.current?.id ?? undefined,
       replacePageId: activePageRef.current?.id ?? undefined,
       replacePageTitle: activePageRef.current?.sheetTitle,
     });
-  }, []);
+  }, [ensureSavedBeforeNavigation]);
 
   const exportCurrentSourceSheet = useCallback(async () => {
     const p = projectRef.current;
@@ -728,23 +729,26 @@ export default function App() {
 
   /** Rebuild the active page's normalized blocks from its linked worksheet. */
   const rebuildCurrentPageFromSource = useCallback(async () => {
-    document.dispatchEvent(new CustomEvent('singh360:capture-active-editors'));
-    const el = document.activeElement as HTMLElement | null;
-    el?.blur?.();
-    const page = activePageRef.current;
-    const p = projectRef.current;
+    const p = captureActivePageState();
+    const page = p?.pages.find((candidate) => candidate.id === activePageRef.current?.id);
     const pageId = page?.id;
     const wsId = page?.linkedWorksheetId;
     if (!pageId || !wsId || !page || !p) return;
     const ws = p.worksheets.find((w) => w.id === wsId);
     if (!ws) return;
 
-    let serverSnapshotName: string | undefined;
+    if (!await confirmLatestProjectSaved(15_000)) {
+      window.alert('Save failed. The imported table was not rebuilt, so the latest annotations remain unchanged.');
+      return;
+    }
+
+    let serverSnapshotName: string;
     try {
       const backup = await savePageRebuildBackup(p.id, pageId, page);
       serverSnapshotName = backup.name;
-    } catch {
-      /* server backup is best-effort */
+    } catch (error) {
+      window.alert(`Could not create the required pre-rebuild history snapshot. No layout was changed.\n\n${String(error)}`);
+      return;
     }
     pageRebuildHistoryRef.current.pushBeforeRebuild(page, serverSnapshotName);
     setPageRebuildTick((n) => n + 1);
@@ -756,7 +760,7 @@ export default function App() {
       return;
     }
     applyPageRebuild(pageId, rebuilt);
-  }, [applyPageRebuild]);
+  }, [applyPageRebuild, captureActivePageState, confirmLatestProjectSaved]);
 
   const applyWorksheetPatch = useCallback((
     wsId: string,
@@ -885,6 +889,93 @@ export default function App() {
       canvasApiRef.current?.addImage(asset.url, asset.name);
     } catch (err) {
       console.error('drop image failed', err);
+    }
+  };
+
+  const createImagePageFromFile = async (file: File): Promise<boolean> => {
+    const saved = await ensureSavedBeforeNavigation();
+    if (!saved) return false;
+    const projectId = projectRef.current?.id;
+    if (!projectId) return false;
+    try {
+      const [asset, digest] = await Promise.all([
+        uploadAssetFile(projectId, file),
+        crypto.subtle.digest('SHA-256', await file.arrayBuffer()).then((bytes) =>
+          [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, '0')).join(''),
+        ),
+      ]);
+      if (asset.sha256 !== digest) throw new Error('The project-local image copy failed SHA-256 verification.');
+      const dimensions = await new Promise<{ width: number; height: number }>((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve({ width: image.naturalWidth || 1600, height: image.naturalHeight || 880 });
+        image.onerror = () => resolve({ width: 1600, height: 880 });
+        image.src = asset.url;
+      });
+      const maxWidth = 1560;
+      const maxHeight = 840;
+      const scale = Math.min(maxWidth / dimensions.width, maxHeight / dimensions.height, 1);
+      const now = new Date().toISOString();
+      const pageId = newPageId();
+      let appended = false;
+      const updated = setProjectSync((latest) => {
+        if (!latest || latest.id !== projectId) return latest;
+        const sheetCode = suggestedSheetCode(file.name)
+          || nextLogicalSheetCode(latest.pages, activePageRef.current?.id);
+        const page: PageModel = {
+          id: pageId,
+          order: latest.pages.length + 1,
+          include: true,
+          sheetCode,
+          displaySheetCode: sheetCode,
+          sheetTitle: file.name.replace(/\.[^.]+$/, '') || 'Imported Image',
+          sheetTab: '',
+          pageType: 'image',
+          pageFamily: 'image',
+          template: 'canvas',
+          templateId: '',
+          blocks: [],
+          canvasObjects: [{
+            type: 'image',
+            objectId: newCanvasObjectId(),
+            objName: file.name,
+            src: asset.url,
+            sourceUrl: asset.url,
+            left: 20 + (maxWidth - dimensions.width * scale) / 2,
+            top: 20 + (maxHeight - dimensions.height * scale) / 2,
+            width: dimensions.width,
+            height: dimensions.height,
+            scaleX: scale,
+            scaleY: scale,
+            originX: 'left',
+            originY: 'top',
+          }],
+          notes: '',
+          createdAt: now,
+          modifiedAt: now,
+          sourceImport: {
+            id: `image_${pageId}`,
+            groupId: `image_${pageId}`,
+            type: 'image',
+            originalName: file.name,
+            sha256: asset.sha256,
+            localAsset: asset.storedFileName,
+            projectLocalPath: asset.projectLocalPath,
+            placementMode: 'fit_body',
+            importedAt: now,
+          },
+        };
+        appended = true;
+        return { ...latest, pages: withPageNumbers([...latest.pages, page]) };
+      });
+      if (!updated || !appended) {
+        throw new Error('The open project changed before the image page could be added.');
+      }
+      setActivePageId(pageId);
+      setPdfCropOpen(false);
+      return true;
+    } catch (error) {
+      console.error('Image import failed', error);
+      throw error;
     }
   };
 
@@ -1207,6 +1298,10 @@ export default function App() {
   // Priority: image/png > image/* > SVG from text/html > HTML table → text box > text/plain
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
+      if (layoutRebuildBusyRef.current) {
+        e.preventDefault();
+        return;
+      }
       if (isClipboardEditingContext(e.target)) return;
       if (!isCanvasContext()) return;
       if (activePageRef.current?.excelLayout) return;
@@ -1299,6 +1394,10 @@ export default function App() {
   // Global keyboard: source undo/redo, canvas delete/undo, quick tools.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (layoutRebuildBusyRef.current) {
+        e.preventDefault();
+        return;
+      }
       const k = e.key.toLowerCase();
       if (isClipboardEditingContext(e.target)) return;
       if (viewModeRef.current === 'source' && (e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
@@ -1400,13 +1499,40 @@ export default function App() {
   }
 
   const updatePages = async (pages: PageModel[]) => {
+    // Child page-management surfaces receive the last rendered page array.
+    // Capture may synchronously advance projectRef beyond that render, so apply
+    // only fields the child actually changed compared with its rendered input.
+    // This preserves freshly captured Fabric/DOM content while still accepting
+    // reorder, rename, recode, status, and template operations by stable ID.
+    const renderedPages = project?.pages ?? [];
     captureActivePageState();
     const cur = projectRef.current;
     if (!cur) return;
-    const numbered = withPageNumbers(pages);
+    const renderedById = new Map(renderedPages.map((page) => [page.id, page]));
+    const authoritativeById = new Map(cur.pages.map((page) => [page.id, page]));
+    const incomingIds = new Set(pages.map((page) => page.id));
+    const merged = pages.map((incoming) => {
+      const authoritative = authoritativeById.get(incoming.id);
+      const rendered = renderedById.get(incoming.id);
+      if (!authoritative || !rendered) return incoming;
+      const next = { ...authoritative } as PageModel & Record<string, unknown>;
+      const incomingRecord = incoming as PageModel & Record<string, unknown>;
+      const renderedRecord = rendered as PageModel & Record<string, unknown>;
+      Object.keys(incomingRecord).forEach((key) => {
+        if (key === 'id') return;
+        if (JSON.stringify(incomingRecord[key]) !== JSON.stringify(renderedRecord[key])) {
+          next[key] = incomingRecord[key];
+        }
+      });
+      return next;
+    });
+    cur.pages.forEach((page) => {
+      if (!incomingIds.has(page.id)) merged.push(page);
+    });
+    const numbered = stampChangedPages(cur.pages, withPageNumbers(merged));
     const next: ProjectModel = { ...cur, pages: numbered };
     setProjectSync(next);
-    await flushSave();
+    await confirmLatestProjectSaved(15_000);
   };
 
   // Single source of truth for per-page edits. Every edit surface (tab, left
@@ -1415,7 +1541,10 @@ export default function App() {
   const patchPage = (pageId: string, patch: Partial<PageModel>) => {
     setProjectSync((prev) => {
       if (!prev) return prev;
-      const pages = withPageNumbers(prev.pages.map((p) => (p.id === pageId ? { ...p, ...patch } : p)));
+      const pages = stampChangedPages(
+        prev.pages,
+        withPageNumbers(prev.pages.map((p) => (p.id === pageId ? { ...p, ...patch } : p))),
+      );
       return { ...prev, pages };
     });
   };
@@ -1429,7 +1558,10 @@ export default function App() {
     captureActivePageState();
     const cur = projectRef.current;
     if (!cur) return;
-    const next = withPageNumbers(fn(cur.pages).map((p, i) => ({ ...p, order: i + 1 })));
+    const next = stampChangedPages(
+      cur.pages,
+      withPageNumbers(fn(cur.pages).map((p, i) => ({ ...p, order: i + 1 }))),
+    );
     const nextProject = { ...cur, pages: next };
     setProjectSync(nextProject);
     void flushSave();
@@ -1461,7 +1593,7 @@ export default function App() {
     if (!latest || latest.id !== current.id) throw new Error('The active project changed before the page could be added.');
     const pageId = newPageId();
     const cleanTitle = title.trim() || 'SYMBOL HIGHLIGHT PLAN';
-    const cleanCode = sheetCode.trim() || 'NEW';
+    const cleanCode = sheetCode.trim() || nextLogicalSheetCode(latest.pages, activePageRef.current?.id);
     const page: PageModel = {
       id: pageId,
       order: latest.pages.length + 1,
@@ -1533,7 +1665,7 @@ export default function App() {
     if (completed) writeRecoverySnapshot(completed);
     const saved = await confirmLatestProjectSaved();
     if (!saved) {
-      throw new Error('The highlighted and count-summary pages were created, but the project save could not be confirmed. Use Save Now before navigating away.');
+      throw new Error('The highlighted and count-summary pages were created, but the project save could not be confirmed. Use Save Project before navigating away.');
     }
   };
 
@@ -1542,7 +1674,16 @@ export default function App() {
       const idx = pages.findIndex((p) => p.id === id);
       if (idx < 0) return pages;
       const src = pages[idx];
-      const copy = duplicateAsAppManagedPage(src, newPageId());
+      if (isCoverPage(src) || isSheetIndexPage(src)) return pages;
+      const now = new Date().toISOString();
+      const code = nextLogicalSheetCode(pages, id);
+      const copy = {
+        ...duplicateAsAppManagedPage(src, newPageId()),
+        sheetCode: code,
+        displaySheetCode: code,
+        createdAt: now,
+        modifiedAt: now,
+      };
       const out = [...pages];
       out.splice(idx + 1, 0, copy);
       return out;
@@ -1556,12 +1697,16 @@ export default function App() {
       const index = pages.findIndex((page) => page.id === id);
       if (index < 0) return pages;
       const source = pages[index];
+      if (isCoverPage(source) || isSheetIndexPage(source)) return pages;
       const newId = newPageId();
+      const now = new Date().toISOString();
       const copy: PageModel = {
         ...duplicateAsAppManagedPage(source, newId),
         sheetTitle: title.trim() || `${source.sheetTitle} Copy`,
-        sheetCode: code.trim() || 'NEW',
-        displaySheetCode: code.trim() || 'NEW',
+        sheetCode: code.trim() || nextLogicalSheetCode(pages, id),
+        displaySheetCode: code.trim() || nextLogicalSheetCode(pages, id),
+        createdAt: now,
+        modifiedAt: now,
       };
       const next = [...pages];
       next.splice(index + 1, 0, copy);
@@ -1577,7 +1722,7 @@ export default function App() {
   ) => {
     addSheetFromModal(
       title.trim() || 'New Sheet',
-      code.trim() || 'NEW',
+      code.trim() || nextLogicalSheetCode(projectRef.current?.pages ?? [], id),
       'canvas',
       id,
       where,
@@ -1592,20 +1737,35 @@ export default function App() {
     mutatePages((pages) => {
       const idx = pages.findIndex((p) => p.id === refId);
       if (idx < 0) return pages;
+      const now = new Date().toISOString();
+      const cleanCode = code.trim() || nextLogicalSheetCode(pages, refId);
       const blank: PageModel = {
         id: newPageId(),
         order: 0,
         include: true,
-        sheetCode: code.trim(),
-        displaySheetCode: code.trim(),
+        sheetCode: cleanCode,
+        displaySheetCode: cleanCode,
         sheetTitle: title || 'New Sheet',
         sheetTab: '',
         pageType: template as PageModel['pageType'] || 'data-grid',
         template: template,
         templateId: '',
-        blocks: template === 'canvas' ? [] : [{ id: `b_${newPageId()}`, type: 'paragraph', text: '' }],
+        blocks: template === 'canvas'
+          ? []
+          : [
+              { id: `b_${newPageId()}`, type: 'paragraph', text: '', editable: true },
+              {
+                id: `b_${newPageId()}`,
+                type: 'table',
+                headers: ['Column 1', 'Column 2', 'Notes'],
+                rows: [['', '', '']],
+                editable: true,
+              },
+            ],
         canvasObjects: [],
         notes: '',
+        createdAt: now,
+        modifiedAt: now,
       };
       const out = [...pages];
       out.splice(where === 'before' ? idx : idx + 1, 0, blank);
@@ -1615,18 +1775,151 @@ export default function App() {
     setAddSheetPending(null);
   };
 
-  const deletePage = (id: string) => {
+  const deletePage = async (id: string) => {
     const target = projectRef.current?.pages.find((page) => page.id === id);
-    if (target && isSheetIndexPage(target)) {
-      window.alert('The Sheet Index / TOC is required and cannot be deleted. Excluded pages are removed from it automatically.');
+    // Keep the selected-page identity across the archive save. Removing the
+    // selected page makes the next render set activePageRef.current to null;
+    // reading that ref after the await would strand the editor in its empty
+    // state even though the archive reached the server successfully.
+    const activePageIdBeforeArchive = activePageRef.current?.id ?? null;
+    if (target && (target.pageType === 'cover' || isSheetIndexPage(target))) {
+      window.alert('The app-managed Cover and Sheet Index cannot be archived. They update automatically from the project.');
       return;
     }
-    if (!window.confirm('Delete this page? This cannot be undone. (Tip: use Exclude to keep it out of the package instead.)')) return;
-    if (activePageId === id) {
-      const remaining = project?.pages.filter((p) => p.id !== id) ?? [];
-      setActivePageId(remaining[0]?.id ?? null);
+    if (!target || !window.confirm(`Archive page "${target.sheetTitle}"? You can restore it from Archived Pages.`)) return;
+    // Archiving is a navigation operation. Capture the live Fabric canvas
+    // before removing any page from React state, then require the exact archive
+    // snapshot to reach the server before switching away. Otherwise a quick
+    // draw -> Archive gesture can archive a stale page and lose the last edit.
+    const authoritative = captureActivePageState();
+    if (!authoritative) return;
+    const index = authoritative.pages.findIndex((page) => page.id === id);
+    if (index < 0) return;
+    const groupIds = new Set(
+      target.continuationOf
+        ? [id]
+        : authoritative.pages
+          .filter((page) => page.id === id || page.continuationOf === id)
+          .map((page) => page.id),
+    );
+    const archivedGroupRootId = id;
+    const archivedAt = new Date().toISOString();
+    const archived = authoritative.pages.flatMap((page, pageIndex) => (
+      groupIds.has(page.id)
+        ? [{
+            ...page,
+            include: false,
+            archivedInclude: page.include,
+            archivedAt,
+            archivedReason: page.id === id
+              ? 'Archived from Pages panel'
+              : `Archived with continuation group ${target.sheetCode || target.sheetTitle}`,
+            archivedFromIndex: pageIndex,
+            archivedPreviousPageId: authoritative.pages[pageIndex - 1]?.id || '',
+            archivedNextPageId: authoritative.pages[pageIndex + 1]?.id || '',
+            archivedGroupRootId,
+            modifiedAt: archivedAt,
+          }]
+        : []
+    ));
+    const archivedProject: ProjectModel = {
+      ...authoritative,
+      pages: withPageNumbers(authoritative.pages.filter((page) => !groupIds.has(page.id))),
+      archivedPages: [...(authoritative.archivedPages ?? []), ...archived],
+    };
+    const normalizedArchivedProject = setProjectSync(archivedProject) ?? archivedProject;
+    writeRecoverySnapshot(normalizedArchivedProject);
+
+    const saved = await confirmLatestProjectSaved(15_000);
+    if (!saved) {
+      projectRef.current = authoritative;
+      setProject(authoritative);
+      writeRecoverySnapshot(authoritative);
+      window.alert('Archive failed. The page and its captured edits were restored; try Save Project and archive again.');
+      return;
     }
-    mutatePages((pages) => pages.filter((p) => p.id !== id));
+    if (activePageIdBeforeArchive && groupIds.has(activePageIdBeforeArchive)) {
+      const remaining = projectRef.current?.pages ?? [];
+      const next = remaining[Math.min(index, Math.max(0, remaining.length - 1))] ?? remaining[index - 1] ?? remaining[0];
+      setActivePageId(next?.id ?? null);
+      if (next?.linkedWorksheetId) setSelectedWorksheetId(next.linkedWorksheetId);
+      else {
+        setSelectedWorksheetId(undefined);
+        setViewMode('normalized');
+      }
+      setSelection(null);
+    }
+  };
+
+  const restoreArchivedPage = async (id: string) => {
+    const authoritative = captureActivePageState();
+    if (!authoritative) return;
+    const selected = (authoritative.archivedPages ?? []).find((page) => page.id === id);
+    if (!selected) return;
+    const inferredLegacyGroupRoot = selected.continuationOf
+      && (authoritative.archivedPages ?? []).some((page) => page.id === selected.continuationOf)
+      ? selected.continuationOf
+      : '';
+    const archivedGroupRootId = selected.archivedGroupRootId || inferredLegacyGroupRoot;
+    const groupIds = new Set(
+      archivedGroupRootId
+        ? (authoritative.archivedPages ?? [])
+          .filter((page) => (
+            page.archivedGroupRootId === archivedGroupRootId
+            || page.id === archivedGroupRootId
+            || page.continuationOf === archivedGroupRootId
+          ))
+          .map((page) => page.id)
+        : selected.continuationOf
+          ? [id]
+          : (authoritative.archivedPages ?? [])
+            .filter((page) => page.id === id || page.continuationOf === id)
+            .map((page) => page.id),
+    );
+    const group = (authoritative.archivedPages ?? [])
+      .filter((page) => groupIds.has(page.id))
+      .sort((a, b) => (a.archivedFromIndex ?? Number.MAX_SAFE_INTEGER) - (b.archivedFromIndex ?? Number.MAX_SAFE_INTEGER));
+    const remaining = (authoritative.archivedPages ?? []).filter((page) => !groupIds.has(page.id));
+    const restoredAt = new Date().toISOString();
+    const pages = [...authoritative.pages];
+    for (const archived of group) {
+      const previousIndex = pages.findIndex((page) => page.id === archived.archivedPreviousPageId);
+      const nextIndex = pages.findIndex((page) => page.id === archived.archivedNextPageId);
+      const fallbackIndex = Math.max(0, Math.min(pages.length, archived.archivedFromIndex ?? pages.length));
+      const insertAt = previousIndex >= 0 ? previousIndex + 1 : nextIndex >= 0 ? nextIndex : fallbackIndex;
+      const restored = {
+        ...archived,
+        include: archived.archivedInclude ?? true,
+        archivedAt: undefined,
+        archivedReason: undefined,
+        archivedFromIndex: undefined,
+        archivedPreviousPageId: undefined,
+        archivedNextPageId: undefined,
+        archivedInclude: undefined,
+        archivedGroupRootId: undefined,
+        lastArchivedAt: archived.archivedAt || '',
+        lastArchivedReason: archived.archivedReason || '',
+        lastArchivedFromIndex: archived.archivedFromIndex ?? insertAt,
+        lastArchivedGroupRootId: archived.archivedGroupRootId || archived.id,
+        restoredAt,
+        modifiedAt: restoredAt,
+      };
+      pages.splice(insertAt, 0, restored);
+    }
+    const restoredProject: ProjectModel = {
+      ...authoritative,
+      pages: withPageNumbers(pages),
+      archivedPages: remaining,
+    };
+    const normalizedRestoredProject = setProjectSync(restoredProject) ?? restoredProject;
+    writeRecoverySnapshot(normalizedRestoredProject);
+    const saved = await confirmLatestProjectSaved(15_000);
+    if (!saved) {
+      projectRef.current = authoritative;
+      setProject(authoritative);
+      writeRecoverySnapshot(authoritative);
+      window.alert('Restore failed. The archived-page state was kept unchanged; try Save Project and restore again.');
+    }
   };
 
   const setPageIncludedAtStoredPosition = (
@@ -1634,41 +1927,31 @@ export default function App() {
     pageId: string,
     include: boolean,
   ): PageModel[] => {
-    const index = pages.findIndex((page) => page.id === pageId);
-    if (index < 0) return pages;
-    const target = pages[index];
+    const target = pages.find((page) => page.id === pageId);
+    if (!target) return pages;
     if (target.include === include) return pages;
-
-    if (!include) {
-      return pages.map((page, pageIndex) => (
-        page.id === pageId
-          ? { ...page, include: false, restorePackageIndex: pageIndex }
-          : page
-      ));
-    }
-
-    const remaining = pages.filter((page) => page.id !== pageId);
-    const rawIndex = Number.isFinite(target.restorePackageIndex)
-      ? Number(target.restorePackageIndex)
-      : remaining.length;
-    const insertAt = Math.max(0, Math.min(remaining.length, rawIndex));
-    const restored = { ...target, include: true, restorePackageIndex: undefined };
-    const next = [...remaining];
-    next.splice(insertAt, 0, restored);
-    return next;
+    // Include is an export flag, not an ordering operation. Re-including a
+    // page must keep the position the user chose while it was excluded.
+    return pages.map((page) => (
+      page.id === pageId
+        ? { ...page, include, restorePackageIndex: undefined }
+        : page
+    ));
   };
 
   const toggleInclude = (id: string) =>
     mutatePages((pages) => {
       const target = pages.find((page) => page.id === id);
+      if (target && (isCoverPage(target) || isSheetIndexPage(target))) return pages;
       return target ? setPageIncludedAtStoredPosition(pages, id, !target.include) : pages;
     });
 
   // S360 RAPID PAGE REVIEW V35
   const toggleIncludeAndAdvance = async () => {
     if (rapidReviewBusy) return;
-    const currentPage = activePageRef.current;
-    const currentProject = projectRef.current;
+    const activePageIdBeforeCapture = activePageRef.current?.id;
+    const currentProject = captureActivePageState();
+    const currentPage = currentProject?.pages.find((page) => page.id === activePageIdBeforeCapture);
     if (!currentPage || !currentProject) return;
     const includeLocked = currentPage.pageType === 'cover' || isSheetIndexPage(currentPage);
     if (includeLocked) return;
@@ -1768,9 +2051,9 @@ export default function App() {
     }
 
     const suggestedCode = suggestedSheetCode(worksheet.name);
-    const codeInput = window.prompt('Sheet code for the published page:', suggestedCode);
+    const codeInput = window.prompt('Sheet code for the new drawing page:', suggestedCode);
     if (codeInput === null) return;
-    const titleInput = window.prompt('Published page title:', worksheet.name);
+    const titleInput = window.prompt('Drawing page title:', worksheet.name);
     if (titleInput === null) return;
     const id = newPageId();
     const base: PageModel = {
@@ -1818,6 +2101,12 @@ export default function App() {
       const idx = pages.findIndex((p) => p.id === id);
       const t = idx + dir;
       if (idx < 0 || t < 0 || t >= pages.length) return pages;
+      if (
+        isCoverPage(pages[idx])
+        || isSheetIndexPage(pages[idx])
+        || isCoverPage(pages[t])
+        || isSheetIndexPage(pages[t])
+      ) return pages;
       const out = [...pages];
       [out[idx], out[t]] = [out[t], out[idx]];
       return out;
@@ -1849,37 +2138,130 @@ export default function App() {
 
   const renamePagePrompt = (id: string) => {
     const cur = project?.pages.find((p) => p.id === id);
+    if (!cur || isCoverPage(cur) || isSheetIndexPage(cur)) return;
     const v = window.prompt('Sheet title:', cur?.sheetTitle ?? '');
     if (v !== null) patchPage(id, { sheetTitle: v.trim() || 'Untitled Sheet' });
   };
   const editCodePrompt = (id: string) => {
     const cur = project?.pages.find((p) => p.id === id);
+    if (!cur || isCoverPage(cur) || isSheetIndexPage(cur)) return;
     const v = window.prompt('Sheet code:', cur?.displaySheetCode || cur?.sheetCode || '');
     if (v !== null) patchPage(id, { sheetCode: v.trim(), displaySheetCode: v.trim() });
+  };
+
+  const openAddImportPage = async () => {
+    const saved = await ensureSavedBeforeNavigation();
+    if (saved) setPdfCropOpen(true);
+  };
+
+  const openProjectSettings = async () => {
+    const saved = await ensureSavedBeforeNavigation();
+    if (saved) setProjectSettingsOpen(true);
+  };
+
+  const saveProjectSettings = async (update: ProjectSettingsUpdate): Promise<boolean> => {
+    captureActivePageState();
+    const next = setProjectSync((latest) => {
+      if (!latest) return latest;
+      return {
+        ...latest,
+        projectMode: 'standalone_layout',
+        projectDisplayName: update.projectDisplayName,
+        coverSettings: {
+          ...(latest.coverSettings || {}),
+          managed: true,
+          include: update.includeCover,
+        },
+        pages: latest.pages.map((page) => (
+          page.managedPage === 'cover' || page.pageType === 'cover'
+            ? { ...page, include: update.includeCover }
+            : page
+        )),
+        metadata: {
+          ...latest.metadata,
+          ...update.metadata,
+        },
+      };
+    });
+    if (!next) return false;
+    writeRecoverySnapshot(next);
+    const saved = await confirmLatestProjectSaved(15_000);
+    if (saved) setProjectSettingsOpen(false);
+    return saved;
+  };
+
+  const openWorksheetImport = async (options: {
+    afterPageId?: string;
+    replacePageId?: string;
+    replacePageTitle?: string;
+  }) => {
+    const saved = await ensureSavedBeforeNavigation();
+    if (saved) setImportWsOpen(options);
+  };
+
+  const waitForEditorPaint = async () => {
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  };
+
+  const openSavePageTemplate = async (pageId: string) => {
+    const target = projectRef.current?.pages.find((page) => page.id === pageId);
+    if (!target || isCoverPage(target) || isSheetIndexPage(target)) return;
+    if (activePageRef.current?.id !== pageId) {
+      await switchPageSafely(pageId);
+      await waitForEditorPaint();
+      if (activePageRef.current?.id !== pageId) return;
+    }
+    const saved = await captureAndSave();
+    if (!saved) {
+      window.alert('Save failed. The page template was not opened so its drawing content cannot be stale.');
+      return;
+    }
+    setSaveTemplateOpen(true);
+  };
+
+  const openInsertPageTemplate = async (pageId: string) => {
+    const target = projectRef.current?.pages.find((page) => page.id === pageId);
+    if (!target) return;
+    if (activePageRef.current?.id !== pageId) {
+      await switchPageSafely(pageId);
+      await waitForEditorPaint();
+      if (activePageRef.current?.id !== pageId) return;
+    } else if (!await ensureSavedBeforeNavigation()) {
+      return;
+    }
+    setTemplateLibManageOnly(false);
+    setTemplateLibOpen(true);
   };
 
   // Build the shared page-action menu for a page id (tab + left list reuse it).
   const buildPageActions = (id: string) => {
     const pg = project?.pages.find((p) => p.id === id);
     const isCont = !!pg?.continuationOf || !!pg?.generatedContinuation;
-    const actions = [
-      { label: 'Rename Sheet Title', onClick: () => renamePagePrompt(id) },
-      { label: 'Edit Sheet Code', onClick: () => editCodePrompt(id) },
-      { label: 'Duplicate Sheet', divider: true, onClick: () => duplicatePage(id) },
-      { label: 'Add Blank Sheet Before', onClick: () => addPage(id, 'before') },
-      { label: 'Add Blank Sheet After', onClick: () => addPage(id, 'after') },
-      { label: 'Import Worksheet from Excel', onClick: () => setImportWsOpen({ afterPageId: id }) },
-      { label: 'Save Page as Template', onClick: () => { setActivePageId(id); setSaveTemplateOpen(true); } },
-      { label: 'Insert Page Template', onClick: () => { setActivePageId(id); setTemplateLibManageOnly(false); setTemplateLibOpen(true); } },
-      { label: pg?.include ? 'Exclude Page' : 'Include Page', divider: true, onClick: () => toggleInclude(id) },
-      { label: 'Delete Page', onClick: () => deletePage(id) },
-      { label: 'Move Left', divider: true, onClick: () => movePage(id, -1) },
-      { label: 'Move Right', onClick: () => movePage(id, 1) },
+    const managed = !!pg && (isCoverPage(pg) || isSheetIndexPage(pg));
+    const actions: Array<{
+      label: string;
+      onClick: () => void;
+      disabled?: boolean;
+      divider?: boolean;
+    }> = [
+      { label: 'Rename Sheet Title', disabled: managed, onClick: () => renamePagePrompt(id) },
+      { label: 'Edit Sheet Code', disabled: managed, onClick: () => editCodePrompt(id) },
+      { label: 'Duplicate Sheet', divider: true, disabled: managed, onClick: () => duplicatePage(id) },
+      { label: 'Add Blank Sheet Before', disabled: managed, onClick: () => addPage(id, 'before') },
+      { label: 'Add Blank Sheet After', disabled: managed, onClick: () => addPage(id, 'after') },
+      { label: 'Import Worksheet from Excel', onClick: () => { void openWorksheetImport({ afterPageId: id }); } },
+      { label: 'Save Page as Template', disabled: managed, onClick: () => { void openSavePageTemplate(id); } },
+      { label: 'Insert Page Template', onClick: () => { void openInsertPageTemplate(id); } },
+      { label: pg?.include ? 'Exclude Page' : 'Include Page', divider: true, disabled: managed, onClick: () => toggleInclude(id) },
+      { label: 'Archive Page', disabled: managed, onClick: () => { void deletePage(id); } },
+      { label: 'Move Left', divider: true, disabled: managed, onClick: () => movePage(id, -1) },
+      { label: 'Move Right', disabled: managed, onClick: () => movePage(id, 1) },
     ];
     if (isCont) {
       actions.push(
-        { label: 'Make Independent', divider: true, onClick: () => makeIndependent(id) },
-        { label: 'Merge Into Previous', onClick: () => mergeContinuationIntoPrevious(id) },
+        { label: 'Make Independent', divider: true, disabled: managed, onClick: () => makeIndependent(id) },
+        { label: 'Merge Into Previous', disabled: managed, onClick: () => mergeContinuationIntoPrevious(id) },
       );
     }
     return actions;
@@ -1891,14 +2273,21 @@ export default function App() {
       const idx = pages.findIndex((p) => p.id === activePageId);
       if (idx < 0) return pages;
       if (mode === 'new_after') {
+        const now = new Date().toISOString();
+        const copyId = newPageId();
+        const code = nextLogicalSheetCode(pages, activePageId);
         const copy: PageModel = {
           ...structuredClone(tplPage),
-          id: newPageId(),
+          id: copyId,
           order: pages[idx].order + 0.5,
-          pageGroupId: newPageId(),
+          pageGroupId: copyId,
           continuationOf: null,
           generatedContinuation: false,
+          createdAt: now,
+          modifiedAt: now,
           include: true,
+          sheetCode: code,
+          displaySheetCode: code,
         };
         const next = [...pages];
         next.splice(idx + 1, 0, copy);
@@ -1930,55 +2319,85 @@ export default function App() {
     setSaveStatus('dirtyLocal');
   };
 
-  const onUploadWorkbook = async (file: File) => {
-    const ok = await ensureSavedBeforeNavigation();
-    if (!ok) return;
-    // PHASE E: a project is already open — merge the workbook into it
-    // (same project id, manual layout pages preserved) instead of always
-    // bootstrapping a brand-new project from the upload.
-    if (project) {
-      setPendingReimportFile(file);
-    } else {
-      setPendingWorkbookFile(file);
+  const reapplyPagePagination = async (pageId: string) => {
+    const authoritative = captureActivePageState();
+    const pg = authoritative?.pages.find((page) => page.id === pageId);
+    if (!authoritative || !pg?.linkedWorksheetId || pg.renderMode !== 'excel_exact') return;
+    if (!await confirmLatestProjectSaved(15_000)) {
+      window.alert('Save failed. Pagination was not rebuilt, so the latest annotations remain unchanged.');
+      return;
     }
-  };
-
-  const onReimportedWorkbook = async () => {
-    setPendingReimportFile(null);
-    if (!project) return;
+    let snapshotName: string;
     try {
-      const p = await getProject(project.id);
-      resetSourceEditState();
-      establishSavedBaseline(p);
-      setSelection(null);
-    } catch (err) {
-      console.error('refresh after reimport failed', err);
+      const backup = await savePageRebuildBackup(authoritative.id, pageId, pg);
+      snapshotName = backup.name;
+    } catch (error) {
+      window.alert(`Could not create the required pre-pagination history snapshot. No layout was changed.\n\n${String(error)}`);
+      return;
+    }
+    pageRebuildHistoryRef.current.pushBeforeRebuild(pg, snapshotName);
+    setPageRebuildTick((count) => count + 1);
+    const next: ProjectModel = {
+      ...authoritative,
+      pages: regenerateExcelGroup(authoritative, pg.linkedWorksheetId),
+      paginationLocked: true,
+    };
+    setProjectSync(next);
+    writeRecoverySnapshot(next);
+    if (!await confirmLatestProjectSaved(15_000)) {
+      projectRef.current = authoritative;
+      setProject(authoritative);
+      writeRecoverySnapshot(authoritative);
+      window.alert('Pagination save failed. The captured pre-pagination project was restored.');
     }
   };
 
-  const reapplyPagePagination = (pageId: string) => {
-    const pg = project?.pages.find((p) => p.id === pageId);
-    if (!pg?.linkedWorksheetId || pg.renderMode !== 'excel_exact') return;
-    setProjectSync((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        pages: regenerateExcelGroup(prev, pg.linkedWorksheetId as string),
-        paginationLocked: true,
-      };
-    });
-  };
-
-  const finishWorkbookImport = async (id: string) => {
-    setPendingWorkbookFile(null);
-    const p = await getProject(id);
-    resetSourceEditState();
-    establishSavedBaseline(p);
-    const firstPage = p.pages?.[0];
-    setActivePageId(firstPage?.id ?? null);
-    setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? p.worksheets?.[0]?.id);
-    setSelection(null);
-    window.history.replaceState({}, '', `?project=${id}`);
+  const applyExcelLayout = async (
+    pageId: string,
+    layoutOverride: 'exact_source' | 'two_columns' | 'keep_one_page',
+  ) => {
+    const captured = captureActivePageState();
+    if (!captured) return;
+    const saved = await confirmLatestProjectSaved(15_000);
+    if (!saved) {
+      window.alert('Save failed. The imported worksheet layout was not rebuilt.');
+      return;
+    }
+    const requestProject = projectRef.current;
+    if (!requestProject) return;
+    layoutRebuildBusyRef.current = true;
+    setLayoutRebuildBusy(true);
+    setSaveNotice('Rebuilding imported worksheet layout…');
+    try {
+      const result = await autoLayoutImportedPage(requestProject.id, pageId, layoutOverride);
+      const rebuilt = normalizeProjectAssetUrls(result.project);
+      const latest = captureActivePageState();
+      if (!latest) throw new Error('The active project closed before the layout rebuild completed.');
+      const merged = reconcileLayoutRebuildResult(
+        latest,
+        rebuilt,
+        pageId,
+        result.pageIds ?? [],
+      );
+      const baseline = establishSavedBaseline(rebuilt);
+      const applied = setProjectSync(merged) ?? merged;
+      if (JSON.stringify(applied) !== JSON.stringify(baseline)) {
+        writeRecoverySnapshot(applied);
+        if (!await confirmLatestProjectSaved(15_000)) {
+          setSaveNotice('LAYOUT REBUILD SAVE FAILED');
+          window.alert('The layout was rebuilt, but newer editor changes could not be confirmed. They remain open and recoverable; retry Save Project.');
+          return;
+        }
+      }
+      setActivePageId(pageId);
+      setSaveNotice('Imported worksheet layout saved');
+    } catch (error) {
+      setSaveError(String(error));
+      setSaveNotice('LAYOUT REBUILD FAILED');
+    } finally {
+      layoutRebuildBusyRef.current = false;
+      setLayoutRebuildBusy(false);
+    }
   };
 
   const openProjectById = async (id: string) => {
@@ -2000,6 +2419,14 @@ export default function App() {
     } finally {
       setOpenProjectOpen(false);
     }
+  };
+
+  const openProjectHome = async () => {
+    if (projectRef.current) {
+      const ok = await ensureSavedBeforeNavigation();
+      if (!ok) return;
+    }
+    window.location.assign('/app');
   };
 
   const onImportedWorksheets = async (
@@ -2024,85 +2451,103 @@ export default function App() {
     }
   };
 
-  // Restore a project (from a server backup or local recovery snapshot) into the
-  // live editor and re-baseline the save manager so status is accurate.
-  const applyRestoredProject = (p: ProjectModel) => {
+  // Server restores are already persisted. Browser-local recovery snapshots
+  // must be posted and read back before they can become a saved baseline.
+  const applyRestoredProject = async (
+    p: ProjectModel,
+    source: 'server' | 'local',
+  ): Promise<boolean> => {
     resetSourceEditState();
-    establishSavedBaseline(p);
-    const firstPage = p.pages?.[0];
+    const restored = normalizeProjectAssetUrls(p);
+    if (source === 'local') {
+      projectRef.current = restored;
+      setProject(restored);
+      setSaveStatus('dirtyLocal');
+      writeRecoverySnapshot(restored);
+      const confirmed = await confirmLatestProjectSaved(15_000);
+      if (!confirmed) return false;
+    } else {
+      establishSavedBaseline(restored);
+    }
+    const current = projectRef.current ?? restored;
+    const firstPage = current.pages?.[0];
     setActivePageId(firstPage?.id ?? activePageId);
-    setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? p.worksheets?.[0]?.id);
+    setSelectedWorksheetId(firstPage?.linkedWorksheetId ?? current.worksheets?.[0]?.id);
     setSelection(null);
-    setSaveStatus(confirmedProjectSaveState(p));
+    setSaveStatus(confirmedProjectSaveState(current));
     setBackupOpen(false);
+    return true;
   };
 
   const onArchiveCurrentProject = async () => {
     if (!project) return;
     const name = project.projectDisplayName || (project.metadata as Record<string, string>)?.projectName || project.id;
-    if (!window.confirm(`Archive project "${name}"?\n\nThis moves the project to .docs/_archive/ and returns you to the landing screen. Nothing is permanently deleted.`)) return;
+    if (!window.confirm(`Archive project "${name}"?\n\nIt will move out of Active Projects but remain fully recoverable. Nothing is permanently deleted.`)) return;
     try {
+      const saved = await ensureSavedBeforeNavigation();
+      if (!saved) return;
       const res = await archiveProject(project.id);
-      window.alert(`Project archived to:\n${res.archivedTo}`);
-      setProjectSync(null);
-      setActivePageId(null);
-      window.history.replaceState({}, '', '/app');
+      window.alert(`Project archived and available under Archived Projects.\n\nPackage retained at:\n${res.archivedTo}`);
+      window.location.assign('/app');
     } catch (err) {
       window.alert(`Archive failed: ${String(err)}`);
     }
   };
 
   const onUploadCsv = async (file: File) => {
-    if (!project) return;
+    if (!project) return false;
     try {
+      const saved = await ensureSavedBeforeNavigation();
+      if (!saved) return false;
       setSaveStatus('savingLocal');
       await attachCsv(project.id, file);
       const p = await getProject(project.id);
       establishSavedBaseline(p);
+      return true;
     } catch (err) {
       console.error('CSV attach failed', err);
       setSaveStatus('saveFailed');
       setSaveError(String(err));
+      return false;
     }
   };
 
   const onExportPdfSized = async (width: number, height: number, rev: { updateRevision: boolean; newRevision: string; notes: string }, pageIds: string[]) => {
-    if (!project) return;
+    const captured = captureActivePageState();
+    if (!captured) return;
     setExportOpen(false);
-    let proj = project;
     // Optionally stamp a new revision into the title block + revision history.
     if (rev.updateRevision) {
       const today = new Date().toISOString().slice(0, 10);
-      const history = [...(project.revisionHistory ?? []), {
-        revision: rev.newRevision,
-        date: today,
-        description: rev.notes || 'Issued',
-        exportedBy: 'Singh360',
-      }];
-      proj = {
-        ...project,
-        revisionHistory: history,
-        metadata: { ...project.metadata, revision: rev.newRevision, issueDate: today },
-      };
-      projectRef.current = proj;
-      setProjectSync(proj);
+      setProjectSync((latest) => latest ? {
+        ...latest,
+        revisionHistory: [...(latest.revisionHistory ?? []), {
+          revision: rev.newRevision,
+          date: today,
+          description: rev.notes || 'Issued',
+          exportedBy: 'Singh360',
+        }],
+        metadata: { ...latest.metadata, revision: rev.newRevision, issueDate: today },
+      } : latest);
     }
-    const coverPage = proj.pages.find((pg) => pg.pageType === 'cover' && pg.linkedWorksheetId);
-    if (coverPage?.linkedWorksheetId) {
-      proj = applyCoverSourceTruth(proj, coverPage.linkedWorksheetId);
-      projectRef.current = proj;
-      setProjectSync(proj);
-    }
-    // Make sure the freshest canvas state is on the server before we render it.
-    const ok = await captureAndSave();
+    // Confirm the captured latest project (including an optional functional
+    // revision patch) before deriving warnings, filename, or export content.
+    const ok = await confirmLatestProjectSaved(15_000);
     if (!ok) return;
+    const proj = projectRef.current;
+    if (!proj) return;
     const base = proj.metadata.drawingPackageFileName || proj.projectDisplayName || proj.metadata.projectName || proj.id;
     const revSuffix = rev.updateRevision ? `_${rev.newRevision.replace(/\s+/g, '')}` : '';
     const downloadName = `${base}${revSuffix}.pdf`;
     try {
       const warnings = await fetchExportWarnings(proj.id, pageIds);
       if (warnings.length > 0) {
-        pendingExportRef.current = { width, height, downloadName, pageIds };
+        pendingExportRef.current = {
+          width,
+          height,
+          revisionSuffix: revSuffix,
+          pageIds,
+        };
         setExportWarnings(warnings);
         return;
       }
@@ -2126,7 +2571,19 @@ export default function App() {
       return;
     }
     try {
-      const blob = await exportPdf(project.id, {
+      if (!await captureAndSave()) return;
+      const latest = projectRef.current;
+      if (!latest) return;
+      const refreshedWarnings = await fetchExportWarnings(latest.id, pending.pageIds);
+      if (
+        refreshedWarnings.length > 0
+        && JSON.stringify(refreshedWarnings) !== JSON.stringify(exportWarnings ?? [])
+      ) {
+        setExportWarnings(refreshedWarnings);
+        window.alert('The saved project changed while export warnings were open. Review and confirm the updated warning list.');
+        return;
+      }
+      const blob = await exportPdf(latest.id, {
         width: pending.width,
         height: pending.height,
         pageIds: pending.pageIds,
@@ -2135,7 +2592,11 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = pending.downloadName;
+      const base = latest.metadata.drawingPackageFileName
+        || latest.projectDisplayName
+        || latest.metadata.projectName
+        || latest.id;
+      a.download = `${base}${pending.revisionSuffix}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       pendingExportRef.current = null;
@@ -2304,12 +2765,12 @@ export default function App() {
     if (!activePage?.linkedWorksheetId) return '';
     if (viewMode === 'source') {
       if (sourceCanUndo) return 'Undo available';
-      if (sourceEditStatus === 'edited' || sourceDirty) return 'Draft edited';
+      if (sourceEditStatus === 'edited' || sourceDirty) return 'Imported table edited';
       return '';
     }
-    if (rebuildValidationModal) return 'Draft rebuild failed validation — current Published page kept';
-    if (sourceEditStatus === 'updated') return 'Published updated';
-    if (sourceDirty) return 'Draft edited';
+    if (rebuildValidationModal) return 'Imported-table rebuild failed validation — current drawing kept';
+    if (sourceEditStatus === 'updated') return 'Drawing updated';
+    if (sourceDirty) return 'Imported table edited';
     return '';
   })();
 
@@ -2317,18 +2778,8 @@ export default function App() {
     <Ribbon
       saveStatus={saveStatus}
       savedAt={savedAt}
-      lastWorkbookSync={lastWorkbookSync}
       dirtyDomains={dirtyDomains}
       saveError={saveError}
-      saveStatusLabel={
-        saveStatus === 'localSavedSyncPending'
-        && (
-          /layout[\s_-]*(sandbox|only)/i.test(project?.metadata.projectName || '')
-          || /layout[\s_-]*only/i.test(project?.sourceWorkbookName || '')
-        )
-          ? 'GENERATED WORKBOOK UPDATE PENDING'
-          : undefined
-      }
       onRetrySave={() => { void saveNow(); }}
       hasProject={!!project}
       view={view}
@@ -2386,28 +2837,27 @@ export default function App() {
         fillImageToPage: () => placeSelectedImageOnPage('fill'),
         addBus: () => setBusOpen(true),
       }}
-      onUploadFile={(f) => void onUploadWorkbook(f)}
       onUploadCsv={(f) => void onUploadCsv(f)}
       onInsertImage={(f) => void onDropImageFile(f)}
-      onInsertPdfPage={() => setPdfCropOpen(true)}
+      onInsertPdfPage={() => { void openAddImportPage(); }}
       onSaveNow={() => void saveNow()}
-      onWriteExcel={() => { void writeProjectToExcel(); }}
-      writeExcelBusy={excelWriteBusy}
+      onProjectSettings={() => { void openProjectSettings(); }}
       onOpenBackups={() => setBackupOpen(true)}
       onExportPdf={() => setExportOpen(true)}
       onExportPackage={() => void onExportPackage()}
       onRenumber={onRenumber}
       renumberBadge={renumberBadge}
       onOpenProject={() => setOpenProjectOpen(true)}
-      onOpenHome={() => window.location.assign(project ? `/app?project=${project.id}` : '/app')}
+      onOpenHome={() => { void openProjectHome(); }}
       onCleanWorkspace={() => setCleanWorkspaceOpen(true)}
-      onImportWorksheet={() => setImportWsOpen({
+      onImportWorksheet={() => { void openWorksheetImport({
         afterPageId: activePageId ?? undefined,
         replacePageId: activePageId ?? undefined,
         replacePageTitle: activePage?.sheetTitle,
-      })}
-      onSavePageTemplate={() => setSaveTemplateOpen(true)}
-      onInsertPageTemplate={() => { setTemplateLibManageOnly(false); setTemplateLibOpen(true); }}
+      }); }}
+      canSavePageTemplate={!!activePage && !isCoverPage(activePage) && !isSheetIndexPage(activePage)}
+      onSavePageTemplate={() => { if (activePageId) void openSavePageTemplate(activePageId); }}
+      onInsertPageTemplate={() => { if (activePageId) void openInsertPageTemplate(activePageId); }}
       onManagePageTemplates={() => { setTemplateLibManageOnly(true); setTemplateLibOpen(true); }}
       onInsertSymbolLegend={() => setSymbolLegendOpen(true)}
       onOpenSymbolMapper={() => setSymbolMapperOpen(true)}
@@ -2459,8 +2909,8 @@ export default function App() {
         center={
           <div className="empty-stage">
             <div className="empty-card">
-              <h2>{projectLoadError ? 'Project could not be loaded' : 'No workbook loaded'}</h2>
-              <p>{projectLoadError || <>Choose a workbook (.xlsx or .xlsm) from the File tab to generate output pages and begin editing your drawing package, or <button className="link-btn" onClick={() => setOpenProjectOpen(true)}>open a saved project</button>.</>}</p>
+              <h2>{projectLoadError ? 'Project could not be loaded' : 'No drawing project open'}</h2>
+              <p>{projectLoadError || <>Return to Project Home to create a drawing set, or <button className="link-btn" onClick={() => setOpenProjectOpen(true)}>open an active project</button>.</>}</p>
             </div>
           </div>
         }
@@ -2486,13 +2936,6 @@ export default function App() {
           onCancel={() => setImportWsOpen(null)}
         />
       )}
-      {pendingWorkbookFile && (
-        <ContinuationPreviewModal
-          file={pendingWorkbookFile}
-          onImported={(id) => void finishWorkbookImport(id)}
-          onCancel={() => setPendingWorkbookFile(null)}
-        />
-      )}
       {addSheetPending && (
         <AddSheetModal
           onAdd={(title, code, tmpl) => addSheetFromModal(title, code, tmpl, addSheetPending.refId, addSheetPending.where)}
@@ -2510,19 +2953,40 @@ export default function App() {
       ribbon={ribbon}
       left={
         <>
-          <CollapsibleSection title="Published Package" hint="Included drawing pages. Drag to reorder; right-click for page actions.">
+          <CollapsibleSection title="Pages" hint="Drawing pages. Drag to reorder; right-click to duplicate, rename, include, or archive.">
+            <button type="button" className="pages-add-import" onClick={() => { void openAddImportPage(); }}>+ Add / Import Page</button>
             <SheetManager pages={project.pages} activePageId={activePageId} onSelect={(id) => { void switchPageSafely(id); }} onUpdate={(p) => void updatePages(p)} onToggleInclude={toggleInclude} onContextMenu={(id, x, y) => setPageMenu({ x, y, pageId: id })} />
           </CollapsibleSection>
-          <CollapsibleSection title="Workbook Drafts" defaultOpen={false} hint="Original workbook tabs. Open a Draft or publish an excluded worksheet.">
-            <WorkbookView
-              worksheets={project.worksheets}
-              pages={project.pages}
-              selectedWorksheetId={selectedWorksheetId}
-              onOpenDraft={(worksheetId) => { void openWorksheetDraft(worksheetId); }}
-              onPublishWorksheet={(worksheetId) => { void publishWorksheet(worksheetId); }}
-            />
-          </CollapsibleSection>
-          <CollapsibleSection title="Components" defaultOpen={false} hint="Search reusable devices and drag them onto a Published drawing page.">
+          {(project.archivedPages?.length ?? 0) > 0 && (
+            <CollapsibleSection title={`Archived Pages (${project.archivedPages?.length ?? 0})`} defaultOpen={false} hint="Recoverable pages removed from the active drawing set.">
+              <div className="archived-page-list">
+                {(project.archivedPages ?? [])
+                  .filter((page) => (
+                    (!page.archivedGroupRootId || page.id === page.archivedGroupRootId)
+                    && (!page.continuationOf || !(project.archivedPages ?? []).some((candidate) => candidate.id === page.continuationOf))
+                  ))
+                  .map((page) => {
+                    const groupRoot = page.archivedGroupRootId || page.id;
+                    const groupSize = (project.archivedPages ?? []).filter((candidate) => (
+                      candidate.archivedGroupRootId === groupRoot
+                      || candidate.id === groupRoot
+                      || candidate.continuationOf === groupRoot
+                    )).length;
+                    return (
+                  <div key={page.id} className="archived-page-item">
+                    <span className="archived-page-summary">
+                      <span><b>{page.displaySheetCode || page.sheetCode}</b> {page.sheetTitle}</span>
+                      {groupSize > 1 ? <small>Includes {groupSize - 1} continuation page{groupSize === 2 ? '' : 's'}</small> : null}
+                      <small>{page.archivedAt ? new Date(page.archivedAt).toLocaleString() : 'Archive time unavailable'} · {page.archivedReason || 'No archive reason recorded'}</small>
+                    </span>
+                    <button type="button" onClick={() => { void restoreArchivedPage(page.id); }}>Restore</button>
+                  </div>
+                    );
+                  })}
+              </div>
+            </CollapsibleSection>
+          )}
+          <CollapsibleSection title="Components" defaultOpen={false} hint="Search reusable devices and drag them onto the active drawing page.">
             <LibraryPanelV2
               onInsert={onInsertComponent}
               canInsert={canvasEnabled}
@@ -2607,11 +3071,15 @@ export default function App() {
             // canvas state with an empty canvasObjects array.
             setProjectSync((prev) => {
               if (!prev) return prev;
+              const timestamp = new Date().toISOString();
+              const pages = prev.pages.map((pg) => (
+                pg.id === pageId
+                  ? stampPageIfChanged(pg, { ...pg, canvasObjects: objects }, timestamp)
+                  : pg
+              ));
               return {
                 ...prev,
-                pages: prev.pages.map((pg) =>
-                  pg.id === pageId ? { ...pg, canvasObjects: objects } : pg,
-                ),
+                pages,
               };
             });
           }}
@@ -2690,14 +3158,10 @@ export default function App() {
                 />
               </div>
             </div>
-            <div className="field">
-              <label htmlFor="proj-file" title="Original uploaded workbook filename (read-only)">Source Workbook</label>
-              <input id="proj-file" title="Original uploaded workbook filename (read-only)" value={project.sourceWorkbookName || project.metadata.sourceFile || ''} readOnly />
-            </div>
           </div>
           <PropertiesPanel
             page={activePage}
-            onChange={(next) => patchPage(next.id, next)}
+            onChange={(patch) => patchPage(activePage.id, patch)}
             selection={selection}
             onUpdateSelection={(patch) => canvasApiRef.current?.updateSelected(patch)}
             onConnectorConvert={(kind) => canvasApiRef.current?.convertSelectedConnector(kind)}
@@ -2712,13 +3176,14 @@ export default function App() {
             projectFolder={project.projectFolder}
             onRenameProject={(name) => void onRenameProject(name)}
             overflowWarning={Array.isArray(activePage.layoutWarnings) && activePage.layoutWarnings.length > 0}
-            onMergeIntoPrevious={activePage.continuationOf ? () => mergeContinuationIntoPrevious(activePage.id) : undefined}
-            onMakeIndependent={activePage.continuationOf ? () => makeIndependent(activePage.id) : undefined}
+            onMergeIntoPrevious={activePage.continuationOf && !isSheetIndexPage(activePage) ? () => mergeContinuationIntoPrevious(activePage.id) : undefined}
+            onMakeIndependent={activePage.continuationOf && !isSheetIndexPage(activePage) ? () => makeIndependent(activePage.id) : undefined}
             onReapplyPagination={
               activePage.renderMode === 'excel_exact' && !activePage.continuationOf
                 ? () => reapplyPagePagination(activePage.id)
                 : undefined
             }
+            onApplyExcelLayout={(layout) => { void applyExcelLayout(activePage.id, layout); }}
           />
         </div>
       }
@@ -2739,6 +3204,17 @@ export default function App() {
         />
       }
     />
+    {layoutRebuildBusy && (
+      <div className="modal-backdrop" role="presentation">
+        <section className="modal" role="dialog" aria-modal="true" aria-labelledby="layout-rebuild-title" aria-busy="true">
+          <div className="modal-head"><h2 id="layout-rebuild-title">Rebuilding Imported Worksheet Layout</h2></div>
+          <div className="modal-body" role="status" aria-live="polite">
+            <p>The latest project state is locked while Singh360 rebuilds and verifies this page.</p>
+            <progress aria-label="Imported worksheet layout rebuild in progress" />
+          </div>
+        </section>
+      </div>
+    )}
     {renumberOpen && (
       <RenumberModal pages={project.pages} onApply={applyRenumber} onCancel={() => setRenumberOpen(false)} />
     )}
@@ -2762,23 +3238,9 @@ export default function App() {
         onCancel={() => setImportWsOpen(null)}
       />
     )}
-    {pendingWorkbookFile && (
-      <ContinuationPreviewModal
-        file={pendingWorkbookFile}
-        onImported={(id) => void finishWorkbookImport(id)}
-        onCancel={() => setPendingWorkbookFile(null)}
-      />
-    )}
-    {pendingReimportFile && project && (
-      <ReimportWorkbookModal
-        projectId={project.id}
-        file={pendingReimportFile}
-        onApplied={() => void onReimportedWorkbook()}
-        onCancel={() => setPendingReimportFile(null)}
-      />
-    )}
     {addSheetPending && (
       <AddSheetModal
+        suggestedCode={nextLogicalSheetCode(project.pages, addSheetPending.refId)}
         onAdd={(title, code, tmpl) => addSheetFromModal(title, code, tmpl, addSheetPending.refId, addSheetPending.where)}
         onCancel={() => setAddSheetPending(null)}
       />
@@ -2792,14 +3254,22 @@ export default function App() {
         onCancel={() => setExportOpen(false)}
       />
     )}
+    {projectSettingsOpen && project && (
+      <ProjectSettingsModal
+        project={project}
+        onCancel={() => setProjectSettingsOpen(false)}
+        onSave={saveProjectSettings}
+      />
+    )}
     {exportWarnings && (
       <ExportWarningsModal
+        key={JSON.stringify(exportWarnings)}
         warnings={exportWarnings}
         onClose={() => {
           pendingExportRef.current = null;
           setExportWarnings(null);
         }}
-        onExportAnyway={() => void onExportPdfDespiteWarnings()}
+        onExportAnyway={onExportPdfDespiteWarnings}
       />
     )}
     {rebuildValidationModal && (
@@ -2905,27 +3375,58 @@ export default function App() {
       />
     )}
     {pdfCropOpen && (
-      <PdfCropModal
-        projectId={project.id}
-        initialFileUrl={initialProjectFileId
-          ? `/api/projects/${project.id}/project-files/${initialProjectFileId}/content`
-          : undefined}
-        onInsert={(url, name, meta, mode) => {
-          setOverlayMode(true);
-          // Current-page placement is implemented now. "Create new page" is
-          // intentionally disabled in the modal for this pass.
-          canvasApiRef.current?.addPdfCrop(url, name, {
-            underlay: mode === 'underlay',
-            meta,
-          });
+      <AddImportPageModal
+        project={project}
+        onClose={() => setPdfCropOpen(false)}
+        onProjectImported={async (updated, pageIds) => {
+          try {
+            const latest = captureActivePageState();
+            if (!latest) return false;
+            const imported = normalizeProjectAssetUrls(updated);
+            const merged = reconcilePdfImportResult(latest, imported, pageIds);
+            const baseline = establishSavedBaseline(imported);
+            const applied = setProjectSync(merged) ?? merged;
+            if (
+              JSON.stringify(applied) !== JSON.stringify(baseline)
+              && !await confirmLatestProjectSaved(15_000)
+            ) {
+              return false;
+            }
+            setActivePageId(pageIds[0] ?? applied.pages[0]?.id ?? null);
+            return true;
+          } catch (error) {
+            setSaveStatus('saveFailed');
+            setSaveError(String(error));
+            return false;
+          }
+        }}
+        onBlank={(title, code) => {
+          const reference = activePageId || project.pages[project.pages.length - 1]?.id;
+          if (reference) addSheetFromModal(title, code, 'canvas', reference, 'after');
           setPdfCropOpen(false);
         }}
-        onCancel={() => setPdfCropOpen(false)}
+        onText={(title, code) => {
+          const reference = activePageId || project.pages[project.pages.length - 1]?.id;
+          if (reference) addSheetFromModal(title, code, 'data-grid', reference, 'after');
+          setPdfCropOpen(false);
+        }}
+        onImage={createImagePageFromFile}
+        onTable={() => {
+          setPdfCropOpen(false);
+          setImportWsOpen({ afterPageId: activePageId ?? undefined });
+        }}
+        onCsv={(file) => onUploadCsv(file)}
+        onTemplate={() => {
+          setPdfCropOpen(false);
+          setTemplateLibManageOnly(false);
+          setTemplateLibOpen(true);
+        }}
       />
     )}
     {backupOpen && (
       <BackupRecoveryModal
         projectId={project.id}
+        beforeRestore={ensureSavedBeforeNavigation}
         onRestore={applyRestoredProject}
         onClose={() => setBackupOpen(false)}
       />
@@ -2961,7 +3462,7 @@ export default function App() {
           { label: 'Insert Elbow Connector', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addElbow(); } },
           { label: 'Insert Connector Legend', onClick: () => { setOverlayMode(true); canvasApiRef.current?.addLegend(); } },
           { label: 'Insert Symbol Legend', onClick: () => setSymbolLegendOpen(true) },
-          { label: 'Import Worksheet from Excel', divider: true, onClick: () => setImportWsOpen({ afterPageId: activePageId ?? undefined }) },
+          { label: 'Import Worksheet from Excel', divider: true, onClick: () => { void openWorksheetImport({ afterPageId: activePageId ?? undefined }); } },
           { label: 'Add Blank Sheet After', onClick: () => activePageId && addPage(activePageId, 'after') },
           { label: 'Duplicate Current Sheet', onClick: () => activePageId && duplicatePage(activePageId) },
           { label: 'Copy', divider: true, disabled: !selection, onClick: () => canvasApiRef.current?.copySelected() },

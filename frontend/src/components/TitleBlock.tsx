@@ -10,18 +10,22 @@ function Field({ label, value }: { label: string; value?: string }) {
   return (
     <div className="tb-field">
       <span className="tb-field-label">{label}</span>
-      <span className="tb-field-value">{value || '—'}</span>
+      <span className="tb-field-value">{value || ''}</span>
     </div>
   );
 }
 
 export default function TitleBlock({ project, page }: Props) {
   const m = project.metadata;
+  // Standalone Project Settings owns the canonical author value. Keep the
+  // legacy aliases as read fallbacks so migrated projects do not lose the
+  // person previously stored as Drawn By / Created By.
+  const preparedBy = m.preparedBy || m.drawnBy || m.createdBy;
   const isContinuation = !!page.continuationOf || !!page.generatedContinuation;
   const cleanTitle = (page.sheetTitle || 'Untitled Sheet').replace(/\s*[—-]\s*CONTINUED\s*$/i, '').trim();
   const pageLabel = page.pageNumber
-    ? `Sheet ${page.pageNumber} of ${page.pageTotal ?? 0}`
-    : `Sheet — of ${page.pageTotal ?? 0}`;
+    ? `Page ${page.pageNumber} of ${page.pageTotal ?? 0}`
+    : `Page of ${page.pageTotal ?? 0}`;
   const projectName = m.projectName || project.projectDisplayName;
   const created = formatDateOnly(m.createdDate);
   const issued = formatDateOnly(m.issueDate || m.date);
@@ -46,12 +50,12 @@ export default function TitleBlock({ project, page }: Props) {
         </div>
         <div className="tb-notes">
           <span className="tb-field-label">Notes</span>
-          <span className="tb-notes-value">{page.notes || '—'}</span>
+          <span className="tb-notes-value">{page.notes || ''}</span>
         </div>
       </div>
 
       <div className="tb-cell tb-stack tb-rev">
-        <Field label="Drawn By" value={m.drawnBy || m.createdBy} />
+        <Field label="Prepared By" value={preparedBy} />
         <Field label="Checked By" value={m.checkedBy || m.editedBy} />
         <Field label="Created" value={created} />
         <div className="tb-field-pair">
@@ -62,7 +66,7 @@ export default function TitleBlock({ project, page }: Props) {
 
       <div className="tb-cell tb-code">
         <span className="tb-field-label">Sheet No.</span>
-        <span className="tb-code-value">{page.displaySheetCode || page.sheetCode || '—'}</span>
+        <span className="tb-code-value">{page.displaySheetCode || page.sheetCode || ''}</span>
         <span className="tb-page-label">{pageLabel}</span>
       </div>
     </div>

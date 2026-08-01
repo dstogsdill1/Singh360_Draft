@@ -1,8 +1,6 @@
 export type SharedWorkspaceState =
   | 'CLEAN'
   | 'DIRTY'
-  | 'PROJECT_SAVED_WORKBOOK_SYNC_PENDING'
-  | 'PROJECT_AND_WORKBOOK_MATCH'
   | 'CONFLICT';
 
 export interface WorkspaceStateSignal {

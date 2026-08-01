@@ -214,6 +214,7 @@ export default function DocumentView({
         view={view}
         viewMode={viewMode}
         sourceWorksheetName={viewMode === 'source' ? worksheet?.name : undefined}
+        hasImportedTableSource={Boolean(linkedWorksheet)}
         sourceOnly={sourceOnly}
         sourceDirty={sourceDirty}
         sourceStatusLabel={sourceStatusLabel}
@@ -266,9 +267,14 @@ export default function DocumentView({
             className={`sheet-scale ${view.showGrid ? 'show-grid' : ''}`}
             ref={scaleRef}
           >
-            <SheetFrame titleBlock={<TitleBlock project={project} page={framePage} />} sourceView={viewMode === 'source'}>
+            <SheetFrame
+              titleBlock={<TitleBlock project={project} page={framePage} />}
+              sourceView={viewMode === 'source'}
+              fullSheet={viewMode !== 'source' && (framePage.pdfPlacementMode === 'full_sheet' || framePage.suppressTitleBlock)}
+              fullSheetPageLabel={framePage.pageNumber ? `Page ${framePage.pageNumber} of ${framePage.pageTotal ?? project.pages.filter((page) => page.include).length}` : ''}
+            >
               <PageRenderer
-                key={`${activePage.id}-${worksheet?.id ?? 'none'}-${activePage.sourceRevision ?? 0}-${viewMode}`}
+                key={`${activePage.id}-${worksheet?.id ?? 'none'}-${activePage.sourceRevision ?? 0}-${activePage.sourceImport?.sourceId ?? 'no-import'}-${activePage.sourceImport?.revision ?? 0}-${viewMode}`}
                 page={activePage}
                 worksheet={worksheet}
                 project={project}

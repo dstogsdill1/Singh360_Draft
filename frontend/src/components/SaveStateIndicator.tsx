@@ -9,7 +9,6 @@ import {
 export default function SaveStateIndicator({
   state,
   lastLocalSave,
-  lastWorkbookSync,
   dirtyDomains,
   error,
   onRetry,
@@ -17,7 +16,6 @@ export default function SaveStateIndicator({
 }: {
   state: SaveState;
   lastLocalSave?: string;
-  lastWorkbookSync?: string;
   dirtyDomains: DirtyDomain[];
   error?: string;
   onRetry: () => void;
@@ -43,11 +41,6 @@ export default function SaveStateIndicator({
         {lastLocalSave && (
           <span data-help-id="status.lastLocalSave" data-status-chip="true">
             Last local save: {lastLocalSave}
-          </span>
-        )}
-        {lastWorkbookSync && (
-          <span data-help-id="status.lastWorkbookSync" data-status-chip="true">
-            Last workbook sync: {lastWorkbookSync}
           </span>
         )}
       </div>

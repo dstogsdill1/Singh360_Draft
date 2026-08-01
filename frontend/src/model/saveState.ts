@@ -5,11 +5,7 @@ export type SaveState =
   | 'dirtyLocal'
   | 'dirtyWorkspace'
   | 'savingLocal'
-  | 'localSavedSyncPending'
-  | 'writingWorkbook'
-  | 'savedAndSynced'
   | 'saveFailed'
-  | 'syncFailed'
   | 'conflict';
 
 export type DirtyDomain =
@@ -27,35 +23,12 @@ export const SAVE_STATE_LABELS: Record<SaveState, string> = {
   dirtyLocal: 'UNSAVED PROJECT EDITS',
   dirtyWorkspace: 'UNSAVED WORKSPACE EDITS',
   savingLocal: 'SAVING PROJECT…',
-  localSavedSyncPending: 'PROJECT SAVED · WORKBOOK SYNC PENDING',
-  writingWorkbook: 'SAVING PROJECT + WRITING EXCEL…',
-  savedAndSynced: 'PROJECT SAVED · WORKBOOK SYNCED',
   saveFailed: 'SAVE FAILED',
-  syncFailed: 'WORKBOOK SYNC FAILED',
-  conflict: 'PROJECT / WORKBOOK CONFLICT',
+  conflict: 'SAVE CONFLICT',
 };
 
-export function isWorkbookConflict(project: ProjectModel | null | undefined): boolean {
-  const state = project?.workbookSync?.status || project?.workbookSync?.state || '';
-  return state === 'conflict';
-}
-
-export function isWorkbookSynced(project: ProjectModel | null | undefined): boolean {
-  const state = project?.workbookSync?.status || project?.workbookSync?.state || '';
-  return state === 'in_sync'
-    && project?.workbookSync?.verified === true
-    && project?.workbookSync?.verification?.status === 'verified';
-}
-
 export function confirmedProjectSaveState(project: ProjectModel | null | undefined): SaveState {
-  if (isWorkbookConflict(project)) return 'conflict';
-  if (isWorkbookSynced(project)) return 'savedAndSynced';
-  const sync = project?.workbookSync;
-  if (
-    sync?.status === 'app_changed'
-    || sync?.status === 'pending'
-    || Boolean(sync?.warning)
-  ) return 'localSavedSyncPending';
+  void project;
   return 'cleanLocal';
 }
 
@@ -67,13 +40,12 @@ export function hasUnconfirmedLocalEdits(state: SaveState): boolean {
 }
 
 export function isSaveBusy(state: SaveState): boolean {
-  return state === 'savingLocal' || state === 'writingWorkbook';
+  return state === 'savingLocal';
 }
 
 export function saveStateHelpId(state: SaveState): string {
   if (state === 'dirtyWorkspace') return 'status.unsavedWorkspace';
   if (state === 'dirtyLocal') return 'status.unsavedProject';
-  if (state === 'localSavedSyncPending' || state === 'syncFailed') return 'status.syncPending';
   if (state === 'conflict') return 'status.conflict';
   if (state === 'saveFailed') return 'save.retry';
   return 'status.localSaved';

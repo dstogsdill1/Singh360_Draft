@@ -1,4 +1,4 @@
-export type PageType = 'data-grid' | 'canvas' | 'underlay' | 'hybrid' | 'cover' | 'index';
+export type PageType = 'data-grid' | 'canvas' | 'underlay' | 'hybrid' | 'cover' | 'index' | 'pdf' | 'image' | 'text';
 
 export interface ExcelLayoutStyle {
   fill?: string;
@@ -157,6 +157,9 @@ export interface PageBlock {
    *  same factor, which can overflow the page's real safe render area for a
    *  narrow table and silently drop bottom rows in export. */
   noGrow?: boolean;
+  /** Actual vertical render budget after page band and title-block safety gap. */
+  safeBodyHeight?: number;
+  heightSafetyFactor?: number;
   /** Optional per-block scale ceiling. Used to keep sibling schedule pages at one visual scale. */
   maxScale?: number;
   /** RDM / IDF network table (idfNetworkTable) payload — TABLE STYLE 4F. */
@@ -288,6 +291,9 @@ export interface PageModel {
   /** Show Terminated By column on RDM/IDF network tables (default hidden). */
   showTerminatedBy?: boolean;
   layoutProfile?: string;
+  /** Semantic spreadsheet arrangement; recomposed by the server when changed. */
+  layoutOverride?: 'auto' | 'exact_source' | 'one_column' | 'two_columns' | 'continue_blocks' | 'keep_one_page';
+  layoutDiagnostics?: Record<string, unknown>;
   /** True when a network_48_port page used the two-up (ports 1-N / N+1-total)
    *  side-by-side layout instead of one full-width table. */
   twoUp?: boolean;
@@ -318,6 +324,56 @@ export interface PageModel {
   canvasObjects: Record<string, unknown>[];
   assets?: Record<string, unknown>[];
   notes: string;
+  createdAt?: string;
+  modifiedAt?: string;
+  archivedAt?: string;
+  archivedReason?: string;
+  archivedFromIndex?: number;
+  archivedPreviousPageId?: string;
+  archivedNextPageId?: string;
+  archivedInclude?: boolean;
+  archivedGroupRootId?: string;
+  lastArchivedAt?: string;
+  lastArchivedReason?: string;
+  lastArchivedFromIndex?: number;
+  lastArchivedGroupRootId?: string;
+  restoredAt?: string;
+  managedPage?: 'cover' | 'index';
+  appManaged?: boolean;
+  standaloneIndex?: boolean;
+  indexContinuation?: boolean;
+  generatedIndexContinuation?: boolean;
+  sourceImport?: {
+    id?: string;
+    groupId?: string;
+    importId?: string;
+    importGroupId?: string;
+    type: 'pdf' | 'image' | 'xlsx' | 'xlsm' | 'csv' | 'text' | string;
+    originalName?: string;
+    originalFileName?: string;
+    originalPath?: string;
+    sha256: string;
+    localAsset?: string;
+    sourceId?: string;
+    projectLocalPath?: string;
+    sourcePageIndex?: number;
+    sourcePageNumber?: number;
+    renderAssetPath?: string;
+    renderAssetUrl?: string;
+    renderDpi?: number;
+    selectedPage?: number;
+    pageIndex?: number;
+    pageFingerprint?: string;
+    selectedWorksheet?: string;
+    placementMode?: 'full_sheet' | 'fit_body' | string;
+    importedAt: string;
+    revision?: number;
+    previousSourceId?: string;
+    previousSha256?: string;
+    previousPageIndex?: number;
+  };
+  pdfPlacementMode?: 'full_sheet' | 'fit_body';
+  suppressTitleBlock?: boolean;
   pageNumber?: number | null;
   pageTotal?: number;
   pageGroupId?: string;
@@ -340,6 +396,9 @@ export interface PageModel {
 
 export interface ProjectModel {
   id: string;
+  schemaVersion?: number;
+  projectMode?: 'standalone_layout' | string;
+  managedPagePolicy?: 'automatic' | 'preserve_existing';
   metadata: {
     projectName: string;
     storeNumber?: string;
@@ -361,6 +420,11 @@ export interface ProjectModel {
     issueDate?: string;
     revision?: string;
     drawingPackageFileName?: string;
+    projectType?: string;
+    drawingSetTitle?: string;
+    preparedBy?: string;
+    notes?: string;
+    customerLogoAsset?: string;
   };
   worksheets: Worksheet[];
   pages: PageModel[];
@@ -376,6 +440,13 @@ export interface ProjectModel {
   projectProfile?: 'ems';
   sourceWorkbookName?: string;
   paginationLocked?: boolean;
+  archived?: boolean;
+  archivedAt?: string;
+  archivedReason?: string;
+  archivedPages?: PageModel[];
+  legacyWorkbookReference?: Record<string, unknown>;
+  coverSettings?: Record<string, unknown>;
+  indexSettings?: Record<string, unknown>;
   workbookSync?: {
     state?: string;
     status?: string;

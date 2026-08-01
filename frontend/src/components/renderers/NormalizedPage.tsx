@@ -58,7 +58,13 @@ export default function NormalizedPage({
   );
   const renderPage = projected.page;
   const renderProject = projected.project;
-  const blocks = renderPage.blocks ?? [];
+  const persistedBlocks = renderPage.blocks ?? [];
+  // A migrated managed cover may retain old workbook blocks for provenance and
+  // rollback. Standalone rendering uses only its managed cover block so stale
+  // workbook tables/text can never reappear beside current Project Settings.
+  const blocks = renderProject.projectMode === 'standalone_layout' && renderPage.pageType === 'cover'
+    ? persistedBlocks.filter((block) => block.type === 'cover').slice(0, 1)
+    : persistedBlocks;
   const excelBlocks = blocks.filter((block) => block.type === 'excelRange');
   const isImageType = renderPage.pageType === 'canvas' || blocks.some((b) => b.type === 'canvas');
   const isIndexPage = renderPage.pageType === 'index';
@@ -191,6 +197,7 @@ export default function NormalizedPage({
           onToolConsumed={onToolConsumed}
           snap={snap}
           overlayMode={overlayMode}
+          exporting={exporting}
         />
       </div>
     </div>

@@ -16,7 +16,6 @@ const requiredHelpIds = [
   'status.whatUnsaved',
   'save.localProject',
   'save.workspace',
-  'save.writeExcel',
   'export.pdf',
   'pages.dragReorder',
   'view.excelLayout',
@@ -43,9 +42,6 @@ export function runTooltipRegistryContractTests(): void {
   if (tooltipRegistry['save.localProject'].saveScope !== 'local-project') {
     throw new Error('Local save tooltip has the wrong save scope.');
   }
-  if (tooltipRegistry['save.writeExcel'].saveScope !== 'linked-workbook') {
-    throw new Error('Save + Write Excel tooltip has the wrong save scope.');
-  }
   if (tooltipRegistry['export.pdf'].saveScope !== 'export-only') {
     throw new Error('PDF tooltip has the wrong save scope.');
   }
@@ -55,8 +51,8 @@ export function runTooltipRegistryContractTests(): void {
   if (SAVE_STATE_LABELS.dirtyWorkspace !== 'UNSAVED WORKSPACE EDITS') {
     throw new Error('Workspace dirty label drifted from the specification.');
   }
-  if (SAVE_STATE_LABELS.localSavedSyncPending !== 'PROJECT SAVED · WORKBOOK SYNC PENDING') {
-    throw new Error('Workbook pending label drifted from the specification.');
+  if (SAVE_STATE_LABELS.cleanLocal !== 'PROJECT SAVED') {
+    throw new Error('Standalone saved label drifted from the specification.');
   }
 }
 

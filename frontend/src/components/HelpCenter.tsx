@@ -11,7 +11,7 @@ export default function HelpCenter({ onClose }: Props) {
         <div>
           <div className="s360-help-eyebrow">SINGH360 DRAFT</div>
           <h1>Quick Help</h1>
-          <p>Help version {HELP_VERSION}. This content matches workbook tab 3: <strong>00_HELP</strong>.</p>
+          <p>Help version {HELP_VERSION}. Singh360 projects are self-contained drawing sets.</p>
         </div>
         <button type="button" className="s360-help-close" onClick={onClose}>Close Help</button>
       </header>
@@ -46,20 +46,20 @@ export default function HelpCenter({ onClose }: Props) {
       <section className="s360-help-section">
         <h2>Everyday tasks</h2>
         <div className="s360-help-steps">
-          <article><b>Open</b><span>Open the saved project. The app checks the linked workbook before showing pages.</span></article>
-          <article><b>Add a workbook page</b><span>Add the sheet and its 00_INDEX row. The permanent Page ID keeps it linked.</span></article>
-          <article><b>Add an app page</b><span>Create it in Singh360. Saving creates or updates its workbook companion row and sheet.</span></article>
-          <article><b>Images / attachments</b><span>Use the matching .a/.b source sheet. Replace the image there and sync.</span></article>
-          <article><b>Reorder / renumber</b><span>Move pages in the app. Saving updates 00_INDEX order, codes, workbook tab order, Sheet Index, and Page X of Y.</span></article>
-          <article><b>Export</b><span>Only included pages export. The generated Sheet Index is refreshed immediately before PDF export.</span></article>
+          <article><b>Open</b><span>Open an active drawing project from Project Home. Every required page and asset lives in the Singh360 project package.</span></article>
+          <article><b>Add / Import Page</b><span>Create a blank page or make a one-time project-local copy of a PDF, image, Excel worksheet, or CSV table.</span></article>
+          <article><b>Edit</b><span>Use the page canvas, imported-table tools, properties, and Components browser. External source files are never updated.</span></article>
+          <article><b>Archive / restore</b><span>Archive pages or projects recoverably, then restore them from Archived Pages or Archived Projects.</span></article>
+          <article><b>Reorder / recode</b><span>Drag drawing pages or edit their title and sheet code. The app-managed cover, Sheet Index, and Page X of Y update from the project.</span></article>
+          <article><b>Save and export</b><span>Save Project confirms the latest editor state. Export PDF regenerates the complete ordered set from included pages.</span></article>
         </div>
       </section>
 
       <section className="s360-help-section">
-        <h2>Documentation rule</h2>
+        <h2>Standalone source-of-truth rule</h2>
         <p>
-          The app and workbook store the same Help Version. Automated tests fail when workflow code changes
-          without updating the Help Center and workbook help version.
+          Imported files are source attachments only. Moving or disconnecting an original file does not affect
+          a saved Singh360 drawing set, and Singh360 never writes changes back to that original.
         </p>
       </section>
     </main>

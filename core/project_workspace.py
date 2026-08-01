@@ -2256,6 +2256,340 @@ def _replace_identity(value: Any, old_id: str, new_id: str) -> Any:
     return value
 
 
+def _drawing_index_page_ids_by_tab(
+    project: dict[str, Any],
+) -> dict[str, set[str]]:
+    """Read the last unambiguous page identity recorded by project ``00_INDEX``."""
+    by_tab: dict[str, set[str]] = {}
+    for worksheet in project.get("worksheets") or []:
+        if (
+            not isinstance(worksheet, dict)
+            or str(worksheet.get("name") or "").strip().casefold() != "00_index"
+        ):
+            continue
+        grid = worksheet.get("grid")
+        if not isinstance(grid, list):
+            continue
+        header_row = -1
+        headers: dict[str, int] = {}
+        for row_number, raw in enumerate(grid[:30]):
+            row = raw if isinstance(raw, list) else []
+            found = {
+                str(value or "").strip().casefold(): column
+                for column, value in enumerate(row)
+                if str(value or "").strip()
+            }
+            if {"sheet tab", "page id"}.issubset(found):
+                header_row = row_number
+                headers = found
+                break
+        if header_row < 0:
+            continue
+        tab_column = headers["sheet tab"]
+        id_column = headers["page id"]
+        for raw in grid[header_row + 1 :]:
+            row = raw if isinstance(raw, list) else []
+            tab = str(row[tab_column] if tab_column < len(row) else "").strip()
+            page_id = str(row[id_column] if id_column < len(row) else "").strip()
+            if tab and page_id:
+                by_tab.setdefault(tab.casefold(), set()).add(page_id)
+    return by_tab
+
+
+def _new_local_worksheet_id(
+    page_id: str,
+    used_ids: set[str],
+) -> str:
+    """Return a deterministic worksheet identity that cannot reuse a source ID."""
+    attempt = 0
+    while True:
+        seed = page_id if attempt == 0 else f"{page_id}\0{attempt}"
+        candidate = "worksheet_" + hashlib.sha256(
+            seed.encode("utf-8")
+        ).hexdigest()[:16]
+        if candidate.casefold() not in used_ids:
+            used_ids.add(candidate.casefold())
+            return candidate
+        attempt += 1
+
+
+def _detach_page_as_app_managed(
+    project: dict[str, Any],
+    page: dict[str, Any],
+    *,
+    authoritative_page: dict[str, Any],
+    used_tabs: set[str],
+    used_worksheet_ids: set[str],
+    force_new_tab: bool,
+    reason: str,
+) -> None:
+    """Detach one proven copy while preserving its complete drawing payload."""
+    page_id = str(page.get("id") or "").strip()
+    old_tab = str(page.get("sheetTab") or "").strip()
+    old_id = str(page.get("linkedWorksheetId") or "").strip()
+    if not page_id:
+        raise ProjectWorkspaceError(
+            "A duplicate drawing page cannot be detached without a stable Page ID."
+        )
+
+    new_tab = (
+        _unique_worksheet_tab(old_tab or page.get("sheetTitle"), used_tabs)
+        if force_new_tab
+        else old_tab
+    )
+    if not new_tab:
+        new_tab = _unique_worksheet_tab(
+            page.get("sheetTitle") or "Recovered Page",
+            used_tabs,
+        )
+    new_id = _new_local_worksheet_id(page_id, used_worksheet_ids)
+
+    worksheets = [
+        item
+        for item in project.get("worksheets") or []
+        if isinstance(item, dict)
+    ]
+    matches = [
+        item
+        for item in worksheets
+        if old_id
+        and str(item.get("id") or "").strip().casefold() == old_id.casefold()
+    ]
+    if len(matches) > 1:
+        tab_matches = [
+            item
+            for item in matches
+            if old_tab
+            and str(item.get("name") or "").strip().casefold()
+            == old_tab.casefold()
+        ]
+        if len(tab_matches) != 1:
+            raise ProjectWorkspaceError(
+                f'Ambiguous worksheet identity "{old_id}" for copied page '
+                f"{page_id}; no single worksheet payload matches tab "
+                f"{old_tab or '(blank)'}."
+            )
+        matches = tab_matches
+
+    worksheet = matches[0] if matches else None
+    shared_old_identity = bool(
+        old_id
+        and sum(
+            1
+            for item in project.get("pages") or []
+            if isinstance(item, dict)
+            and str(item.get("linkedWorksheetId") or "").strip().casefold()
+            == old_id.casefold()
+        )
+        > 1
+    )
+    if worksheet is not None:
+        if shared_old_identity:
+            worksheet = deepcopy(worksheet)
+            project.setdefault("worksheets", []).append(worksheet)
+        worksheet["id"] = new_id
+        worksheet["name"] = new_tab
+        worksheet["sourceSheet"] = new_tab
+        worksheet["role"] = "drawing"
+
+    # Do not recursively rewrite raw worksheet IDs: a grid cell or manual
+    # canvas label may legitimately contain that same text. Only schema fields
+    # that carry worksheet identity are changed below.
+    repaired_page = deepcopy(page)
+    repaired_page.update(
+        {
+            "linkedWorksheetId": new_id,
+            "sheetTab": new_tab,
+            "sourceSheet": new_tab,
+            "sourceMode": "app",
+            "syncDirection": "app_to_workbook",
+            "pageGroupId": page_id,
+            "continuationOf": None,
+            "continuationIndex": 0,
+            "generatedContinuation": False,
+            "recipeOnly": False,
+        }
+    )
+    for key in (
+        "parentPageId",
+        "recipeWorksheetId",
+        "indexContinuation",
+        "generatedIndexContinuation",
+    ):
+        repaired_page.pop(key, None)
+    for block in repaired_page.get("blocks") or []:
+        if not isinstance(block, dict):
+            continue
+        if old_id and block.get("sourceWorksheetId") == old_id:
+            block["sourceWorksheetId"] = new_id
+        if (
+            old_tab
+            and str(block.get("sourceSheet") or "").strip().casefold()
+            == old_tab.casefold()
+        ):
+            block["sourceSheet"] = new_tab
+    page.clear()
+    page.update(repaired_page)
+
+    existing = project.get("worksheetIdentityRecovery")
+    project["worksheetIdentityRecovery"] = [
+        *(existing if isinstance(existing, list) else []),
+        {
+            "kind": "copied_page_detached_from_workbook",
+            "pageId": page_id,
+            "authoritativePageId": authoritative_page.get("id"),
+            "oldId": old_id,
+            "newId": new_id,
+            "oldSheetTab": old_tab,
+            "newSheetTab": new_tab,
+            "reason": reason,
+        },
+    ]
+
+
+def _repair_copied_page_identities(project: dict[str, Any]) -> None:
+    """Detach only copies that ``00_INDEX`` proves are not workbook identities."""
+    candidate_pages = [
+        item
+        for item in project.get("pages") or []
+        if isinstance(item, dict) and not _generated_drawing_page(item)
+    ]
+    page_by_id = {
+        str(item.get("id") or ""): item
+        for item in candidate_pages
+        if str(item.get("id") or "")
+    }
+    pages: list[dict[str, Any]] = []
+    for page in candidate_pages:
+        match = re.match(r"^(.+)_c\d+$", str(page.get("id") or ""))
+        base = page_by_id.get(match.group(1)) if match else None
+        if (
+            base
+            and page.get("linkedWorksheetId")
+            and page.get("linkedWorksheetId") == base.get("linkedWorksheetId")
+        ):
+            # The legacy continuation repair below has stronger identity
+            # evidence than the generic copied-page rule.
+            continue
+        pages.append(page)
+    index_ids_by_tab = _drawing_index_page_ids_by_tab(project)
+    used_tabs = {
+        str(item.get("sheetTab") or "").strip().casefold()
+        for item in pages
+        if str(item.get("sheetTab") or "").strip()
+    }
+    used_tabs.update(
+        str(item.get("name") or "").strip().casefold()
+        for item in project.get("worksheets") or []
+        if isinstance(item, dict) and str(item.get("name") or "").strip()
+    )
+    used_worksheet_ids = {
+        str(item.get("id") or "").strip().casefold()
+        for item in project.get("worksheets") or []
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+
+    by_tab: dict[str, list[dict[str, Any]]] = {}
+    for page in pages:
+        tab = str(page.get("sheetTab") or "").strip().casefold()
+        if tab:
+            by_tab.setdefault(tab, []).append(page)
+    for tab, matches in by_tab.items():
+        if len(matches) < 2:
+            continue
+        indexed = [
+            page
+            for page in matches
+            if str(page.get("id") or "") in index_ids_by_tab.get(tab, set())
+        ]
+        if len(indexed) != 1:
+            candidates = ", ".join(
+                str(page.get("id") or "(blank)") for page in matches
+            )
+            raise ProjectWorkspaceError(
+                "Ambiguous duplicate drawing worksheet tab "
+                f"{matches[0].get('sheetTab')}: 00_INDEX does not identify "
+                f"exactly one workbook-backed page among [{candidates}]."
+            )
+        authoritative = indexed[0]
+        for page in matches:
+            if page is authoritative:
+                continue
+            _detach_page_as_app_managed(
+                project,
+                page,
+                authoritative_page=authoritative,
+                used_tabs=used_tabs,
+                used_worksheet_ids=used_worksheet_ids,
+                force_new_tab=True,
+                reason="unique_00_index_page_id_for_duplicate_tab",
+            )
+
+    by_worksheet_id: dict[str, list[dict[str, Any]]] = {}
+    for page in pages:
+        worksheet_id = str(page.get("linkedWorksheetId") or "").strip().casefold()
+        if worksheet_id:
+            by_worksheet_id.setdefault(worksheet_id, []).append(page)
+    for worksheet_id, matches in by_worksheet_id.items():
+        if len(matches) < 2:
+            continue
+        worksheets_by_tab = {
+            str(item.get("name") or "").strip().casefold(): [
+                candidate
+                for candidate in project.get("worksheets") or []
+                if isinstance(candidate, dict)
+                and str(candidate.get("name") or "").strip().casefold()
+                == str(item.get("name") or "").strip().casefold()
+            ]
+            for item in project.get("worksheets") or []
+            if isinstance(item, dict) and str(item.get("name") or "").strip()
+        }
+        if all(
+            len(
+                worksheets_by_tab.get(
+                    str(page.get("sheetTab") or "").strip().casefold(),
+                    [],
+                )
+            )
+            == 1
+            for page in matches
+        ):
+            # The existing exact-tab repair below can recover each stale page
+            # reference without detaching either workbook-backed page.
+            continue
+        indexed = [
+            page
+            for page in matches
+            if str(page.get("id") or "")
+            in index_ids_by_tab.get(
+                str(page.get("sheetTab") or "").strip().casefold(),
+                set(),
+            )
+        ]
+        if len(indexed) != 1:
+            candidates = ", ".join(
+                str(page.get("id") or "(blank)") for page in matches
+            )
+            raise ProjectWorkspaceError(
+                f'Ambiguous shared worksheet identity "{worksheet_id}": '
+                "00_INDEX does not identify exactly one workbook-backed page "
+                f"among [{candidates}]."
+            )
+        authoritative = indexed[0]
+        for page in matches:
+            if page is authoritative:
+                continue
+            _detach_page_as_app_managed(
+                project,
+                page,
+                authoritative_page=authoritative,
+                used_tabs=used_tabs,
+                used_worksheet_ids=used_worksheet_ids,
+                force_new_tab=False,
+                reason="unique_00_index_page_id_for_shared_worksheet",
+            )
+
+
 def _repair_project_worksheet_identities(project: dict[str, Any]) -> None:
     """Repair worksheet IDs only when project-local evidence is unique.
 
@@ -2479,6 +2813,7 @@ def reconcile_project_workbook_order(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Reconcile project pages, the project ``00_INDEX``, and worksheet order."""
     reconciled = deepcopy(project)
+    _repair_copied_page_identities(reconciled)
     _repair_project_worksheet_identities(reconciled)
     _ensure_base_page_worksheet_identities(reconciled)
     manifest = project_base_drawing_manifest(reconciled)

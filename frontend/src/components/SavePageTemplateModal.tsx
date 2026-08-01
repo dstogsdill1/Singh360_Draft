@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PageModel } from '../model/types';
 import { savePageTemplate } from '../api/client';
+import { preparePageTemplatePayload } from '../model/pageDuplication';
 
 interface Props {
   page: PageModel;
@@ -109,7 +110,7 @@ export default function SavePageTemplateModal({
         new Map<string, string>(),
       ) as PageModel;
 
-      await savePageTemplate(portable, name.trim(), thumbnail);
+      await savePageTemplate(preparePageTemplatePayload(portable), name.trim(), thumbnail);
       onSaved();
     } catch (e) {
       setError(String(e));

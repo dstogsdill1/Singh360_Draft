@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 interface Props {
+  suggestedCode?: string;
   onAdd: (title: string, code: string, template: string) => void;
   onCancel: () => void;
 }
@@ -8,15 +9,14 @@ interface Props {
 const TEMPLATES = [
   { value: 'data-grid', label: 'Table / Schedule' },
   { value: 'canvas', label: 'Image / Layout' },
-  { value: 'cover', label: 'Cover / Title' },
   { value: 'matrix', label: 'Matrix' },
   { value: 'hybrid', label: 'Hybrid' },
   { value: 'underlay', label: 'Underlay / Reference' },
 ];
 
-export default function AddSheetModal({ onAdd, onCancel }: Props) {
+export default function AddSheetModal({ suggestedCode = '', onAdd, onCancel }: Props) {
   const [title, setTitle] = useState('');
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(suggestedCode);
   const [template, setTemplate] = useState('data-grid');
 
   const submit = () => {

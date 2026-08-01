@@ -1,11 +1,23 @@
 import type { ProjectModel, PageModel } from '../model/types';
 
+export class Singh360ApiError extends Error {
+  payload: Record<string, unknown>;
+  status: number;
+
+  constructor(message: string, status: number, payload: Record<string, unknown>) {
+    super(message);
+    this.name = 'Singh360ApiError';
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
 async function exactApiError(response: Response): Promise<Error> {
   const text = await response.text();
   try {
-    const payload = JSON.parse(text) as { error?: string; detail?: string };
+    const payload = JSON.parse(text) as Record<string, unknown> & { error?: string; detail?: string };
     const message = [payload.error, payload.detail].filter(Boolean).join(' ');
-    return new Error(message || `${response.status} ${response.statusText}`);
+    return new Singh360ApiError(message || `${response.status} ${response.statusText}`, response.status, payload);
   } catch {
     return new Error(text || `${response.status} ${response.statusText}`);
   }
@@ -482,6 +494,137 @@ export async function saveProject(project: ProjectModel): Promise<ProjectModel> 
   return res.json() as Promise<ProjectModel>;
 }
 
+export interface PdfDrawingPreviewPage {
+  pageIndex: number;
+  pageNumber: number;
+  widthPoints: number;
+  heightPoints: number;
+  fingerprint: string;
+  thumbnail: string;
+}
+
+export interface PdfDrawingPreview {
+  previewId: string;
+  pdfFile: string;
+  originalName: string;
+  sha256: string;
+  pageCount: number;
+  pages: PdfDrawingPreviewPage[];
+  existingGroups: Array<{
+    groupId: string;
+    originalName: string;
+    pageIds: string[];
+    pageIndices: number[];
+    pageFingerprints: string[];
+    revision: number;
+    sameName: boolean;
+  }>;
+}
+
+export type PdfDrawingImportPhase = 'validate' | 'render' | 'install' | 'compose' | 'save' | 'complete';
+
+export interface PdfDrawingImportProgress {
+  phase: PdfDrawingImportPhase;
+  completed: number;
+  total: number;
+  message: string;
+  pageIndex?: number;
+  pageNumber?: number;
+}
+
+export interface PdfDrawingImportResult {
+  project: ProjectModel;
+  pageIds: string[];
+  replacedPageIds: string[];
+  progress: PdfDrawingImportProgress;
+}
+
+export async function previewPdfDrawing(projectId: string, file: File): Promise<PdfDrawingPreview> {
+  const body = new FormData();
+  body.append('file', file);
+  const response = await fetch(`/api/projects/${projectId}/pdf/import-preview`, { method: 'POST', body });
+  if (!response.ok) throw await exactApiError(response);
+  return response.json();
+}
+
+export async function commitPdfDrawingImport(
+  projectId: string,
+  options: {
+    previewId: string;
+    selectedPages: number[];
+    placementMode: 'full_sheet' | 'fit_body';
+    action: 'add' | 'replace';
+    replaceGroupId?: string;
+    mapping?: Array<{ existingPageId: string; pageIndex: number }>;
+    titlePrefix?: string;
+    firstSheetCode?: string;
+  },
+  onProgress?: (progress: PdfDrawingImportProgress) => void,
+): Promise<PdfDrawingImportResult> {
+  const initialProgress: PdfDrawingImportProgress = {
+    phase: 'validate',
+    completed: 0,
+    total: options.selectedPages.length,
+    message: 'Validating the staged PDF import',
+  };
+  onProgress?.(initialProgress);
+  const response = await fetch(`/api/projects/${projectId}/pdf/import-commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...options, background: true }),
+  });
+  if (!response.ok) throw await exactApiError(response);
+  const started = await response.json() as {
+    jobId?: string;
+    state?: 'queued' | 'running' | 'succeeded' | 'failed';
+    progress?: PdfDrawingImportProgress;
+  } & Partial<PdfDrawingImportResult>;
+  if (response.status !== 202) return started as PdfDrawingImportResult;
+  if (!started.jobId) {
+    throw new Singh360ApiError(
+      'The PDF import started without a job ID.',
+      500,
+      { ok: false, code: 'import_job_id_missing', phase: 'validate' },
+    );
+  }
+  if (started.progress) onProgress?.(started.progress);
+
+  const deadline = Date.now() + 30 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => window.setTimeout(resolve, 125));
+    const statusResponse = await fetch(`/api/projects/${projectId}/pdf/import-jobs/${started.jobId}`, {
+      cache: 'no-store',
+    });
+    if (!statusResponse.ok) throw await exactApiError(statusResponse);
+    const job = await statusResponse.json() as {
+      state: 'queued' | 'running' | 'succeeded' | 'failed';
+      progress?: PdfDrawingImportProgress;
+      result?: PdfDrawingImportResult;
+      error?: Record<string, unknown> & { error?: string; detail?: string };
+      errorStatus?: number;
+    };
+    if (job.progress) onProgress?.(job.progress);
+    if (job.state === 'succeeded' && job.result) return job.result;
+    if (job.state === 'failed') {
+      const payload = job.error ?? { ok: false, code: 'pdf_import_failed', phase: 'commit' };
+      const message = [payload.error, payload.detail].filter(Boolean).join(' ');
+      throw new Singh360ApiError(message || 'PDF import failed.', job.errorStatus || 500, payload);
+    }
+  }
+  throw new Singh360ApiError(
+    'The PDF import did not finish within 30 minutes.',
+    408,
+    { ok: false, code: 'pdf_import_timeout', phase: 'commit' },
+  );
+}
+
+export async function restoreArchivedProject(projectId: string): Promise<ProjectModel> {
+  const response = await fetch(`/api/projects/${projectId}/restore`, { method: 'POST' });
+  if (!response.ok) throw await exactApiError(response);
+  const payload = await response.json();
+  return payload.project as ProjectModel;
+}
+
 export async function savePages(projectId: string, pages: PageModel[]): Promise<void> {
   const res = await fetch(`/api/projects/${projectId}/pages`, {
     method: 'POST',
@@ -636,7 +779,7 @@ export async function uploadAssetDataUrl(
   projectId: string,
   dataUrl: string,
   name: string,
-): Promise<{ id: string; name: string; url: string }> {
+): Promise<{ id: string; name: string; storedFileName: string; projectLocalPath: string; sha256: string; url: string }> {
   const res = await fetch(`/api/projects/${projectId}/assets`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -650,7 +793,7 @@ export async function uploadAssetDataUrl(
 export async function uploadAssetFile(
   projectId: string,
   file: File,
-): Promise<{ id: string; name: string; url: string }> {
+): Promise<{ id: string; name: string; storedFileName: string; projectLocalPath: string; sha256: string; url: string }> {
   const fd = new FormData();
   fd.append('file', file);
   const res = await fetch(`/api/projects/${projectId}/assets`, { method: 'POST', body: fd });
@@ -1746,7 +1889,26 @@ export async function resolveWorkbookLink(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ direction }),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw await exactApiError(res);
+  return res.json();
+}
+
+export async function autoLayoutImportedPage(
+  projectId: string,
+  pageId: string,
+  layoutOverride: 'exact_source' | 'two_columns' | 'keep_one_page',
+): Promise<{
+  project: ProjectModel;
+  pageIds: string[];
+  continuationCount: number;
+  layoutDiagnostics: Record<string, unknown>;
+}> {
+  const res = await fetch(`/api/projects/${projectId}/pages/${pageId}/auto-layout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layoutOverride }),
+  });
+  if (!res.ok) throw await exactApiError(res);
   return res.json();
 }
 

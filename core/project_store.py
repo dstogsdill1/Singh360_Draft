@@ -144,16 +144,42 @@ class ProjectStore:
         target = project_dir / "project.json"
         # Snapshot the prior project.json before overwriting it (keep last 20) so a
         # bad save or accidental change can always be recovered.
-        self._backup_before_write(project_dir, target)
+        target_existed = target.is_file()
+        recovery_copy = self._backup_before_write(project_dir, target)
+        if target_existed and recovery_copy is None:
+            raise OSError(
+                "Refusing to overwrite project.json because its recovery "
+                "snapshot could not be created."
+            )
 
         temp_target = target.with_name(
             f".project-{uuid.uuid4().hex[:8]}.json.tmp"
         )
         try:
-            temp_target.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            payload = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+            with temp_target.open("xb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            prepared = _read_json(temp_target)
+            if prepared != data or str(prepared.get("id") or "") != project_id:
+                raise OSError("Temporary project JSON failed identity/readback validation.")
             os.replace(temp_target, target)
+            persisted = _read_json(target)
+            if persisted != data or str(persisted.get("id") or "") != project_id:
+                if recovery_copy and recovery_copy.is_file():
+                    rollback = target.with_name(
+                        f".project-{uuid.uuid4().hex[:8]}.recovery.tmp"
+                    )
+                    try:
+                        with rollback.open("xb") as stream:
+                            stream.write(recovery_copy.read_bytes())
+                            stream.flush()
+                            os.fsync(stream.fileno())
+                        os.replace(rollback, target)
+                    finally:
+                        rollback.unlink(missing_ok=True)
+                raise OSError("Saved project JSON failed post-replace readback validation.")
         finally:
             temp_target.unlink(missing_ok=True)
         # S360 INCREMENTAL SAFETY V12
@@ -161,13 +187,10 @@ class ProjectStore:
         # separate snapshot for every page on every autosave created hundreds
         # of OneDrive filesystem writes for large packages. Page snapshots are
         # still created explicitly before page rebuild/recovery operations.
-        # Migrate: drop legacy flat file once saved into the folder structure.
-        legacy = self.legacy_json(project_id)
-        try:
-            if legacy.is_file():
-                legacy.unlink()
-        except OSError:
-            pass
+        # Keep any legacy flat package as recoverable historical data. The
+        # canonical folder is preferred by read_path/listing, so retaining the
+        # old file does not create a second active project and avoids an
+        # implicit destructive migration during an ordinary Save Project.
         return project_dir / "project.json"
 
     def activate_staged_project(
@@ -288,9 +311,14 @@ class ProjectStore:
     def _prune_backups(self, backups: Path) -> None:
         snaps = sorted(backups.glob("project_*.json"), key=lambda p: p.name)
         excess = len(snaps) - self._MAX_BACKUPS
+        archive = backups / "project_json_archive"
         for old in snaps[: max(0, excess)]:
             try:
-                old.unlink()
+                archive.mkdir(parents=True, exist_ok=True)
+                destination = archive / old.name
+                if destination.exists():
+                    destination = archive / f"{old.stem}_{uuid.uuid4().hex[:8]}{old.suffix}"
+                os.replace(old, destination)
             except OSError:
                 pass
 
@@ -606,6 +634,13 @@ class ProjectStore:
                     or meta.get("sourceFile")
                     or "",
                     "duplicateFolders": max(0, id_counts.get(pid, 1) - 1),
+                    "projectMode": data.get("projectMode") or "legacy_workbook",
+                    "archived": bool(data.get("archived")),
+                    "archivedAt": data.get("archivedAt") or "",
+                    "archivedReason": data.get("archivedReason") or "",
+                    "archiveReason": data.get("archivedReason") or "",
+                    "pageCount": len(data.get("pages") or []),
+                    "assetCount": len(data.get("assets") or []),
                 }
             )
         # legacy flat files
@@ -626,7 +661,41 @@ class ProjectStore:
                     "packageFile": data.get("drawingPackageFileName", ""),
                     "sourceWorkbook": data.get("sourceWorkbookName", ""),
                     "duplicateFolders": 0,
+                    "projectMode": data.get("projectMode") or "legacy_workbook",
+                    "archived": bool(data.get("archived")),
+                    "archivedAt": data.get("archivedAt") or "",
+                    "archivedReason": data.get("archivedReason") or "",
+                    "archiveReason": data.get("archivedReason") or "",
+                    "pageCount": len(data.get("pages") or []),
+                    "assetCount": len(data.get("assets") or []),
                 }
             )
         out.sort(key=lambda r: str(r.get("modified") or r.get("lastSavedAt") or ""), reverse=True)
         return out
+
+    def set_archived(
+        self,
+        project_id: str,
+        archived: bool,
+        *,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Recoverably archive or restore a project without moving its package.
+
+        The package, assets, source attachments, history and stable project ID
+        stay at their existing path.  A normal save creates the recovery
+        snapshot before the metadata flag changes.
+        """
+        data = self.load(project_id)
+        if data is None:
+            raise FileNotFoundError(project_id)
+        data["archived"] = bool(archived)
+        if archived:
+            data["archivedAt"] = _utcnow()
+            data["archivedReason"] = reason.strip() or "Archived from Project Home"
+        else:
+            data["restoredAt"] = _utcnow()
+            data["archivedAt"] = ""
+            data["archivedReason"] = ""
+        self.save(project_id, data)
+        return data

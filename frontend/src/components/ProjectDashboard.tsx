@@ -1,749 +1,299 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ProjectModel } from '../model/types';
-import {
-  aiGuideUrl,
-  archiveProject,
-  createProjectFromWorkbook,
-  exportPackage,
-  getLibV2,
-  getWorkbookLinkStatus,
-  getWorkbookQuality,
-  linkWorkbookPath,
-  listProjects,
-  openLinkedWorkbook,
-  pickWorkbookPath,
-  repairWorkbookQuality,
-  resolveWorkbookLink,
-  revealLinkedWorkbook,
-  savePageInclusion,
-  unlinkWorkbook,
-  type ProjectListItem,
-  type ProjectProfile,
-  type WorkbookLinkStatus,
-  type WorkbookQualityReport,
-} from '../api/client';
-import LibraryPanelV2 from './LibraryPanelV2';
-import SyncDecisionModal from './SyncDecisionModal';
-import PageManagerModal from './PageManagerModal';
-import WorkbookQualityModal from './WorkbookQualityModal';
-import DeleteProjectModal from './DeleteProjectModal';
-import {
-  readWorkspaceState,
-  subscribeWorkspaceState,
-  type WorkspaceStateSignal,
-} from '../workspace/workspaceState';
+import NewProjectWizard from './NewProjectWizard';
 
 interface Props {
   project: ProjectModel | null;
 }
 
-const statusLabel: Record<string, string> = {
-  not_linked: 'Not linked',
-  internal: 'Internal copy',
-  review_required: 'First sync decision required',
-  in_sync: 'In sync',
-  workbook_changed: 'Workbook changed',
-  app_changed: 'Project saved locally — workbook update pending',
-  conflict: 'Both changed — review required',
-  missing: 'Workbook missing',
-  locked: 'Workbook locked',
-  invalid: 'Invalid workbook',
-  project_mismatch: 'Wrong project workbook',
-  pending: 'Project saved · workbook sync pending',
-};
-
-function projectName(item: ProjectListItem): string {
-  return item.projectName || item.packageFile || item.sourceWorkbook || item.id;
+interface ProjectListItem {
+  id: string;
+  projectName?: string;
+  projectDisplayName?: string;
+  modified?: string;
+  lastSavedAt?: string;
+  projectMode?: string;
+  pageCount?: number;
+  assetCount?: number;
+  archivedAt?: string;
+  archiveReason?: string;
+  metadata?: {
+    projectName?: string;
+    storeNumber?: string;
+    client?: string;
+    location?: string;
+  };
 }
 
-function activeProjectName(project: ProjectModel): string {
-  return project.projectDisplayName || project.metadata.projectName || project.id;
+interface ProjectListResponse {
+  projects?: ProjectListItem[];
+  archivedProjects?: ProjectListItem[];
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+function displayName(item: ProjectListItem): string {
+  return (
+    item.projectName
+    || item.projectDisplayName
+    || item.metadata?.projectName
+    || `Drawing Project ${item.id}`
+  );
+}
+
+function displayDate(value?: string): string {
+  if (!value) return 'Not saved yet';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
+async function responseJson<T>(response: Response): Promise<T> {
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = await response.json() as Record<string, unknown>;
+  } catch {
+    payload = {};
+  }
+  if (!response.ok) {
+    const detail = String(payload.detail || payload.error || response.statusText || 'Request failed.');
+    throw new Error(detail);
+  }
+  return payload as T;
 }
 
 export default function ProjectDashboard({ project }: Props) {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
-  const [link, setLink] = useState<WorkbookLinkStatus | null>(null);
-  const [linkPath, setLinkPath] = useState('');
-  const [quality, setQuality] = useState<WorkbookQualityReport | null>(null);
-  const [busy, setBusy] = useState('');
-  const [message, setMessage] = useState('');
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  const [pageManagerOpen, setPageManagerOpen] = useState(false);
-  const [qualityOpen, setQualityOpen] = useState(false);
-  const [syncDecisionOpen, setSyncDecisionOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [projectProfile, setProjectProfile] = useState<ProjectProfile>('ems');
-  const [libraryHealth, setLibraryHealth] = useState<{ total: number; favorites: number; needsReview: number } | null>(null);
-  const [workspaceState, setWorkspaceState] = useState<WorkspaceStateSignal | null>(
-    () => project ? readWorkspaceState(project.id) : null,
-  );
-  const newWorkbookRef = useRef<HTMLInputElement | null>(null);
-  const layoutOnly = Boolean(
-    /layout[\s_-]*(sandbox|only)/i.test(project?.metadata.projectName || '')
-    || /layout[\s_-]*only/i.test(project?.sourceWorkbookName || ''),
-  );
-  const generatedWorkbookPath = String(link?.path || project?.workbookSync?.workbook || '').trim();
+  const [archivedProjects, setArchivedProjects] = useState<ProjectListItem[]>([]);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busyProjectId, setBusyProjectId] = useState('');
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
 
-  const reload = async () => {
-    const list = await listProjects();
-    setProjects(list);
-    if (project) {
-      const status = await getWorkbookLinkStatus(project.id);
-      setLink(status);
-      setLinkPath(status.path || '');
-      if (status.path && !['missing', 'invalid', 'locked'].includes(status.status)) {
-        try {
-          setQuality(await getWorkbookQuality(project.id));
-        } catch {
-          setQuality(null);
-        }
-      } else {
-        setQuality(null);
-      }
-    } else {
-      setLink(null);
-      setQuality(null);
-    }
+  const closeWizard = useCallback(() => setWizardOpen(false), []);
+
+  const loadProjects = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setError('');
     try {
-      const data = await getLibV2(true);
-      setLibraryHealth(data.counts);
-    } catch {
-      setLibraryHealth(null);
+      const response = await fetch('/api/projects', {
+        headers: { Accept: 'application/json' },
+        signal,
+      });
+      const result = await responseJson<ProjectListResponse>(response);
+      setProjects(Array.isArray(result.projects) ? result.projects : []);
+      setArchivedProjects(Array.isArray(result.archivedProjects) ? result.archivedProjects : []);
+    } catch (requestError) {
+      if ((requestError as Error).name !== 'AbortError') {
+        setError(`Projects could not be loaded. ${String(requestError)}`);
+      }
+    } finally {
+      if (!signal?.aborted) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id]);
+    const controller = new AbortController();
+    void loadProjects(controller.signal);
+    return () => controller.abort();
+  }, [loadProjects]);
 
-  useEffect(() => {
-    if (!project) {
-      setWorkspaceState(null);
-      return undefined;
-    }
-    setWorkspaceState(readWorkspaceState(project.id));
-    return subscribeWorkspaceState(project.id, setWorkspaceState);
-  }, [project?.id]);
-
-  useEffect(() => {
-    if (!project) return undefined;
-    const timer = window.setInterval(() => setWorkspaceState(readWorkspaceState(project.id)), 5_000);
-    return () => window.clearInterval(timer);
-  }, [project?.id]);
-
-  const selectedWorkbookPending = Boolean(
-    linkPath.trim() && linkPath.trim() !== String(link?.path || '').trim(),
-  );
-  const included = project?.pages.filter((page) => page.include).length ?? 0;
-  const excluded = (project?.pages.length ?? 0) - included;
-  const stageCounts = useMemo(() => {
-    const counts = { draft: 0, draft_confirmed: 0, public: 0, public_confirmed: 0 };
-    for (const page of project?.pages ?? []) {
-      const key = (page.issueStatus || 'draft') as keyof typeof counts;
-      if (key in counts) counts[key] += 1;
-    }
-    return counts;
-  }, [project]);
-
-  const actionUrl = (tool?: string) => {
-    if (!project) return '/app';
-    const params = new URLSearchParams({ project: project.id, mode: 'editor' });
-    if (tool) params.set('tool', tool);
-    return `/app?${params.toString()}`;
+  const openProject = (projectId: string) => {
+    window.location.assign(`/app?project=${encodeURIComponent(projectId)}&mode=editor`);
   };
-  const workspaceUrl = (view: 'files' | 'data') =>
-    project ? `/app?project=${project.id}&view=${view}` : '/app';
 
-  const run = async (label: string, fn: () => Promise<unknown>, refresh = true) => {
-    setBusy(label);
-    setMessage('');
+  const archive = async (item: ProjectListItem) => {
+    if (!window.confirm(`Archive "${displayName(item)}"? It can be restored later.`)) return;
+    setBusyProjectId(item.id);
+    setStatus('');
+    setError('');
     try {
-      await fn();
-      setMessage(`${label} completed.`);
-      if (refresh) await reload();
-    } catch (error) {
-      setMessage(`${label} failed: ${String(error)}`);
+      const response = await fetch(`/api/projects/${encodeURIComponent(item.id)}/archive`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      await responseJson<Record<string, unknown>>(response);
+      setStatus(`${displayName(item)} was archived and remains recoverable.`);
+      await loadProjects();
+    } catch (requestError) {
+      setError(`Project archive failed. ${String(requestError)}`);
     } finally {
-      setBusy('');
+      setBusyProjectId('');
     }
   };
 
-  const browseWorkbook = async () => {
-    if (!project) return;
-    setBusy('Browse workbook');
-    setMessage('');
+  const restore = async (item: ProjectListItem) => {
+    setBusyProjectId(item.id);
+    setStatus('');
+    setError('');
     try {
-      const result = await pickWorkbookPath(project.id);
-      if (result.cancelled) {
-        setMessage('Workbook selection cancelled. The existing link was not changed.');
-        return;
-      }
-      const selected = (result.selectedPath || '').trim();
-      if (!selected) {
-        setMessage('No workbook was selected. The existing link was not changed.');
-        return;
-      }
-      setLinkPath(selected);
-      const linked = await linkWorkbookPath(project.id, selected);
-      setLink(linked.status);
-      if (['review_required', 'conflict', 'workbook_changed', 'app_changed'].includes(linked.status.status)) {
-        setMessage('Workbook selected. It is authoritative and is being loaded.');
-        setSyncDecisionOpen(true);
-      } else {
-        setMessage(linked.status.message || 'Workbook linked.');
-      }
-    } catch (error) {
-      setMessage(`Browse workbook failed: ${String(error)}`);
+      const response = await fetch(`/api/projects/${encodeURIComponent(item.id)}/restore`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      await responseJson<Record<string, unknown>>(response);
+      setStatus(`${displayName(item)} was restored to Active Projects.`);
+      await loadProjects();
+    } catch (requestError) {
+      setError(`Project restore failed. ${String(requestError)}`);
     } finally {
-      setBusy('');
+      setBusyProjectId('');
     }
   };
-
-  const createProject = async (file: File) => {
-    const projectRoot = window.prompt(
-      'Confirm the physical project root for Project Files (for example G:\\My Drive\\Working Files\\829_Mi_Tienda).',
-      '',
-    )?.trim();
-    if (!projectRoot) {
-      setMessage('Project creation cancelled. A physical project root is required.');
-      return;
-    }
-    setBusy('Creating project');
-    try {
-      const result = await createProjectFromWorkbook(file, projectRoot, projectProfile);
-      window.location.assign(`/app?project=${result.id}&mode=editor`);
-    } catch (error) {
-      setMessage(`Project creation failed: ${String(error)}`);
-      setBusy('');
-    }
-  };
-
-  const packageDownload = async () => {
-    if (!project) return;
-    const blob = await exportPackage(project.id);
-    const name = project.metadata.drawingPackageFileName || activeProjectName(project);
-    downloadBlob(blob, `${name}_package.zip`);
-  };
-
-  const reviewSync = async () => {
-    if (!project) return;
-    setBusy('Checking workbook versions');
-    setMessage('');
-    try {
-      const status = await getWorkbookLinkStatus(project.id);
-      setLink(status);
-      if (status.status === 'in_sync' && status.verified) {
-        setMessage('The project and workbook are already in sync. No files were changed.');
-      } else if (status.status === 'in_sync') {
-        setMessage('Hashes match, but workbook order verification is still required. Run Save + Write Excel from Page Editor.');
-      } else if (['review_required', 'conflict', 'workbook_changed', 'app_changed'].includes(status.status)) {
-        setSyncDecisionOpen(true);
-      } else {
-        setMessage(status.message);
-      }
-    } catch (error) {
-      setMessage(`Workbook check failed: ${String(error)}`);
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const resolveSync = async (direction: 'workbook_to_app' | 'app_to_workbook' | 'baseline') => {
-    if (!project) return;
-    setBusy(direction === 'baseline' ? 'Linking matching versions' : direction === 'workbook_to_app' ? 'Importing workbook structure' : 'Writing app structure');
-    setMessage('');
-    try {
-      const result = await resolveWorkbookLink(project.id, direction);
-      setLink(result.status);
-      setSyncDecisionOpen(false);
-      const backup = String((result.status as WorkbookLinkStatus & { resolutionBackup?: string }).resolutionBackup || '');
-      setMessage(
-        `Synchronization completed safely.${backup ? ` Backup: ${backup}` : ''}`,
-      );
-      window.setTimeout(() => window.location.reload(), 700);
-    } catch (error) {
-      setMessage(`Synchronization failed: ${String(error)}`);
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const refreshQuality = async () => {
-    if (!project) return;
-    setBusy('Auditing workbook');
-    try {
-      setQuality(await getWorkbookQuality(project.id));
-      setMessage('Workbook audit completed. No workbook data was changed.');
-    } catch (error) {
-      setMessage(`Workbook audit failed: ${String(error)}`);
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const repairQuality = async (mode: 'safe' | 'strict') => {
-    if (!project) return;
-    setBusy(mode === 'safe' ? 'Applying safe workbook repair' : 'Applying strict workbook formatting');
-    try {
-      const result = await repairWorkbookQuality(project.id, mode);
-      setQuality(result.audit);
-      setMessage(`${result.message} Backup: ${result.backup}`);
-    } catch (error) {
-      setMessage(`Workbook repair failed: ${String(error)}`);
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const savePageSelection = async (includedByPageId: Record<string, boolean>) => {
-    if (!project) return;
-    setBusy('Saving drawing-set selection');
-    setMessage('');
-    try {
-      const result = await savePageInclusion(project.id, includedByPageId);
-      const sync = result.workbookSync || {};
-      const pending = sync.status === 'pending' || Boolean(sync.warning);
-      setMessage(
-        pending
-          ? `Selection saved locally: ${result.included} included / ${result.excluded} excluded. Workbook update is pending: ${String(sync.warning || 'review required')}`
-          : `Selection saved: ${result.included} included / ${result.excluded} excluded. Workbook updated.`,
-      );
-      setPageManagerOpen(false);
-      window.setTimeout(() => window.location.reload(), 700);
-    } catch (error) {
-      setMessage(`Page selection save failed before confirmation: ${String(error)}`);
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const openPage = (pageId: string) => {
-    if (!project) return;
-    try {
-      localStorage.setItem(`singh360-open-page:${project.id}`, pageId);
-    } catch {
-      // The editor still opens on page 1 if localStorage is unavailable.
-    }
-    window.location.assign(actionUrl());
-  };
-
-  const removeProject = async () => {
-    if (!project) return;
-    setBusy('Removing project');
-    try {
-      await archiveProject(project.id);
-      setDeleteOpen(false);
-      window.location.assign('/app');
-    } catch (error) {
-      setMessage(`Project removal failed: ${String(error)}`);
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const confirmNewProject = () => {
-    if (!window.confirm(
-      'Create a separate Singh360 project? Use this only for a different store or a genuinely different workbook. Click Cancel to open an existing project instead.',
-    )) return;
-    newWorkbookRef.current?.click();
-  };
-
-  const workspaceDirty = workspaceState?.state === 'DIRTY' || workspaceState?.state === 'CONFLICT';
-  const workspacePending = workspaceState?.state === 'PROJECT_SAVED_WORKBOOK_SYNC_PENDING';
-  const workbookVerified = link?.status === 'in_sync'
-    && link.verified === true
-    && link.verification?.status === 'verified';
-  const syncTone = workspaceDirty
-    ? 'red'
-    : workspacePending
-      ? 'yellow'
-      : !project
-    ? 'neutral'
-    : workbookVerified
-      ? 'green'
-      : ['workbook_changed', 'app_changed', 'review_required', 'pending'].includes(link?.status || '')
-        ? 'yellow'
-        : ['conflict', 'project_mismatch', 'missing', 'locked', 'invalid'].includes(link?.status || '')
-          ? 'red'
-          : 'neutral';
-
-  const syncHeadline = workspaceDirty
-    ? 'UNSAVED WORKSPACE EDITS'
-    : workspacePending
-      ? 'PROJECT SAVED · WORKBOOK SYNC PENDING'
-      : !project
-    ? 'Choose an existing project'
-    : workbookVerified
-      ? 'PROJECT SAVED · WORKBOOK SYNCED'
-      : link?.status === 'in_sync'
-        ? 'Workbook order verification required'
-      : link?.status === 'workbook_changed'
-        ? 'Workbook changed after the last sync'
-      : link?.status === 'app_changed'
-          ? 'PROJECT SAVED · WORKBOOK SYNC PENDING'
-          : link?.status === 'conflict'
-            ? 'PROJECT / WORKBOOK CONFLICT'
-            : link?.status === 'project_mismatch'
-              ? 'Wrong workbook is linked to this project'
-              : link?.status === 'review_required'
-                ? 'Workbook is authoritative — opening refreshes the project'
-                : link?.message || 'Choose the correct project workbook';
-
-  const qualityState = !quality
-    ? 'Not audited'
-    : quality.counts.critical || quality.counts.errors
-      ? `${quality.counts.errors + quality.counts.critical} errors`
-      : quality.counts.warnings
-        ? `${quality.counts.warnings} warnings`
-        : 'Clean';
 
   return (
-    <div className="project-home">
+    <main className="project-home">
       <header className="project-home-head">
         <div>
           <div className="project-home-brand">SINGH360 DRAFT</div>
-          <h1>Project Home</h1>
-          <p>Link → Inspect → Synchronize → Review Pages → Edit → Export</p>
+          <h1>Drawing Projects</h1>
+          <p>Create, open, archive, and restore self-contained drawing sets.</p>
         </div>
         <div className="project-home-head-actions">
-          <button type="button" onClick={() => window.open(aiGuideUrl('html'), '_blank', 'noopener,noreferrer')}>AI-Ready Instructions</button>
-          <button type="button" onClick={() => window.open('/app?help=1', '_blank', 'noopener,noreferrer')}>Quick Help</button>
-          <button type="button" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}>Component Builder</button>
-          {project && <button type="button" onClick={() => window.location.assign(workspaceUrl('files'))}>Project Files</button>}
-          {project && <button type="button" onClick={() => window.location.assign(workspaceUrl('data'))}>Data Workspace</button>}
-          {project && <button type="button" onClick={() => window.location.assign(actionUrl('symbol-mapper'))}>Symbol Mapper</button>}
-          {project && <button type="button" className="primary" onClick={() => window.location.assign(actionUrl())}>Page Editor</button>}
+          <button className="primary" type="button" onClick={() => setWizardOpen(true)}>
+            New Drawing Project
+          </button>
+          <button type="button" onClick={() => { void loadProjects(); }} disabled={loading}>
+            {loading ? 'Refreshing…' : 'Refresh Projects'}
+          </button>
         </div>
       </header>
 
-      <div className="workflow-strip">
-        <span className={link?.path ? 'done' : ''}>1. Link Workbook</span>
-        <span className={quality ? 'done' : ''}>2. Inspect / Repair</span>
-        <span className={workbookVerified ? 'done' : ''}>3. Establish Sync</span>
-        <span>4. Review Pages</span>
-        <span>5. Edit / Export</span>
-      </div>
-
       <div className="project-home-layout">
-        <aside className="project-list-card">
+        <aside className="project-list-card" aria-label="Active project shortcuts">
           <div className="card-head">
-            <h2>Projects</h2>
-            <label>
-              Profile
-              <select
-                value={projectProfile}
-                onChange={(event) => setProjectProfile(event.target.value as ProjectProfile)}
-                aria-label="New project profile"
-              >
-                <option value="ems">EMS Drawing Package</option>
-              </select>
-            </label>
-            <button type="button" onClick={confirmNewProject}>Create New Project</button>
-            <input
-              ref={newWorkbookRef}
-              type="file"
-              accept=".xlsx,.xlsm"
-              hidden
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                const file = event.target.files?.[0];
-                event.currentTarget.value = '';
-                if (file) void createProject(file);
-              }}
-            />
+            <div>
+              <h2>Open Active Project</h2>
+              <p>{projects.length} active drawing {projects.length === 1 ? 'project' : 'projects'}</p>
+            </div>
           </div>
           <div className="project-list">
             {projects.map((item) => (
               <button
-                type="button"
-                key={item.id}
                 className={item.id === project?.id ? 'active' : ''}
-                onClick={() => window.location.assign(`/app?project=${item.id}&mode=editor`)}
+                key={item.id}
+                type="button"
+                onClick={() => openProject(item.id)}
+                aria-current={item.id === project?.id ? 'page' : undefined}
               >
-                <strong>{projectName(item)}</strong>
-                <span>{item.sourceWorkbook || 'No workbook name'}</span>
-                <small>{item.lastSavedAt || item.modified || ''}</small>
+                <strong>{displayName(item)}</strong>
+                <span>{item.metadata?.storeNumber || item.metadata?.location || 'Standalone drawing set'}</span>
+                <small>{displayDate(item.lastSavedAt || item.modified)}</small>
               </button>
             ))}
-            {!projects.length && <p className="empty-note">No saved projects were found.</p>}
+            {!loading && projects.length === 0 ? (
+              <p className="muted">No active projects yet.</p>
+            ) : null}
           </div>
         </aside>
 
-        <main className="project-home-main">
-          {!project ? (
-            <section className="welcome-card">
-              <h2>Open a saved project from the left</h2>
-              <p>Click a project to open it. Create New Project is only for a different store or a genuinely different workbook.</p>
-              <div className="welcome-actions">
-                <button type="button" className="primary large" onClick={confirmNewProject}>Create a Different Project</button>
-                <button type="button" className="large" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}>Open Component Builder</button>
+        <div className="project-home-main">
+          <section className="welcome-card" aria-labelledby="drawing-project-start">
+            <div className="eyebrow">STANDALONE DRAWING-SET EDITOR</div>
+            <h2 id="drawing-project-start">Start with only a project name</h2>
+            <p className="muted">
+              Singh360 stores the cover, sheet index, pages, imports, annotations, and components inside the project.
+            </p>
+            <div className="welcome-actions">
+              <button className="primary large" type="button" onClick={() => setWizardOpen(true)}>
+                New Drawing Project
+              </button>
+            </div>
+          </section>
+
+          <section className="quick-actions-card" aria-labelledby="active-projects-heading">
+            <div className="card-head">
+              <div>
+                <h2 id="active-projects-heading">Active Projects</h2>
+                <p>Open a project in the editor or archive it recoverably.</p>
               </div>
-            </section>
-          ) : (
-            <>
-              <section className="project-summary-card">
-                <div>
-                  <div className="eyebrow">ACTIVE PROJECT</div>
-                  <h2>{activeProjectName(project)}</h2>
-                  <p>{project.metadata.location || 'Location not entered'}</p>
-                  <p className="muted">{project.metadata.drawingPackageFileName || project.sourceWorkbookName || ''}</p>
-                </div>
-                <div className="summary-grid">
-                  <div><b>{project.pages.length}</b><span>Editor pages</span></div>
-                  <div><b>{included}</b><span>Included</span></div>
-                  <div><b>{excluded}</b><span>Excluded</span></div>
-                  <div><b>{project.worksheets.length}</b><span>Workbook drafts</span></div>
-                </div>
-                <div className="stage-strip">
-                  <span className="draft">Draft {stageCounts.draft}</span>
-                  <span className="draft-confirmed">✓ Draft Confirmed {stageCounts.draft_confirmed}</span>
-                  <span className="public">Public {stageCounts.public}</span>
-                  <span className="public-confirmed">✓ Public Confirmed {stageCounts.public_confirmed}</span>
-                </div>
-              </section>
-
-              <section className={`simple-project-open ${syncTone}`}>
-                <div className="simple-project-open-status">
-                  <span className="simple-status-light" aria-hidden="true" />
-                  <div>
-                    <div className="eyebrow">PROJECT / WORKBOOK CHECK</div>
-                    <h2
-                      data-status-chip="true"
-                      data-help-id={workspaceDirty
-                        ? 'status.unsavedWorkspace'
-                        : workspacePending || link?.status === 'app_changed'
-                          ? 'status.syncPending'
-                          : link?.status === 'conflict'
-                            ? 'status.conflict'
-                            : 'status.localSaved'}
-                    >{syncHeadline}</h2>
-                    <p>{workspaceDirty
-                      ? 'Save or explicitly discard the open Data Workspace edits before trusting workbook sync status.'
-                      : workspacePending
-                        ? 'The local project is saved. Excel has not been intentionally mirrored.'
-                        : link?.message || 'Choose the project workbook.'}</p>
-                    <div className="simple-edit-times">
-                      <span><b>Workbook last edit</b>{link?.workbook?.modified || 'Not recorded'}</span>
-                      <span data-status-chip="true" data-help-id="status.lastLocalSave"><b>Last local save</b>{project.workbookSync?.localProjectSavedAt || project.lastSavedAt || project.modified || 'Not recorded'}</span>
-                      <span data-status-chip="true" data-help-id="status.lastWorkbookSync"><b>Last workbook sync</b>{project.workbookSync?.lastSyncUtc || 'Not recorded'}</span>
-                    </div>
-                    {workspaceDirty && (
-                      <details className="workspace-dirty-details">
-                        <summary data-help-id="status.whatUnsaved">What is unsaved?</summary>
-                        <ul>
-                          {(workspaceState?.dirtyDomains?.length
-                            ? workspaceState.dirtyDomains
-                            : ['Data Workspace cells']).map((domain) => <li key={domain}>{domain}</li>)}
-                        </ul>
-                      </details>
-                    )}
-                  </div>
-                </div>
-                <div className="simple-project-open-actions">
-                  {workbookVerified ? (
-                    <>
-                      <button type="button" className="primary large" onClick={() => window.location.assign(actionUrl())}>Open Project</button>
-                      <button type="button" onClick={() => project && void openLinkedWorkbook(project.id)}>Open Workbook</button>
-                    </>
-                  ) : ['review_required', 'conflict', 'workbook_changed', 'app_changed'].includes(link?.status || '') ? (
-                    <button type="button" className="primary large" onClick={() => void reviewSync()}>Compare Versions</button>
-                  ) : (
-                    <button type="button" className="primary large" onClick={() => void browseWorkbook()}>Choose Correct Workbook</button>
-                  )}
-                </div>
-              </section>
-
-              <section className="quick-actions-card">
-                <div className="card-head"><h2>Primary Workspace</h2><span>Keep project files, schedules, and drawing pages together</span></div>
-                <div className="project-start-tools">
-                  <button type="button" onClick={() => window.location.assign(workspaceUrl('files'))}><b>Project Files</b><span>Full-screen folders, uploads, previews, archive, and recovery</span></button>
-                  <button type="button" onClick={() => window.location.assign(workspaceUrl('data'))}><b>Data Workspace</b><span>Edit project-local schedule data without writing the linked Excel workbook</span></button>
-                  <button type="button" className="primary" onClick={() => window.location.assign(actionUrl())}><b>Page Editor</b><span>Open the complete File / Home / Insert / Symbols / Draw editor</span></button>
-                  <button type="button" onClick={() => setPageManagerOpen(true)}><b>Review Drawing Pages</b><span>Scroll through every page and choose what publishes</span></button>
-                  <button type="button" onClick={() => window.location.assign(actionUrl('symbol-mapper'))}><b>Run Symbol Mapper</b><span>Upload a drawing PDF, identify symbols, highlight, and count</span></button>
-                  <button type="button" onClick={() => window.location.assign(actionUrl('symbol-legend'))}><b>Symbol Maker / Legend Builder</b><span>Edit the Singh360 symbol standard and insert a legend</span></button>
-                  <button type="button" onClick={() => window.open('/component-catalog', '_blank', 'noopener,noreferrer')}><b>Component Builder</b><span>Create, approve, edit, and maintain reusable components</span></button>
-                </div>
-                <div className="card-head secondary-tool-head"><h2>Project Administration</h2><span>Workbook, output, recovery, and maintenance tools</span></div>
-                <div className="project-more-tools">
-                  <button type="button" onClick={() => setQualityOpen(true)}><b>Workbook Inspector / Repair</b><span>Audit, restructure, normalize, and recover from backup</span></button>
-                  <button type="button" onClick={() => void reviewSync()}><b>Review Workbook Sync</b><span>Push the current project page order, tabs, and statuses to Excel</span></button>
-                  <button type="button" onClick={() => setLibraryOpen(true)}><b>Component Library Browser</b><span>Search and review the component library inside this project</span></button>
-                  <button type="button" onClick={() => window.location.assign(actionUrl('export'))}><b>Drawing Set / Export PDF</b><span>Pick exact sheets and export</span></button>
-                  <button type="button" onClick={() => window.location.assign(actionUrl('renumber'))}><b>Reorder / Renumber</b><span>Review and apply sheet-code order</span></button>
-                  <button type="button" onClick={() => void run('Export package', packageDownload)}><b>Export Project Package</b><span>Download project.json, sources, assets, and exports</span></button>
-                  <button type="button" onClick={() => window.location.assign(actionUrl('backups'))}><b>Backups / Recovery</b><span>Review project, page, workbook, and resolution snapshots</span></button>
-                  <button type="button" onClick={() => window.open(aiGuideUrl('markdown'), '_blank', 'noopener,noreferrer')}><b>Copy / Feed AI Instructions</b><span>Open the source-of-truth Markdown guide for ChatGPT</span></button>
-                  <button type="button" className="danger" onClick={() => setDeleteOpen(true)}><b>Delete This Project</b><span>Requires the exact project name; external workbook is untouched</span></button>
-                </div>
-              </section>
-
-              <section className="workbook-link-card">
-                <div className="card-head">
-                  <div>
-                    <h2>Linked Workbook</h2>
-                    <p>G:, Google Drive for Desktop, OneDrive, network, or local Excel workbook</p>
-                  </div>
-                  <span className={`sync-badge ${link?.status || 'not_linked'}`}>
-                    {layoutOnly && ['app_changed', 'pending'].includes(link?.status || '')
-                      ? 'GENERATED WORKBOOK UPDATE PENDING'
-                      : link?.status === 'in_sync' && !workbookVerified
-                      ? 'Verification required'
-                      : statusLabel[link?.status || 'not_linked'] || link?.status}
-                  </span>
-                </div>
-                <div className="link-path-row">
-                  <input
-                    value={linkPath}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => setLinkPath(event.target.value)}
-                    placeholder="G:\Shared drives\...\Project Workbook.xlsx"
-                  />
-                  <button type="button" disabled={!!busy} onClick={() => void browseWorkbook()}>Browse</button>
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={!!busy || !linkPath.trim()}
-                    onClick={() => void run('Link workbook', async () => {
-                      if (!project) return;
-                      const result = await linkWorkbookPath(project.id, linkPath);
-                      setLink(result.status);
-                    })}
-                  >
-                    {selectedWorkbookPending ? 'Confirm Selected Workbook' : 'Confirm Link'}
-                  </button>
-                </div>
-                {selectedWorkbookPending && (
-                  <div className="workbook-selection-pending">
-                    <strong>Selected workbook — not linked yet</strong>
-                    <code>{linkPath}</code>
-                    <span>The existing workbook link stays active until confirmation.</span>
-                  </div>
-                )}
-                <div className="workbook-status-detail">
-                  <strong>{link?.message || 'Choose the project workbook.'}</strong>
-                  {link?.path && <code>{link.path}</code>}
-                  {link?.workbook && (
-                    <div className="workbook-meta">
-                      <span>{link.workbook.filename}</span>
-                      <span>{link.workbook.sheetCount} sheets</span>
-                      <span>Schema {link.workbook.schemaVersion || 'not set'}</span>
-                      <span>Help {link.workbook.helpVersion || 'not set'}</span>
-                    </div>
-                  )}
-                </div>
-                {layoutOnly && (
-                  <div className="workbook-selection-pending generated-workbook-path">
-                    <strong>Generated Workbook Path</strong>
-                    <code data-testid="generated-workbook-path">{generatedWorkbookPath || 'Not generated yet'}</code>
-                    <div className="workbook-action-row">
-                      <button type="button" disabled={!project || !generatedWorkbookPath} onClick={() => project && void openLinkedWorkbook(project.id)}>Open Workbook</button>
-                      <button type="button" disabled={!project || !generatedWorkbookPath} onClick={() => project && void revealLinkedWorkbook(project.id)}>Open Folder</button>
-                      <button
-                        type="button"
-                        disabled={!generatedWorkbookPath}
-                        data-help-id="workbook.copyPath"
-                        onClick={() => {
-                          void navigator.clipboard.writeText(generatedWorkbookPath)
-                            .then(() => setMessage('Generated workbook path copied.'))
-                            .catch(() => setMessage('Copy Path failed. Select and copy the displayed path.'));
-                        }}
-                      >
-                        Copy Path
-                      </button>
+            </div>
+            <div className="project-home-main">
+              {projects.map((item) => (
+                <article className="simple-project-open green" key={item.id}>
+                  <div className="simple-project-open-status">
+                    <span className="simple-status-light" aria-hidden="true" />
+                    <div>
+                      <div className="eyebrow">ACTIVE DRAWING SET</div>
+                      <h2>{displayName(item)}</h2>
+                      <p>
+                        {item.metadata?.client || item.metadata?.location || 'Ready to edit'}
+                      </p>
+                      <div className="simple-edit-times">
+                        <span><b>Last saved</b>{displayDate(item.lastSavedAt || item.modified)}</span>
+                        {typeof item.pageCount === 'number' ? <span><b>Pages</b>{item.pageCount}</span> : null}
+                        {typeof item.assetCount === 'number' ? <span><b>Assets</b>{item.assetCount}</span> : null}
+                      </div>
                     </div>
                   </div>
-                )}
-                <div className="workbook-action-row">
-                  <button type="button" disabled={!project || !!busy} onClick={() => void browseWorkbook()}>Change Workbook</button>
-                  <button type="button" className="primary" disabled={!project || !!busy || !link?.path} onClick={() => void reviewSync()}>
-                    {workbookVerified ? 'Check for Workbook Changes' : 'Review and Synchronize Safely'}
-                  </button>
-                  <button type="button" disabled={!project || !link?.path} onClick={() => project && void openLinkedWorkbook(project.id)}>Open in Excel</button>
-                  <button type="button" disabled={!project || !link?.path} onClick={() => project && void revealLinkedWorkbook(project.id)}>Show in Explorer</button>
-                  <button type="button" onClick={() => setQualityOpen(true)} disabled={!link?.path}>Inspect / Repair Workbook</button>
-                  <button type="button" className="danger" disabled={!project || !link?.path} onClick={() => void run('Unlink workbook', async () => {
-                    if (!project || !window.confirm('Unlink the external workbook? Project data and the internal recovery copy remain.')) return;
-                    await unlinkWorkbook(project.id);
-                  })}>Unlink</button>
+                  <div className="simple-project-open-actions">
+                    <button className="primary" type="button" onClick={() => openProject(item.id)}>
+                      Open Project
+                    </button>
+                    <button
+                      className="danger"
+                      type="button"
+                      disabled={Boolean(busyProjectId)}
+                      onClick={() => { void archive(item); }}
+                    >
+                      {busyProjectId === item.id ? 'Archiving…' : 'Archive'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+              {!loading && projects.length === 0 ? (
+                <div className="welcome-card">
+                  <h2>No active projects</h2>
+                  <p className="muted">Create a blank drawing set to begin.</p>
                 </div>
-              </section>
+              ) : null}
+            </div>
+          </section>
 
-              <section className="health-card expanded">
-                <div><b>Local project save</b><span className="ok">Independent of workbook availability</span></div>
-                <div><b>Workbook quality</b><span>{qualityState}</span></div>
-                <div><b>Component library</b><span>{libraryHealth ? `${libraryHealth.total} components · ${libraryHealth.needsReview} need review` : 'Health check unavailable'}</span></div>
-                <div><b>Last project save</b><span>{project.lastSavedAt || project.modified || 'Not recorded'}</span></div>
-                <div><b>Workbook sync</b><span>{link?.lastSyncUtc || 'Not completed'}</span></div>
-              </section>
-            </>
-          )}
-
-          {message && <div className={`dashboard-message ${message.toLowerCase().includes('failed') ? 'error' : ''}`}>{message}</div>}
-          {busy && <div className="dashboard-busy">{busy}…</div>}
-        </main>
+          <section className="quick-actions-card" id="archived-projects" aria-labelledby="archived-projects-heading">
+            <div className="card-head">
+              <div>
+                <h2 id="archived-projects-heading">Archived Projects</h2>
+                <p>Archived drawing sets remain recoverable and can be restored here.</p>
+              </div>
+            </div>
+            <div className="project-home-main">
+              {archivedProjects.map((item) => (
+                <article className="simple-project-open yellow" key={item.id}>
+                  <div className="simple-project-open-status">
+                    <span className="simple-status-light" aria-hidden="true" />
+                    <div>
+                      <div className="eyebrow">ARCHIVED DRAWING SET</div>
+                      <h2>{displayName(item)}</h2>
+                      <p>{item.archiveReason || 'This project is excluded from Active Projects.'}</p>
+                      <div className="simple-edit-times">
+                        <span><b>Archived</b>{displayDate(item.archivedAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="simple-project-open-actions">
+                    <button
+                      type="button"
+                      disabled={Boolean(busyProjectId)}
+                      onClick={() => { void restore(item); }}
+                    >
+                      {busyProjectId === item.id ? 'Restoring…' : 'Restore Project'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+              {!loading && archivedProjects.length === 0 ? (
+                <div className="welcome-card">
+                  <p className="muted">No archived projects.</p>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </div>
       </div>
 
-      {project && syncDecisionOpen && link && (
-        <SyncDecisionModal
-          status={link}
-          projectName={activeProjectName(project)}
-          projectSavedAt={project.lastSavedAt || project.modified || ''}
-          busy={!!busy}
-          onClose={() => setSyncDecisionOpen(false)}
-          onResolve={resolveSync}
-        />
-      )}
-      {project && pageManagerOpen && (
-        <PageManagerModal
-          project={project}
-          busy={!!busy}
-          onClose={() => setPageManagerOpen(false)}
-          onSave={savePageSelection}
-          onOpenPage={openPage}
-        />
-      )}
-      {qualityOpen && (
-        <WorkbookQualityModal
-          report={quality}
-          busy={!!busy}
-          onClose={() => setQualityOpen(false)}
-          onRefresh={refreshQuality}
-          onRepair={repairQuality}
-        />
-      )}
-      {project && deleteOpen && (
-        <DeleteProjectModal
-          projectName={activeProjectName(project)}
-          busy={!!busy}
-          onClose={() => setDeleteOpen(false)}
-          onDelete={removeProject}
-        />
-      )}
-      {libraryOpen && (
-        <div className="dashboard-overlay">
-          <div className="dashboard-overlay-panel component-workspace">
-            <div className="overlay-head">
-              <div><h2>Component Library</h2><p>Full project component workspace</p></div>
-              <div>
-                {project && <button type="button" onClick={() => window.location.assign(actionUrl())}>Open Editor to Insert</button>}
-                <button type="button" onClick={() => setLibraryOpen(false)}>Close</button>
-              </div>
-            </div>
-            <div className="component-workspace-body">
-              <LibraryPanelV2 onInsert={() => undefined} canInsert={false} onOpenLegendEditor={() => project && window.location.assign(actionUrl('symbol-legend'))} />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      {loading ? <div className="dashboard-busy" role="status">Loading projects…</div> : null}
+      {status ? <div className="dashboard-message" role="status">{status}</div> : null}
+      {error ? <div className="dashboard-message error" role="alert">{error}</div> : null}
+      {wizardOpen ? <NewProjectWizard onClose={closeWizard} /> : null}
+    </main>
   );
 }

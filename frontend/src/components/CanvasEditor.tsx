@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Canvas, Rect, Circle, Textbox, Line, Group, ActiveSelection, FabricImage, filters, util, type FabricObject } from 'fabric';
 import type { BusOptions, CalloutSetConfig, CanvasApi, CanvasSelection, ImageCropPlacement, ImageCropRect, ImageCropState, LibraryComponentInsertMeta, LineStyle, PlacedSymbolEditorConfig, QuickAssemblyId, SavedAssembly, SmartComponentConfig, SmartComponentType, SymbolLegendInsertConfig } from '../model/types';
 import { Connector } from './connector';
@@ -23,12 +23,13 @@ interface Props {
   onToolConsumed: () => void;
   snap: boolean;
   overlayMode: boolean;
+  exporting?: boolean;
 }
 
 const CANVAS_W = BODY_W;
 const CANVAS_H = BODY_H;
 const SNAP = 16;
-const SER_PROPS = ['objectId', 'assemblyId', 'assemblyName', 'objName', 'sourceUrl', 'symCategory', 'symAcronym', 'libraryComponentId', 'libraryCollection', 'favorite', 'placedSymbolType', 'placedSymbolConfig', 'placedSymbolRole', 'calloutComponentType', 'calloutConfig', 'calloutVersion', 'calloutRole', 'smartComponentType', 'smartConfig', 'smartComponentVersion', 'smartRole', 'smartParentId', 'smartParentType', 'smartParentConfig', 'smartParentName', 'subTargetCheck', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfPage', 'pdfDpi', 'pdfCrop', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented', 'visible', 'textBoxFill', 'textBoxFillOpacity', 'textBoxStroke', 'textBoxStrokeWidth', 'textBoxPadding', 'textBoxRadius'];
+const SER_PROPS = ['objectId', 'assemblyId', 'assemblyName', 'objName', 'sourceUrl', 'symCategory', 'symAcronym', 'libraryComponentId', 'libraryCollection', 'favorite', 'placedSymbolType', 'placedSymbolConfig', 'placedSymbolRole', 'calloutComponentType', 'calloutConfig', 'calloutVersion', 'calloutRole', 'smartComponentType', 'smartConfig', 'smartComponentVersion', 'smartRole', 'smartParentId', 'smartParentType', 'smartParentConfig', 'smartParentName', 'subTargetCheck', 'arrowStart', 'arrowEnd', 'connectorKind', 'pointsData', 'label', 'stylePreset', 'wireNumber', 'labelStart', 'labelMiddle', 'labelEnd', 'layer', 'pdfSource', 'pdfSourceId', 'pdfPage', 'pdfDpi', 'pdfCrop', 'pdfBase', 'pdfImportId', 'pdfImportGroupId', 'pdfPlacementMode', 'pdfCoordinateSpace', 'pdfPageFingerprint', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'editable', 'selectable', 'evented', 'visible', 'textBoxFill', 'textBoxFillOpacity', 'textBoxStroke', 'textBoxStrokeWidth', 'textBoxPadding', 'textBoxRadius'];
 const SMART_COMPONENT_TYPES = new Set<SmartComponentType>(
   SMART_COMPONENT_CHOICES.map((item) => item.kind),
 );
@@ -535,9 +536,11 @@ export default function CanvasEditor({
   onToolConsumed,
   snap,
   overlayMode,
+  exporting = false,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fabricRef = useRef<Canvas | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   // Latest-prop refs so long-lived Fabric handlers read current values.
   const toolRef = useRef(activeTool);
@@ -720,7 +723,7 @@ export default function CanvasEditor({
         let repairedPdfObjects = false;
         const liveObjects = componentRepair.objects.map((raw) => {
           const obj: Record<string, unknown> = { ...raw };
-          if (typeof obj.pdfSource === 'string' && obj.pdfSource.trim()) {
+          if (!exporting && typeof obj.pdfSource === 'string' && obj.pdfSource.trim()) {
             if (obj.visible === false || Number(obj.opacity ?? 1) !== 1 || obj.excludeFromExport === true) repairedPdfObjects = true;
             obj.visible = true;
             obj.opacity = 1;
@@ -738,6 +741,7 @@ export default function CanvasEditor({
         historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
         histIdxRef.current = 0;
         restoringRef.current = false;
+        setHydrated(true);
         if (repairedPdfObjects || componentRepair.repaired > 0 || leakSensorRepair.repaired > 0) {
           onSerRef.current(normalizeCanvasObjects((canvas.toObject(SER_PROPS).objects ?? []) as Record<string, unknown>[]));
         }
@@ -748,6 +752,7 @@ export default function CanvasEditor({
     } else {
       historyRef.current = [JSON.stringify(canvas.toObject(SER_PROPS))];
       histIdxRef.current = 0;
+      setHydrated(true);
     }
 
     canvas.on('object:modified', onChanged);
@@ -2747,6 +2752,7 @@ export default function CanvasEditor({
   return (
     <div
       className="canvas-wrap"
+      data-canvas-hydrated={hydrated ? '1' : '0'}
       data-action="canvas-selection"
       data-help-id="object.select"
       aria-label="Drawing canvas objects"

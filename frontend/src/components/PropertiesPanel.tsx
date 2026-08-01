@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { CanvasSelection, PageModel } from '../model/types';
-import { PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
+import { USER_PAGE_TEMPLATES, applyTemplate, templateForPage, type PageTemplate } from '../model/pageTemplates';
+import { isCoverPage, isSheetIndexPage } from '../model/packageIndex';
 import { BODY_H, BODY_W } from '../model/sheetGeometry';
 import { SMART_COMPONENT_LABELS } from '../model/smartComponents';
 
 interface Props {
   page: PageModel;
-  onChange: (next: PageModel) => void;
+  onChange: (patch: Partial<PageModel>) => void;
   selection: CanvasSelection | null;
   onUpdateSelection: (patch: Partial<CanvasSelection>) => void;
   projectDisplayName?: string;
@@ -16,6 +17,7 @@ interface Props {
   onMergeIntoPrevious?: () => void;
   onMakeIndependent?: () => void;
   onReapplyPagination?: () => void;
+  onApplyExcelLayout?: (layout: 'exact_source' | 'two_columns' | 'keep_one_page') => void;
   onConnectorConvert?: (kind: 'line' | 'arrow' | 'polyline' | 'elbow') => void;
   onConnectorAddVertex?: () => void;
   onConnectorDeleteVertex?: () => void;
@@ -38,6 +40,7 @@ export default function PropertiesPanel({
   onMergeIntoPrevious,
   onMakeIndependent,
   onReapplyPagination,
+  onApplyExcelLayout,
   onConnectorConvert,
   onConnectorAddVertex,
   onConnectorDeleteVertex,
@@ -48,6 +51,7 @@ export default function PropertiesPanel({
   onEditPlacedSymbol,
 }: Props) {
   const [renameValue, setRenameValue] = useState('');
+  const managedPage = isCoverPage(page) || isSheetIndexPage(page);
   return (
     <>
       {(projectDisplayName !== undefined || projectFolder) && (
@@ -101,7 +105,7 @@ export default function PropertiesPanel({
         </div>
       )}
 
-      {page.continuationOf && (
+      {page.continuationOf && !managedPage && (
         <div className="props-group props-warning">
           <h3>↳ Continuation Page</h3>
           <p className="props-note">This sheet is a continuation of a previous page.</p>
@@ -120,22 +124,43 @@ export default function PropertiesPanel({
 
       <div className="props-group">
         <h3>Page Properties</h3>
+        {managedPage ? <p className="props-note">This page is maintained automatically. Update cover fields in Project Settings.</p> : null}
+        {page.renderMode === 'excel_exact' && !page.continuationOf && onApplyExcelLayout && (
+          <div className="field">
+            <label htmlFor="excel-layout">Excel Layout</label>
+            <select
+              id="excel-layout"
+              aria-label="Excel Layout"
+              value={page.layoutOverride === 'two_columns' || page.layoutOverride === 'keep_one_page' ? page.layoutOverride : 'exact_source'}
+              onChange={(event) => onApplyExcelLayout(event.target.value as 'exact_source' | 'two_columns' | 'keep_one_page')}
+            >
+              <option value="exact_source">Exact Source / Auto</option>
+              <option value="two_columns">Two Columns</option>
+              <option value="keep_one_page">Keep on One Page</option>
+            </select>
+            <p className="props-note">Exact Source preserves Excel geometry. Two Columns and Keep on One Page are explicit overrides.</p>
+          </div>
+        )}
         <div className="field">
           <label htmlFor="page-code">Sheet Code</label>
-          <input id="page-code" value={page.sheetCode} onChange={(e) => onChange({ ...page, sheetCode: e.target.value })} />
+          <input id="page-code" value={page.sheetCode} disabled={managedPage} onChange={(e) => onChange({ sheetCode: e.target.value, displaySheetCode: e.target.value })} />
         </div>
         <div className="field">
           <label htmlFor="page-title">Sheet Title</label>
-          <input id="page-title" value={page.sheetTitle} onChange={(e) => onChange({ ...page, sheetTitle: e.target.value })} />
+          <input id="page-title" value={page.sheetTitle} disabled={managedPage} onChange={(e) => onChange({ sheetTitle: e.target.value })} />
         </div>
         <div className="field">
           <label htmlFor="page-type">Page Template</label>
           <select
             id="page-type"
             value={templateForPage(page)}
-            onChange={(e) => onChange(applyTemplate(page, e.target.value as PageTemplate))}
+            disabled={managedPage}
+            onChange={(e) => {
+              const applied = applyTemplate(page, e.target.value as PageTemplate);
+              onChange({ template: applied.template, pageType: applied.pageType });
+            }}
           >
-            {PAGE_TEMPLATES.map((t) => (
+            {(managedPage ? [templateForPage(page)] : USER_PAGE_TEMPLATES).map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
@@ -145,14 +170,14 @@ export default function PropertiesPanel({
             <input
               type="checkbox"
               checked={!!page.showTerminatedBy}
-              onChange={(e) => onChange({ ...page, showTerminatedBy: e.target.checked })}
+              onChange={(e) => onChange({ showTerminatedBy: e.target.checked })}
             />
             {' '}Show Terminated By column
           </label>
         )}
         <div className="field">
           <label htmlFor="page-notes">Notes</label>
-          <textarea id="page-notes" value={page.notes} onChange={(e) => onChange({ ...page, notes: e.target.value })} rows={4} />
+          <textarea id="page-notes" value={page.notes} disabled={managedPage} onChange={(e) => onChange({ notes: e.target.value })} rows={4} />
         </div>
       </div>
 
@@ -164,7 +189,7 @@ export default function PropertiesPanel({
             <input
               id="page-src-range"
               value={page.sourceRange || ''}
-              onChange={(e) => onChange({ ...page, sourceRange: e.target.value })}
+              onChange={(e) => onChange({ sourceRange: e.target.value })}
             />
           </div>
           <div className="field">
@@ -173,7 +198,7 @@ export default function PropertiesPanel({
               id="page-print-area"
               value={page.printArea || ''}
               placeholder="e.g. A1:K45"
-              onChange={(e) => onChange({ ...page, printArea: e.target.value || null })}
+              onChange={(e) => onChange({ printArea: e.target.value || null })}
             />
           </div>
           <div className="field">
@@ -181,7 +206,7 @@ export default function PropertiesPanel({
             <select
               id="page-split-mode"
               value={page.splitMode || 'auto_rows'}
-              onChange={(e) => onChange({ ...page, splitMode: e.target.value })}
+              onChange={(e) => onChange({ splitMode: e.target.value })}
             >
               <option value="none">None (scale/warn only)</option>
               <option value="auto_rows">Auto — split by rows</option>
@@ -200,7 +225,7 @@ export default function PropertiesPanel({
                   .filter(Boolean)
                   .map((x) => Number(x))
                   .filter((n) => Number.isFinite(n) && n >= 0);
-                onChange({ ...page, repeatRows: rows });
+                onChange({ repeatRows: rows });
               }}
             />
           </div>
@@ -214,7 +239,7 @@ export default function PropertiesPanel({
                 max={1}
                 step={0.05}
                 value={page.minScale ?? 0.5}
-                onChange={(e) => onChange({ ...page, minScale: Number(e.target.value) })}
+                onChange={(e) => onChange({ minScale: Number(e.target.value) })}
               />
             </div>
             <div className="field">
@@ -223,7 +248,7 @@ export default function PropertiesPanel({
                   id="page-allow-cont"
                   type="checkbox"
                   checked={page.allowContinuation !== false}
-                  onChange={(e) => onChange({ ...page, allowContinuation: e.target.checked })}
+                  onChange={(e) => onChange({ allowContinuation: e.target.checked })}
                 />
                 {' '}Allow continuation
               </label>

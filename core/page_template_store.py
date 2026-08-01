@@ -29,19 +29,45 @@ _STRIP_ON_SAVE = {
     "pageNumber",
     "pageTotal",
     "sourceRevision",
+    "sourceImport",
     "importedFrom",
     "layoutWarnings",
     "archivedAt",
+    "archivedReason",
+    "archivedFromIndex",
+    "archivedPreviousPageId",
+    "archivedNextPageId",
+    "archivedInclude",
+    "lastArchivedAt",
+    "lastArchivedReason",
+    "lastArchivedFromIndex",
+    "restoredAt",
+    "managedPage",
+    "parentPageId",
+    "recipeWorksheetId",
+    "indexContinuation",
+    "generatedIndexContinuation",
     "renderMode",
     "sourceSheet",
     "sourceRange",
     "printArea",
+    "createdAt",
+    "modifiedAt",
+    "savedAt",
 }
 
 _NESTED_SOURCE_KEYS = {
     "sourceWorksheetId",
     "sourceSheet",
     "sourceRange",
+    "linkedWorksheetId",
+    "recipeWorksheetId",
+    "pdfSource",
+    "pdfSourceId",
+    "pdfImportId",
+    "pdfImportGroupId",
+    "pdfPageFingerprint",
+    "pdfBase",
 }
 
 
@@ -67,6 +93,51 @@ def _remove_nested_source_links(value: Any) -> Any:
         for key, item in value.items()
         if key not in _NESTED_SOURCE_KEYS
     }
+
+
+def _clean_template_payload(page: dict[str, Any]) -> dict[str, Any]:
+    """Return a project-independent clone without mutating *page*."""
+    payload = deepcopy(page)
+    for key in _STRIP_ON_SAVE:
+        payload.pop(key, None)
+    cleaned = _remove_nested_source_links(payload)
+    return cleaned if isinstance(cleaned, dict) else {}
+
+
+def _freshen_canvas_object_ids(objects: Any) -> list[dict[str, Any]]:
+    """Clone a serialized Fabric forest with unique group/child object IDs."""
+    if not isinstance(objects, list):
+        return []
+
+    cloned = deepcopy(objects)
+    replacements: dict[str, str] = {}
+
+    def walk(value: Any):
+        if isinstance(value, list):
+            for item in value:
+                yield from walk(item)
+            return
+        if not isinstance(value, dict):
+            return
+        yield value
+        children = value.get("objects")
+        if isinstance(children, list):
+            for child in children:
+                yield from walk(child)
+
+    for record in walk(cloned):
+        previous = record.get("objectId")
+        fresh = str(uuid.uuid4())
+        record["objectId"] = fresh
+        if isinstance(previous, str) and previous:
+            replacements[previous] = fresh
+
+    for record in walk(cloned):
+        previous_parent = record.get("smartParentId")
+        if isinstance(previous_parent, str) and previous_parent in replacements:
+            record["smartParentId"] = replacements[previous_parent]
+
+    return [item for item in cloned if isinstance(item, dict)]
 
 
 class PageTemplateStore:
@@ -236,10 +307,7 @@ class PageTemplateStore:
         template_id = template_id or (str(existing.get("id")) if existing else None)
         template_id = template_id or uuid.uuid4().hex[:12]
 
-        payload = deepcopy(page)
-        for key in _STRIP_ON_SAVE:
-            payload.pop(key, None)
-        payload = _remove_nested_source_links(payload)
+        payload = _clean_template_payload(page)
         payload["templateName"] = clean_name
         payload["savedAt"] = _ts()
 
@@ -350,7 +418,7 @@ class PageTemplateStore:
         if payload is None:
             return None
 
-        page = deepcopy(payload)
+        page = _clean_template_payload(payload)
         page_id = new_page_id or f"page_{uuid.uuid4().hex[:12]}"
         page["id"] = page_id
         page["order"] = order
@@ -363,8 +431,10 @@ class PageTemplateStore:
         page["continuationOf"] = None
         page["continuationIndex"] = 0
         page["generatedContinuation"] = False
-        page["canvasObjects"] = list(page.get("canvasObjects") or [])
-        page["blocks"] = list(page.get("blocks") or [])
+        page["canvasObjects"] = _freshen_canvas_object_ids(page.get("canvasObjects"))
+        page["blocks"] = deepcopy(list(page.get("blocks") or []))
+        page["sourceMode"] = "app"
+        page["syncDirection"] = "none"
         page.pop("renderMode", None)
         page.pop("linkedWorksheetId", None)
         return page

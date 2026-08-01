@@ -42,6 +42,8 @@ class VectorPlacement:
     width: float
     height: float
     object_name: str
+    coordinate_space: str = "body"
+    strict_base: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -160,6 +162,8 @@ def _placement_from_object(
         width=rendered_width,
         height=rendered_height,
         object_name=str(obj.get("objName") or source_pdf),
+        coordinate_space=str(obj.get("pdfCoordinateSpace") or ("sheet" if obj.get("pdfPlacementMode") == "full_sheet" else "body")),
+        strict_base=bool(obj.get("pdfBase")),
     )
 
 
@@ -194,7 +198,7 @@ def _drawing_page(page: dict[str, Any]) -> bool:
     page_type = str(page.get("pageType") or "").strip().lower()
     if page_type in {"cover", "index", "sheet index", "toc", "data-grid", "table", "matrix"}:
         return False
-    if page_type in {"canvas", "hybrid", "image", "layout", "image / layout", "underlay"}:
+    if page_type in {"canvas", "hybrid", "image", "layout", "image / layout", "underlay", "pdf"}:
         return True
     family = str(page.get("pageFamily") or page.get("family") or "").lower()
     if any(token in family for token in ("image", "layout", "floor plan", "device location")):
@@ -260,7 +264,22 @@ def build_selected_export_document(
                 page["pageNumber"] = None
                 page["pageTotal"] = total
 
+    def _normalize_automatic_standalone(doc: dict[str, Any]) -> dict[str, Any]:
+        """Refresh managed pages without consulting legacy workbook data."""
+        from core.standalone_project import normalize_standalone_project
+
+        stable_timestamp = str(
+            doc.get("modified")
+            or doc.get("created")
+            or "1970-01-01T00:00:00Z"
+        )
+        return normalize_standalone_project(doc, now=stable_timestamp)
+
     clone = copy.deepcopy(project)
+    standalone = clone.get("projectMode") == "standalone_layout"
+    automatic_standalone = standalone and clone.get("managedPagePolicy") != "preserve_existing"
+    if automatic_standalone:
+        clone = _normalize_automatic_standalone(clone)
     selected = selected_page_ids_from_request(selected_page_ids)
     pages = clone.get("pages") if isinstance(clone.get("pages"), list) else []
     originally_included = {
@@ -269,8 +288,15 @@ def build_selected_export_document(
         if isinstance(page, dict) and page.get("include", True)
     }
     if not selected:
-        from core.sheet_index_sync import sync_project_sheet_index
-        clone = sync_project_sheet_index(clone)
+        # A standalone project JSON is authoritative.  In particular, never
+        # let a retained legacy ``worksheets`` / ``00_INDEX`` snapshot rewrite
+        # the saved sheet codes during export.  Automatic sets were refreshed
+        # above solely from their current page manifest; detach-only sets such
+        # as SA31 must remain byte-structure preserving in the export clone.
+        if not standalone:
+            from core.sheet_index_sync import sync_project_sheet_index
+
+            clone = sync_project_sheet_index(clone)
         _recalc_page_numbers_local(clone)
         return clone
 
@@ -289,8 +315,34 @@ def build_selected_export_document(
         if isinstance(page, dict):
             page["include"] = str(page.get("id")) in allowed
 
-    if selected_base_index:
+    if selected_base_index and automatic_standalone:
+        # Normalization normally keeps the Cover included according to project
+        # settings.  For an exact selected export, reflect the explicit Cover
+        # selection while deriving the required index continuation count.
+        cover_selected = any(
+            str(page.get("id")) in allowed
+            and str(page.get("pageType") or "").strip().casefold() == "cover"
+            for page in pages
+            if isinstance(page, dict)
+        )
+        clone["coverSettings"] = {
+            **dict(clone.get("coverSettings") or {}),
+            "include": cover_selected,
+        }
+        clone = _normalize_automatic_standalone(clone)
+        pages = clone.get("pages") if isinstance(clone.get("pages"), list) else []
+        generated_index_ids = {
+            str(page.get("id"))
+            for page in pages
+            if isinstance(page, dict)
+            and is_sheet_index_page(page)
+            and page.get("generatedContinuation")
+            and page.get("include", True)
+        }
+        allowed |= generated_index_ids
+    elif selected_base_index and not standalone:
         from core.sheet_index_sync import sync_project_sheet_index
+
         clone = sync_project_sheet_index(clone)
         pages = clone.get("pages") if isinstance(clone.get("pages"), list) else []
         generated_index_ids = {
@@ -338,6 +390,8 @@ def prepare_vector_export_clone(
     for export_index, page in enumerate(pages):
         objects = page.get("canvasObjects") if isinstance(page.get("canvasObjects"), list) else []
         drawing_page = _drawing_page(page)
+        strict_pdf_page = str(page.get("pageType") or "").strip().lower() == "pdf"
+        strict_base_count = 0
 
         # Protected pages never receive source-PDF vector content.  Hide any stale
         # direct PDF object in the export clone so it cannot show through the
@@ -357,10 +411,16 @@ def prepare_vector_export_clone(
                 project_page_id=str(page.get("id") or ""),
             )
             if placement is None:
+                if strict_pdf_page and obj.get("pdfBase") is True:
+                    raise RuntimeError(f"Managed PDF base is invalid on project page {page.get('id') or ''}.")
                 continue
+            if placement.strict_base:
+                strict_base_count += 1
             if source_pdf_dir is not None:
                 source_path = _resolve_source_pdf(Path(source_pdf_dir), placement.source_pdf)
                 if source_path is None:
+                    if placement.strict_base:
+                        raise RuntimeError(f"Managed PDF source is missing for project page {placement.project_page_id}: {placement.source_pdf}")
                     continue
                 page_count = verified_sources.get(source_path)
                 if page_count is None:
@@ -368,9 +428,13 @@ def prepare_vector_export_clone(
                         with fitz.open(source_path) as source_doc:
                             page_count = source_doc.page_count
                     except Exception:
+                        if placement.strict_base:
+                            raise RuntimeError(f"Managed PDF source is unreadable for project page {placement.project_page_id}: {placement.source_pdf}")
                         continue
                     verified_sources[source_path] = page_count
                 if placement.source_page_index < 0 or placement.source_page_index >= page_count:
+                    if placement.strict_base:
+                        raise RuntimeError(f"Managed PDF source page is out of range for project page {placement.project_page_id}.")
                     continue
 
             key = (
@@ -410,6 +474,11 @@ def prepare_vector_export_clone(
                 if body_fraction >= 0.30 and _overlap_ratio(pdf_bounds, other_bounds) >= 0.90:
                     _hide_export_object(other)
 
+        if strict_pdf_page and strict_base_count != 1:
+            raise RuntimeError(
+                f"Managed PDF project page {page.get('id') or ''} requires exactly one vector base; found {strict_base_count}."
+            )
+
     return clone, placements
 
 def _resolve_source_pdf(source_pdf_dir: Path, name: str) -> Path | None:
@@ -422,7 +491,26 @@ def _resolve_source_pdf(source_pdf_dir: Path, name: str) -> Path | None:
     return candidate
 
 
-def _destination_rect(page: fitz.Page, placement: VectorPlacement) -> fitz.Rect:
+def _contained_rect(container: fitz.Rect, source: fitz.Rect) -> fitz.Rect:
+    if source.width <= 0 or source.height <= 0:
+        return fitz.Rect()
+    scale = min(container.width / source.width, container.height / source.height)
+    width = source.width * scale
+    height = source.height * scale
+    left = container.x0 + (container.width - width) / 2.0
+    top = container.y0 + (container.height - height) / 2.0
+    return fitz.Rect(left, top, left + width, top + height)
+
+
+def _destination_rect(
+    page: fitz.Page,
+    placement: VectorPlacement,
+    *,
+    source_clip: fitz.Rect | None = None,
+) -> fitz.Rect:
+    if placement.coordinate_space == "sheet" and placement.strict_base:
+        clip = source_clip or fitz.Rect(*placement.clip)
+        return _contained_rect(fitz.Rect(page.rect), clip)
     sheet_scale = min(page.rect.width / SHEET_W, page.rect.height / SHEET_H)
     rendered_sheet_w = SHEET_W * sheet_scale
     rendered_sheet_h = SHEET_H * sheet_scale
@@ -496,7 +584,11 @@ def apply_vector_pdf_underlays(
                 skipped.append({**placement.to_dict(), "reason": "source crop is empty"})
                 continue
 
-            destination = _destination_rect(output[mapped_index], placement)
+            destination = _destination_rect(
+                output[mapped_index],
+                placement,
+                source_clip=clip,
+            )
             if destination.is_empty or destination.width <= 0 or destination.height <= 0:
                 skipped.append({**placement.to_dict(), "reason": "destination is empty"})
                 continue
@@ -505,7 +597,7 @@ def apply_vector_pdf_underlays(
                 source,
                 placement.source_page_index,
                 clip=clip,
-                keep_proportion=False,
+                keep_proportion=placement.coordinate_space == "sheet" and placement.strict_base,
                 overlay=False,
             )
             inserted += 1

@@ -64,7 +64,6 @@ export function accessibleName(element: HTMLElement): string {
 }
 
 const helpRules: Array<[RegExp, string]> = [
-  [/save\s*\+\s*write excel|writing excel/i, 'save.writeExcel'],
   [/save data workspace|save workspace edits/i, 'workspace.save'],
   [/save now|save project/i, 'save.localProject'],
   [/what is unsaved/i, 'status.whatUnsaved'],
@@ -78,10 +77,7 @@ const helpRules: Array<[RegExp, string]> = [
   [/help|instructions/i, 'nav.help'],
   [/create (new|a different) project/i, 'project.new'],
   [/open project/i, 'project.open'],
-  [/upload workbook|import workbook/i, 'project.importWorkbook'],
-  [/change workbook|choose correct workbook|browse/i, 'project.relinkWorkbook'],
-  [/confirm link|link workbook/i, 'project.linkWorkbook'],
-  [/open workbook|open in excel/i, 'project.refreshWorkbook'],
+  [/import excel table|upload excel|import worksheet/i, 'project.importTable'],
   [/backups|back up/i, 'project.backup'],
   [/delete this project|remove project|archive project/i, 'project.delete'],
   [/export pdf|drawing set/i, 'export.pdf'],
@@ -157,7 +153,6 @@ const helpRules: Array<[RegExp, string]> = [
 function statusHelpId(label: string): string | undefined {
   if (/unsaved workspace/i.test(label)) return 'status.unsavedWorkspace';
   if (/unsaved project|unsaved changes/i.test(label)) return 'status.unsavedProject';
-  if (/sync pending|workbook update pending/i.test(label)) return 'status.syncPending';
   if (/conflict|both.*changed/i.test(label)) return 'status.conflict';
   if (/save failed/i.test(label)) return 'save.retry';
   if (/saved|ready|clean|match/i.test(label)) return 'status.localSaved';

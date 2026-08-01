@@ -51,11 +51,13 @@ async def run_export():
 
         await page.route("**/*", route_assets)
         await page.goto(PAGE_URL, wait_until="networkidle")
-        try:
-            await page.wait_for_selector("body[data-print-ready='1']", timeout=20000)
-        except Exception:
-            pass
-        await page.wait_for_timeout(800)
+        await page.wait_for_selector(
+            "body[data-print-ready='1'], body[data-print-error]",
+            timeout=30000,
+        )
+        print_error = await page.locator("body").get_attribute("data-print-error")
+        if print_error:
+            raise RuntimeError(f"Print renderer did not become ready: {{print_error}}")
         blocking = [
             e for e in errors
             if not e.startswith("fabric: Error loading ")

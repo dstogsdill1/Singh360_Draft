@@ -12,14 +12,15 @@ import type { ProjectModel } from '../model/types';
 
 interface Props {
   projectId: string;
-  onRestore: (project: ProjectModel) => void;
+  beforeRestore: () => Promise<boolean>;
+  onRestore: (project: ProjectModel, source: 'server' | 'local') => Promise<boolean>;
   onClose: () => void;
 }
 
 // Backups & recovery: list server-side project.json snapshots and offer to
 // restore, plus surface the newest local (browser) recovery snapshot in case a
 // save never reached the server.
-export default function BackupRecoveryModal({ projectId, onRestore, onClose }: Props) {
+export default function BackupRecoveryModal({ projectId, beforeRestore, onRestore, onClose }: Props) {
   const [backups, setBackups] = useState<ProjectBackup[]>([]);
   const [pageSnapshots, setPageSnapshots] = useState<PageSnapshot[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,8 +42,9 @@ export default function BackupRecoveryModal({ projectId, onRestore, onClose }: P
   const doRestore = async (name: string) => {
     if (!window.confirm(`Restore backup "${name}"?\n\nThe current project is backed up first, so this is reversible.`)) return;
     try {
+      if (!await beforeRestore()) return;
       const restored = await restoreProjectBackup(projectId, name);
-      onRestore(restored);
+      if (!await onRestore(restored, 'server')) setError('The restored project could not be confirmed in the editor.');
     } catch (e) {
       setError(String(e));
     }
@@ -51,16 +53,25 @@ export default function BackupRecoveryModal({ projectId, onRestore, onClose }: P
   const doRestorePage = async (snapshot: PageSnapshot) => {
     if (!window.confirm(`Restore page snapshot "${snapshot.sheetCode} ${snapshot.sheetTitle}"?\n\nThe current project is backed up first, so this is reversible.`)) return;
     try {
+      if (!await beforeRestore()) return;
       const restored = await restorePageSnapshot(projectId, snapshot.pageId, snapshot.name);
-      onRestore(restored);
+      if (!await onRestore(restored, 'server')) setError('The restored page could not be confirmed in the editor.');
     } catch (e) {
       setError(String(e));
     }
   };
 
-  const restoreLocal = (snapshot: RecoverySnapshot) => {
+  const restoreLocal = async (snapshot: RecoverySnapshot) => {
     if (!window.confirm('Restore the latest unsaved drawing changes from this browser?')) return;
-    onRestore(snapshot.project);
+    setError('');
+    try {
+      if (!await beforeRestore()) return;
+      if (!await onRestore(snapshot.project, 'local')) {
+        setError('The local recovery snapshot is still open in the editor, but its server save was not confirmed. Use Save Project to retry.');
+      }
+    } catch (reason) {
+      setError(String(reason));
+    }
   };
 
   const countText = (counts: PageSnapshot['counts'] | undefined) => {
@@ -89,7 +100,7 @@ export default function BackupRecoveryModal({ projectId, onRestore, onClose }: P
                 <li key={`${snap.savedAt}-${i}`}>
                   <span>{fmt(snap.savedAt)}</span>
                   <span className="backup-size">pages {snap.project.pages?.length ?? 0}</span>
-                  <button className="btn btn-primary" onClick={() => restoreLocal(snap)}>Restore Local</button>
+                  <button className="btn btn-primary" onClick={() => { void restoreLocal(snap); }}>Restore Local</button>
                 </li>
               ))}
             </ul>
@@ -101,7 +112,7 @@ export default function BackupRecoveryModal({ projectId, onRestore, onClose }: P
         <section className="backup-section">
           <h4>Page Snapshots</h4>
           {loading && <p className="backup-empty">Loading…</p>}
-          {!loading && !pageSnapshots.length && <p className="backup-empty">No page snapshots yet. They are created automatically on save.</p>}
+          {!loading && !pageSnapshots.length && <p className="backup-empty">No page snapshots yet. They are created before page rebuild and recovery operations.</p>}
           <ul className="backup-list">
             {pageSnapshots.map((s) => (
               <li key={`${s.pageId}-${s.name}`}>

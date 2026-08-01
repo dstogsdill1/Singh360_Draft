@@ -7,6 +7,8 @@ packages.
 from __future__ import annotations
 
 import base64
+from copy import deepcopy
+import hashlib
 import json
 import logging
 import os
@@ -14,6 +16,8 @@ import re
 import shutil
 import socket
 import sys
+import tempfile
+import threading
 import time
 import traceback
 import uuid
@@ -54,8 +58,20 @@ from core.pdf_renderer import (
     is_available as pdf_renderer_available,
 )
 from core.pdf_importer import import_pdf
+from core.pdf_page_import import (
+    PdfPageImportError,
+    commit_pdf_import,
+    existing_pdf_import_groups,
+    preview_pdf,
+)
 from core.project_model import ensure_project_shape, recalc_page_numbers
-from core.sheet_index_sync import sync_project_sheet_index
+from core.standalone_project import (
+    archive_project as mark_project_archived,
+    create_standalone_project,
+    migrate_project_to_standalone,
+    normalize_standalone_project,
+    restore_project as mark_project_restored,
+)
 from core.project_store import ProjectStore, slugify
 from core.project_workspace import (
     ProjectFileLibrary,
@@ -63,7 +79,6 @@ from core.project_workspace import (
     WorkbookDocumentStore,
     WorkbookRevisionConflict,
     open_local_path,
-    reconcile_project_workbook_order,
     reconcile_workbook_document_order,
     reveal_local_path,
     safe_virtual_path,
@@ -85,11 +100,9 @@ from core.workbook_link_manager import (
     configured_workbook_path,
     initialize_internal_workbook_link,
     internal_workbook_path,
-    maybe_pull_on_open,
     open_workbook as open_linked_workbook,
     resolve as resolve_workbook_link,
     reveal_workbook as reveal_linked_workbook,
-    save_local_then_try_sync,
     set_link as set_workbook_link,
     status_payload,
     sync_auto as sync_workbook_auto,
@@ -164,6 +177,30 @@ app.config["MAX_CONTENT_LENGTH"] = 512 * 1024 * 1024
 
 
 _NO_CACHE_PATHS = {"/", "/app", "/component-catalog", "/component-catalog/"}
+_LEGACY_WORKBOOK_ROUTE_RE = re.compile(
+    r"^/api/projects/[a-f0-9]{16}/(?:workbook-link(?:/.*)?|workbook-quality(?:/.*)?|reimport(?:/.*)?)$"
+)
+
+
+@app.before_request
+def _disable_legacy_workbook_authority_routes():
+    """Keep workbook authority endpoints unreachable in standalone mode.
+
+    The implementations remain available only as an explicit rollback aid.
+    One-time worksheet import routes are deliberately not matched here.
+    """
+    if os.environ.get("SINGH360_ENABLE_LEGACY_WORKBOOK_ROUTES", "").strip() == "1":
+        return None
+    path = request.path
+    if (
+        path in {"/api/legacy/projects/new-from-workbook", "/api/import/workbook"}
+        or _LEGACY_WORKBOOK_ROUTE_RE.fullmatch(path)
+    ):
+        return jsonify(_err(
+            "Legacy workbook synchronization is disabled.",
+            "Use Add / Import Page for a one-time project-local worksheet import.",
+        )), 410
+    return None
 
 
 @app.after_request
@@ -188,11 +225,38 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _safe_id(project_id: str) -> str:
     """Validate and return the project_id, or 404 if it looks malformed."""
     if not PROJECT_ID_RE.match(project_id):
         abort(404)
     return project_id
+
+
+def _normalize_project_for_runtime(project: dict) -> dict:
+    """Normalize automatic sets while preserving protected detach-only pages.
+
+    SA31 and an unopened legacy package use ``preserve_existing`` so an
+    ordinary GET, Save Project, or Export PDF cannot synthesize/reorder pages.
+    The controlled migration command is the only path that opts a protected
+    project into app-managed Cover/Sheet Index normalization.
+    """
+    if (
+        project.get("projectMode") != "standalone_layout"
+        or project.get("managedPagePolicy") == "preserve_existing"
+    ):
+        return migrate_project_to_standalone(
+            project,
+            normalize_managed_pages=False,
+        )
+    return normalize_standalone_project(project)
 
 
 def _project_path(project_id: str) -> Path:
@@ -283,6 +347,65 @@ def _staging_dir(kind: str, token: str) -> Path:
     path = root / token
     path.mkdir(parents=False, exist_ok=False)
     return path
+
+
+def _new_standalone_project_request() -> tuple[dict, object | None]:
+    """Read one standalone-project request without accepting workbook uploads.
+
+    JSON remains the ordinary no-logo API.  The onboarding wizard uses one
+    multipart request only when it includes a customer logo, keeping project
+    creation and the project-local logo copy inside the same server-side
+    transaction.
+    """
+    if request.is_json:
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            raise ValueError("Request body must be a JSON object.")
+        return body, None
+
+    if request.mimetype == "multipart/form-data" and "customerLogo" in request.files:
+        raw_metadata = str(request.form.get("metadata") or "").strip()
+        if not raw_metadata:
+            raise ValueError("Project metadata is required.")
+        try:
+            body = json.loads(raw_metadata)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Project metadata must be valid JSON.") from exc
+        if not isinstance(body, dict):
+            raise ValueError("Project metadata must be a JSON object.")
+        return body, request.files["customerLogo"]
+
+    raise TypeError(
+        "New Drawing Project accepts JSON settings, or settings with one customer logo."
+    )
+
+
+def _stage_customer_logo(upload: object, stage: Path, project_id: str) -> str:
+    """Validate and copy one raster logo into a not-yet-active package."""
+    filename = str(getattr(upload, "filename", "") or "").strip()
+    extension = Path(filename).suffix.lower().lstrip(".")
+    if extension == "jpeg":
+        extension = "jpg"
+    if extension not in {"png", "jpg", "webp", "gif"}:
+        raise ValueError("Customer logo must be a PNG, JPEG, WebP, or GIF image.")
+
+    asset_id = uuid.uuid4().hex[:16]
+    assets_dir = stage / "assets" / "images"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    destination = assets_dir / f"{asset_id}.{extension}"
+    getattr(upload, "save")(destination)
+    if not destination.is_file() or destination.stat().st_size <= 0:
+        raise ValueError("Customer logo is empty.")
+    if destination.stat().st_size > 25 * 1024 * 1024:
+        raise ValueError("Customer logo exceeds the 25 MB limit.")
+    try:
+        from PIL import Image as _PILImage
+
+        with _PILImage.open(destination) as image:
+            image.verify()
+    except Exception as exc:
+        raise ValueError("Customer logo is not a readable image.") from exc
+    return f"/api/assets/{project_id}/{destination.name}"
 
 
 # --------------------------------------------------------------------------
@@ -433,7 +556,11 @@ def serve_firm_logo():
 
 @app.get("/api/projects")
 def list_projects():
-    return jsonify({"projects": store.list_projects()})
+    projects = store.list_projects()
+    return jsonify({
+        "projects": [project for project in projects if not project.get("archived")],
+        "archivedProjects": [project for project in projects if project.get("archived")],
+    })
 
 
 def _project_workspace(project_id: str) -> tuple[dict, Path]:
@@ -442,7 +569,48 @@ def _project_workspace(project_id: str) -> tuple[dict, Path]:
     project_dir = store.find_dir(project_id)
     if doc is None or project_dir is None:
         abort(404)
-    return doc, project_dir
+    resolved = project_dir.resolve()
+    projects_root = store.projects_dir.resolve()
+    if projects_root not in resolved.parents:
+        abort(403)
+    return doc, resolved
+
+
+def _project_child(project_dir: Path, *parts: str) -> Path:
+    """Resolve one path that is provably contained by an existing package."""
+    root = Path(project_dir).resolve()
+    child = root.joinpath(*parts).resolve()
+    if root not in child.parents:
+        abort(403)
+    return child
+
+
+def _import_staging_parent() -> Path:
+    """Return disposable import staging outside every project package."""
+    root = (DOCS_DIR / ".runtime" / "import-staging").resolve()
+    if DOCS_DIR.resolve() not in root.parents:
+        raise OSError("Import staging escaped the configured runtime directory.")
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _install_staged_file(source: Path, destination: Path, created: list[Path]) -> None:
+    """Install a new file without overwriting an existing project asset."""
+    with source.open("rb") as incoming, destination.open("xb") as outgoing:
+        # Record immediately so a short write/fsync failure also rolls back the
+        # partially-created destination.
+        created.append(destination)
+        shutil.copyfileobj(incoming, outgoing)
+        outgoing.flush()
+        os.fsync(outgoing.fileno())
+
+
+def _remove_created_files(paths: list[Path]) -> None:
+    for path in reversed(paths):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            app.logger.warning("Could not clean failed import artifact %s", path)
 
 
 @app.get("/api/projects/<project_id>/project-files")
@@ -707,20 +875,6 @@ def save_data_workspace(project_id: str):
                 (doc.get("dataWorkspace") or {}).get("appliedRevision") or 0
             ),
         }
-        sync = dict(doc.get("workbookSync") or {})
-        sync.update(
-            {
-                "status": "app_changed",
-                "warning": (
-                    "Data Workspace saved locally. The linked Excel workbook "
-                    "was not written."
-                ),
-                "pendingReason": "data_workspace_saved_excel_pending",
-                "localProjectSavedAt": saved_at,
-                "lastAuthorityAction": "data_workspace_local_save",
-            }
-        )
-        doc["workbookSync"] = sync
         store.save(project_id, doc)
         return jsonify(saved)
     except WorkbookRevisionConflict as exc:
@@ -795,8 +949,60 @@ def preview_continuation():
 
 
 @app.post("/api/projects/new")
+@app.post("/api/legacy/projects/new-from-workbook")
 def new_project():
-    """Build and atomically publish a complete project package."""
+    """Create a standalone drawing set; retain workbook import only at /api/legacy/."""
+    if request.path == "/api/projects/new":
+        try:
+            body, customer_logo = _new_standalone_project_request()
+        except TypeError as exc:
+            return jsonify(_err(
+                str(exc),
+                "Use Add / Import Page after creating the standalone project; workbook creation is legacy-only.",
+            )), 415
+        except ValueError as exc:
+            return jsonify(_err("Project creation failed.", str(exc))), 400
+        project_name = str(body.get("projectName") or "").strip()
+        if not project_name:
+            return jsonify(_err("Project Name is required.")), 400
+        project_id = uuid.uuid4().hex[:16]
+        prepared_by = str(body.get("preparedBy") or "").strip()
+        metadata = {
+            "projectName": project_name,
+            "client": body.get("client") or body.get("customer") or "",
+            "storeNumber": body.get("storeNumber") or body.get("projectNumber") or "",
+            "location": body.get("location") or "",
+            "projectType": body.get("projectType") or "",
+            "drawingSetTitle": body.get("drawingSetTitle") or "",
+            "preparedBy": prepared_by,
+            "createdBy": prepared_by,
+            "checkedBy": body.get("checkedBy") or "",
+            "createdDate": body.get("createdDate") or "",
+            "revision": body.get("revision") or "",
+            "notes": body.get("notes") or "",
+            "drawingPackageFileName": body.get("drawingPackageFileName") or "",
+        }
+        stage = None
+        try:
+            stage = _staging_dir("project", f"new-standalone-{project_id}-{uuid.uuid4().hex[:8]}")
+            store.ensure_folders(stage)
+            if customer_logo is not None:
+                metadata["customerLogoAsset"] = _stage_customer_logo(customer_logo, stage, project_id)
+            project_state = create_standalone_project(project_id, metadata, profile="full")
+            store.activate_staged_project(project_id, project_state, stage)
+            stage = None
+        except ValueError as exc:
+            app.logger.warning("Standalone project creation rejected for %s: %s", project_id, exc)
+            return jsonify(_err("Project creation failed.", str(exc))), 400
+        except OSError as exc:
+            app.logger.exception("Standalone project creation failed for %s", project_id)
+            return jsonify(_err("Project creation failed.", str(exc))), 500
+        finally:
+            if stage is not None:
+                shutil.rmtree(stage, ignore_errors=True)
+        return jsonify({"ok": True, "id": project_id, "project": project_state}), 201
+
+    # Explicitly isolated rollback/migration-only workbook importer.
     if "file" not in request.files:
         return jsonify(_err("No workbook file uploaded.")), 400
 
@@ -890,45 +1096,20 @@ def get_project(project_id: str):
         return jsonify(_err("Project file is corrupt or unreadable.")), 500
     if doc is None:
         abort(404)
-    doc = ensure_project_shape(doc)
-    doc = sync_project_sheet_index(doc)
-    try:
-        doc = maybe_pull_on_open(project_id, doc, store)
-    except WorkbookSyncError as exc:
-        # A workbook sync problem must never hide an intact locally saved
-        # drawing package. Return it with the exact failure attached.
-        app.logger.error("Opening local project %s with workbook sync error: %s", project_id, exc)
-        sync = dict(doc.get("workbookSync") or {})
-        sync.update({
-            "status": "sync_failed",
-            "warning": str(exc),
-            "openError": str(exc),
-            "lastAuthorityAction": "opened_local_project_with_sync_error",
-        })
-        doc["workbookSync"] = sync
+    doc = _normalize_project_for_runtime(doc)
     return jsonify(doc)
 
 
 @app.post("/api/projects/<project_id>")
-# S360 LOCAL DRAFT SAVE MODE V23.1
-@app.post("/api/projects/<project_id>")
-
-# S360 LOCAL AUTOSAVE / EXPLICIT WORKBOOK SYNC V25
-@app.post("/api/projects/<project_id>")
 def save_project(project_id: str):
-    """Save the working drawing locally; Excel changes are an explicit sync."""
+    """Atomically save the standalone project package; no external authority."""
     _safe_id(project_id)
     data = request.get_json(force=True, silent=True)
     if data is None:
         return jsonify(_err("Request body must be valid JSON.")), 400
 
     data["id"] = project_id
-    data = ensure_project_shape(data)
-    data = sync_project_sheet_index(data)
-    try:
-        data, manifest = reconcile_project_workbook_order(data)
-    except ProjectWorkspaceError as exc:
-        return jsonify(_err("Project order reconciliation failed.", str(exc))), 400
+    data = _normalize_project_for_runtime(data)
 
     problems = validate_project(data)
     if problems:
@@ -936,73 +1117,12 @@ def save_project(project_id: str):
     else:
         data.pop("draftValidationWarnings", None)
 
-    previous = _load_doc(project_id) or {}
-    previous_sync = (
-        previous.get("workbookSync")
-        if isinstance(previous.get("workbookSync"), dict)
-        else {}
-    )
-    incoming_sync = (
-        data.get("workbookSync")
-        if isinstance(data.get("workbookSync"), dict)
-        else {}
-    )
-    sync = {**previous_sync, **incoming_sync}
-    conflict_active = (
-        str(previous_sync.get("status") or previous_sync.get("state") or "")
-        == "conflict"
-        or str(incoming_sync.get("status") or incoming_sync.get("state") or "")
-        == "conflict"
-    )
-    sync.update(
-        {
-            "status": "conflict" if conflict_active else "app_changed",
-            "warning": (
-                "Both the local project and workbook changed. Automatic "
-                "overwrite remains blocked."
-                if conflict_active
-                else (
-                    "Project saved locally. Workbook update is pending. "
-                    "Use Project Home > Review Workbook Sync > "
-                    "Sync Project to Workbook Now."
-                )
-            ),
-            "pendingReason": (
-                "two_sided_conflict" if conflict_active else "app_changes_pending"
-            ),
-            "localProjectSavedAt": _utcnow(),
-            "lastAuthorityAction": "local_autosave",
-            "syncEngineVersion": "V25",
-        }
-    )
-    data["workbookSync"] = sync
-
     project_dir = store.find_dir(project_id)
     if project_dir is None:
         return jsonify(_err("Local project save failed.", "Project package was not found.")), 404
-    project_path = project_dir / "project.json"
-    document_store = WorkbookDocumentStore(project_dir)
-    try:
-        prepared_document, document_changed = (
-            document_store.prepare_reconciled_order(data, manifest)
-        )
-    except ProjectWorkspaceError as exc:
-        return jsonify(
-            _err("Data Workspace order reconciliation failed.", str(exc))
-        ), 400
-
-    previous_project_bytes = project_path.read_bytes()
     try:
         store.save(project_id, data)
-        if document_changed:
-            document_store.commit_reconciled_order(prepared_document)
     except OSError as exc:
-        try:
-            _restore_file_bytes(project_path, previous_project_bytes)
-        except OSError:
-            app.logger.exception(
-                "Could not roll back partial local project save %s", project_id
-            )
         app.logger.error("Could not save local project %s: %s", project_id, exc)
         return jsonify(_err("Local project save failed.", str(exc))), 500
 
@@ -1012,7 +1132,8 @@ def save_project(project_id: str):
 
 
 
-# S360 PROJECT HOME + EXTERNAL WORKBOOK LINK V1
+# Legacy explicit-only workbook routes retained for package rollback and
+# diagnostics.  Standalone UI/save/navigation/export code never calls them.
 @app.get("/api/projects/<project_id>/workbook-link")
 def workbook_link_status(project_id: str):
     doc = _load_doc(project_id)
@@ -1223,10 +1344,9 @@ def save_page_inclusion(project_id: str):
             page["publishStatus"] = "YES" if included else "NO"
 
     doc["pages"] = pages
-    doc = ensure_project_shape(doc)
-    doc = sync_project_sheet_index(doc)
+    doc = _normalize_project_for_runtime(doc)
     try:
-        doc = save_local_then_try_sync(project_id, doc, store)
+        store.save(project_id, doc)
     except Exception as exc:
         app.logger.exception("Page inclusion save failed for project %s", project_id)
         return jsonify(_err("Page selection save failed before the local project could be confirmed.", str(exc))), 500
@@ -1238,7 +1358,6 @@ def save_page_inclusion(project_id: str):
         "project": doc,
         "included": included,
         "excluded": excluded,
-        "workbookSync": doc.get("workbookSync", {}),
     })
 
 @app.post("/api/projects/<project_id>/pages")
@@ -1253,7 +1372,7 @@ def upsert_pages(project_id: str):
     try:
         doc["pages"] = pages
         doc = ensure_project_shape(doc)
-        doc = sync_project_sheet_index(doc)
+        doc = _normalize_project_for_runtime(doc)
         problems = validate_project(doc)
         if problems:
             return jsonify(_err("Page update failed validation.", " | ".join(problems[:20]))), 400
@@ -1266,9 +1385,7 @@ def upsert_pages(project_id: str):
 
 @app.post("/api/projects/<project_id>/sources")
 def add_source_to_project(project_id: str):
-    path = _project_path(project_id)
-    if not path.is_file():
-        abort(404)
+    doc, project_dir = _project_workspace(project_id)
 
     if "file" not in request.files:
         return jsonify(_err("No source file uploaded.")), 400
@@ -1292,59 +1409,78 @@ def add_source_to_project(project_id: str):
             ".webp": "image",
         }.get(ext, "asset")
 
-    source_dir = store.sources_dir(project_id, source_kind if source_kind in {"workbook", "csv", "pdf", "vsdx"} else "csv")
-    source_path = source_dir / f"{source_id}{ext}"
+    source_folder = source_kind if source_kind in {"workbook", "csv", "pdf", "vsdx"} else "csv"
+    stored_name = f"{source_id}{ext}"
+    project_local_path = f"sources/{source_folder}/{stored_name}"
+    source_destination = _project_child(project_dir, *project_local_path.split("/"))
+    created_files: list[Path] = []
+    saved = False
 
-    try:
-        upload.save(source_path)
-        doc = _load_doc(project_id)
-        if doc is None:
-            abort(404)
-        doc = ensure_project_shape(doc)
+    with tempfile.TemporaryDirectory(
+        prefix="source-import-",
+        dir=_import_staging_parent(),
+    ) as staging_name:
+        source_path = Path(staging_name) / stored_name
+        try:
+            upload.save(source_path)
+            doc = ensure_project_shape(deepcopy(doc))
 
-        source_meta: dict = {
-            "id": source_id,
-            "type": source_kind,
-            "name": upload.filename,
-            "path": str(source_path),
-            "importedAt": _utcnow(),
-        }
+            source_meta: dict = {
+                "id": source_id,
+                "type": source_kind,
+                "name": upload.filename,
+                "path": str(source_destination),
+                "projectLocalPath": project_local_path,
+                "sha256": _sha256_file(source_path),
+                "importedAt": _utcnow(),
+            }
 
-        if source_kind == "csv":
-            grid = import_csv_to_grid(source_path)
-            ws_id = f"ws_{len(doc['worksheets']) + 1}"
-            doc["worksheets"].append(
-                {
-                    "id": ws_id,
-                    "name": upload.filename,
-                    "sourceId": source_id,
-                    "visible": True,
-                    "classHint": "data-grid",
-                    "grid": grid,
-                    "formulas": {},
-                    "styles": {},
-                    "mergedCells": [],
-                    "rowHeights": {},
-                    "columnWidths": {},
-                    "provenance": {"sheet": upload.filename},
-                }
-            )
-        elif source_kind == "pdf":
-            source_meta.update(import_pdf(source_path))
-        elif source_kind == "vsdx":
-            source_meta.update(import_vsdx(source_path))
+            if source_kind == "csv":
+                grid = import_csv_to_grid(source_path)
+                ws_id = f"ws_{len(doc['worksheets']) + 1}"
+                doc["worksheets"].append(
+                    {
+                        "id": ws_id,
+                        "name": upload.filename,
+                        "sourceId": source_id,
+                        "visible": True,
+                        "classHint": "data-grid",
+                        "grid": grid,
+                        "formulas": {},
+                        "styles": {},
+                        "mergedCells": [],
+                        "rowHeights": {},
+                        "columnWidths": {},
+                        "provenance": {
+                            "sheet": upload.filename,
+                            "projectLocalPath": project_local_path,
+                        },
+                    }
+                )
+            elif source_kind == "pdf":
+                source_meta.update(import_pdf(source_path))
+            elif source_kind == "vsdx":
+                source_meta.update(import_vsdx(source_path))
+            source_meta["name"] = upload.filename
+            source_meta["path"] = str(source_destination)
+            source_meta["projectLocalPath"] = project_local_path
 
-        doc["sources"].append(source_meta)
-        doc = ensure_project_shape(doc)
+            doc["sources"].append(source_meta)
+            doc = ensure_project_shape(doc)
 
-        problems = validate_project(doc)
-        if problems:
-            return jsonify(_err("Source import failed validation.", " | ".join(problems[:20]))), 400
+            problems = validate_project(doc)
+            if problems:
+                return jsonify(_err("Source import failed validation.", " | ".join(problems[:20]))), 400
 
-        store.save(project_id, doc)
-    except Exception as exc:
-        app.logger.error("Failed to add source for %s: %s", project_id, exc)
-        return jsonify(_err("Failed to import source.", str(exc))), 500
+            _install_staged_file(source_path, source_destination, created_files)
+            store.save(project_id, doc)
+            saved = True
+        except Exception as exc:
+            app.logger.error("Failed to add source for %s: %s", project_id, exc)
+            return jsonify(_err("Failed to import source.", str(exc))), 500
+        finally:
+            if not saved:
+                _remove_created_files(created_files)
 
     return jsonify({"ok": True, "id": project_id, "source": source_meta})
 
@@ -1353,8 +1489,7 @@ def add_source_to_project(project_id: str):
 def attach_csv_structured(project_id: str):
     """Attach a CSV as a structured source: raw worksheet + Equipment Summary
     and per-category inventory output pages."""
-    if _load_doc(project_id) is None:
-        abort(404)
+    doc, project_dir = _project_workspace(project_id)
     if "file" not in request.files:
         return jsonify(_err("No CSV uploaded.")), 400
 
@@ -1363,42 +1498,79 @@ def attach_csv_structured(project_id: str):
         return jsonify(_err("Only .csv is supported for this endpoint.")), 400
 
     source_id = uuid.uuid4().hex[:16]
-    csv_path = store.sources_dir(project_id, "csv") / f"{source_id}.csv"
+    project_local_path = f"sources/csv/{source_id}.csv"
+    csv_destination = _project_child(project_dir, *project_local_path.split("/"))
+    created_files: list[Path] = []
+    saved = False
 
-    try:
-        upload.save(csv_path)
-        doc = _load_doc(project_id)
-        doc = ensure_project_shape(doc)
+    with tempfile.TemporaryDirectory(
+        prefix="csv-import-",
+        dir=_import_staging_parent(),
+    ) as staging_name:
+        csv_path = Path(staging_name) / f"{source_id}.csv"
+        try:
+            upload.save(csv_path)
+            source_sha256 = _sha256_file(csv_path)
+            imported_at = _utcnow()
+            doc = ensure_project_shape(deepcopy(doc))
 
-        ws_id = f"ws_csv_{source_id}"
-        worksheet, new_pages = build_csv_worksheet_and_pages(
-            csv_path, ws_id, source_id, upload.filename, len(doc.get("pages", [])) + 1
-        )
-        # Paginate any oversized CSV tables.
-        new_pages = compose_pages(new_pages)
+            ws_id = f"ws_csv_{source_id}"
+            original_name = Path(str(upload.filename or "import.csv")).name
+            worksheet, new_pages = build_csv_worksheet_and_pages(
+                csv_path, ws_id, source_id, original_name, len(doc.get("pages", [])) + 1
+            )
+            # Paginate any oversized CSV tables.
+            new_pages = compose_pages(new_pages)
 
-        doc["worksheets"].append(worksheet)
-        doc["sources"].append(
-            {
-                "id": source_id,
-                "type": "csv",
-                "name": upload.filename,
-                "path": str(csv_path),
-                "importedAt": _utcnow(),
+            source_import = {
+                "sourceId": source_id,
+                "sourceType": "csv",
+                "originalFileName": original_name,
+                "sha256": source_sha256,
+                "selectedWorksheet": Path(original_name).stem,
+                "importMode": "one_time_editable_table",
+                "projectLocalPath": project_local_path,
+                "importedAt": imported_at,
             }
-        )
-        doc["pages"].extend(new_pages)
-        doc = ensure_project_shape(doc)
-        recalc_page_numbers(doc)
+            worksheet.setdefault("provenance", {}).update(source_import)
+            for page in new_pages:
+                page["sourceImport"] = dict(source_import)
+                page.setdefault("createdAt", imported_at)
+                page["modifiedAt"] = imported_at
 
-        problems = validate_project(doc)
-        if problems:
-            return jsonify(_err("CSV import failed validation.", " | ".join(problems[:20]))), 400
+            doc["worksheets"].append(worksheet)
+            doc["sources"].append(
+                {
+                    "id": source_id,
+                    "type": "csv",
+                    "name": original_name,
+                    "originalFileName": original_name,
+                    "path": str(csv_destination),
+                    "projectLocalPath": project_local_path,
+                    "sha256": source_sha256,
+                    "sourceType": "csv",
+                    "selectedWorksheet": source_import["selectedWorksheet"],
+                    "importMode": source_import["importMode"],
+                    "importedAt": imported_at,
+                }
+            )
+            doc["pages"].extend(new_pages)
+            doc = ensure_project_shape(doc)
+            recalc_page_numbers(doc)
 
-        store.save(project_id, doc)
-    except Exception as exc:
-        app.logger.error("CSV structured import failed for %s: %s", project_id, exc)
-        return jsonify(_err("Failed to import CSV.", str(exc))), 500
+            problems = validate_project(doc)
+            if problems:
+                return jsonify(_err("CSV import failed validation.", " | ".join(problems[:20]))), 400
+
+            _install_staged_file(csv_path, csv_destination, created_files)
+            store.save(project_id, doc)
+            saved = True
+        except Exception as exc:
+            app.logger.error("CSV structured import failed for %s: %s", project_id, exc)
+            return jsonify(_err("Failed to import CSV.", str(exc))), 500
+        finally:
+            if not saved:
+                _remove_created_files(created_files)
 
     return jsonify({"ok": True, "id": project_id, "worksheetId": ws_id, "pagesAdded": len(new_pages)})
 
@@ -1406,31 +1578,29 @@ def attach_csv_structured(project_id: str):
 @app.post("/api/projects/<project_id>/import/workbook-sheet/preview")
 def preview_import_workbook_sheet(project_id: str):
     """Upload a workbook and return sheet names + row/col counts (no project mutation)."""
-    _safe_id(project_id)
-    if _load_doc(project_id) is None:
-        abort(404)
+    _project_workspace(project_id)
     if "file" not in request.files:
         return jsonify(_err("No workbook file uploaded.")), 400
     upload = request.files["file"]
-    if not (upload.filename or "").lower().endswith((".xlsx", ".xlsm", ".xls")):
-        return jsonify(_err("Only .xlsx/.xlsm/.xls workbooks are supported.")), 400
+    if not (upload.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        return jsonify(_err("Only .xlsx/.xlsm workbooks are supported.")), 400
 
-    # Store temporarily in project tmp (auto-expires on next cleanup).
-    tmp_dir = store.sources_dir(project_id, "tmp")
-    tmp_path = tmp_dir / f"preview_{uuid.uuid4().hex[:8]}_{upload.filename}"
     try:
-        upload.save(tmp_path)
-        from core.sheet_importer import preview_workbook_sheets
-        sheets = preview_workbook_sheets(tmp_path)
-    except Exception as exc:
-        return jsonify(_err("Could not read workbook.", str(exc))), 400
-    finally:
+        original_name = _uploaded_workbook_name(upload.filename)
+    except ValueError as exc:
+        return jsonify(_err("Invalid workbook filename.", str(exc))), 400
+    with tempfile.TemporaryDirectory(
+        prefix="workbook-preview-",
+        dir=_import_staging_parent(),
+    ) as staging_name:
+        tmp_path = Path(staging_name) / original_name
         try:
-            if tmp_path.exists():
-                tmp_path.unlink()
-        except OSError:
-            pass
-    return jsonify({"ok": True, "sheets": sheets, "filename": upload.filename})
+            upload.save(tmp_path)
+            from core.sheet_importer import preview_workbook_sheets
+            sheets = preview_workbook_sheets(tmp_path)
+        except Exception as exc:
+            return jsonify(_err("Could not read workbook.", str(exc))), 400
+    return jsonify({"ok": True, "sheets": sheets, "filename": original_name})
 
 
 @app.post("/api/projects/<project_id>/import/workbook-sheet")
@@ -1443,15 +1613,14 @@ def do_import_workbook_sheet(project_id: str):
       insertAfterPageId — page id to insert after (optional; default: append)
       templateOverride  — page template hint (optional)
     """
-    _safe_id(project_id)
-    doc = _load_doc(project_id)
-    if doc is None:
-        abort(404)
+    doc, project_dir = _project_workspace(project_id)
     if "file" not in request.files:
         return jsonify(_err("No workbook file uploaded.")), 400
     upload = request.files["file"]
-    if not (upload.filename or "").lower().endswith((".xlsx", ".xlsm", ".xls")):
-        return jsonify(_err("Only .xlsx/.xlsm/.xls workbooks are supported.")), 400
+    try:
+        original_name = _uploaded_workbook_name(upload.filename)
+    except ValueError as exc:
+        return jsonify(_err("Only .xlsx/.xlsm workbooks are supported.", str(exc))), 400
 
     import json as _json
     raw_names = request.form.get("sheetNames", "[]")
@@ -1466,32 +1635,104 @@ def do_import_workbook_sheet(project_id: str):
     replace_page_id = request.form.get("replacePageId") or None
     template_override = request.form.get("templateOverride") or None
     preserve_exact = (request.form.get("preserveExact") or "1").strip().lower() not in {"0", "false", "no", "off"}  # S360 SINGLE FORMATTED SHEET IMPORT V1
+    layout_override = (request.form.get("layoutOverride") or "exact_source").strip().lower()
+    if layout_override not in {"auto", "exact_source", "one_column", "two_columns", "continue_blocks", "keep_one_page"}:
+        return jsonify(_err("Invalid layout override.", layout_override)), 400
 
-    # Save the workbook permanently to the project sources directory.
-    wb_dir = store.sources_dir(project_id, "workbook")
-    wb_path = wb_dir / upload.filename
-    try:
-        upload.save(wb_path)
-        from core.sheet_importer import import_workbook_sheets
-        doc = ensure_project_shape(doc)
-        doc, new_pages = import_workbook_sheets(
-            doc,
-            wb_path,
-            sheet_names,
-            insert_after_page_id=insert_after_id,
-            replace_page_id=replace_page_id,
-            template_override=template_override,
-            preserve_exact=preserve_exact,
-            assets_dir=store.assets_excel_dir(project_id, doc),
-            asset_url_prefix=f"/api/assets/{project_id}",
-            source_filename=upload.filename,
-        )
-        recalc_page_numbers(doc)
-        store.save(project_id, doc)
-    except Exception as exc:
-        tb = traceback.format_exc()
-        app.logger.error("workbook-sheet import failed for %s:\n%s", project_id, tb)
-        return jsonify(_err("Failed to import worksheet(s).", str(exc))), 500
+    source_token = uuid.uuid4().hex[:16]
+    stored_name = f"{source_token}_{original_name}"
+    project_local_path = f"sources/workbook/{stored_name}"
+    wb_destination = _project_child(project_dir, *project_local_path.split("/"))
+    created_files: list[Path] = []
+    saved = False
+    with tempfile.TemporaryDirectory(
+        prefix="workbook-import-",
+        dir=_import_staging_parent(),
+    ) as staging_name:
+        stage = Path(staging_name)
+        wb_path = stage / stored_name
+        staged_assets = stage / "excel-assets"
+        try:
+            upload.save(wb_path)
+            source_sha256 = _sha256_file(wb_path)
+            from core.sheet_importer import import_workbook_sheets
+            doc = ensure_project_shape(deepcopy(doc))
+            doc, new_pages = import_workbook_sheets(
+                doc,
+                wb_path,
+                sheet_names,
+                insert_after_page_id=insert_after_id,
+                replace_page_id=replace_page_id,
+                template_override=template_override,
+                preserve_exact=preserve_exact,
+                layout_override=layout_override,
+                assets_dir=staged_assets,
+                asset_url_prefix=f"/api/assets/{project_id}",
+                source_filename=original_name,
+                source_sha256=source_sha256,
+                project_local_path=project_local_path,
+            )
+
+            # Source records must point at the permanent project-local copy,
+            # never at the disposable import staging directory.
+            for source in doc.get("sources", []):
+                if isinstance(source, dict) and source.get("projectLocalPath") == project_local_path:
+                    source["path"] = str(wb_destination)
+            for worksheet in doc.get("worksheets", []):
+                if not isinstance(worksheet, dict):
+                    continue
+                provenance = worksheet.get("provenance")
+                if isinstance(provenance, dict) and provenance.get("projectLocalPath") == project_local_path:
+                    provenance["sourcePath"] = str(wb_destination)
+
+            # Embedded-image names are historically based on worksheet names.
+            # Prefix this import's files so a later import cannot overwrite an
+            # earlier project asset with the same sheet/image ordinal.
+            asset_installs: list[tuple[Path, Path]] = []
+            asset_name_map: dict[str, str] = {}
+            if staged_assets.is_dir():
+                for staged_asset in sorted(path for path in staged_assets.iterdir() if path.is_file()):
+                    unique_name = f"{source_token}_{staged_asset.name}"
+                    destination = _project_child(
+                        project_dir,
+                        "assets",
+                        "images",
+                        "excel",
+                        unique_name,
+                    )
+                    asset_name_map[staged_asset.name] = unique_name
+                    asset_installs.append((staged_asset, destination))
+            if asset_name_map:
+                for worksheet in doc.get("worksheets", []):
+                    embedded = worksheet.get("embeddedImages") if isinstance(worksheet, dict) else None
+                    if not isinstance(embedded, list):
+                        continue
+                    for image in embedded:
+                        if not isinstance(image, dict):
+                            continue
+                        old_name = str(image.get("name") or "")
+                        new_name = asset_name_map.get(old_name)
+                        if new_name:
+                            image["name"] = new_name
+                            image["url"] = f"/api/assets/{project_id}/{new_name}"
+
+            recalc_page_numbers(doc)
+            problems = validate_project(doc)
+            if problems:
+                return jsonify(_err("Worksheet import failed validation.", " | ".join(problems[:20]))), 400
+
+            _install_staged_file(wb_path, wb_destination, created_files)
+            for staged_asset, destination in asset_installs:
+                _install_staged_file(staged_asset, destination, created_files)
+            store.save(project_id, doc)
+            saved = True
+        except Exception as exc:
+            tb = traceback.format_exc()
+            app.logger.error("workbook-sheet import failed for %s:\n%s", project_id, tb)
+            return jsonify(_err("Failed to import worksheet(s).", str(exc))), 500
+        finally:
+            if not saved:
+                _remove_created_files(created_files)
 
     return jsonify({
         "ok": True,
@@ -1713,7 +1954,7 @@ def do_reimport_workbook(project_id: str):
 # Image assets (pasted screenshots / dropped image files)
 # --------------------------------------------------------------------------
 
-_IMAGE_EXTS = {"png", "jpg", "jpeg", "webp", "gif"}
+_IMAGE_EXTS = {"png", "jpg", "jpeg", "webp", "gif", "svg"}
 
 
 @app.post("/api/projects/<project_id>/assets")
@@ -1722,10 +1963,10 @@ def add_asset(project_id: str):
     a JSON body {"dataUrl": "data:image/png;base64,...", "name": "..."}.
     Returns the asset id + URL to reference from a canvas image object.
     """
-    _safe_id(project_id)
-    doc = _load_doc(project_id)
-    assets_dir = store.assets_images_dir(project_id, doc or {})
+    _doc, project_dir = _project_workspace(project_id)
+    assets_dir = _project_child(project_dir, "assets", "images")
     asset_id = uuid.uuid4().hex[:16]
+    asset_path: Path | None = None
 
     try:
         if "file" in request.files:
@@ -1734,7 +1975,7 @@ def add_asset(project_id: str):
             if ext not in _IMAGE_EXTS:
                 return jsonify(_err("Unsupported image type.", ext)), 400
             name = upload.filename or f"{asset_id}.{ext}"
-            asset_path = assets_dir / f"{asset_id}.{ext}"
+            asset_path = _project_child(assets_dir, f"{asset_id}.{ext}")
             upload.save(asset_path)
         else:
             body = request.get_json(force=True, silent=True) or {}
@@ -1745,9 +1986,11 @@ def add_asset(project_id: str):
                 return jsonify(_err("Invalid image dataUrl.")), 400
             ext = m.group(1).lower().replace("jpeg", "jpg")
             raw = base64.b64decode(m.group(2))
-            asset_path = assets_dir / f"{asset_id}.{ext}"
+            asset_path = _project_child(assets_dir, f"{asset_id}.{ext}")
             asset_path.write_bytes(raw)
     except Exception as exc:
+        if asset_path is not None:
+            asset_path.unlink(missing_ok=True)
         app.logger.error("Asset store failed for %s: %s", project_id, exc)
         return jsonify(_err("Failed to store asset.", str(exc))), 500
 
@@ -1757,6 +2000,9 @@ def add_asset(project_id: str):
             "asset": {
                 "id": asset_id,
                 "name": name,
+                "storedFileName": asset_path.name,
+                "projectLocalPath": f"assets/images/{asset_path.name}",
+                "sha256": _sha256_file(asset_path),
                 "url": f"/api/assets/{project_id}/{asset_path.name}",
             },
         }
@@ -1765,20 +2011,18 @@ def add_asset(project_id: str):
 
 @app.get("/api/assets/<project_id>/<asset_name>")
 def get_asset(project_id: str, asset_name: str):
-    _safe_id(project_id)
-    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}\.(png|jpg|jpeg|webp|gif)", asset_name):
+    _doc, project_dir = _project_workspace(project_id)
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}\.(png|jpg|jpeg|webp|gif|svg)", asset_name):
         abort(404)
     candidates = [
-        store.assets_images_dir(project_id) / asset_name,
-        store.assets_excel_dir(project_id) / asset_name,
+        _project_child(project_dir, "assets", "images", asset_name),
+        _project_child(project_dir, "assets", "images", "excel", asset_name),
         # Best-effort reference screenshots (Phase C blank-page asset match).
-        store.dir_for(project_id) / "assets" / "screenshots" / asset_name,
-        DOCS_DIR / "assets" / project_id / asset_name,  # legacy
+        _project_child(project_dir, "assets", "screenshots", asset_name),
     ]
     for cand in candidates:
-        resolved = cand.resolve()
-        if resolved.is_file() and DOCS_DIR.resolve() in resolved.parents:
-            return send_file(resolved)
+        if cand.is_file():
+            return send_file(cand)
     abort(404)
 
 
@@ -2743,6 +2987,655 @@ def import_pdf_route():
 # PDF Page renderer (PyMuPDF backend — high-DPI per-page render + thumbnails)
 # --------------------------------------------------------------------------
 
+_PDF_IMPORT_PREVIEW_TTL_SECONDS = 4 * 60 * 60
+_PDF_IMPORT_JOB_TTL_SECONDS = 60 * 60
+_PDF_IMPORT_JOBS: dict[str, dict] = {}
+_PDF_IMPORT_JOBS_LOCK = threading.Lock()
+
+
+def _pdf_import_error_status(exc: PdfPageImportError) -> int:
+    if exc.code == "preview_expired":
+        return 410
+    if exc.code == "preview_project_mismatch":
+        return 403
+    return 400
+
+
+def _pdf_import_result_payload(result: dict) -> dict:
+    page_results = result.get("pageResults") or []
+    return {
+        **result,
+        "pageIds": [item["pageId"] for item in page_results if item.get("action") == "added"],
+        "replacedPageIds": [item["pageId"] for item in page_results if item.get("action") == "replaced"],
+        "progress": {
+            "phase": "complete",
+            "completed": len(page_results),
+            "total": len(page_results),
+            "message": "PDF import complete",
+        },
+    }
+
+
+def _cleanup_pdf_import_jobs(*, now: float | None = None) -> int:
+    cutoff = float(now if now is not None else time.time()) - _PDF_IMPORT_JOB_TTL_SECONDS
+    with _PDF_IMPORT_JOBS_LOCK:
+        expired = [
+            job_id
+            for job_id, job in _PDF_IMPORT_JOBS.items()
+            if float(job.get("updatedAtEpoch") or 0) < cutoff
+            and job.get("state") in {"succeeded", "failed"}
+        ]
+        for job_id in expired:
+            _PDF_IMPORT_JOBS.pop(job_id, None)
+    return len(expired)
+
+
+def _start_pdf_import_job(
+    project_id: str,
+    pdf_path: Path,
+    metadata_path: Path,
+    *,
+    total: int,
+    commit_options: dict,
+) -> dict:
+    """Run one atomic PDF import while exposing live, page-counted progress."""
+    _cleanup_pdf_import_jobs()
+    job_id = uuid.uuid4().hex
+    initial_progress = {
+        "phase": "validate",
+        "completed": 0,
+        "total": int(total),
+        "message": "Validating the staged PDF import",
+    }
+    now = time.time()
+    with _PDF_IMPORT_JOBS_LOCK:
+        _PDF_IMPORT_JOBS[job_id] = {
+            "jobId": job_id,
+            "projectId": project_id,
+            "state": "queued",
+            "progress": initial_progress,
+            "createdAtEpoch": now,
+            "updatedAtEpoch": now,
+        }
+
+    def update_progress(progress: dict) -> None:
+        with _PDF_IMPORT_JOBS_LOCK:
+            job = _PDF_IMPORT_JOBS.get(job_id)
+            if job is None:
+                return
+            job["state"] = "running"
+            job["progress"] = dict(progress)
+            job["updatedAtEpoch"] = time.time()
+
+    def run() -> None:
+        try:
+            update_progress(initial_progress)
+            result = commit_pdf_import(
+                store,
+                project_id,
+                pdf_path,
+                progress_callback=update_progress,
+                **commit_options,
+            )
+            payload = _pdf_import_result_payload(result)
+            pdf_path.unlink(missing_ok=True)
+            metadata_path.unlink(missing_ok=True)
+            with _PDF_IMPORT_JOBS_LOCK:
+                job = _PDF_IMPORT_JOBS.get(job_id)
+                if job is not None:
+                    job["state"] = "succeeded"
+                    job["progress"] = payload["progress"]
+                    job["result"] = payload
+                    job["updatedAtEpoch"] = time.time()
+        except PdfPageImportError as exc:
+            with _PDF_IMPORT_JOBS_LOCK:
+                job = _PDF_IMPORT_JOBS.get(job_id)
+                if job is not None:
+                    job["state"] = "failed"
+                    job["error"] = exc.to_dict()
+                    job["errorStatus"] = _pdf_import_error_status(exc)
+                    job["updatedAtEpoch"] = time.time()
+        except Exception as exc:  # noqa: BLE001
+            app.logger.exception("Background PDF import failed for %s", project_id)
+            with _PDF_IMPORT_JOBS_LOCK:
+                job = _PDF_IMPORT_JOBS.get(job_id)
+                if job is not None:
+                    job["state"] = "failed"
+                    job["error"] = {
+                        **_err("PDF import failed.", str(exc)),
+                        "code": "pdf_import_failed",
+                        "phase": "commit",
+                    }
+                    job["errorStatus"] = 500
+                    job["updatedAtEpoch"] = time.time()
+
+    threading.Thread(
+        target=run,
+        name=f"s360-pdf-import-{job_id[:8]}",
+        daemon=True,
+    ).start()
+    return {
+        "ok": True,
+        "jobId": job_id,
+        "state": "queued",
+        "progress": initial_progress,
+    }
+
+
+def _pending_pdf_dir() -> Path:
+    pending_dir = (DOCS_DIR / ".runtime" / "pdf-import-previews").resolve()
+    if DOCS_DIR.resolve() not in pending_dir.parents:
+        raise OSError("PDF preview staging escaped the configured runtime directory.")
+    pending_dir.mkdir(parents=True, exist_ok=True)
+    return pending_dir
+
+
+def _pending_pdf_paths(preview_id: str) -> tuple[Path, Path] | None:
+    if not re.fullmatch(r"[a-f0-9]{32}", preview_id or ""):
+        return None
+    pending_dir = _pending_pdf_dir()
+    return (
+        pending_dir / f"{preview_id}.pdf",
+        pending_dir / f"{preview_id}.json",
+    )
+
+
+def _cleanup_pending_pdf_previews(*, now: float | None = None) -> int:
+    """Delete expired preview pairs and stale orphan files."""
+    pending_dir = _pending_pdf_dir()
+    current = time.time() if now is None else float(now)
+    cutoff = current - _PDF_IMPORT_PREVIEW_TTL_SECONDS
+    removed: set[Path] = set()
+    preview_ids = {
+        path.stem
+        for path in pending_dir.iterdir()
+        if path.is_file()
+        and path.suffix in {".pdf", ".json"}
+        and re.fullmatch(r"[a-f0-9]{32}", path.stem)
+    }
+    for preview_id in preview_ids:
+        pair = [pending_dir / f"{preview_id}.pdf", pending_dir / f"{preview_id}.json"]
+        existing = [path for path in pair if path.is_file()]
+        if not existing:
+            continue
+        try:
+            expired = min(path.stat().st_mtime for path in existing) < cutoff
+        except OSError:
+            expired = True
+        if expired:
+            for path in pair:
+                try:
+                    if path.is_file():
+                        path.unlink()
+                        removed.add(path)
+                except OSError:
+                    app.logger.warning("Could not remove expired PDF preview %s", path)
+    return len(removed)
+
+
+def _pending_pdf_error(
+    message: str,
+    *,
+    code: str,
+    detail: str = "",
+) -> PdfPageImportError:
+    return PdfPageImportError(
+        message,
+        code=code,
+        phase="validate",
+        detail=detail,
+    )
+
+
+def _pdf_sheet_code_suffix(offset: int) -> str:
+    """Return Excel-style lowercase suffixes: 1=a, 26=z, 27=aa."""
+    if offset < 1:
+        return ""
+    value = int(offset)
+    letters: list[str] = []
+    while value:
+        value, remainder = divmod(value - 1, 26)
+        letters.append(chr(ord("a") + remainder))
+    return "".join(reversed(letters))
+
+
+def _read_pending_pdf_metadata(
+    preview_id: str,
+    project_id: str,
+    pdf_path: Path,
+    metadata_path: Path,
+) -> dict:
+    """Validate pending metadata and bind it to the unchanged staged PDF."""
+    try:
+        pending = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise _pending_pdf_error(
+            "The PDF import preview metadata is unreadable.",
+            code="preview_metadata_invalid",
+            detail=str(exc),
+        ) from exc
+    if not isinstance(pending, dict):
+        raise _pending_pdf_error(
+            "The PDF import preview metadata is invalid.",
+            code="preview_metadata_invalid",
+            detail=type(pending).__name__,
+        )
+    if pending.get("previewId") != preview_id:
+        raise _pending_pdf_error(
+            "The PDF import preview metadata does not match this preview.",
+            code="preview_metadata_mismatch",
+        )
+    if pending.get("projectId") != project_id:
+        raise _pending_pdf_error(
+            "The PDF import preview belongs to a different project.",
+            code="preview_project_mismatch",
+        )
+    original_name = pending.get("originalName")
+    if (
+        not isinstance(original_name, str)
+        or not original_name.lower().endswith(".pdf")
+        or Path(original_name).name != original_name
+    ):
+        raise _pending_pdf_error(
+            "The PDF import preview filename metadata is invalid.",
+            code="preview_metadata_invalid",
+        )
+    expected_sha = pending.get("sha256")
+    if not isinstance(expected_sha, str) or not re.fullmatch(r"[a-f0-9]{64}", expected_sha):
+        raise _pending_pdf_error(
+            "The PDF import preview fingerprint metadata is invalid.",
+            code="preview_metadata_invalid",
+        )
+    if pending.get("contentAddressedName") != f"pdf_{expected_sha}.pdf":
+        raise _pending_pdf_error(
+            "The PDF import preview content-addressed filename is invalid.",
+            code="preview_metadata_invalid",
+        )
+    page_count = pending.get("pageCount")
+    size_bytes = pending.get("sizeBytes")
+    created_at = pending.get("createdAt")
+    created_epoch = pending.get("createdAtEpoch")
+    expires_epoch = pending.get("expiresAtEpoch")
+    if (
+        not isinstance(page_count, int)
+        or isinstance(page_count, bool)
+        or page_count < 1
+        or not isinstance(size_bytes, int)
+        or isinstance(size_bytes, bool)
+        or size_bytes < 1
+        or not isinstance(created_at, str)
+        or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", created_at) is None
+        or not isinstance(created_epoch, (int, float))
+        or isinstance(created_epoch, bool)
+        or not isinstance(expires_epoch, (int, float))
+        or isinstance(expires_epoch, bool)
+    ):
+        raise _pending_pdf_error(
+            "The PDF import preview metadata is incomplete.",
+            code="preview_metadata_invalid",
+        )
+    now = time.time()
+    if (
+        float(created_epoch) > now + 60
+        or float(expires_epoch) <= float(created_epoch)
+        or float(expires_epoch) - float(created_epoch) > _PDF_IMPORT_PREVIEW_TTL_SECONDS + 60
+        or now >= float(expires_epoch)
+    ):
+        raise _pending_pdf_error(
+            "The PDF import preview expired. Upload the PDF again.",
+            code="preview_expired",
+        )
+    try:
+        actual_size = pdf_path.stat().st_size
+        actual_sha = _sha256_file(pdf_path)
+    except OSError as exc:
+        raise _pending_pdf_error(
+            "The staged PDF preview could not be read.",
+            code="preview_source_unreadable",
+            detail=str(exc),
+        ) from exc
+    if actual_size != size_bytes or actual_sha != expected_sha:
+        raise _pending_pdf_error(
+            "The staged PDF changed after preview. Upload the PDF again.",
+            code="preview_source_changed",
+        )
+    try:
+        import fitz
+
+        with fitz.open(pdf_path) as staged_pdf:
+            actual_page_count = staged_pdf.page_count
+    except Exception as exc:  # noqa: BLE001
+        raise _pending_pdf_error(
+            "The staged PDF is no longer readable.",
+            code="preview_source_unreadable",
+            detail=str(exc),
+        ) from exc
+    if actual_page_count != page_count:
+        raise _pending_pdf_error(
+            "The staged PDF page count no longer matches its preview.",
+            code="preview_source_changed",
+        )
+    return pending
+
+
+def _pdf_request_index(value: object, field: str) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and re.fullmatch(r"\d+", value.strip()):
+        return int(value.strip())
+    raise _pending_pdf_error(
+        f"{field} must contain zero-based PDF page indices.",
+        code="invalid_page_selection",
+        detail=repr(value),
+    )
+
+
+def _pdf_metadata_text(body: dict, field: str, *, maximum: int) -> str:
+    value = body.get(field)
+    if value is None:
+        return ""
+    if not isinstance(value, str) or len(value) > maximum:
+        raise _pending_pdf_error(
+            f"{field} must be text no longer than {maximum} characters.",
+            code="invalid_page_metadata",
+        )
+    return value.strip()
+
+
+def _pdf_import_groups(doc: dict, original_name: str) -> list[dict]:
+    return existing_pdf_import_groups(doc, original_name=original_name)
+
+
+@app.post("/api/projects/<project_id>/pdf/import-preview")
+def preview_pdf_drawing_pages(project_id: str):
+    """Stage a unique PDF revision and return selectable page thumbnails."""
+    _safe_id(project_id)
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    upload = request.files.get("file")
+    if upload is None or not str(upload.filename or "").lower().endswith(".pdf"):
+        return jsonify(_err("Choose a PDF file to import.")), 400
+    _cleanup_pending_pdf_previews()
+    preview_id = uuid.uuid4().hex
+    resolved = _pending_pdf_paths(preview_id)
+    assert resolved is not None
+    pdf_path, metadata_path = resolved
+    original_name = Path(str(upload.filename or "imported.pdf")).name
+    try:
+        upload.save(pdf_path)
+        inspected = preview_pdf(pdf_path, original_name=original_name)
+        created_epoch = time.time()
+        pending = {
+            "previewId": preview_id,
+            "projectId": project_id,
+            "originalName": original_name,
+            "sha256": inspected["sha256"],
+            "sizeBytes": pdf_path.stat().st_size,
+            "pageCount": inspected["pageCount"],
+            "contentAddressedName": inspected["contentAddressedName"],
+            "createdAt": _utcnow(),
+            "createdAtEpoch": created_epoch,
+            "expiresAtEpoch": created_epoch + _PDF_IMPORT_PREVIEW_TTL_SECONDS,
+        }
+        metadata_path.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding="utf-8")
+    except PdfPageImportError as exc:
+        pdf_path.unlink(missing_ok=True)
+        metadata_path.unlink(missing_ok=True)
+        return jsonify(exc.to_dict()), 400
+    except Exception as exc:  # noqa: BLE001
+        pdf_path.unlink(missing_ok=True)
+        metadata_path.unlink(missing_ok=True)
+        app.logger.exception("PDF import preview failed for %s", project_id)
+        return jsonify(_err("PDF preview failed.", str(exc))), 500
+    return jsonify({
+        "previewId": preview_id,
+        "pdfFile": inspected["contentAddressedName"],
+        "originalName": inspected["originalFileName"],
+        "sha256": inspected["sha256"],
+        "pageCount": inspected["pageCount"],
+        "pages": [{
+            "pageIndex": page["index"],
+            "pageNumber": page["pageNumber"],
+            "widthPoints": page["widthPt"],
+            "heightPoints": page["heightPt"],
+            "fingerprint": page["fingerprint"],
+            "thumbnail": page["thumbnailDataUrl"],
+        } for page in inspected["pages"]],
+        "existingGroups": _pdf_import_groups(doc, inspected["originalFileName"]),
+    })
+
+
+@app.post("/api/projects/<project_id>/pdf/import-commit")
+def commit_pdf_drawing_pages(project_id: str):
+    """Atomically add selected PDF pages or replace explicitly mapped pages."""
+    _safe_id(project_id)
+    if _load_doc(project_id) is None:
+        abort(404)
+    try:
+        _cleanup_pending_pdf_previews()
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            raise _pending_pdf_error(
+                "The PDF import request body must be a JSON object.",
+                code="invalid_request_body",
+            )
+        preview_value = body.get("previewId")
+        preview_id = preview_value if isinstance(preview_value, str) else ""
+        resolved = _pending_pdf_paths(preview_id)
+        if resolved is None:
+            raise _pending_pdf_error(
+                "The PDF import preview ID is invalid.",
+                code="invalid_preview_id",
+            )
+        pdf_path, metadata_path = resolved
+        if not pdf_path.is_file() or not metadata_path.is_file():
+            raise _pending_pdf_error(
+                "The PDF import preview expired. Upload the PDF again.",
+                code="preview_expired",
+            )
+        pending = _read_pending_pdf_metadata(
+            preview_id,
+            project_id,
+            pdf_path,
+            metadata_path,
+        )
+
+        selected_values = body.get("selectedPages")
+        if not isinstance(selected_values, list):
+            raise _pending_pdf_error(
+                "selectedPages must be a list of zero-based PDF page indices.",
+                code="invalid_page_selection",
+            )
+        selected = [
+            _pdf_request_index(value, "selectedPages")
+            for value in selected_values
+        ]
+        action_value = body.get("action")
+        if action_value is None:
+            action = "add"
+        elif isinstance(action_value, str):
+            action = action_value.strip().lower()
+        else:
+            raise _pending_pdf_error(
+                "PDF import action must be text.",
+                code="invalid_import_action",
+            )
+        mapping_values = body.get("mapping") or []
+        replace_mapping: dict[str, int] = {}
+        if action == "replace":
+            if not isinstance(mapping_values, list):
+                raise _pending_pdf_error(
+                    "Replacement mapping must be a list.",
+                    code="invalid_replace_mapping",
+                )
+            for item in mapping_values:
+                if not isinstance(item, dict):
+                    raise _pending_pdf_error(
+                        "Each replacement mapping must name an existing page and revised PDF page.",
+                        code="invalid_replace_mapping",
+                    )
+                existing_page_id = item.get("existingPageId")
+                if not isinstance(existing_page_id, str) or not existing_page_id.strip():
+                    raise _pending_pdf_error(
+                        "Each replacement mapping must include an existing page ID.",
+                        code="invalid_replace_mapping",
+                    )
+                replace_mapping[existing_page_id.strip()] = _pdf_request_index(
+                    item.get("pageIndex"),
+                    "mapping.pageIndex",
+                )
+        elif mapping_values:
+            raise _pending_pdf_error(
+                "Replacement mappings are only valid for Replace Existing Pages.",
+                code="unexpected_replace_mapping",
+            )
+
+        title_prefix = _pdf_metadata_text(body, "titlePrefix", maximum=200)
+        first_code = _pdf_metadata_text(body, "firstSheetCode", maximum=80)
+        page_metadata: dict[int, dict[str, str]] = {}
+        supplied_metadata = body.get("pageMetadata")
+        if supplied_metadata is not None:
+            if not isinstance(supplied_metadata, dict):
+                raise _pending_pdf_error(
+                    "pageMetadata must map PDF page indices to sheet metadata.",
+                    code="invalid_page_metadata",
+                )
+            for raw_index, raw_metadata in supplied_metadata.items():
+                index = _pdf_request_index(raw_index, "pageMetadata")
+                if not isinstance(raw_metadata, dict):
+                    raise _pending_pdf_error(
+                        "Each pageMetadata entry must be an object.",
+                        code="invalid_page_metadata",
+                    )
+                unexpected = set(raw_metadata) - {"sheetTitle", "sheetCode"}
+                if unexpected:
+                    raise _pending_pdf_error(
+                        "pageMetadata contains unsupported fields.",
+                        code="invalid_page_metadata",
+                        detail=", ".join(sorted(str(item) for item in unexpected)),
+                    )
+                item: dict[str, str] = {}
+                for field, maximum in (("sheetTitle", 200), ("sheetCode", 80)):
+                    value = raw_metadata.get(field)
+                    if value is not None:
+                        if not isinstance(value, str) or len(value) > maximum:
+                            raise _pending_pdf_error(
+                                f"pageMetadata.{field} must be text no longer than {maximum} characters.",
+                                code="invalid_page_metadata",
+                            )
+                        item[field] = value.strip()
+                page_metadata[index] = item
+        unexpected_metadata_indices = set(page_metadata) - set(selected)
+        if unexpected_metadata_indices:
+            raise _pending_pdf_error(
+                "pageMetadata may only describe selected PDF pages.",
+                code="invalid_page_metadata",
+                detail=", ".join(str(index) for index in sorted(unexpected_metadata_indices)),
+            )
+        for offset, index in enumerate(selected):
+            item = page_metadata.setdefault(index, {})
+            if title_prefix:
+                item.setdefault("sheetTitle", f"{title_prefix} — Page {index + 1}")
+            if first_code:
+                item.setdefault(
+                    "sheetCode",
+                    first_code if offset == 0 else f"{first_code}{_pdf_sheet_code_suffix(offset)}",
+                )
+
+        requested_placement = body.get("placementMode")
+        if requested_placement is not None and not isinstance(requested_placement, str):
+            raise _pending_pdf_error(
+                "placementMode must be text.",
+                code="invalid_placement_mode",
+            )
+        placement_mode = (
+            None
+            if action == "replace" and not requested_placement
+            else str(requested_placement or "fit_body")
+        )
+        replace_group_id = body.get("replaceGroupId")
+        insert_after_page_id = body.get("insertAfterPageId")
+        if replace_group_id is not None and not isinstance(replace_group_id, str):
+            raise _pending_pdf_error(
+                "replaceGroupId must be text.",
+                code="invalid_page_metadata",
+            )
+        if insert_after_page_id is not None and not isinstance(insert_after_page_id, str):
+            raise _pending_pdf_error(
+                "insertAfterPageId must be text.",
+                code="invalid_page_metadata",
+            )
+        background = body.get("background", False)
+        if not isinstance(background, bool):
+            raise _pending_pdf_error(
+                "background must be true or false.",
+                code="invalid_request_body",
+            )
+        commit_options = {
+            "original_name": pending["originalName"],
+            "selected_page_indices": selected,
+            "placement_mode": placement_mode,
+            "action": action,
+            "replace_mapping": replace_mapping or None,
+            "import_group_id": (replace_group_id or "").strip() or None,
+            "page_metadata": page_metadata,
+            "insert_after_page_id": (insert_after_page_id or "").strip() or None,
+            "dpi": 300,
+            "project_transform": _normalize_project_for_runtime,
+        }
+        if background:
+            return jsonify(_start_pdf_import_job(
+                project_id,
+                pdf_path,
+                metadata_path,
+                total=len(selected),
+                commit_options=commit_options,
+            )), 202
+        result = commit_pdf_import(
+            store,
+            project_id,
+            pdf_path,
+            **commit_options,
+        )
+    except PdfPageImportError as exc:
+        return jsonify(exc.to_dict()), _pdf_import_error_status(exc)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("PDF import commit failed for %s", project_id)
+        return jsonify(_err("PDF import failed.", str(exc))), 500
+
+    pdf_path.unlink(missing_ok=True)
+    metadata_path.unlink(missing_ok=True)
+    return jsonify(_pdf_import_result_payload(result))
+
+
+@app.get("/api/projects/<project_id>/pdf/import-jobs/<job_id>")
+def pdf_import_job_status(project_id: str, job_id: str):
+    """Return an exact live phase/page count or the final structured result."""
+    _safe_id(project_id)
+    if not re.fullmatch(r"[a-f0-9]{32}", job_id or ""):
+        return jsonify({
+            **_err("The PDF import job ID is invalid."),
+            "code": "invalid_import_job_id",
+            "phase": "validate",
+        }), 400
+    _cleanup_pdf_import_jobs()
+    with _PDF_IMPORT_JOBS_LOCK:
+        stored = _PDF_IMPORT_JOBS.get(job_id)
+        if stored is None or stored.get("projectId") != project_id:
+            return jsonify({
+                **_err("The PDF import job was not found."),
+                "code": "import_job_not_found",
+                "phase": "validate",
+            }), 404
+        payload = {
+            key: deepcopy(value)
+            for key, value in stored.items()
+            if key not in {"projectId", "createdAtEpoch", "updatedAtEpoch"}
+        }
+    payload["ok"] = payload.get("state") != "failed"
+    return jsonify(payload)
+
 @app.post("/api/projects/<project_id>/pdf-thumbnails")
 def pdf_page_thumbnails(project_id: str):
     """Upload a PDF and return base64 thumbnail images for each page so the
@@ -3021,37 +3914,32 @@ def import_vsdx_route():
 
 @app.delete("/api/projects/<project_id>")
 def delete_project(project_id: str):
-    # Permanently delete every active folder for one project ID.
-    # The endpoint requires ?confirm=true in addition to the UI confirmation.
+    """Compatibility endpoint: a normal delete is recoverable project archive.
+
+    Physical deletion is intentionally unavailable until a separate advanced
+    workflow can prove a backup, dependency audit, typed confirmation, and
+    rollback.  This route therefore never unlinks project data or exports.
+    """
     _safe_id(project_id)
-    confirmed = request.args.get("confirm", "").strip().lower() in {"1", "true", "yes", "delete"}
-    if not confirmed:
-        return jsonify(_err("Permanent project deletion requires confirm=true.")), 400
-
-    removed: list[str] = []
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
     try:
-        for pdir in store.find_all_dirs(project_id):
-            if not pdir.is_dir():
-                continue
-            shutil.rmtree(pdir)
-            if pdir.exists():
-                raise OSError(f"Project folder still exists after deletion: {pdir}")
-            removed.append(str(pdir))
-
-        legacy = _project_path(project_id)
-        if legacy.is_file():
-            legacy.unlink()
-            removed.append(str(legacy))
-
-        pdf_path = DOCS_DIR / f"{project_id}.pdf"
-        if pdf_path.is_file():
-            pdf_path.unlink()
-            removed.append(str(pdf_path))
+        archived = mark_project_archived(
+            doc,
+            reason="Archived through the legacy Delete Project action.",
+        )
+        store.save(project_id, archived)
     except OSError as exc:
-        app.logger.error("Error deleting project %s: %s", project_id, exc)
-        return jsonify(_err("Failed to delete project.", str(exc))), 500
-
-    return jsonify({"ok": True, "deleted": removed})
+        app.logger.error("Could not archive project %s: %s", project_id, exc)
+        return jsonify(_err("Failed to archive project.", str(exc))), 500
+    return jsonify({
+        "ok": True,
+        "archived": True,
+        "id": project_id,
+        "project": archived,
+        "permanentDeletionAvailable": False,
+    })
 
 
 
@@ -3066,12 +3954,10 @@ def export_warnings_preview(project_id: str):
         abort(404)
     from core.export_qa import compute_export_warnings
 
-    # The live package stays current, while QA itself runs against an export-only
-    # selected-page clone so deselected sheets do not create irrelevant warnings.
-    doc = sync_project_sheet_index(ensure_project_shape(doc))
-    store.save(project_id, doc)
+    # GET is strictly read-only.  Managed-page normalization belongs to an
+    # explicit Save, migration, or export operation—not a warnings preview.
     selected_ids = selected_page_ids_from_request(request.args.getlist("pageId"))
-    export_doc = build_selected_export_document(doc, selected_ids)
+    export_doc = build_selected_export_document(deepcopy(doc), selected_ids)
     selected_count = sum(1 for page in export_doc.get("pages", []) if page.get("include", True))
     return jsonify({
         "ok": True,
@@ -3093,7 +3979,14 @@ def project_preflight(project_id: str):
 
 def _write_export_only_project(export_doc: dict, temp_id: str):
     """Write a short-lived project clone without touching the live project."""
-    temp_doc = ensure_project_shape(export_doc)
+    # A protected detach-only set (SA31) must reach the print route with its
+    # pages byte-for-byte intact. ensure_project_shape sanitizes arbitrary
+    # canvas text and therefore is only appropriate for automatic managed sets.
+    temp_doc = (
+        deepcopy(export_doc)
+        if export_doc.get("managedPagePolicy") == "preserve_existing"
+        else ensure_project_shape(export_doc)
+    )
     temp_doc["id"] = temp_id
     temp_doc["projectDisplayName"] = f"{temp_doc.get('projectDisplayName') or temp_id} export"
     # The export clone is a read-only render artifact, not another workbook
@@ -3126,11 +4019,12 @@ def export_pdf(project_id: str):
 
     # Sync and save the live package first.  Export selection and vector-preview
     # hiding happen only in a temporary clone and cannot overwrite manual work.
-    doc = sync_project_sheet_index(ensure_project_shape(doc))
+    doc = _normalize_project_for_runtime(doc)
     store.save(project_id, doc)
     body = request.get_json(silent=True) or {}
-    raw_page_ids = body.get("pageIds")
-    selected_ids = selected_page_ids_from_request(raw_page_ids if isinstance(raw_page_ids, list) else [])
+    # Standalone export is always the complete current drawing set. Cover,
+    # managed index and every included page come from the persisted package.
+    selected_ids: list[str] = []
     selected_doc = build_selected_export_document(doc, selected_ids)
     pages = [page for page in selected_doc.get("pages", []) if page.get("include", True)]
     if not pages:
@@ -3148,13 +4042,10 @@ def export_pdf(project_id: str):
             "confirmationRequired": True,
         }), 409
 
-    try:
-        width_in = float(body.get("width", 17.0))
-        height_in = float(body.get("height", 11.0))
-    except (TypeError, ValueError):
-        width_in, height_in = 17.0, 11.0
-    width_in = max(3.0, min(60.0, width_in))
-    height_in = max(3.0, min(60.0, height_in))
+    # A Singh360 drawing set has one authoritative export geometry. Ignore
+    # legacy/requested paper values so API callers cannot produce a partial or
+    # non-ANSI-B deliverable that diverges from the saved standalone project.
+    width_in, height_in = 17.0, 11.0
 
     source_pdf_dir = store.dir_for(project_id, doc) / "sources" / "pdf"
     export_doc, vector_placements = prepare_vector_export_clone(
@@ -3163,17 +4054,25 @@ def export_pdf(project_id: str):
     )
     temp_id = uuid.uuid4().hex[:16]
     temp_dir = None
-    pdf_path = store.exports_pdf_dir(project_id, doc) / f"{project_id}.pdf"
+    package_name = str(
+        (doc.get("metadata") or {}).get("drawingPackageFileName")
+        or doc.get("projectDisplayName")
+        or (doc.get("metadata") or {}).get("projectName")
+        or project_id
+    )
+    safe_package_name = slugify(package_name) or project_id
+    pdf_path = store.exports_pdf_dir(project_id, doc) / f"{safe_package_name}.pdf"
+    render_path = pdf_path.with_name(f".{pdf_path.stem}.{uuid.uuid4().hex}.rendering.pdf")
     try:
         temp_dir = _write_export_only_project(export_doc, temp_id)
         url = f"http://127.0.0.1:{_SERVER_PORT}/app?project={temp_id}&print=1&pw={width_in}&ph={height_in}"
-        ok, detail = export_pdf_via_playwright(url, pdf_path, width_in=width_in, height_in=height_in)
+        ok, detail = export_pdf_via_playwright(url, render_path, width_in=width_in, height_in=height_in)
         if not ok:
             app.logger.error("Playwright export failed for %s: %s", project_id, detail)
             return jsonify(_err("PDF export failed.", detail)), 500
 
         audit = apply_vector_pdf_underlays(
-            pdf_path,
+            render_path,
             source_pdf_dir=source_pdf_dir,
             placements=vector_placements,
         )
@@ -3183,24 +4082,40 @@ def export_pdf(project_id: str):
             "selectedPageCount": len(pages),
             "paper": {"width": width_in, "height": height_in},
         })
+        if audit.get("skipped"):
+            strict_skips = [item for item in audit.get("skippedDetails", []) if item.get("strict_base")]
+            if strict_skips:
+                raise RuntimeError(f"Managed PDF vector placement failed: {strict_skips}")
+            app.logger.warning("Vector PDF export skipped %s optional placement(s): %s", audit.get("skipped"), audit.get("skippedDetails"))
+        import fitz
+        with fitz.open(render_path) as rendered:
+            if rendered.page_count != len(pages):
+                raise RuntimeError(f"Export page count mismatch: expected {len(pages)}, got {rendered.page_count}.")
+            if any(page.rect.width <= 0 or page.rect.height <= 0 for page in rendered):
+                raise RuntimeError("Export contains an invalid media box.")
+        os.replace(render_path, pdf_path)
         audit_path = pdf_path.with_suffix(".vector-audit.json")
         audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
-        if audit.get("skipped"):
-            app.logger.warning("Vector PDF export skipped %s placement(s): %s", audit.get("skipped"), audit.get("skippedDetails"))
     except Exception as exc:  # noqa: BLE001
         app.logger.exception("Vector-preserving PDF export failed for %s", project_id)
         return jsonify(_err("PDF export failed.", str(exc))), 500
     finally:
         if temp_dir and temp_dir.is_dir():
             shutil.rmtree(temp_dir, ignore_errors=True)
+        render_path.unlink(missing_ok=True)
 
-    download = f"{(doc.get('projectDisplayName') or project_id)}.pdf"
-    return send_file(
+    response = send_file(
         pdf_path,
         mimetype="application/pdf",
         as_attachment=True,
-        download_name=download,
+        download_name=f"{safe_package_name}.pdf",
+        etag=False,
+        max_age=0,
     )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.post("/api/projects/<project_id>/rename")
@@ -3300,6 +4215,57 @@ def save_page_rebuild_backup(project_id: str):
     return jsonify({"ok": True, "id": project_id, "pageId": page_id, "name": name})
 
 
+@app.post("/api/projects/<project_id>/pages/<page_id>/auto-layout")
+def auto_layout_imported_page(project_id: str, page_id: str):
+    """Recompose one imported worksheet from its attached source, locally only."""
+    _safe_id(project_id)
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    layout_override = str(body.get("layoutOverride") or "exact_source").strip().lower()
+    if layout_override not in {"auto", "exact_source", "one_column", "two_columns", "continue_blocks", "keep_one_page"}:
+        return jsonify(_err("Invalid layout override.", layout_override)), 400
+    page = next((item for item in doc.get("pages") or [] if item.get("id") == page_id), None)
+    if page is None:
+        abort(404)
+    if page.get("canvasObjects"):
+        return jsonify(_err(
+            "Automatic layout was skipped.",
+            "The page has manual canvas objects. Create a draft/history copy before rebuilding it.",
+        )), 409
+    snapshot = store.save_pre_rebuild_page_snapshot(project_id, page_id, page)
+    if not snapshot:
+        return jsonify(_err("Could not save the required page history snapshot.")), 500
+    try:
+        from core.sheet_importer import repair_imported_excel_page
+
+        updated, replacements = repair_imported_excel_page(
+            ensure_project_shape(doc),
+            page_id,
+            layout_override=layout_override,
+        )
+        updated = _normalize_project_for_runtime(updated)
+        recalc_page_numbers(updated)
+        store.save(project_id, updated)
+        saved = store.load(project_id)
+        if not saved:
+            raise RuntimeError("The repaired project could not be read back after save.")
+    except Exception as exc:
+        app.logger.exception("Imported worksheet auto-layout failed for %s page %s", project_id, page_id)
+        return jsonify(_err("Imported worksheet auto-layout failed.", str(exc))), 500
+    return jsonify({
+        "ok": True,
+        "id": project_id,
+        "pageId": page_id,
+        "snapshot": snapshot,
+        "pageIds": [item.get("id") for item in replacements],
+        "continuationCount": max(0, len(replacements) - 1),
+        "layoutDiagnostics": replacements[0].get("layoutDiagnostics") or {},
+        "project": saved,
+    })
+
+
 @app.post("/api/projects/<project_id>/archive-duplicate-folders")
 def archive_duplicate_folders(project_id: str):
     _safe_id(project_id)
@@ -3315,66 +4281,39 @@ def archive_duplicate_folders(project_id: str):
 
 @app.post("/api/projects/<project_id>/archive")
 def archive_project(project_id: str):
-    """Archive (not delete) the whole project folder to .docs/_archive/<ts>/projects/."""
+    """Recoverably archive a project in place; never delete or move its package."""
     _safe_id(project_id)
-    if _load_doc(project_id) is None:
+    doc = _load_doc(project_id)
+    if doc is None:
         abort(404)
-    from datetime import datetime
-
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    archive_root = DOCS_DIR / "_archive" / ts / "projects"
-    archive_root.mkdir(parents=True, exist_ok=True)
-    project_dir = store.find_dir(project_id)
-    if not project_dir:
-        return jsonify(_err("Project folder not found.")), 404
-    dest = archive_root / project_dir.name
-    archive_mode = "folder-move"
+    body = request.get_json(silent=True) or {}
+    reason = str(body.get("reason") or "Archived from Project Home")
     try:
-        import shutil
-        shutil.move(str(project_dir), str(dest))
+        # Project archive is a metadata-only operation.  In particular, do not
+        # normalize a legacy package merely because the user archived it: its
+        # pages and workbook history must remain byte-for-byte recoverable.
+        normalized = mark_project_archived(doc, reason=reason)
+        store.save(project_id, normalized)
     except Exception as exc:
-        # S360 ARCHIVE-FIRST PROJECT REMOVAL V14
-        # OneDrive may deny a folder move while a generated image placeholder
-        # is being synchronized. Deactivate the project in place by renaming
-        # only project.json. The package remains restorable and immediately
-        # disappears from the active project list.
-        app.logger.warning(
-            "archive_project folder move failed for %s; deactivating in place: %s",
-            project_id,
-            exc,
-        )
-        project_json = project_dir / "project.json"
-        if not project_json.is_file():
-            return jsonify(_err("Failed to archive project.", str(exc))), 500
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        archived_json = project_dir / f"project.archived_{stamp}.json"
-        try:
-            project_json.rename(archived_json)
-            (project_dir / "ARCHIVED_PROJECT.txt").write_text(
-                "Removed from active Singh360 projects at "
-                + datetime.now().isoformat(timespec="seconds")
-                + "\nOriginal project ID: "
-                + project_id
-                + "\nOriginal folder retained because OneDrive denied the folder move.\n",
-                encoding="utf-8",
-            )
-        except OSError as fallback_exc:
-            app.logger.error(
-                "archive_project fallback failed for %s: %s",
-                project_id,
-                fallback_exc,
-            )
-            return jsonify(
-                _err("Failed to archive project.", str(fallback_exc))
-            ), 500
-        dest = project_dir
-        archive_mode = "deactivated-in-place"
-    return jsonify({
-        "ok": True,
-        "id": project_id,
-        "archivedTo": str(dest),
-        "archiveMode": archive_mode,
-    })
+        app.logger.exception("Project archive failed for %s", project_id)
+        return jsonify(_err("Failed to archive project.", str(exc))), 500
+    return jsonify({"ok": True, "id": project_id, "project": normalized, "archivedTo": str(store.find_dir(project_id) or "")})
+
+
+@app.post("/api/projects/<project_id>/restore")
+def restore_archived_project(project_id: str):
+    """Restore an in-place archived project with its stable ID and package."""
+    _safe_id(project_id)
+    doc = _load_doc(project_id)
+    if doc is None:
+        abort(404)
+    try:
+        restored = mark_project_restored(doc)
+        store.save(project_id, restored)
+    except Exception as exc:
+        app.logger.exception("Project restore failed for %s", project_id)
+        return jsonify(_err("Failed to restore project.", str(exc))), 500
+    return jsonify({"ok": True, "id": project_id, "project": restored})
 
 
 @app.post("/api/projects/<project_id>/export/package")
@@ -3388,7 +4327,7 @@ def export_package(project_id: str):
         abort(404)
     # Keep the generated Sheet Index current for package export even when
     # the revision value itself was not changed.
-    doc = sync_project_sheet_index(ensure_project_shape(doc))
+    doc = _normalize_project_for_runtime(doc)
     store.save(project_id, doc)
     body = request.get_json(silent=True) or {}
     from core.export_qa import compute_export_warnings

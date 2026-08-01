@@ -14,7 +14,7 @@ export default function StatusBar({ pageCount, includedCount, worksheetCount, ac
       <span className="sb-item">Singh360 Draft</span>
       <span className="sb-item">Pages: {pageCount}</span>
       <span className="sb-item">Included: {includedCount}</span>
-      <span className="sb-item">Source tabs: {worksheetCount}</span>
+      {worksheetCount > 0 ? <span className="sb-item">Imported tables: {worksheetCount}</span> : null}
       <span className="sb-item">Active: {activeLabel}</span>
       {drawingHint ? <span className="sb-item sb-hint">{drawingHint}</span> : null}
       <span className="sb-item sb-right">Zoom: {zoomPct}%</span>

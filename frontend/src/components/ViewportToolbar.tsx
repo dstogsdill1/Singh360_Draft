@@ -9,6 +9,7 @@ interface Props {
   view: ViewControls;
   viewMode: ViewMode;
   sourceWorksheetName?: string;
+  hasImportedTableSource: boolean;
   sourceOnly?: boolean;
   sourceDirty?: boolean;
   sourceStatusLabel?: string;
@@ -32,6 +33,7 @@ export default function ViewportToolbar({
   view,
   viewMode,
   sourceWorksheetName,
+  hasImportedTableSource,
   sourceOnly,
   sourceDirty,
   sourceStatusLabel,
@@ -72,23 +74,26 @@ export default function ViewportToolbar({
         {sourceOnly && viewMode === 'source' ? <em className="vt-source-only">Source only</em> : null}
       </span>
       <span className="vt-viewmode">
-        {sourceOnly && viewMode === 'source' ? (
-          <button className="fit-btn publish-source" onClick={onPublishSource} disabled={!onPublishSource}>Publish Worksheet</button>
-        ) : (
-          <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Drawing</button>
-        )}
-        <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Workbook Draft</button>
-        <button
-          className={`fit-btn ${activePage.excelLayout ? 'active' : ''}`}
-          onClick={() => onPatchPage?.({
-            excelLayout: activePage.excelLayout || {
-              version: 1, pageWidth: 1632, pageHeight: 1056,
-              printableMargin: 48, snapSize: 8, tabColor: '#F4B183', tables: [],
-            },
-          })}
-        >Excel Layout</button>
-        {canRebuildFromSource && onRebuildFromSource ? (
-          <button className="fit-btn" type="button" onClick={onRebuildFromSource} title="Rebuild this Published page from the linked Draft worksheet">Rebuild Published Page From Draft</button>
+        <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Drawing</button>
+        {hasImportedTableSource ? (
+          <>
+            {sourceOnly && viewMode === 'source' ? (
+              <button className="fit-btn publish-source" onClick={onPublishSource} disabled={!onPublishSource}>Add Imported Table as Drawing Page</button>
+            ) : null}
+            <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Imported Table Data</button>
+            <button
+              className={`fit-btn ${activePage.excelLayout ? 'active' : ''}`}
+              onClick={() => onPatchPage?.({
+                excelLayout: activePage.excelLayout || {
+                  version: 1, pageWidth: 1632, pageHeight: 1056,
+                  printableMargin: 48, snapSize: 8, tabColor: '#F4B183', tables: [],
+                },
+              })}
+            >Imported Table Layout</button>
+            {canRebuildFromSource && onRebuildFromSource ? (
+              <button className="fit-btn" type="button" onClick={onRebuildFromSource} title="Rebuild this drawing from its project-local imported table data">Rebuild Drawing From Imported Table</button>
+            ) : null}
+          </>
         ) : null}
         {canRestorePageRebuild && onRestorePageRebuild ? (
           <button className="fit-btn" type="button" onClick={onRestorePageRebuild} title="Restore the page from before the last rebuild (Ctrl+Z)">Restore Last Page Rebuild</button>
@@ -104,6 +109,7 @@ export default function ViewportToolbar({
               type="button"
               className={`vt-status-btn status-${status.value} ${active ? 'active' : ''}`}
               title={`Set page status to ${status.label}`}
+              disabled={includeLocked}
               onClick={() => onPatchPage?.({
                 issueStatus: status.value,
                 statusUpdatedAt: new Date().toISOString(),
@@ -117,7 +123,9 @@ export default function ViewportToolbar({
         <button
           type="button"
           className={`fit-btn vt-include-btn ${activePage.include ? 'included' : 'excluded'}`}
+          disabled={includeLocked}
           onClick={() => onPatchPage?.({ include: !activePage.include })}
+          title={includeLocked ? 'Cover and Sheet Index are required app-managed pages' : 'Include or exclude this page from the drawing set'}
         >
           {activePage.include ? 'Included in Drawing Set' : 'Excluded from Drawing Set'}
         </button>

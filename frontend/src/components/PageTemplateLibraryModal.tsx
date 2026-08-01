@@ -7,6 +7,7 @@ import {
   type PageTemplateEntry,
 } from '../api/client';
 import type { PageModel } from '../model/types';
+import { instantiatePageTemplate } from '../model/pageDuplication';
 
 function newPageId() {
   return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -114,26 +115,12 @@ export default function PageTemplateLibraryModal({ manageOnly, onInsert, onClose
 
     try {
       const payload = await getPageTemplatePayload(selectedId);
-      const page = structuredClone(payload) as unknown as PageModel;
       const pageId = newPageId();
-
-      page.id = pageId;
-      page.order = 0;
-      page.include = true;
-      page.sheetCode = 'NEW';
-      page.displaySheetCode = 'NEW';
-      page.sheetTitle = selected?.name || page.sheetTitle || 'From Template';
-      page.sheetTab = '';
-      page.pageGroupId = pageId;
-      page.continuationOf = null;
-      page.generatedContinuation = false;
-      page.continuationIndex = undefined;
-      page.canvasObjects = structuredClone(page.canvasObjects || []);
-      page.blocks = structuredClone(page.blocks || []);
-      page.linkedWorksheetId = undefined;
-      page.renderMode = undefined;
-      page.sourceSheet = undefined;
-      page.sourceRange = undefined;
+      const page = instantiatePageTemplate(
+        payload as unknown as PageModel,
+        pageId,
+        selected?.name,
+      );
 
       if (
         page.canvasObjects.length > 0
