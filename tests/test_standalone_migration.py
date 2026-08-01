@@ -259,6 +259,48 @@ class StandaloneMigrationTests(unittest.TestCase):
             self.assertEqual(backup_names, sorted(path.name for path in backup_parent.iterdir()))
             fixture.assert_workbooks_untouched(self)
 
+    def test_semantically_identical_save_format_is_idempotent(self) -> None:
+        """A normal Save must not make migration want to rewrite JSON formatting."""
+        with tempfile.TemporaryDirectory() as raw:
+            fixture = DisposableProtectedDocs(Path(raw))
+            first = apply_migration_plan(
+                fixture.docs,
+                build_migration_plan(fixture.docs, now=NOW),
+            )
+            backup_parent = Path(first["backupPath"]).parent
+            backup_names = sorted(path.name for path in backup_parent.iterdir())
+
+            canonical_path = fixture.paths[CANONICAL_MI_TIENDA_ID]
+            canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
+            # Match a valid alternate serializer: reordered keys and a final
+            # newline change the byte hash without changing project state.
+            canonical_path.write_text(
+                json.dumps(canonical, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            second_plan = build_migration_plan(
+                fixture.docs,
+                now="2026-08-02T00:00:00Z",
+            )
+            canonical_action = next(
+                action
+                for action in second_plan["actions"]
+                if action["projectId"] == CANONICAL_MI_TIENDA_ID
+            )
+            self.assertFalse(canonical_action["needsChange"])
+            self.assertEqual(
+                canonical_action["beforeSha256"],
+                canonical_action["afterSha256"],
+            )
+            self.assertEqual([], second_plan["filesThatWouldBeWritten"])
+
+            second = apply_migration_plan(fixture.docs, second_plan)
+            self.assertFalse(second["applied"])
+            self.assertEqual([], second["changedProjectIds"])
+            self.assertEqual(backup_names, sorted(path.name for path in backup_parent.iterdir()))
+            fixture.assert_workbooks_untouched(self)
+
     def test_generated_rollback_restores_exact_pre_migration_json(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             fixture = DisposableProtectedDocs(Path(raw))

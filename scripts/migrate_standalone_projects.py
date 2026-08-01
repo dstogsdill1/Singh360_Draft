@@ -471,7 +471,17 @@ def build_migration_plan(
                     )
                 after = _transform_project(before, definition["role"], generated_at)
                 before_sha = _sha256_file(path)
-                after_sha = _sha256_bytes(_project_bytes(after))
+                # A normal project save may serialize the same logical JSON
+                # with a trailing newline or a different key order. Migration
+                # idempotence is about project state, not byte formatting: do
+                # not rewrite an already-migrated live package merely to
+                # canonicalize its JSON representation.
+                needs_change = before != after
+                after_sha = (
+                    _sha256_bytes(_project_bytes(after))
+                    if needs_change
+                    else before_sha
+                )
                 action.update(
                     {
                         "state": "ready",
@@ -479,7 +489,7 @@ def build_migration_plan(
                         "relativePath": relative,
                         "beforeSha256": before_sha,
                         "afterSha256": after_sha,
-                        "needsChange": before_sha != after_sha,
+                        "needsChange": needs_change,
                         "summary": _summary(before, after),
                     }
                 )
