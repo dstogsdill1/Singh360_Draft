@@ -10,8 +10,12 @@ PDF.
 from __future__ import annotations
 
 import copy
+import json
 import math
 import re
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Iterable
@@ -28,6 +32,9 @@ PAGE_ID_MARKER_PREFIX = "S360PID_"
 BODY_ORIGIN_X = 19.0
 BODY_ORIGIN_Y = 19.0
 _SAFE_PDF_NAME = re.compile(r"^[A-Za-z0-9._-]{1,120}\.pdf$", re.IGNORECASE)
+_TRANSPARENT_EXPORT_PREVIEW = (
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +51,7 @@ class VectorPlacement:
     object_name: str
     coordinate_space: str = "body"
     strict_base: bool = False
+    rotation: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -69,15 +77,6 @@ def _parse_crop(value: Any) -> tuple[float, float, float, float] | None:
     return None
 
 
-def _origin_adjust(value: float, size: float, origin: str | None) -> float:
-    key = str(origin or "left").lower()
-    if key == "center":
-        return value - size / 2.0
-    if key in {"right", "bottom"}:
-        return value - size
-    return value
-
-
 def _eligible_direct_pdf_object(obj: dict[str, Any]) -> bool:
     source = str(obj.get("pdfSource") or "").strip()
     if not source or not _SAFE_PDF_NAME.fullmatch(source):
@@ -86,16 +85,14 @@ def _eligible_direct_pdf_object(obj: dict[str, Any]) -> bool:
         return False
     try:
         angle = float(obj.get("angle") or 0)
-        opacity = float(obj.get("opacity") if obj.get("opacity") is not None else 1)
     except (TypeError, ValueError):
         return False
-    # Rotated/flipped/semi-transparent previews stay raster so the export cannot
-    # silently change a user's intended appearance.
-    if abs(angle) > 0.001 or bool(obj.get("flipX")) or bool(obj.get("flipY")):
-        return False
-    # Legacy PDF underlays were stored at 0.85 opacity. Treat those as direct
-    # PDF previews and restore the original source at full clarity during export.
-    if opacity < 0.80:
+    # Born-digital PDF bases must never fall back to their PNG editor preview.
+    # Orthogonal rotation remains vector-preserving; arbitrary rotation and
+    # mirroring fail preflight with a useful message instead of silently
+    # embedding the preview.
+    nearest_quarter_turn = round(angle / 90.0) * 90
+    if abs(angle - nearest_quarter_turn) > 0.001 or bool(obj.get("flipX")) or bool(obj.get("flipY")):
         return False
     try:
         width = float(obj.get("width") or 0)
@@ -105,6 +102,32 @@ def _eligible_direct_pdf_object(obj: dict[str, Any]) -> bool:
     except (TypeError, ValueError):
         return False
     return width > 0 and height > 0 and sx > 0 and sy > 0
+
+
+def _fabric_bounds(
+    raw_left: float,
+    raw_top: float,
+    width: float,
+    height: float,
+    *,
+    origin_x: str | None,
+    origin_y: str | None,
+    rotation: int,
+) -> tuple[float, float, float, float]:
+    """Return Fabric's axis-aligned bounds for an orthogonally rotated object."""
+    ox = {"left": 0.0, "center": width / 2.0, "right": width}.get(str(origin_x or "left").lower(), 0.0)
+    oy = {"top": 0.0, "center": height / 2.0, "bottom": height}.get(str(origin_y or "top").lower(), 0.0)
+    radians = math.radians(rotation % 360)
+    cosine, sine = math.cos(radians), math.sin(radians)
+    points: list[tuple[float, float]] = []
+    for x, y in ((0.0, 0.0), (width, 0.0), (0.0, height), (width, height)):
+        local_x, local_y = x - ox, y - oy
+        points.append((
+            raw_left + local_x * cosine - local_y * sine,
+            raw_top + local_x * sine + local_y * cosine,
+        ))
+    xs, ys = zip(*points)
+    return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
 
 
 def _placement_from_object(
@@ -148,8 +171,16 @@ def _placement_from_object(
 
     rendered_width = width_px * scale_x
     rendered_height = height_px * scale_y
-    left = _origin_adjust(raw_left, rendered_width, obj.get("originX"))
-    top = _origin_adjust(raw_top, rendered_height, obj.get("originY"))
+    rotation = int(round(float(obj.get("angle") or 0))) % 360
+    left, top, placed_width, placed_height = _fabric_bounds(
+        raw_left,
+        raw_top,
+        rendered_width,
+        rendered_height,
+        origin_x=obj.get("originX"),
+        origin_y=obj.get("originY"),
+        rotation=rotation,
+    )
 
     return VectorPlacement(
         export_page_index=export_page_index,
@@ -159,11 +190,12 @@ def _placement_from_object(
         clip=(x0, y0, x1, y1),
         left=left,
         top=top,
-        width=rendered_width,
-        height=rendered_height,
+        width=placed_width,
+        height=placed_height,
         object_name=str(obj.get("objName") or source_pdf),
         coordinate_space=str(obj.get("pdfCoordinateSpace") or ("sheet" if obj.get("pdfPlacementMode") == "full_sheet" else "body")),
         strict_base=bool(obj.get("pdfBase")),
+        rotation=rotation,
     )
 
 
@@ -177,8 +209,16 @@ def _object_bounds(obj: dict[str, Any]) -> fitz.Rect | None:
     try:
         width = float(obj.get("width") or 0) * float(obj.get("scaleX") if obj.get("scaleX") is not None else 1)
         height = float(obj.get("height") or 0) * float(obj.get("scaleY") if obj.get("scaleY") is not None else 1)
-        left = _origin_adjust(float(obj.get("left") or 0), width, str(obj.get("originX") or "left"))
-        top = _origin_adjust(float(obj.get("top") or 0), height, str(obj.get("originY") or "top"))
+        rotation = int(round(float(obj.get("angle") or 0))) % 360
+        left, top, width, height = _fabric_bounds(
+            float(obj.get("left") or 0),
+            float(obj.get("top") or 0),
+            width,
+            height,
+            origin_x=str(obj.get("originX") or "left"),
+            origin_y=str(obj.get("originY") or "top"),
+            rotation=rotation,
+        )
     except (TypeError, ValueError):
         return None
     if width <= 0 or height <= 0:
@@ -211,9 +251,14 @@ def _drawing_page(page: dict[str, Any]) -> bool:
     )
 
 
-def _hide_export_object(obj: dict[str, Any]) -> None:
+def _hide_export_object(obj: dict[str, Any], *, remove_pdf_preview: bool = False) -> None:
     obj["visible"] = False
     obj["excludeFromExport"] = True
+    if remove_pdf_preview:
+        # The clone is disposable. Removing the project-local PNG URL makes it
+        # impossible for a renderer regression to paint the editor preview.
+        obj["src"] = _TRANSPARENT_EXPORT_PREVIEW
+        obj["pdfPreviewExcluded"] = True
 
 
 def _physical_page_map(output: fitz.Document) -> dict[str, int]:
@@ -399,18 +444,26 @@ def prepare_vector_export_clone(
         if not drawing_page:
             for obj in objects:
                 if isinstance(obj, dict) and str(obj.get("pdfSource") or "").strip():
-                    _hide_export_object(obj)
+                    _hide_export_object(obj, remove_pdf_preview=True)
             continue
 
         for obj in objects:
             if not isinstance(obj, dict):
                 continue
+            pdf_source = str(obj.get("pdfSource") or "").strip()
             placement = _placement_from_object(
                 obj,
                 export_page_index=export_index,
                 project_page_id=str(page.get("id") or ""),
             )
             if placement is None:
+                if pdf_source:
+                    _hide_export_object(obj, remove_pdf_preview=True)
+                    raise RuntimeError(
+                        "Born-digital PDF base cannot be exported as vector content on "
+                        f"project page {page.get('id') or ''}: {pdf_source}. "
+                        "Only unmirrored 0, 90, 180, or 270 degree placement is supported."
+                    )
                 if strict_pdf_page and obj.get("pdfBase") is True:
                     raise RuntimeError(f"Managed PDF base is invalid on project page {page.get('id') or ''}.")
                 continue
@@ -419,23 +472,23 @@ def prepare_vector_export_clone(
             if source_pdf_dir is not None:
                 source_path = _resolve_source_pdf(Path(source_pdf_dir), placement.source_pdf)
                 if source_path is None:
-                    if placement.strict_base:
-                        raise RuntimeError(f"Managed PDF source is missing for project page {placement.project_page_id}: {placement.source_pdf}")
-                    continue
+                    raise RuntimeError(
+                        f"Born-digital PDF source is missing for project page {placement.project_page_id}: {placement.source_pdf}"
+                    )
                 page_count = verified_sources.get(source_path)
                 if page_count is None:
                     try:
                         with fitz.open(source_path) as source_doc:
                             page_count = source_doc.page_count
                     except Exception:
-                        if placement.strict_base:
-                            raise RuntimeError(f"Managed PDF source is unreadable for project page {placement.project_page_id}: {placement.source_pdf}")
-                        continue
+                        raise RuntimeError(
+                            f"Born-digital PDF source is unreadable for project page {placement.project_page_id}: {placement.source_pdf}"
+                        )
                     verified_sources[source_path] = page_count
                 if placement.source_page_index < 0 or placement.source_page_index >= page_count:
-                    if placement.strict_base:
-                        raise RuntimeError(f"Managed PDF source page is out of range for project page {placement.project_page_id}.")
-                    continue
+                    raise RuntimeError(
+                        f"Born-digital PDF source page is out of range for project page {placement.project_page_id}."
+                    )
 
             key = (
                 placement.project_page_id,
@@ -446,11 +499,12 @@ def prepare_vector_export_clone(
                 round(placement.top, 2),
                 round(placement.width, 2),
                 round(placement.height, 2),
+                placement.rotation,
             )
             if key not in placement_keys:
                 placement_keys.add(key)
                 placements.append(placement)
-            _hide_export_object(obj)
+            _hide_export_object(obj, remove_pdf_preview=True)
 
             # If the user stacked the PDF over a screenshot/image of the same
             # drawing for comparison, the opaque raster would otherwise cover the
@@ -481,6 +535,43 @@ def prepare_vector_export_clone(
 
     return clone, placements
 
+
+def audit_export_preview_exclusion(
+    export_project: dict[str, Any],
+    placements: Iterable[VectorPlacement],
+) -> dict[str, Any]:
+    """Fail if a born-digital PDF preview can still reach print output."""
+    pdf_objects: list[tuple[str, dict[str, Any]]] = []
+    for page in export_project.get("pages", []):
+        if not isinstance(page, dict) or not page.get("include", True) or not _drawing_page(page):
+            continue
+        for obj in page.get("canvasObjects", []):
+            if isinstance(obj, dict) and str(obj.get("pdfSource") or "").strip():
+                pdf_objects.append((str(page.get("id") or ""), obj))
+    exposed = [
+        page_id
+        for page_id, obj in pdf_objects
+        if obj.get("visible") is not False
+        or obj.get("excludeFromExport") is not True
+        or obj.get("pdfPreviewExcluded") is not True
+        or obj.get("src") != _TRANSPARENT_EXPORT_PREVIEW
+    ]
+    if exposed:
+        raise RuntimeError(
+            "Managed PDF preview exclusion failed for project page(s): "
+            + ", ".join(sorted(set(exposed)))
+        )
+    placement_list = list(placements)
+    if len(placement_list) > len(pdf_objects):
+        raise RuntimeError("Vector placement count exceeds the number of imported PDF bases.")
+    return {
+        "pdfPreviewObjects": len(pdf_objects),
+        "excludedPreviewObjects": len(pdf_objects),
+        "vectorPlacements": len(placement_list),
+        "deduplicatedPreviewObjects": len(pdf_objects) - len(placement_list),
+        "previewRasterAllowed": False,
+    }
+
 def _resolve_source_pdf(source_pdf_dir: Path, name: str) -> Path | None:
     if not _SAFE_PDF_NAME.fullmatch(name):
         return None
@@ -489,6 +580,41 @@ def _resolve_source_pdf(source_pdf_dir: Path, name: str) -> Path | None:
     if root not in candidate.parents or not candidate.is_file():
         return None
     return candidate
+
+
+def _prune_source_in_worker(
+    source_path: Path,
+    source_page_index: int,
+    clip: fitz.Rect,
+    output_path: Path,
+) -> dict[str, Any]:
+    """Prune one huge engineering page in an isolated process.
+
+    MuPDF's display-list store retains memory after redaction. A separate worker
+    guarantees that a series of million-path crops cannot accumulate enough
+    retained memory to terminate the live server.
+    """
+    worker = Path(__file__).with_name("pdf_prune_worker.py")
+    process = subprocess.run(
+        [
+            sys.executable,
+            str(worker),
+            "--source", str(source_path),
+            "--page", str(source_page_index),
+            "--clip", ",".join(f"{value:.8f}" for value in clip),
+            "--output", str(output_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if process.returncode != 0 or not output_path.is_file():
+        detail = (process.stderr or process.stdout or "PDF crop worker failed")[-3000:]
+        raise RuntimeError(f"Could not prune source PDF crop (worker exit {process.returncode}): {detail}")
+    try:
+        return json.loads(process.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"PDF crop worker returned invalid diagnostics: {process.stdout[-1000:]}") from exc
 
 
 def _contained_rect(container: fitz.Rect, source: fitz.Rect) -> fitz.Rect:
@@ -545,67 +671,119 @@ def apply_vector_pdf_underlays(
 
     output = fitz.open(pdf_path)
     source_docs: dict[Path, fitz.Document] = {}
+    pruned_paths: dict[tuple[Any, ...], Path | None] = {}
+    pruned_docs: dict[tuple[Any, ...], fitz.Document] = {}
+    pruning_audit: dict[tuple[Any, ...], dict[str, Any]] = {}
     inserted = 0
     skipped: list[dict[str, Any]] = []
     physical_page_map = _physical_page_map(output)
     try:
-        for placement in placement_list:
-            mapped_index = physical_page_map.get(placement.project_page_id)
-            if mapped_index is None:
-                # Marker-aware exports must never guess.  The ordinal fallback is
-                # retained only for older one-off tests/PDFs that contain no page
-                # identity markers at all.
-                if physical_page_map:
-                    skipped.append({**placement.to_dict(), "reason": "project page marker is missing from export"})
+        with tempfile.TemporaryDirectory(prefix="s360_pdf_vector_crop_", dir=pdf_path.parent) as raw_pruned:
+            pruned_root = Path(raw_pruned)
+            for placement in placement_list:
+                mapped_index = physical_page_map.get(placement.project_page_id)
+                if mapped_index is None:
+                    # Marker-aware exports must never guess.  The ordinal fallback is
+                    # retained only for older one-off tests/PDFs that contain no page
+                    # identity markers at all.
+                    if physical_page_map:
+                        skipped.append({**placement.to_dict(), "reason": "project page marker is missing from export"})
+                        continue
+                    mapped_index = placement.export_page_index
+                if mapped_index < 0 or mapped_index >= output.page_count:
+                    skipped.append({**placement.to_dict(), "reason": "export page is missing"})
                     continue
-                mapped_index = placement.export_page_index
-            if mapped_index < 0 or mapped_index >= output.page_count:
-                skipped.append({**placement.to_dict(), "reason": "export page is missing"})
-                continue
-            source_path = _resolve_source_pdf(source_pdf_dir, placement.source_pdf)
-            if source_path is None:
-                skipped.append({**placement.to_dict(), "reason": "source PDF is missing or unsafe"})
-                continue
-            source = source_docs.get(source_path)
-            if source is None:
-                source = fitz.open(source_path)
-                source_docs[source_path] = source
-            if placement.source_page_index >= source.page_count:
-                skipped.append({**placement.to_dict(), "reason": "source page is outside the PDF"})
-                continue
+                source_path = _resolve_source_pdf(source_pdf_dir, placement.source_pdf)
+                if source_path is None:
+                    skipped.append({**placement.to_dict(), "reason": "source PDF is missing or unsafe"})
+                    continue
+                source = source_docs.get(source_path)
+                if source is None:
+                    source = fitz.open(source_path)
+                    source_docs[source_path] = source
+                if placement.source_page_index >= source.page_count:
+                    skipped.append({**placement.to_dict(), "reason": "source page is outside the PDF"})
+                    continue
 
-            source_page = source[placement.source_page_index]
-            clip_values = placement.clip
-            if any(math.isnan(value) for value in clip_values):
-                clip = fitz.Rect(source_page.rect)
-            else:
-                clip = fitz.Rect(*clip_values) & source_page.rect
-            if clip.is_empty or clip.width <= 0 or clip.height <= 0:
-                skipped.append({**placement.to_dict(), "reason": "source crop is empty"})
-                continue
+                source_page = source[placement.source_page_index]
+                clip_values = placement.clip
+                if any(math.isnan(value) for value in clip_values):
+                    clip = fitz.Rect(source_page.rect)
+                else:
+                    clip = fitz.Rect(*clip_values) & source_page.rect
+                if clip.is_empty or clip.width <= 0 or clip.height <= 0:
+                    skipped.append({**placement.to_dict(), "reason": "source crop is empty"})
+                    continue
 
-            destination = _destination_rect(
-                output[mapped_index],
-                placement,
-                source_clip=clip,
-            )
-            if destination.is_empty or destination.width <= 0 or destination.height <= 0:
-                skipped.append({**placement.to_dict(), "reason": "destination is empty"})
-                continue
-            output[mapped_index].show_pdf_page(
-                destination,
-                source,
-                placement.source_page_index,
-                clip=clip,
-                keep_proportion=placement.coordinate_space == "sheet" and placement.strict_base,
-                overlay=False,
-            )
-            inserted += 1
+                destination = _destination_rect(
+                    output[mapped_index],
+                    placement,
+                    source_clip=clip,
+                )
+                if destination.is_empty or destination.width <= 0 or destination.height <= 0:
+                    skipped.append({**placement.to_dict(), "reason": "destination is empty"})
+                    continue
+                prune_key = (
+                    source_path,
+                    placement.source_page_index,
+                    *(round(value, 4) for value in clip),
+                )
+                if prune_key not in pruned_paths:
+                    pruned_path = pruned_root / f"crop-{len(pruned_paths) + 1:03d}.pdf"
+                    try:
+                        detail = _prune_source_in_worker(
+                            source_path,
+                            placement.source_page_index,
+                            clip,
+                            pruned_path,
+                        )
+                        detail["mode"] = "pruned-vector"
+                        pruning_audit[prune_key] = detail
+                        pruned_paths[prune_key] = pruned_path
+                        pruned_docs[prune_key] = fitz.open(pruned_path)
+                    except RuntimeError as exc:
+                        pruned_path.unlink(missing_ok=True)
+                        pruning_audit[prune_key] = {
+                            "mode": "full-source-vector-fallback",
+                            "reason": str(exc),
+                            "cropFraction": round(clip.get_area() / max(1.0, source_page.rect.get_area()), 6),
+                        }
+                        pruned_paths[prune_key] = None
+                pruned_path = pruned_paths[prune_key]
+                if pruned_path is None:
+                    output[mapped_index].show_pdf_page(
+                        destination,
+                        source,
+                        placement.source_page_index,
+                        clip=clip,
+                        keep_proportion=placement.coordinate_space == "sheet" and placement.strict_base,
+                        overlay=False,
+                        rotate=placement.rotation,
+                    )
+                else:
+                    pruned_source = pruned_docs[prune_key]
+                    output[mapped_index].show_pdf_page(
+                        destination,
+                        pruned_source,
+                        0,
+                        keep_proportion=placement.coordinate_space == "sheet" and placement.strict_base,
+                        overlay=False,
+                        rotate=placement.rotation,
+                    )
+                inserted += 1
 
-        temp_path = pdf_path.with_name(f"{pdf_path.stem}.vectorized.tmp.pdf")
-        output.save(temp_path, garbage=4, deflate=True, clean=True)
+            temp_path = pdf_path.with_name(f"{pdf_path.stem}.vectorized.tmp.pdf")
+            output.save(temp_path, garbage=4, deflate=True, clean=True)
+            output.close()
+            output = None
+            for source in pruned_docs.values():
+                source.close()
+            pruned_docs.clear()
     finally:
-        output.close()
+        if output is not None:
+            output.close()
+        for source in pruned_docs.values():
+            source.close()
         for source in source_docs.values():
             source.close()
 
@@ -625,4 +803,8 @@ def apply_vector_pdf_underlays(
         "pageSizes": page_sizes,
         "pageIdMap": physical_page_map,
         "placements": [placement.to_dict() for placement in placement_list],
+        "prunedSourceVariants": sum(path is not None for path in pruned_paths.values()),
+        "fullSourceVectorFallbacks": sum(path is None for path in pruned_paths.values()),
+        "pruning": list(pruning_audit.values()),
+        "allVectorBasesInsertedExactlyOnce": inserted == len(placement_list) and not skipped,
     }

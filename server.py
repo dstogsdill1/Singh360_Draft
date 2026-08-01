@@ -64,6 +64,7 @@ from core.pdf_page_import import (
     existing_pdf_import_groups,
     preview_pdf,
 )
+from core.pdf_optimizer import optimize_pdf_atomic
 from core.project_model import ensure_project_shape, recalc_page_numbers
 from core.standalone_project import (
     archive_project as mark_project_archived,
@@ -86,6 +87,7 @@ from core.project_workspace import (
 from core.validation import validate_project
 from core.vector_pdf_export import (
     apply_vector_pdf_underlays,
+    audit_export_preview_exclusion,
     build_selected_export_document,
     prepare_vector_export_clone,
     selected_page_ids_from_request,
@@ -4048,10 +4050,14 @@ def export_pdf(project_id: str):
     width_in, height_in = 17.0, 11.0
 
     source_pdf_dir = store.dir_for(project_id, doc) / "sources" / "pdf"
-    export_doc, vector_placements = prepare_vector_export_clone(
-        selected_doc,
-        source_pdf_dir=source_pdf_dir,
-    )
+    try:
+        export_doc, vector_placements = prepare_vector_export_clone(
+            selected_doc,
+            source_pdf_dir=source_pdf_dir,
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.exception("PDF vector preflight failed for %s", project_id)
+        return jsonify(_err("PDF export failed.", str(exc))), 500
     temp_id = uuid.uuid4().hex[:16]
     temp_dir = None
     package_name = str(
@@ -4064,6 +4070,7 @@ def export_pdf(project_id: str):
     pdf_path = store.exports_pdf_dir(project_id, doc) / f"{safe_package_name}.pdf"
     render_path = pdf_path.with_name(f".{pdf_path.stem}.{uuid.uuid4().hex}.rendering.pdf")
     try:
+        preview_audit = audit_export_preview_exclusion(export_doc, vector_placements)
         temp_dir = _write_export_only_project(export_doc, temp_id)
         url = f"http://127.0.0.1:{_SERVER_PORT}/app?project={temp_id}&print=1&pw={width_in}&ph={height_in}"
         ok, detail = export_pdf_via_playwright(url, render_path, width_in=width_in, height_in=height_in)
@@ -4081,21 +4088,34 @@ def export_pdf(project_id: str):
             "selectedPageIds": selected_ids,
             "selectedPageCount": len(pages),
             "paper": {"width": width_in, "height": height_in},
+            "previewExclusion": preview_audit,
         })
-        if audit.get("skipped"):
-            strict_skips = [item for item in audit.get("skippedDetails", []) if item.get("strict_base")]
-            if strict_skips:
-                raise RuntimeError(f"Managed PDF vector placement failed: {strict_skips}")
-            app.logger.warning("Vector PDF export skipped %s optional placement(s): %s", audit.get("skipped"), audit.get("skippedDetails"))
-        import fitz
-        with fitz.open(render_path) as rendered:
-            if rendered.page_count != len(pages):
-                raise RuntimeError(f"Export page count mismatch: expected {len(pages)}, got {rendered.page_count}.")
-            if any(page.rect.width <= 0 or page.rect.height <= 0 for page in rendered):
-                raise RuntimeError("Export contains an invalid media box.")
-        os.replace(render_path, pdf_path)
+        if (
+            audit.get("skipped")
+            or audit.get("inserted") != len(vector_placements)
+            or audit.get("fullSourceVectorFallbacks")
+        ):
+            raise RuntimeError(
+                "Born-digital PDF base insertion failed: "
+                f"expected {len(vector_placements)}, inserted {audit.get('inserted')}, "
+                f"skipped {audit.get('skipped')}, full-source fallbacks "
+                f"{audit.get('fullSourceVectorFallbacks')}. Details: {audit.get('skippedDetails')}"
+            )
+        diagnostics = optimize_pdf_atomic(
+            render_path,
+            pdf_path,
+            expected_page_count=len(pages),
+            managed_page_indices={
+                int(audit["pageIdMap"][placement.project_page_id])
+                for placement in vector_placements
+            },
+            render_dpi=96,
+        )
+        audit["optimization"] = diagnostics
         audit_path = pdf_path.with_suffix(".vector-audit.json")
-        audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+        audit_temp = audit_path.with_name(f".{audit_path.name}.{uuid.uuid4().hex}.tmp")
+        audit_temp.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(audit_temp, audit_path)
     except Exception as exc:  # noqa: BLE001
         app.logger.exception("Vector-preserving PDF export failed for %s", project_id)
         return jsonify(_err("PDF export failed.", str(exc))), 500
@@ -4115,6 +4135,11 @@ def export_pdf(project_id: str):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["X-Singh360-PDF-Bytes"] = str(diagnostics["totalBytes"])
+    response.headers["X-Singh360-PDF-Pages"] = str(diagnostics["pageCount"])
+    response.headers["X-Singh360-PDF-First-Page-Ms"] = str(diagnostics["firstPageOpenMs"])
+    response.headers["X-Singh360-PDF-Navigation-Max-Ms"] = str(diagnostics["pageNavigationMaxMs"])
+    response.headers["X-Singh360-PDF-Duplicate-Resources"] = str(diagnostics["duplicateResourceCount"])
     return response
 
 
