@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import BytesIO
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -17,6 +18,13 @@ from tests.generated_fixtures import isolate_server_runtime, write_workbook
 
 class ProjectImportTransactionTests(unittest.TestCase):
     def setUp(self) -> None:
+        # Legacy workbook-authority routes are disabled in production. These
+        # rollback-compatibility tests opt in explicitly and never use live data.
+        self.legacy_routes = patch.dict(
+            os.environ,
+            {"SINGH360_ENABLE_LEGACY_WORKBOOK_ROUTES": "1"},
+        )
+        self.legacy_routes.start()
         self.runtime = isolate_server_runtime(server)
         self.client = server.app.test_client()
         self.source_root = tempfile.TemporaryDirectory(prefix="s360_import_source_")
@@ -35,10 +43,11 @@ class ProjectImportTransactionTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.source_root.cleanup()
         self.runtime.cleanup()
+        self.legacy_routes.stop()
 
     def _create(self):
         return self.client.post(
-            "/api/projects/new",
+            "/api/legacy/projects/new-from-workbook",
             data={
                 "profile": "ems",
                 "projectRoot": str(self.project_root),
@@ -96,7 +105,7 @@ class ProjectImportTransactionTests(unittest.TestCase):
         invalid_bytes.seek(0)
 
         response = self.client.post(
-            "/api/projects/new",
+            "/api/legacy/projects/new-from-workbook",
             data={
                 "profile": "ems",
                 "projectRoot": str(self.project_root),

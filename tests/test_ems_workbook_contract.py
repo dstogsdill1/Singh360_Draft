@@ -316,40 +316,12 @@ class EmsWorkbookContractTests(unittest.TestCase):
         self.assertGreater(updated_abbreviations["canonicalDataRowCount"], 0)
         self.assertEqual([], updated_abbreviations["missingCanonicalSources"])
 
-    def test_tracked_runtime_template_is_clean_and_styled(self) -> None:
-        template = (
-            Path(__file__).resolve().parents[1]
-            / "defaults"
-            / "runtime_templates"
-            / "Singh360_BASE_Project_Workbook_Template_V1.xlsx"
+    def test_standalone_runtime_has_no_tracked_workbook_template(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        self.assertFalse(
+            (root / "defaults" / "runtime_templates" / "Singh360_BASE_Project_Workbook_Template_V1.xlsx").exists()
         )
-        workbook = load_workbook(template)
-        try:
-            for required in (
-                "00_PROJECT_META", "00_INDEX", "21_NETWORK_PORTS",
-                "31_OPEN_ITEMS", "32_GUIDELINES", "37_RESPONSIBILITY_MATRIX",
-            ):
-                self.assertIn(required, workbook.sheetnames)
-            for name in ("21_NETWORK_PORTS", "32_GUIDELINES"):
-                ws = workbook[name]
-                self.assertEqual("00D97706", ws["A1"].fill.fgColor.rgb)
-                self.assertEqual("001F4E78", ws["A2"].fill.fgColor.rgb)
-                self.assertIsNone(ws["A3"].value)
-                self.assertEqual("00A6A6A6", ws["A4"].fill.fgColor.rgb)
-                self.assertTrue(all(ws.cell(row, 1).value in (None, "") for row in range(5, 20)))
-            metadata = {
-                str(row[0].value): str(row[1].value or "")
-                for row in workbook["00_PROJECT_META"].iter_rows(min_row=5)
-                if row[0].value
-            }
-            self.assertEqual("", metadata["Linked Project ID"])
-            self.assertEqual(CANONICAL_REPOSITORY, metadata["Repository"])
-            self.assertEqual("TBD", metadata["Project Revision"])
-            self.assertEqual("1.0.0", metadata["Template Version"])
-            blob = " ".join(str(cell.value or "") for ws in workbook for row in ws for cell in row)
-            self.assertNotIn("SmartDraw", blob)
-        finally:
-            workbook.close()
+        self.assertFalse((root / "scripts" / "build_runtime_workbook_template.py").exists())
 
 
 if __name__ == "__main__":

@@ -43,22 +43,36 @@ def main() -> int:
     client = (ROOT / "frontend" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
     server = (ROOT / "server.py").read_text(encoding="utf-8")
     canvas = (ROOT / "frontend" / "src" / "components" / "CanvasEditor.tsx").read_text(encoding="utf-8")
+    normalized_page = (ROOT / "frontend" / "src" / "components" / "renderers" / "NormalizedPage.tsx").read_text(encoding="utf-8")
     sheet_css = (ROOT / "frontend" / "src" / "styles" / "sheet.css").read_text(encoding="utf-8")
     pdf_modal = (ROOT / "frontend" / "src" / "components" / "PdfCropModal.tsx").read_text(encoding="utf-8")
     print_view = (ROOT / "frontend" / "src" / "components" / "PrintView.tsx").read_text(encoding="utf-8")
 
     checks = {
-        "allSelectedByDefault": "new Set(includedPages.map((page) => page.id))" in modal,
-        "selectAllAndNone": "Select All" in modal and ">None<" in modal,
+        "completeIncludedSetReadOnly": (
+            "always the complete current drawing set" in modal
+            and "included page" in modal
+            and "Export Complete PDF" in modal
+        ),
+        "ansiBOnly": "onExport(\n              17,\n              11," in modal,
         "pageIdsSent": "pageIds: pending.pageIds" in app and "pageIds?: string[]" in client,
         "warningsScoped": "fetchExportWarnings(proj.id, pageIds)" in app,
-        "serverSelectedClone": "build_selected_export_document(doc, selected_ids)" in server,
+        "serverCompleteSet": (
+            "selected_ids: list[str] = []" in server
+            and "build_selected_export_document(doc, selected_ids)" in server
+        ),
+        "serverAnsiBOnly": "width_in, height_in = 17.0, 11.0" in server,
         "vectorUnderlay": "apply_vector_pdf_underlays" in server,
         "pdfStartsNearFullBody": "const maxW = CANVAS_W * 0.98;" in canvas and "const maxH = CANVAS_H * 0.98;" in canvas,
         "transparentPrintCanvas": "S360 VECTOR PDF EXPORT START" in sheet_css,
         "cropUsesPdfPointMapping": "page.widthPt / page.previewWidth" in pdf_modal and "page.heightPt / page.previewHeight" in pdf_modal,
         "physicalPageIdentityMarker": "S360PID_${pageId}" in print_view,
         "livePdfPreviewOpaque": "S360 LIVE PDF OBJECT REPAIR V1" in canvas and "obj.opacity = 1" in canvas,
+        "exportKeepsPdfRasterHidden": (
+            "exporting?: boolean" in canvas
+            and "if (!exporting && typeof obj.pdfSource" in canvas
+            and "exporting={exporting}" in normalized_page
+        ),
     }
     assert all(checks.values()), checks
 

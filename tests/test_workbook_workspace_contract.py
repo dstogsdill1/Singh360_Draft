@@ -298,14 +298,14 @@ class DataWorkspaceStateEndpointTests(unittest.TestCase):
             }],
             "pages": [],
             "sources": [],
-            "workbookSync": {"status": "in_sync"},
+            "workbookSync": {"mode": "disabled", "status": "disabled", "warning": ""},
         }
         server.store.save(self.project_id, deepcopy(self.project))
 
     def tearDown(self) -> None:
         self.runtime.cleanup()
 
-    def test_local_data_workspace_save_sets_excel_pending(self) -> None:
+    def test_local_data_workspace_save_preserves_standalone_sync_metadata(self) -> None:
         initial = self.client.get(f"/api/projects/{self.project_id}/data-workspace")
         self.assertEqual(200, initial.status_code)
         document = initial.get_json()
@@ -316,10 +316,9 @@ class DataWorkspaceStateEndpointTests(unittest.TestCase):
         )
         self.assertEqual(200, response.status_code, response.get_data(as_text=True))
         saved_project = server.store.load(self.project_id)
-        self.assertEqual("app_changed", saved_project["workbookSync"]["status"])
         self.assertEqual(
-            "data_workspace_saved_excel_pending",
-            saved_project["workbookSync"]["pendingReason"],
+            self.project["workbookSync"],
+            saved_project["workbookSync"],
         )
         self.assertEqual(1, saved_project["dataWorkspace"]["revision"])
         reopened_project = self.client.get(

@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import server
-from core.project_workspace import WorkbookDocumentStore, drawing_workspace_sequence
+from core.project_workspace import WorkbookDocumentStore
 from tests.generated_fixtures import isolate_server_runtime
 from tests.test_sync_order_reconciliation import (
     document_for,
@@ -58,7 +58,9 @@ class BlankSheetTransactionTests(unittest.TestCase):
         )
         return candidate
 
-    def test_save_atomically_persists_page_worksheet_and_both_index_rows(self) -> None:
+    def test_save_persists_blank_page_without_mutating_workbook_workspace(self) -> None:
+        document_before = self.document_store.path.read_bytes()
+        worksheets_before = deepcopy(self.project["worksheets"])
         response = self.client.post(
             f"/api/projects/{self.project_id}",
             json=self.candidate_with_blank(),
@@ -68,60 +70,55 @@ class BlankSheetTransactionTests(unittest.TestCase):
         payload = response.get_json()
         blank = next(page for page in payload["pages"] if page["id"] == "page-blank")
         self.assertEqual("", blank["sheetCode"])
-        self.assertEqual("New Sheet", blank["sheetTab"])
-        self.assertTrue(blank["linkedWorksheetId"].startswith("worksheet_"))
+        self.assertEqual("", blank["sheetTab"])
+        self.assertNotIn("linkedWorksheetId", blank)
 
         saved = server.store.load(self.project_id)
         self.assertIsNotNone(saved)
-        saved_blank = next(page for page in saved["pages"] if page["id"] == "page-blank")
-        self.assertEqual(blank["linkedWorksheetId"], saved_blank["linkedWorksheetId"])
-        project_worksheet = next(
-            sheet
-            for sheet in saved["worksheets"]
-            if sheet["id"] == blank["linkedWorksheetId"]
-        )
-        self.assertEqual("New Sheet", project_worksheet["name"])
-
-        index = next(sheet for sheet in saved["worksheets"] if sheet["name"] == "00_INDEX")
-        headers = {str(value): column for column, value in enumerate(index["grid"][0])}
-        row = next(
-            row
-            for row in index["grid"][1:]
-            if row[headers["Page ID"]] == "page-blank"
-        )
-        self.assertEqual("", row[headers["Sheet Code"]])
-        self.assertEqual("New Sheet", row[headers["Sheet Tab"]])
-
-        document = self.document_store.load(saved)
-        workspace = drawing_workspace_sequence(document)
-        workspace_blank = next(item for item in workspace if item["pageId"] == "page-blank")
-        self.assertEqual("", workspace_blank["sheetCode"])
-        self.assertEqual("New Sheet", workspace_blank["sheetTab"])
+        self.assertEqual("preserve_existing", saved["managedPagePolicy"])
         self.assertEqual(
-            blank["linkedWorksheetId"],
-            next(
-                sheet["id"]
-                for sheet in document["sheets"]
-                if sheet["name"] == "New Sheet"
-            ),
+            [page["id"] for page in self.candidate_with_blank()["pages"]],
+            [page["id"] for page in saved["pages"]],
+            "a normal standalone save must not synthesize or reorder protected legacy pages",
+        )
+        saved_blank = next(page for page in saved["pages"] if page["id"] == "page-blank")
+        self.assertEqual("New Sheet", saved_blank["sheetTitle"])
+        self.assertEqual(worksheets_before, saved["worksheets"])
+        self.assertEqual(
+            document_before,
+            self.document_store.path.read_bytes(),
         )
 
-    def test_workspace_commit_failure_rolls_back_project_json(self) -> None:
-        project_path = self.project_dir / "project.json"
-        before = project_path.read_bytes()
+    def test_local_save_never_invokes_workbook_workspace_commit(self) -> None:
         with patch.object(
             WorkbookDocumentStore,
             "commit_reconciled_order",
             side_effect=OSError("injected disposable workspace write failure"),
-        ):
+        ) as workspace_commit:
             response = self.client.post(
                 f"/api/projects/{self.project_id}",
                 json=self.candidate_with_blank(),
             )
-        self.assertEqual(500, response.status_code, response.get_data(as_text=True))
-        self.assertEqual(before, project_path.read_bytes())
+        self.assertEqual(200, response.status_code, response.get_data(as_text=True))
+        workspace_commit.assert_not_called()
         reloaded = server.store.load(self.project_id)
-        self.assertNotIn("page-blank", {page["id"] for page in reloaded["pages"]})
+        self.assertIn("page-blank", {page["id"] for page in reloaded["pages"]})
+
+    def test_protected_export_clone_preserves_exact_pages_and_policy(self) -> None:
+        protected = deepcopy(self.project)
+        protected["projectMode"] = "standalone_layout"
+        protected["managedPagePolicy"] = "preserve_existing"
+        protected["pages"][0].setdefault("canvasObjects", []).append(
+            {"objectId": "literal-source-text", "type": "textbox", "text": "NaN"}
+        )
+        expected_pages = deepcopy(protected["pages"])
+        export_id = "f1e2d3c4b5a60718"
+        server._write_export_only_project(protected, export_id)
+        clone = server.store.load(export_id)
+        self.assertIsNotNone(clone)
+        self.assertEqual("preserve_existing", clone["managedPagePolicy"])
+        self.assertEqual(expected_pages, clone["pages"])
+        self.assertEqual(expected_pages, server._normalize_project_for_runtime(clone)["pages"])
 
 
 if __name__ == "__main__":

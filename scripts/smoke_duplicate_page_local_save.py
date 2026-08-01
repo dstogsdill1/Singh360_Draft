@@ -1,11 +1,13 @@
-"""Browser regression for workbook-detached page duplication and local saving.
+"""Browser regression for standalone page duplication and local saving.
 
-The fixture is generated in a disposable SINGH360_DOCS_DIR. It deliberately
-starts in workbook conflict and never invokes workbook synchronization.
+The fixture is generated in a disposable SINGH360_DOCS_DIR. It retains a
+read-only historical workbook name while the project is authoritative and
+never invokes workbook synchronization.
 """
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import socket
 import subprocess
@@ -21,8 +23,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from core.project_store import ProjectStore
-from core.project_workspace import WorkbookDocumentStore
-from core.workbook_link_manager import claim_workbook_for_project
 from tests.generated_fixtures import write_workbook
 
 PROJECT_ID = "d00bd00bd00bd00b"
@@ -148,8 +148,8 @@ def fixture_project(workbook: Path) -> dict:
         "include": True,
         "publishStatus": "YES",
         "issueStatus": "draft",
-        "sourceMode": "workbook",
-        "syncDirection": "Both",
+        "sourceMode": "app",
+        "syncDirection": "none",
         "sheetCode": "TBD",
         "displaySheetCode": "TBD",
         "sheetTitle": "WICP1",
@@ -174,18 +174,21 @@ def fixture_project(workbook: Path) -> dict:
     return {
         "id": PROJECT_ID,
         "projectDisplayName": "Sanitized Duplicate Save Regression",
-        "metadata": {"projectName": "Sanitized Duplicate Save Regression"},
+        "projectMode": "standalone_layout",
+        "managedPagePolicy": "preserve_existing",
+        "sourceAuthority": "project",
+        "metadata": {
+            "projectName": "Sanitized Duplicate Save Regression",
+            "legacySourceWorkbookName": workbook.name,
+        },
         "worksheets": [worksheet, index],
         "pages": [page],
         "sources": [],
         "workbookSync": {
-            "mode": "external",
-            "workbook": str(workbook),
-            "workbookHash": "0" * 64,
-            "appHash": "0" * 64,
-            "status": "conflict",
-            "state": "conflict",
-            "warning": "Generated two-sided conflict for local-save regression.",
+            "mode": "disabled",
+            "status": "disabled",
+            "state": "disabled",
+            "warning": "Historical workbook name only; this standalone project is authoritative.",
         },
     }
 
@@ -212,24 +215,92 @@ def assert_saved_copy(project: dict, expected_objects: list[dict]) -> dict:
     expected_names = [item.get("objName") for item in expected_objects]
     source_objects = source.get("canvasObjects") or []
     copy_objects = copy.get("canvasObjects") or []
-    if len(source_objects) != len(expected_objects) or [
-        item.get("objName") for item in source_objects
-    ] != expected_names:
+    if [item.get("objName") for item in source_objects] != expected_names:
         raise AssertionError("source WICP1 lost or replaced canvas objects")
-    if copy_objects != source_objects:
-        raise AssertionError("duplicate did not preserve the saved source canvas payload")
-    if project.get("workbookSync", {}).get("status") != "conflict":
-        raise AssertionError("local save cleared the workbook conflict")
+    assert_canvas_semantics_preserved(source_objects, expected_objects)
+    assert_canvas_semantics_preserved(copy_objects, expected_objects)
+    source_ids = {str(item.get("objectId") or "") for item in source_objects}
+    copy_ids = {str(item.get("objectId") or "") for item in copy_objects}
+    if source_ids & copy_ids:
+        raise AssertionError("duplicate reused a source canvas object identity")
+    if project.get("workbookSync", {}).get("status") != "disabled":
+        raise AssertionError("local save re-enabled workbook synchronization")
     tabs = [str(page.get("sheetTab") or "").casefold() for page in pages]
     if len(tabs) != len(set(tabs)):
         raise AssertionError(f"duplicate worksheet tabs remain after local save: {tabs}")
-    matching = [
-        worksheet for worksheet in project.get("worksheets") or []
-        if worksheet.get("id") == copy.get("linkedWorksheetId")
-    ]
-    if len(matching) != 1 or matching[0].get("name") != copy.get("sheetTab"):
-        raise AssertionError("copy does not have one matching project worksheet")
+    if copy.get("linkedWorksheetId") or copy.get("sheetTab"):
+        raise AssertionError("standalone duplicate retained a worksheet identity")
     return copy
+
+
+def assert_canvas_semantics_preserved(
+    actual_objects: list[dict],
+    expected_objects: list[dict],
+) -> None:
+    """Allow Fabric defaults/line normalization while proving drawing content."""
+    if len(actual_objects) != len(expected_objects):
+        raise AssertionError(
+            "archive/reopen changed the source canvas object count"
+        )
+    actual_by_name = {
+        str(item.get("objName") or ""): item for item in actual_objects
+    }
+    if len(actual_by_name) != len(actual_objects):
+        raise AssertionError("archive/reopen lost unique manual object names")
+    for expected in expected_objects:
+        name = str(expected.get("objName") or "")
+        actual = actual_by_name.get(name)
+        if actual is None:
+            raise AssertionError(
+                f"archive/reopen lost manual canvas object {name!r}"
+            )
+        stable_keys = (
+            "type",
+            "left",
+            "top",
+            "width",
+            "fill",
+            "stroke",
+            "strokeWidth",
+            "scaleX",
+            "scaleY",
+            "angle",
+            "opacity",
+            "visible",
+            "text",
+            "fontSize",
+        )
+        for key in stable_keys:
+            if key in expected and actual.get(key) != expected[key]:
+                raise AssertionError(
+                    f"archive/reopen changed {name!r} field {key}: "
+                    f"{expected[key]!r} -> {actual.get(key)!r}"
+                )
+        if expected.get("type") == "Rect" and (
+            actual.get("height") != expected.get("height")
+        ):
+            raise AssertionError(
+                f"archive/reopen changed {name!r} rectangle height"
+            )
+        if expected.get("type") == "Line":
+            expected_width = abs(expected["x2"] - expected["x1"])
+            expected_height = abs(expected["y2"] - expected["y1"])
+            if (
+                actual.get("width") != expected_width
+                or actual.get("height") != expected_height
+            ):
+                raise AssertionError(
+                    f"archive/reopen changed {name!r} line geometry"
+                )
+    object_ids = [
+        str(item.get("objectId") or "") for item in actual_objects
+    ]
+    if any(not object_id for object_id in object_ids) or (
+        len(object_ids) != len(set(object_ids))
+    ):
+        raise AssertionError(
+            "archive/reopen did not preserve unique canvas object identities"
+        )
 
 
 def export_pdf(port: int) -> int:
@@ -256,18 +327,12 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="singh360_duplicate_save_") as raw:
         runtime = Path(raw)
         docs = runtime / ".docs"
-        workbook = write_workbook(runtime / "protected-conflict-clone.xlsx")
-        claim_workbook_for_project(workbook, PROJECT_ID)
+        workbook = write_workbook(runtime / "historical-source-clone.xlsx")
+        workbook_sha = hashlib.sha256(workbook.read_bytes()).hexdigest()
         initial = fixture_project(workbook)
         expected_objects = initial["pages"][0]["canvasObjects"]
         store = ProjectStore(docs)
         store.save(PROJECT_ID, initial)
-        project_dir = store.dir_for(PROJECT_ID, initial)
-        WorkbookDocumentStore(project_dir).save(
-            initial,
-            0,
-            {"revision": 0, "updatedAt": "", "sheets": []},
-        )
 
         port = free_port()
         env = {
@@ -284,6 +349,7 @@ def main() -> int:
         )
         requests: list[tuple[str, str]] = []
         project_responses: list[int] = []
+        dialogs: list[dict[str, str]] = []
         evidence = Path(os.environ["SINGH360_EVIDENCE_DIR"]) if os.environ.get("SINGH360_EVIDENCE_DIR") else runtime
         evidence.mkdir(parents=True, exist_ok=True)
         try:
@@ -309,7 +375,18 @@ def main() -> int:
                     and response.url.endswith(f"/api/projects/{PROJECT_ID}")
                     else None,
                 )
-                page.on("dialog", lambda dialog: dialog.dismiss())
+
+                def handle_dialog(dialog) -> None:
+                    dialogs.append({"type": dialog.type, "message": dialog.message})
+                    if (
+                        dialog.type == "confirm"
+                        and dialog.message.startswith("Archive page ")
+                    ):
+                        dialog.accept()
+                    else:
+                        dialog.dismiss()
+
+                page.on("dialog", handle_dialog)
                 page.goto(
                     f"http://127.0.0.1:{port}/app?project={PROJECT_ID}&mode=editor",
                     wait_until="domcontentloaded",
@@ -331,11 +408,10 @@ def main() -> int:
                 page.locator(".page-tab").filter(has_text="WICP1 Copy").wait_for(
                     state="visible", timeout=15_000
                 )
-                page.get_by_role("button", name="File", exact=True).click()
-                page.get_by_role("button", name="Save Now", exact=True).click()
+                page.get_by_role("button", name="Save Project", exact=True).first.click()
                 page.wait_for_function(
                     """() => document.querySelector('.save-state-control .status-pill')
-                      ?.textContent === 'PROJECT / WORKBOOK CONFLICT'""",
+                      ?.textContent === 'PROJECT SAVED'""",
                     timeout=20_000,
                 )
                 page.screenshot(path=str(evidence / "duplicate-before-reload.png"), full_page=True)
@@ -357,9 +433,88 @@ def main() -> int:
                 reloaded_copy = assert_saved_copy(read_project(port), expected_objects)
                 if reloaded_copy["id"] != saved["id"]:
                     raise AssertionError("reloaded duplicate changed page identity")
+
+                copy_item = page.locator(".page-tab").filter(
+                    has_text="WICP1 Copy"
+                )
+                copy_item.click(button="right")
+                with page.expect_response(
+                    lambda response: response.request.method == "POST"
+                    and response.url.endswith(f"/api/projects/{PROJECT_ID}"),
+                    timeout=30_000,
+                ) as archived_response:
+                    page.locator(".ctx-menu").get_by_role(
+                        "button", name="Archive Page", exact=True
+                    ).click()
+                if archived_response.value.status != 200:
+                    raise AssertionError(
+                        "disposable duplicate archive returned "
+                        f"{archived_response.value.status}"
+                    )
+
+                page.goto(
+                    f"http://127.0.0.1:{port}/app",
+                    wait_until="domcontentloaded",
+                    timeout=60_000,
+                )
+                page.goto(
+                    f"http://127.0.0.1:{port}/app?project={PROJECT_ID}&mode=editor",
+                    wait_until="domcontentloaded",
+                    timeout=60_000,
+                )
+                page.locator(".page-tab").filter(has_text="WICP1").first.wait_for(
+                    state="visible", timeout=30_000
+                )
+                if page.locator(".page-tab").filter(
+                    has_text="WICP1 Copy"
+                ).count():
+                    raise AssertionError(
+                        "archived disposable duplicate returned as active after reopen"
+                    )
+                after_archive = read_project(port)
+                (evidence / "project-after-archive-reopen.json").write_text(
+                    json.dumps(after_archive, indent=2),
+                    encoding="utf-8",
+                )
+                final_pages = after_archive.get("pages") or []
+                if len(final_pages) != 1 or final_pages[0].get("id") != "page_wicp1":
+                    raise AssertionError(
+                        "archive/reopen did not retain exactly the source page"
+                    )
+                archived_pages = after_archive.get("archivedPages") or []
+                if len(archived_pages) != 1 or archived_pages[0].get("id") != reloaded_copy["id"]:
+                    raise AssertionError(
+                        "archive/reopen did not retain the duplicate recoverably"
+                    )
+                assert_canvas_semantics_preserved(
+                    final_pages[0].get("canvasObjects") or [],
+                    expected_objects,
+                )
+                if after_archive.get("workbookSync", {}).get("status") != "disabled":
+                    raise AssertionError(
+                        "archive/reopen re-enabled workbook synchronization"
+                    )
+                page.screenshot(
+                    path=str(evidence / "duplicate-archived-after-reopen.png"),
+                    full_page=True,
+                )
                 browser.close()
 
             pdf_bytes = export_pdf(port)
+            if hashlib.sha256(workbook.read_bytes()).hexdigest() != workbook_sha:
+                raise AssertionError("standalone save/archive changed the historical workbook")
+            unexpected_dialogs = [
+                item
+                for item in dialogs
+                if not (
+                    item["type"] == "confirm"
+                    and item["message"].startswith("Archive page ")
+                )
+            ]
+            if unexpected_dialogs:
+                raise AssertionError(
+                    f"unexpected browser dialogs: {unexpected_dialogs}"
+                )
             print(json.dumps({
                 "ok": True,
                 "health": health,
@@ -372,8 +527,11 @@ def main() -> int:
                 ],
                 "copyPageId": reloaded_copy["id"],
                 "copyPageGroupId": reloaded_copy["pageGroupId"],
-                "copySheetTab": reloaded_copy["sheetTab"],
-                "copyWorksheetId": reloaded_copy["linkedWorksheetId"],
+                "copySheetTab": reloaded_copy.get("sheetTab", ""),
+                "copyWorksheetId": reloaded_copy.get("linkedWorksheetId", ""),
+                "archivedCopyPageId": reloaded_copy["id"],
+                "finalPageCount": len(final_pages),
+                "dialogs": dialogs,
                 "pdfBytes": pdf_bytes,
                 "evidence": str(evidence),
             }, indent=2))
