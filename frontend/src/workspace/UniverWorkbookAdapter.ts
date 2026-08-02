@@ -259,6 +259,7 @@ export function toUniverWorkbook(
         tableRegions: sheet.tableRegions,
         tableLayout: sheet.tableLayout,
         annotations: sheet.annotations,
+        pageLayouts: sheet.pageLayouts,
       },
     } as Partial<IWorksheetData>;
   }
@@ -300,7 +301,12 @@ export function fromUniverWorkbook(
           ? snapshot.styles[cell.s]
           : cell.s;
         if (style && typeof style === 'object') {
-          styles[coordinate] = fromUniverStyle(style as Record<string, unknown>);
+          styles[coordinate] = {
+            ...fromUniverStyle(style as Record<string, unknown>),
+            ...(prior?.styles[coordinate]?.numberFormat
+              ? { numberFormat: prior.styles[coordinate].numberFormat }
+              : {}),
+          };
         } else if (cell.s === undefined && prior?.styles[coordinate]) {
           styles[coordinate] = prior.styles[coordinate];
         }
@@ -364,6 +370,7 @@ export function fromUniverWorkbook(
       tableRegions: [...(prior?.tableRegions || [])],
       tableLayout: prior?.tableLayout || 'single',
       annotations: [...(prior?.annotations || [])],
+      pageLayouts: structuredClone(prior?.pageLayouts || []),
     };
   });
   return { ...previous, sheets };

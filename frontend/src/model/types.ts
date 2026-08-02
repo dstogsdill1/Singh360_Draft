@@ -37,6 +37,8 @@ export interface ExcelLayoutTable {
   splitRows: boolean;
   repeatTitle: boolean;
   repeatHeaders: boolean;
+  /** Per-cell styling from Excel/Google Sheets HTML, keyed "row:column". */
+  cellStyles?: Record<string, ExcelLayoutStyle>;
 }
 
 export interface ExcelLayoutModel {
@@ -47,6 +49,35 @@ export interface ExcelLayoutModel {
   snapSize: number;
   tabColor?: string | null;
   tables: ExcelLayoutTable[];
+}
+
+export type SpreadsheetFitMode = 'fit_width' | 'fit_box' | 'exact_scale';
+export type SpreadsheetOverflowMode = 'visible' | 'clip' | 'explicit_continuation';
+
+/** Stable, user-authored placement of one exact worksheet range on one page. */
+export interface SpreadsheetRegion {
+  id: string;
+  sourceSheetId: string;
+  range: string;
+  pageId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fitMode: SpreadsheetFitMode;
+  overflowMode: SpreadsheetOverflowMode;
+  /** Absolute, zero-based worksheet rows. Nothing is repeated unless listed. */
+  repeatRows: number[];
+  /** Absolute, zero-based worksheet row boundaries selected by the user. */
+  explicitBreaks: number[];
+  preserveGeometry: boolean;
+  scale: number;
+  continuationOf?: string;
+}
+
+export interface SpreadsheetPageRecipe {
+  pageId: string;
+  regions: SpreadsheetRegion[];
 }
 
 export type BlockType =
@@ -91,6 +122,7 @@ export interface ExcelCellStyle {
     bottom?: BorderSide;
     left?: BorderSide;
   };
+  numberFormat?: string | null;
 }
 
 export interface PageBlock {
@@ -140,6 +172,7 @@ export interface PageBlock {
   manualRanges?: number[][];
   layoutWarnings?: string[];
   scaleMode?: string;
+  preserveGeometry?: boolean;
   orientation?: string;
   printArea?: string | null;
   bodyRowFillMode?: 'none' | 'source' | 'zebra';
@@ -256,6 +289,9 @@ export interface Worksheet {
     text: string;
     placement: 'right' | 'bottom';
   }>;
+  /** Explicit Data Workspace page recipes. Legacy auto-layout remains intact
+   * until a user creates one of these recipes. */
+  pageLayouts?: SpreadsheetPageRecipe[];
 }
 
 export type PageIssueStatus = 'draft' | 'draft_confirmed' | 'public' | 'public_confirmed';
@@ -392,6 +428,8 @@ export interface PageModel {
   }>;
   /** Opt-in independent editable tables positioned on stacked 17 x 11 sheets. */
   excelLayout?: ExcelLayoutModel;
+  /** Authoritative source-range recipe; bypasses normalized/reflow blocks. */
+  spreadsheetRegions?: SpreadsheetRegion[];
 }
 
 export interface ProjectModel {

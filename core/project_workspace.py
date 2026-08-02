@@ -1596,6 +1596,7 @@ def workbook_file_to_document(path: Path) -> dict[str, Any]:
                 "tableRegions": [],
                 "tableLayout": "single",
                 "annotations": [],
+                "pageLayouts": [],
             }
         )
     workbook.close()
@@ -1751,6 +1752,9 @@ def project_to_workbook_document(project: dict[str, Any]) -> dict[str, Any]:
                 "annotations": deepcopy(
                     worksheet.get("annotations") or []
                 ),
+                "pageLayouts": deepcopy(
+                    worksheet.get("pageLayouts") or []
+                ),
             }
         )
     return _apply_document_contract(
@@ -1834,6 +1838,7 @@ def _normalize_workbook_document(document: dict[str, Any]) -> dict[str, Any]:
             "conditionalFormats",
             "tableRegions",
             "annotations",
+            "pageLayouts",
         ):
             sheet[field] = (
                 deepcopy(sheet.get(field))
@@ -2805,6 +2810,7 @@ def _new_project_worksheet(item: dict[str, Any]) -> dict[str, Any]:
         "tableRegions": [],
         "tableLayout": "single",
         "annotations": [],
+        "pageLayouts": [],
     }
 
 
@@ -2907,6 +2913,7 @@ def _new_drawing_document_sheet(item: dict[str, Any]) -> dict[str, Any]:
         "tableRegions": [],
         "tableLayout": "single",
         "annotations": [],
+        "pageLayouts": [],
     }
 
 
@@ -3136,6 +3143,7 @@ class WorkbookDocumentStore:
                         "tableRegions": [],
                         "tableLayout": "single",
                         "annotations": [],
+                        "pageLayouts": [],
                     }
                 ]
             }

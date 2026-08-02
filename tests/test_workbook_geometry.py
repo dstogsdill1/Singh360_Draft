@@ -70,6 +70,7 @@ class WorkbookGeometryTests(unittest.TestCase):
                 wrap_text=True,
             )
             sheet["A2"] = "=1+1"
+            sheet["A2"].number_format = "0.00"
             workbook.save(source)
             workbook.close()
 
@@ -86,6 +87,7 @@ class WorkbookGeometryTests(unittest.TestCase):
             self.assertTrue(imported["styles"]["A1"]["wrap"])
             self.assertEqual("center", imported["styles"]["A1"]["hAlign"])
             self.assertEqual("#F4B183", imported["styles"]["A1"]["fill"])
+            self.assertEqual("0.00", imported["styles"]["A2"]["numberFormat"])
 
             project = {
                 "id": "geometry-fixture",

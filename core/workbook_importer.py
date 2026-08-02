@@ -294,6 +294,7 @@ def _cell_style(cell) -> dict[str, Any]:
         "indent": int(getattr(align, "indent", 0) or 0),
         "fill": _cell_fill_hex(cell),
         "borders": _cell_borders(cell),
+        "numberFormat": getattr(cell, "number_format", None),
     }
     return {k: v for k, v in raw.items() if v not in (None, False, 0, "")}
 

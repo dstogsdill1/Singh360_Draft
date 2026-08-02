@@ -24,7 +24,7 @@ function parseMerge(value: string): MergedCell | null {
   return { startRow, startCol, endRow, endCol };
 }
 
-function sheetToWorksheet(
+export function sheetToWorksheet(
   sheet: WorkbookDocument['sheets'][number],
   previous?: Worksheet,
 ): Worksheet {
@@ -98,6 +98,7 @@ function sheetToWorksheet(
     tableRegions: sheet.tableRegions.map((item) => ({ ...item })),
     tableLayout: sheet.tableLayout,
     annotations: sheet.annotations.map((item) => ({ ...item })),
+    pageLayouts: structuredClone(sheet.pageLayouts || []),
   } as Worksheet;
 }
 
@@ -281,6 +282,37 @@ export function updateProjectDrawingsFromWorkbook(
   const indexedPages = entries.flatMap((entry) => {
     const existing = pageByTab.get(entry.sheetTab.toLowerCase());
     const worksheet = worksheetByName.get(entry.sheetTab.toLowerCase());
+    if (worksheet?.pageLayouts?.length) {
+      return worksheet.pageLayouts.map((recipe, recipeIndex) => {
+        const prior = project.pages.find((page) => page.id === recipe.pageId)
+          || (recipeIndex === 0 ? existing : undefined);
+        return {
+          ...(prior || {
+            id: recipe.pageId,
+            templateId: 'spreadsheet-region',
+            canvasObjects: [],
+            notes: '',
+            sheetCode: entry.code,
+            displaySheetCode: entry.code,
+            sheetTitle: recipeIndex ? `${entry.title} — Continued` : entry.title,
+            sheetTab: entry.sheetTab,
+            pageType: 'data-grid' as const,
+          }),
+          order: 0,
+          include: entry.publishStatus === 'YES',
+          publishStatus: entry.publishStatus,
+          issueStatus: entry.issueStatus,
+          linkedWorksheetId: worksheet.id,
+          sourceSheet: worksheet.name,
+          renderMode: 'spreadsheet_layout',
+          blocks: [],
+          spreadsheetRegions: structuredClone(recipe.regions),
+          generatedContinuation: false,
+          continuationOf: recipeIndex ? worksheet.pageLayouts?.[recipeIndex - 1]?.pageId : null,
+          continuationIndex: recipeIndex,
+        } as PageModel;
+      });
+    }
     const blockPages = worksheet?.tableRegions?.length
       ? tableBlockPages(worksheet)
       : [existing?.blocks || []];
@@ -316,9 +348,15 @@ export function updateProjectDrawingsFromWorkbook(
       tableAnnotations: worksheet?.annotations || existing?.tableAnnotations || [],
     } as PageModel));
   });
+  const indexedPageIds = new Set<string>();
+  const uniqueIndexedPages = indexedPages.filter((page) => {
+    if (indexedPageIds.has(page.id)) return false;
+    indexedPageIds.add(page.id);
+    return true;
+  });
   const indexedTabs = new Set(entries.map((entry) => entry.sheetTab.toLowerCase()));
   const pages = [
-    ...indexedPages,
+    ...uniqueIndexedPages,
     ...project.pages.filter((page) => !indexedTabs.has(page.sheetTab.toLowerCase())),
   ].map((page, index) => ({ ...page, order: index + 1 }));
   let next: ProjectModel = { ...project, worksheets, pages };
@@ -326,7 +364,21 @@ export function updateProjectDrawingsFromWorkbook(
   for (const worksheet of updated) {
     const linkedPages = next.pages.filter((page) => page.linkedWorksheetId === worksheet.id);
     if (!linkedPages.length) continue;
-    if (worksheet.tableRegions?.length) {
+    if (worksheet.pageLayouts?.length) {
+      next = {
+        ...next,
+        pages: next.pages.map((page) => {
+          const recipe = worksheet.pageLayouts?.find((item) => item.pageId === page.id);
+          return recipe ? {
+            ...page,
+            blocks: [],
+            renderMode: 'spreadsheet_layout',
+            spreadsheetRegions: structuredClone(recipe.regions),
+            sourceRevision: (page.sourceRevision || 0) + 1,
+          } : page;
+        }),
+      };
+    } else if (worksheet.tableRegions?.length) {
       const blockPages = tableBlockPages(worksheet);
       next = {
         ...next,

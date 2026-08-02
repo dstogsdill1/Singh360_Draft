@@ -344,6 +344,7 @@ def project_hash(project: dict[str, Any]) -> str:
                 "assets": p.get("assets", []),
                 "notes": p.get("notes", ""),
                 "excelLayout": p.get("excelLayout"),
+                "spreadsheetRegions": p.get("spreadsheetRegions"),
             }
             for p in project.get("pages", [])
             if isinstance(p, dict)
@@ -365,6 +366,7 @@ def project_hash(project: dict[str, Any]) -> str:
                 "hiddenRows": w.get("hiddenRows", []),
                 "hiddenColumns": w.get("hiddenColumns", []),
                 "geometryAuthority": w.get("geometryAuthority"),
+                "pageLayouts": w.get("pageLayouts", []),
             }
             for w in project.get("worksheets", [])
             if isinstance(w, dict)

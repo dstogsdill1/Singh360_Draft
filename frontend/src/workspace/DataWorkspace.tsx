@@ -19,16 +19,17 @@ import {
   saveProject,
   type WorkbookDocument,
 } from '../api/client';
-import type { ProjectModel } from '../model/types';
+import type { ProjectModel, SpreadsheetRegion } from '../model/types';
+import SpreadsheetPageCanvas from '../components/SpreadsheetPageCanvas';
+import { spreadsheetRecipePreflight } from '../model/spreadsheetRegion';
 import { fromUniverWorkbook, letters, toUniverWorkbook } from './UniverWorkbookAdapter';
 import {
   activeRangeA1,
-  detectTableRegions,
   pasteTargetRange,
   protectedOverlap,
   rangeBounds,
 } from './workspaceContract';
-import { updateProjectDrawingsFromWorkbook } from './workspaceProject';
+import { sheetToWorksheet, updateProjectDrawingsFromWorkbook } from './workspaceProject';
 import { publishWorkspaceState, readWorkspaceState } from './workspaceState';
 
 type WorkspaceStatus =
@@ -234,10 +235,12 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
   const [activeSheetId, setActiveSheetId] = useState('');
   const [activeRange, setActiveRange] = useState<IRange | null>(null);
   const [navigation, setNavigation] = useState<NavigationRequest>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<'drawing' | 'all'>('drawing');
   const [documentSheets, setDocumentSheets] = useState<WorkbookDocument['sheets']>([]);
   const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState<'data' | 'page-layout' | 'print-preview'>('data');
+  const [layoutPageId, setLayoutPageId] = useState('');
+  const [selectedRegionId, setSelectedRegionId] = useState('');
 
   const setStatus = useCallback((next: WorkspaceStatus) => {
     statusRef.current = next;
@@ -253,8 +256,8 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
   }, [project.id]);
 
   const activeDocumentSheet = useMemo(
-    () => baseRef.current?.sheets.find((sheet) => sheet.id === activeSheetId),
-    [activeSheetId, status, previewOpen],
+    () => documentSheets.find((sheet) => sheet.id === activeSheetId),
+    [activeSheetId, documentSheets],
   );
   const drawingSheets = useMemo(
     () => documentSheets
@@ -295,8 +298,8 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
     const sheet = base.sheets.find((item) => item.id === activeSheetId);
     if (!sheet) return;
     updater(sheet);
+    setDocumentSheets([...base.sheets]);
     markDirty('Source-sheet layout settings changed. Save Data Workspace to keep them.');
-    setPreviewOpen((current) => current);
   }, [activeSheetId, markDirty]);
 
   const applyWorkbookRules = useCallback((api: FUniver, document: WorkbookDocument) => {
@@ -452,6 +455,23 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
     }
     if (statusRef.current !== 'clean') {
       setMessage('Save the local Data Workspace before updating drawings.');
+      return;
+    }
+    const layoutWorksheets = document.sheets.map((sheet) => sheetToWorksheet(
+      sheet,
+      projectRef.current.worksheets.find((worksheet) => worksheet.id === sheet.id),
+    ));
+    const layoutWarnings = document.sheets.flatMap((sheet) => spreadsheetRecipePreflight(
+      sheet.pageLayouts || [],
+      layoutWorksheets,
+    ));
+    const blocking = layoutWarnings.filter((warning) => [
+      'duplicate-range', 'partial-merge', 'merge-crosses-break', 'blank-page',
+    ].includes(warning.code));
+    if (blocking.length) {
+      setStatus('error');
+      setMessage(`Drawing update blocked by Spreadsheet Page Layout preflight: ${blocking.map((item) => item.message).join(' ')}`);
+      signal('DIRTY');
       return;
     }
     setStatus('saving');
@@ -672,33 +692,140 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
     snapshot,
   ]);
 
-  const autoDetect = () => {
-    const current = snapshot()?.sheets.find((sheet) => sheet.id === activeSheetId);
-    if (!current) return;
-    const regions = detectTableRegions(current);
-    updateSheetMetadata((sheet) => { sheet.tableRegions = regions; });
-    setMessage(`${regions.length} separate table region${regions.length === 1 ? '' : 's'} detected without changing source cells.`);
-  };
+  const linkedLayoutPages = useMemo(() => {
+    const recipeIds = new Set((activeDocumentSheet?.pageLayouts || []).map((item) => item.pageId));
+    return project.pages.filter((page) => page.linkedWorksheetId === activeSheetId || recipeIds.has(page.id));
+  }, [activeDocumentSheet?.pageLayouts, activeSheetId, project.pages]);
 
-  const addRegion = () => {
-    if (!activeRange || activeRange.startRow < 2) {
-      setMessage('Select a range in the editable source canvas beginning at A3.');
+  useEffect(() => {
+    if (linkedLayoutPages.some((page) => page.id === layoutPageId)) return;
+    setLayoutPageId(linkedLayoutPages[0]?.id || '');
+    setSelectedRegionId('');
+  }, [layoutPageId, linkedLayoutPages]);
+
+  const selectedRecipe = activeDocumentSheet?.pageLayouts?.find((item) => item.pageId === layoutPageId);
+  const layoutRegions = selectedRecipe?.regions || [];
+  const selectedRegion = layoutRegions.find((item) => item.id === selectedRegionId);
+
+  const updateRegionsForPage = (pageId: string, regions: SpreadsheetRegion[]) => updateSheetMetadata((sheet) => {
+    const layouts = [...(sheet.pageLayouts || [])];
+    const index = layouts.findIndex((item) => item.pageId === pageId);
+    const recipe = { pageId, regions };
+    if (index >= 0) layouts[index] = recipe;
+    else layouts.push(recipe);
+    sheet.pageLayouts = layouts;
+  });
+  const updateLayoutRegions = (regions: SpreadsheetRegion[]) => updateRegionsForPage(layoutPageId, regions);
+
+  const addSelectionToPage = (targetPageId = layoutPageId, continuationOf?: string) => {
+    if (!activeRange || !activeDocumentSheet || !targetPageId) {
+      setMessage('Select a worksheet range and a linked drawing page first.');
       return;
     }
-    updateSheetMetadata((sheet) => {
-      const index = sheet.tableRegions.length + 1;
-      sheet.tableRegions.push({
-        id: `table-${crypto.randomUUID().slice(0, 8)}`,
-        range: activeRangeA1(activeRange),
-        label: `Table ${index}`,
-      });
+    const range = activeRangeA1(activeRange);
+    const bounds = rangeBounds(range);
+    if (!bounds) return;
+    const partialMerge = activeDocumentSheet.merges.some((value) => {
+      const merge = rangeBounds(value);
+      return merge
+        && bounds.startRow <= merge.endRow && bounds.endRow >= merge.startRow
+        && bounds.startColumn <= merge.endColumn && bounds.endColumn >= merge.startColumn
+        && !(bounds.startRow <= merge.startRow && bounds.endRow >= merge.endRow
+          && bounds.startColumn <= merge.startColumn && bounds.endColumn >= merge.endColumn);
     });
+    if (partialMerge) {
+      setMessage(`${range} cuts through a merged range. Expand the selection so the merge stays intact.`);
+      return;
+    }
+    const existing = activeDocumentSheet.pageLayouts?.find((item) => item.pageId === targetPageId)?.regions || [];
+    const y = Math.min(760, 32 + existing.reduce((max, item) => Math.max(max, item.y + item.height), 0));
+    const region: SpreadsheetRegion = {
+      id: `region-${crypto.randomUUID().slice(0, 8)}`,
+      sourceSheetId: activeDocumentSheet.id,
+      range,
+      pageId: targetPageId,
+      x: 32,
+      y: existing.length ? y : 32,
+      width: 1534,
+      height: Math.max(74, 802 - (existing.length ? y : 32)),
+      fitMode: 'fit_width',
+      overflowMode: 'clip',
+      repeatRows: [],
+      explicitBreaks: [],
+      preserveGeometry: true,
+      scale: 1,
+      ...(continuationOf ? { continuationOf } : {}),
+    };
+    updateRegionsForPage(targetPageId, [...existing, region]);
+    setLayoutPageId(targetPageId);
+    setSelectedRegionId(region.id);
+    setMessage(`${activeDocumentSheet.name}!${range} added explicitly to ${targetPageId}. No rows were inferred or repeated.`);
   };
 
-  const removeRegion = (id?: string) => updateSheetMetadata((sheet) => {
-    const target = id || sheet.tableRegions[sheet.tableRegions.length - 1]?.id;
-    sheet.tableRegions = sheet.tableRegions.filter((region) => region.id !== target);
-  });
+  const patchSelectedRegion = (patch: Partial<SpreadsheetRegion>) => {
+    if (!selectedRegionId) return;
+    updateLayoutRegions(layoutRegions.map((region) => region.id === selectedRegionId ? { ...region, ...patch } : region));
+  };
+  const nextLayoutPage = linkedLayoutPages[linkedLayoutPages.findIndex((page) => page.id === layoutPageId) + 1];
+  const applyFirstBreak = () => {
+    if (!selectedRegion || !nextLayoutPage || !activeDocumentSheet) return;
+    const bounds = rangeBounds(selectedRegion.range);
+    const breakRow = [...selectedRegion.explicitBreaks]
+      .sort((left, right) => left - right)
+      .find((row) => bounds && row > bounds.startRow && row <= bounds.endRow);
+    if (!bounds || breakRow === undefined) {
+      setMessage('Enter a break before a row inside the selected range. Empty continuations are not allowed.');
+      return;
+    }
+    const crossesMerge = activeDocumentSheet.merges.some((value) => {
+      const merge = rangeBounds(value);
+      return merge && breakRow > merge.startRow && breakRow <= merge.endRow;
+    });
+    if (crossesMerge) {
+      setMessage(`Break before row ${breakRow + 1} crosses a merged range and was not applied.`);
+      return;
+    }
+    const columnStart = letters(bounds.startColumn);
+    const columnEnd = letters(bounds.endColumn);
+    const firstRange = `${columnStart}${bounds.startRow + 1}:${columnEnd}${breakRow}`;
+    const continuationRange = `${columnStart}${breakRow + 1}:${columnEnd}${bounds.endRow + 1}`;
+    const first = {
+      ...selectedRegion,
+      range: firstRange,
+      explicitBreaks: selectedRegion.explicitBreaks.filter((row) => row < breakRow),
+    };
+    const continuation: SpreadsheetRegion = {
+      ...selectedRegion,
+      id: `region-${crypto.randomUUID().slice(0, 8)}`,
+      pageId: nextLayoutPage.id,
+      range: continuationRange,
+      continuationOf: selectedRegion.id,
+      explicitBreaks: selectedRegion.explicitBreaks.filter((row) => row > breakRow),
+    };
+    const nextRegions = activeDocumentSheet.pageLayouts?.find((item) => item.pageId === nextLayoutPage.id)?.regions || [];
+    updateSheetMetadata((sheet) => {
+      const layouts = [...(sheet.pageLayouts || [])];
+      const put = (pageId: string, regions: SpreadsheetRegion[]) => {
+        const index = layouts.findIndex((item) => item.pageId === pageId);
+        if (index >= 0) layouts[index] = { pageId, regions };
+        else layouts.push({ pageId, regions });
+      };
+      put(layoutPageId, layoutRegions.map((region) => region.id === first.id ? first : region));
+      put(nextLayoutPage.id, [...nextRegions, continuation]);
+      sheet.pageLayouts = layouts;
+    });
+    setLayoutPageId(nextLayoutPage.id);
+    setSelectedRegionId(continuation.id);
+    setMessage(`${selectedRegion.range} split explicitly into ${firstRange} and ${continuationRange}; no source row was duplicated.`);
+  };
+
+  const previewProject = useMemo<ProjectModel>(() => ({
+    ...project,
+    worksheets: documentSheets.map((sheet) => sheetToWorksheet(
+      sheet,
+      project.worksheets.find((worksheet) => worksheet.id === sheet.id),
+    )),
+  }), [documentSheets, project]);
 
   const activateWorkspaceSheet = (sheetId: string) => {
     const worksheet = apiRef.current?.getActiveWorkbook()?.getSheetBySheetId(sheetId);
@@ -745,6 +872,20 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
       <button type="button" data-help-id="view.canvas" onClick={() => requestNavigation(`/app?project=${project.id}&mode=editor`)}>Page Editor</button>
     </header>
     <div className="data-message">{message}</div>
+    <nav className="workspace-mode-tabs" aria-label="Data Workspace views">
+      {([
+        ['data', 'Data'],
+        ['page-layout', 'Page Layout'],
+        ['print-preview', 'Print Preview'],
+      ] as const).map(([mode, label]) => <button
+        type="button"
+        key={mode}
+        className={workspaceMode === mode ? 'active' : ''}
+        aria-pressed={workspaceMode === mode}
+        onClick={() => setWorkspaceMode(mode)}
+      >{label}</button>)}
+    </nav>
+    <div style={{ display: workspaceMode === 'data' ? 'contents' : 'none' }}>
     <nav className="workspace-sheet-view" aria-label="Data Workspace sheet view">
       <label>
         View
@@ -802,28 +943,8 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
           <dt>Editable canvas</dt><dd>A3 onward</dd>
         </dl>
         <div className="source-actions">
-          <button type="button" onClick={autoDetect}>Auto-Detect Tables</button>
-          <button type="button" onClick={addRegion}>Add Table Region</button>
-          <button type="button" disabled={!activeDocumentSheet.tableRegions.length} onClick={() => removeRegion()}>Remove Table Region</button>
-          <button type="button" onClick={() => setPreviewOpen(true)}>Preview Drawing Layout</button>
+          <button type="button" onClick={() => setWorkspaceMode('page-layout')}>Open Page Layout</button>
         </div>
-        <label>Page layout
-          <select value={activeDocumentSheet.tableLayout} onChange={(event) => updateSheetMetadata((sheet) => {
-            sheet.tableLayout = event.target.value as typeof sheet.tableLayout;
-          })}>
-            <option value="single">Single full-width</option>
-            <option value="side_by_side">Two tables side-by-side</option>
-            <option value="stacked">Stacked</option>
-          </select>
-        </label>
-        <h3>Table regions</h3>
-        <ul className="table-region-list">
-          {activeDocumentSheet.tableRegions.map((region) => <li key={region.id}>
-            <span>{region.label}: {region.range}</span>
-            <button type="button" aria-label={`Remove ${region.label}`} onClick={() => removeRegion(region.id)}>×</button>
-          </li>)}
-          {!activeDocumentSheet.tableRegions.length && <li>No regions defined.</li>}
-        </ul>
         <h3>Page annotations</h3>
         {(['right', 'bottom'] as const).map((placement) => <label key={placement}>
           {placement === 'right' ? 'Right-side note' : 'Bottom note'}
@@ -845,6 +966,54 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
         </>}
       </aside>}
     </main>
+    </div>
+    {workspaceMode !== 'data' && <section className="spreadsheet-layout-workbench" aria-label={workspaceMode === 'page-layout' ? 'Spreadsheet Page Layout' : 'Spreadsheet Print Preview'}>
+      <div className="spreadsheet-layout-sheet">
+        {layoutPageId && <SpreadsheetPageCanvas
+          pageId={layoutPageId}
+          regions={layoutRegions}
+          project={previewProject}
+          readOnly={workspaceMode === 'print-preview'}
+          onChange={workspaceMode === 'page-layout' ? updateLayoutRegions : undefined}
+        />}
+      </div>
+      <aside className="spreadsheet-layout-sidebar">
+        <strong>{workspaceMode === 'page-layout' ? 'Spreadsheet Regions' : 'Print Preview'}</strong>
+        <label>Drawing page
+          <select value={layoutPageId} onChange={(event) => { setLayoutPageId(event.target.value); setSelectedRegionId(''); }}>
+            {linkedLayoutPages.map((page) => <option key={page.id} value={page.id}>{page.sheetCode} — {page.sheetTitle}</option>)}
+          </select>
+        </label>
+        {!linkedLayoutPages.length && <p>This worksheet has no linked drawing page. Publish it before creating a page recipe.</p>}
+        {workspaceMode === 'page-layout' && <>
+          <div className="button-row">
+            <button type="button" disabled={!activeRange || !layoutPageId} onClick={() => addSelectionToPage()}>Add Selection to Page</button>
+            <button type="button" disabled={!activeRange || !nextLayoutPage} onClick={() => nextLayoutPage && addSelectionToPage(nextLayoutPage.id, selectedRegionId || undefined)}>Add Selection as Continuation</button>
+          </div>
+          <label>Region
+            <select value={selectedRegionId} onChange={(event) => setSelectedRegionId(event.target.value)}>
+              <option value="">Select a region</option>
+              {layoutRegions.map((region) => <option key={region.id} value={region.id}>{region.range}</option>)}
+            </select>
+          </label>
+          {selectedRegion && <>
+            <label>Exact range<input value={selectedRegion.range} onChange={(event) => patchSelectedRegion({ range: event.target.value.toUpperCase() })} /></label>
+            <label>Fit mode<select value={selectedRegion.fitMode} onChange={(event) => patchSelectedRegion({ fitMode: event.target.value as SpreadsheetRegion['fitMode'] })}>
+              <option value="fit_width">Fit Width</option><option value="fit_box">Fit Box</option><option value="exact_scale">Exact Scale</option>
+            </select></label>
+            <label>Exact scale<input type="number" min="0.05" step="0.05" value={selectedRegion.scale} disabled={selectedRegion.fitMode !== 'exact_scale'} onChange={(event) => patchSelectedRegion({ scale: Number(event.target.value) })} /></label>
+            <label>Overflow<select value={selectedRegion.overflowMode} onChange={(event) => patchSelectedRegion({ overflowMode: event.target.value as SpreadsheetRegion['overflowMode'] })}>
+              <option value="clip">Warn and clip</option><option value="visible">Show overflow</option><option value="explicit_continuation">Explicit continuation</option>
+            </select></label>
+            <label>Repeat header rows<input placeholder="e.g. 3,4" value={selectedRegion.repeatRows.map((row) => row + 1).join(',')} onChange={(event) => patchSelectedRegion({ repeatRows: event.target.value.split(',').map((value) => Number(value.trim()) - 1).filter((value) => Number.isInteger(value) && value >= 0) })} /></label>
+            <label>Explicit breaks before rows<input placeholder="e.g. 28" value={selectedRegion.explicitBreaks.map((row) => row + 1).join(',')} onChange={(event) => patchSelectedRegion({ explicitBreaks: event.target.value.split(',').map((value) => Number(value.trim()) - 1).filter((value) => Number.isInteger(value) && value >= 0) })} /></label>
+            <label><input type="checkbox" checked={selectedRegion.preserveGeometry} onChange={(event) => patchSelectedRegion({ preserveGeometry: event.target.checked })} />Preserve source geometry</label>
+            <div className="button-row"><button type="button" onClick={() => patchSelectedRegion({ x: 32, width: 1534, fitMode: 'fit_width' })}>Fit to Page Width</button><button type="button" disabled={!nextLayoutPage || !selectedRegion.explicitBreaks.length} onClick={applyFirstBreak}>Apply First Break to Next Page</button><button type="button" onClick={() => { updateLayoutRegions(layoutRegions.filter((region) => region.id !== selectedRegion.id)); setSelectedRegionId(''); }}>Remove Region</button></div>
+          </>}
+        </>}
+        <p>Only explicitly selected ranges are used. No automatic combining, headers, or continuation is applied.</p>
+      </aside>
+    </section>}
     {navigation && <div className="workspace-modal-backdrop" role="presentation">
       <section className="workspace-modal" role="dialog" aria-modal="true" aria-labelledby="unsaved-title">
         <h2 id="unsaved-title">Unsaved Data Workspace edits</h2>
@@ -856,22 +1025,6 @@ export default function DataWorkspace({ project }: { project: ProjectModel }) {
           <button type="button" data-help-id="workspace.discard" onClick={() => void discardAndNavigate()}>Discard</button>
           <button type="button" data-help-id="dialog.cancel" onClick={() => setNavigation(null)}>Cancel</button>
         </div>
-      </section>
-    </div>}
-    {previewOpen && activeDocumentSheet && <div className="workspace-modal-backdrop" role="presentation">
-      <section className="workspace-modal layout-preview" role="dialog" aria-modal="true" aria-labelledby="preview-title">
-        <h2 id="preview-title">Drawing layout preview</h2>
-        <p>{setup?.title || activeDocumentSheet.name}</p>
-        <div className={`layout-preview-canvas ${activeDocumentSheet.tableLayout}`}>
-          <div className="layout-preview-tables">
-            {activeDocumentSheet.tableRegions.map((region) => <div key={region.id} className="layout-preview-table">
-              <strong>{region.label}</strong><span>{region.range}</span>
-            </div>)}
-          </div>
-          {activeDocumentSheet.annotations.find((item) => item.placement === 'right')?.text && <aside>{activeDocumentSheet.annotations.find((item) => item.placement === 'right')?.text}</aside>}
-          {activeDocumentSheet.annotations.find((item) => item.placement === 'bottom')?.text && <footer>{activeDocumentSheet.annotations.find((item) => item.placement === 'bottom')?.text}</footer>}
-        </div>
-        <button type="button" onClick={() => setPreviewOpen(false)}>Close Preview</button>
       </section>
     </div>}
   </div>;

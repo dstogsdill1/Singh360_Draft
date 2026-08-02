@@ -77,9 +77,9 @@ def main() -> int:
                 tab.locator('[aria-label="Body row height"]').fill("31")
                 tab.get_by_label("Table width").fill("920")
                 tab.get_by_label("Table height").fill("180")
-                before_b = tab.locator("[data-table-id='b'] .excel-layout-row").first.get_attribute("style")
+                before_b = tab.locator("[data-table-id='b'] .excel-layout-grid tr").first.get_attribute("style")
                 tab.get_by_label("Column 1 width").fill("333")
-                after_b = tab.locator("[data-table-id='b'] .excel-layout-row").first.get_attribute("style")
+                after_b = tab.locator("[data-table-id='b'] .excel-layout-grid tr").first.get_attribute("style")
                 if before_b != after_b:
                     raise AssertionError("Table B geometry changed when Table A was resized")
                 for label in ("Keep Together", "Split Rows", "Repeat Title", "Repeat Headers"):
@@ -91,8 +91,9 @@ def main() -> int:
                 tab.get_by_role("button", name="Duplicate").click()
                 tab.get_by_role("button", name="Delete").click()
                 tab.get_by_role("button", name="New Table").click()
-                tab.get_by_role("button", name="Undo").click()
-                tab.get_by_role("button", name="Redo").click()
+                canvas = tab.get_by_test_id("excel-layout-canvas")
+                canvas.get_by_role("button", name="Undo").click()
+                canvas.get_by_role("button", name="Redo").click()
                 tab.get_by_label("Workbook tab color").fill("#336699")
                 # Real TSV clipboard event creates a separate editable table below selection.
                 tab.evaluate("""() => window.dispatchEvent(new ClipboardEvent('paste', {

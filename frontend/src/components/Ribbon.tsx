@@ -81,6 +81,7 @@ interface Props {
   onUploadCsv: (file: File) => void;
   onInsertImage: (file: File) => void;
   onInsertPdfPage: () => void;
+  onInsertSpreadsheetTable: () => void;
   onSaveNow: () => void;
   onProjectSettings: () => void;
   onOpenBackups: () => void;
@@ -151,6 +152,7 @@ export default function Ribbon({
   onUploadCsv,
   onInsertImage,
   onInsertPdfPage,
+  onInsertSpreadsheetTable,
   onSaveNow,
   onProjectSettings,
   onOpenBackups,
@@ -330,6 +332,7 @@ export default function Ribbon({
                 />
               </label>
               <button className="ribbon-btn" disabled={!cx} onClick={onInsertPdfPage} title="Best quality: open PDF Crop, select a region, and render at 300/400/600 DPI">PDF Page / Crop</button>
+              <button className="ribbon-btn" disabled={!hasProject} data-help-id="excelLayout.pasteTable" onClick={onInsertSpreadsheetTable} title="Insert one movable editable table, then paste Excel or Google Sheets cells">Spreadsheet Table</button>
               <PlaceholderBtn label="Callout" />
             </Group>
             <Group title="Headings">

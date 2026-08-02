@@ -1,4 +1,4 @@
-import type { ProjectModel, PageModel } from '../model/types';
+import type { ProjectModel, PageModel, SpreadsheetPageRecipe } from '../model/types';
 
 export class Singh360ApiError extends Error {
   payload: Record<string, unknown>;
@@ -134,6 +134,7 @@ export interface WorkbookDocument {
       text: string;
       placement: 'right' | 'bottom';
     }>;
+    pageLayouts: SpreadsheetPageRecipe[];
     workspaceSection?: 'drawing' | 'control' | 'source';
     drawingPageId?: string;
     drawingSheetCode?: string;

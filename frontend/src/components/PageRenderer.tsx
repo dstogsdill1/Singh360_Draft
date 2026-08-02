@@ -2,6 +2,8 @@ import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, Vi
 import NormalizedPage from './renderers/NormalizedPage';
 import RawGridRenderer from './renderers/RawGridRenderer';
 import ExcelLayoutCanvas from './ExcelLayoutCanvas';
+import SpreadsheetPageCanvas from './SpreadsheetPageCanvas';
+import CanvasEditor from './CanvasEditor';
 
 interface Props {
   page: PageModel;
@@ -56,6 +58,33 @@ export default function PageRenderer({
         onExportSource={onExportPageSource}
       />
     );
+  }
+  if (page.spreadsheetRegions?.length) {
+    const overlayInteractive = overlayMode || activeTool !== 'select' || (page.canvasObjects?.length || 0) > 0;
+    return <div className="np-page-root">
+      <SpreadsheetPageCanvas
+        pageId={page.id}
+        regions={page.spreadsheetRegions}
+        project={project}
+        readOnly
+        exporting={exporting}
+      />
+      <div className={`np-overlay-layer ${overlayInteractive ? 'active' : ''}`}>
+        <CanvasEditor
+          key={page.id}
+          serialized={page.canvasObjects || []}
+          onSerializedChange={(objects) => onCanvasChange(page.id, objects)}
+          registerApi={onRegisterApi}
+          onSelectionChange={onSelectionChange}
+          activeTool={activeTool}
+          onToolConsumed={onToolConsumed}
+          snap={snap}
+          overlayMode={overlayMode}
+          exporting={exporting}
+        />
+      </div>
+      {page.excelLayout && <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={exporting} overlay />}
+    </div>;
   }
   if (page.excelLayout) {
     return <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={exporting} />;

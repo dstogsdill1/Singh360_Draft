@@ -12,6 +12,9 @@ interface Props {
   reservedTop?: number;
   /** When true (PDF export), suppress on-page diagnostic banners. */
   exporting?: boolean;
+  /** Shared Spreadsheet Page Layout supplies its persisted uniform scale. */
+  scaleOverride?: number;
+  embedded?: boolean;
 }
 
 const PAD_X = 10;
@@ -121,7 +124,13 @@ function cellCss(
  * independently stretched or crushed; the complete table receives one uniform
  * scale so relative workbook proportions survive editor and PDF output.
  */
-export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting = false }: Props) {
+export default function ExcelRangeRenderer({
+  block,
+  reservedTop = 0,
+  exporting = false,
+  scaleOverride,
+  embedded = false,
+}: Props) {
   const grid = block.grid ?? [];
   const styles = block.styles ?? {};
   const colWidths = block.colWidths ?? [];
@@ -190,8 +199,9 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
         block.noGrow ? 1 : GROW_CAP,
         Number.isFinite(configuredMaxScale) ? configuredMaxScale : GROW_CAP,
       );
-      const scale =
-        scaleMode === 'fit_width'
+      const scale = Number.isFinite(scaleOverride)
+        ? Math.max(0.01, Number(scaleOverride))
+        : scaleMode === 'fit_width'
           ? Math.min(growCap, sw)
           : Math.min(growCap, sw, sh);
       if (Math.abs(scale - last) < 0.003) return;
@@ -211,14 +221,14 @@ export default function ExcelRangeRenderer({ block, reservedTop = 0, exporting =
       ro.disconnect();
       cancelAnimationFrame(raf);
     };
-  }, [naturalW, nRows, nCols, scaleMode, grid, reservedTop, block.noGrow, block.maxScale]);
+  }, [naturalW, nRows, nCols, scaleMode, grid, reservedTop, block.noGrow, block.maxScale, scaleOverride]);
 
   if (!nRows || !nCols) {
     return <div className="np np-empty">No source range data.</div>;
   }
 
   return (
-    <div className="np-xr">
+    <div className={`np-xr ${embedded ? 'embedded' : ''}`}>
       {block.layoutWarnings?.length && !exporting ? (
         <div className="np-xr-warning">
           {block.layoutWarnings.join(' ')}

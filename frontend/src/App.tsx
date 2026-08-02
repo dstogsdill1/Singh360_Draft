@@ -2840,6 +2840,21 @@ export default function App() {
       onUploadCsv={(f) => void onUploadCsv(f)}
       onInsertImage={(f) => void onDropImageFile(f)}
       onInsertPdfPage={() => { void openAddImportPage(); }}
+      onInsertSpreadsheetTable={() => {
+        if (!activePageId) return;
+        patchPage(activePageId, {
+          excelLayout: activePage?.excelLayout || {
+            version: 1,
+            pageWidth: 1632,
+            pageHeight: 1056,
+            printableMargin: 48,
+            snapSize: 8,
+            tabColor: '#F4B183',
+            tables: [],
+          },
+        });
+        window.setTimeout(() => window.alert('Paste Excel or Google Sheets cells now. They will be inserted as one movable editable table.'), 0);
+      }}
       onSaveNow={() => void saveNow()}
       onProjectSettings={() => { void openProjectSettings(); }}
       onOpenBackups={() => setBackupOpen(true)}

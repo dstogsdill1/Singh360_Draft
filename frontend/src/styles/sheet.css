@@ -243,6 +243,15 @@
   transform: scale(var(--xr-scale, 1));
   transform-origin: top left;
 }
+.np-xr.embedded {
+  display: block;
+  align-items: initial;
+  padding: 0;
+  max-height: none;
+}
+.np-xr.embedded .np-xr-fit {
+  margin: 0;
+}
 .np-xr-warning {
   margin: 0 0 6px;
   padding: 6px 8px;
