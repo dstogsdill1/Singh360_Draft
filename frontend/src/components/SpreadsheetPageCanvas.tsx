@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { ProjectModel, SpreadsheetRegion } from '../model/types';
 import {
   regionScale,
@@ -65,15 +65,31 @@ export default function SpreadsheetPageCanvas({
     setDragRegions(null);
     if (draft) onChange?.(draft);
   };
+  const beginPointer = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    region: SpreadsheetRegion,
+    mode: PointerAction['mode'],
+  ) => {
+    event.preventDefault();
+    setSelectedId(region.id);
+    action.current = { id: region.id, mode, startX: event.clientX, startY: event.clientY, region };
+    const move = (pointerEvent: PointerEvent) => updatePointer(pointerEvent.clientX, pointerEvent.clientY);
+    const finish = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      finishPointer();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+  };
   const displayRegions = dragRegions || regions;
 
   return <div
     className="spreadsheet-page-canvas"
     data-testid="spreadsheet-page-canvas"
     data-page-id={pageId}
-    onPointerMove={(event) => updatePointer(event.clientX, event.clientY)}
-    onPointerUp={finishPointer}
-    onPointerLeave={finishPointer}
   >
     {!exporting && warnings.length > 0 && <aside className="spreadsheet-preflight" aria-label="Spreadsheet preflight warnings">
       {warnings.map((warning, index) => <div key={`${warning.code}-${warning.regionId || 'page'}-${index}`} data-warning={warning.code}>{warning.message}</div>)}
@@ -98,11 +114,7 @@ export default function SpreadsheetPageCanvas({
           type="button"
           className="spreadsheet-region-handle"
           aria-label={`Move ${worksheet.name} ${region.range}`}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            setSelectedId(region.id);
-            action.current = { id: region.id, mode: 'move', startX: event.clientX, startY: event.clientY, region };
-          }}
+          onPointerDown={(event) => beginPointer(event, region, 'move')}
         >{worksheet.name}!{region.range}</button>}
         <div className="spreadsheet-region-content">
           <ExcelRangeRenderer block={block} scaleOverride={scale} embedded exporting={exporting} />
@@ -111,11 +123,7 @@ export default function SpreadsheetPageCanvas({
           type="button"
           className="spreadsheet-region-resize"
           aria-label={`Resize ${worksheet.name} ${region.range}`}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            setSelectedId(region.id);
-            action.current = { id: region.id, mode: 'resize', startX: event.clientX, startY: event.clientY, region };
-          }}
+          onPointerDown={(event) => beginPointer(event, region, 'resize')}
         />}
       </section>;
     })}

@@ -1,8 +1,9 @@
 .spreadsheet-page-canvas{position:absolute;inset:0;overflow:hidden;background:#fff}
 .spreadsheet-region{position:absolute;box-sizing:border-box;background:#fff;overflow:visible;outline:1px solid transparent}
 .spreadsheet-region.selected{outline:3px solid #1f78d1}
-.spreadsheet-region.overflow-clip,.spreadsheet-region.overflow-explicit_continuation{overflow:hidden}
+.spreadsheet-region.overflow-clip,.spreadsheet-region.overflow-explicit_continuation{overflow:visible}
 .spreadsheet-region-content{position:absolute;inset:0;pointer-events:none;transform-origin:top left}
+.spreadsheet-region.overflow-clip .spreadsheet-region-content,.spreadsheet-region.overflow-explicit_continuation .spreadsheet-region-content{overflow:hidden}
 .spreadsheet-region-handle{position:absolute;z-index:8;left:0;top:-24px;max-width:100%;height:22px;padding:1px 6px;border:1px solid #1f78d1;background:#eaf4ff;color:#123f68;font:11px/18px "Segoe UI",sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:move}
 .spreadsheet-region-resize{position:absolute;z-index:9;right:-6px;bottom:-6px;width:14px;height:14px;padding:0;border:2px solid #fff;background:#1f78d1;box-shadow:0 0 0 1px #1f78d1;cursor:nwse-resize}
 .spreadsheet-preflight{position:absolute;z-index:20;right:8px;top:8px;width:330px;max-height:180px;overflow:auto;padding:7px;border:1px solid #a95e00;background:#fff7e8;color:#6b3500;font:11px/1.35 "Segoe UI",sans-serif;box-shadow:0 2px 8px #0002}

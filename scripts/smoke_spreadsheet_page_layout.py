@@ -141,7 +141,41 @@ def main() -> int:
                 canvas.wait_for(timeout=20_000)
                 if canvas.get_by_text("LCP1", exact=True).count() != 1 or canvas.get_by_text("LCP2", exact=True).count() != 1:
                     raise AssertionError(f"first explicit range did not render LCP1/LCP2 exactly once: {canvas.inner_text()!r}")
-                first_scale = canvas.locator("[data-region-id='first']").get_attribute("data-scale")
+                first_region = canvas.locator("[data-region-id='first']")
+                before_geometry = first_region.evaluate(
+                    "element => [element.offsetLeft, element.offsetTop, element.offsetWidth, element.offsetHeight]"
+                )
+                move = first_region.get_by_role("button", name="Move Lighting I-O A1:B5")
+                move_box = move.bounding_box()
+                if not move_box:
+                    raise AssertionError("linked range move handle has no browser geometry")
+                tab.mouse.move(move_box["x"] + 8, move_box["y"] + 8)
+                tab.mouse.down()
+                tab.mouse.move(move_box["x"] + 24, move_box["y"] + 20)
+                tab.mouse.up()
+                tab.wait_for_function(
+                    """([selector, left, top]) => {
+                      const element = document.querySelector(selector);
+                      return element && element.offsetLeft > left && element.offsetTop > top;
+                    }""",
+                    arg=["[data-region-id='first']", before_geometry[0], before_geometry[1]],
+                )
+                resize = first_region.get_by_role("button", name="Resize Lighting I-O A1:B5")
+                resize_box = resize.bounding_box()
+                if not resize_box:
+                    raise AssertionError("linked range resize handle has no browser geometry")
+                tab.mouse.move(resize_box["x"] + 5, resize_box["y"] + 5)
+                tab.mouse.down()
+                tab.mouse.move(resize_box["x"] + 25, resize_box["y"] + 17)
+                tab.mouse.up()
+                after_geometry = first_region.evaluate(
+                    "element => [element.offsetLeft, element.offsetTop, element.offsetWidth, element.offsetHeight]"
+                )
+                if after_geometry[0] <= before_geometry[0] or after_geometry[1] <= before_geometry[1]:
+                    raise AssertionError(f"linked range did not move: {before_geometry!r} -> {after_geometry!r}")
+                if after_geometry[2] <= before_geometry[2] or after_geometry[3] <= before_geometry[3]:
+                    raise AssertionError(f"linked range did not resize: {before_geometry!r} -> {after_geometry!r}")
+                first_scale = first_region.get_attribute("data-scale")
                 tab.locator(".spreadsheet-layout-sidebar select").first.select_option("ems-16-2a")
                 if canvas.get_by_text("LCP1", exact=True).count():
                     raise AssertionError("continuation repeated the section-specific LCP1 header")
