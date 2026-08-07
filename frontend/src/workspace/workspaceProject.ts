@@ -4,7 +4,6 @@ import {
   buildExcelRangeBlock,
   refreshPageFromSource,
   regenerateExcelGroup,
-  splitExcelRangeBlock,
 } from '../model/excelRange';
 import {
   DEFAULT_COLUMN_WIDTH_UNITS,
@@ -242,12 +241,13 @@ function tableBlocks(worksheet: Worksheet): PageModel['blocks'] {
   return blocks;
 }
 
+// PAGE-LOCAL MODEL: a source worksheet renders as exactly ONE drawing page.
+// Automatic continuation/pagination (splitExcelRangeBlock) is intentionally
+// removed — additional pages exist only when a user explicitly creates them
+// (page recipes or manual pages). This prevents "Update Drawings" from silently
+// spawning continuation pages and duplicating leading rows (e.g. WICP01).
 function tableBlockPages(worksheet: Worksheet): NonNullable<PageModel['blocks']>[] {
-  const groups = (tableBlocks(worksheet) || []).map((block) => splitExcelRangeBlock(block));
-  const pageCount = Math.max(1, ...groups.map((parts) => parts.length));
-  return Array.from({ length: pageCount }, (_, pageIndex) =>
-    groups.flatMap((parts) => parts[pageIndex] ? [parts[pageIndex]] : []),
-  );
+  return [tableBlocks(worksheet) || []];
 }
 
 function pageType(value: string): PageModel['pageType'] {

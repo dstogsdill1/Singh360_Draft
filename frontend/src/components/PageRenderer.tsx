@@ -3,6 +3,7 @@ import NormalizedPage from './renderers/NormalizedPage';
 import RawGridRenderer from './renderers/RawGridRenderer';
 import ExcelLayoutCanvas from './ExcelLayoutCanvas';
 import SpreadsheetPageCanvas from './SpreadsheetPageCanvas';
+import PageLocalSpreadsheet from './PageLocalSpreadsheet';
 import CanvasEditor from './CanvasEditor';
 
 interface Props {
@@ -24,6 +25,8 @@ interface Props {
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
+  onOpenDataWorkspace?: () => void;
+  onDuplicateSpreadsheetPage?: () => void;
 }
 
 export default function PageRenderer({
@@ -45,7 +48,22 @@ export default function PageRenderer({
   onCanvasChange,
   onReplacePageSource,
   onExportPageSource,
+  onOpenDataWorkspace,
+  onDuplicateSpreadsheetPage,
 }: Props) {
+  // 'spreadsheet' mode: the page-local Univer editor — never RawGridRenderer.
+  if (viewMode === 'spreadsheet' && worksheet) {
+    return (
+      <PageLocalSpreadsheet
+        page={page}
+        worksheet={worksheet}
+        onWorksheetChange={onWorksheetChange}
+        onPatchPage={onPatchPage}
+        onOpenDataWorkspace={onOpenDataWorkspace}
+        onDuplicateSpreadsheetPage={onDuplicateSpreadsheetPage}
+      />
+    );
+  }
   if (viewMode === 'source') {
     return (
       <RawGridRenderer

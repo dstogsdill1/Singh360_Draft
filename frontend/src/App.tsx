@@ -846,9 +846,11 @@ export default function App() {
     if (mode === 'source' && activePageRef.current?.linkedWorksheetId) {
       setSelectedWorksheetId(activePageRef.current.linkedWorksheetId);
     }
+    // Leaving 'source' mode triggers a rebuild; leaving 'spreadsheet' does not
+    // (the page-local worksheet is edited in-place via onWorksheetChange).
     if (
       viewModeRef.current === 'source'
-      && mode === 'normalized'
+      && mode !== 'source'
       && selectedWorksheetIdRef.current === activePageRef.current?.linkedWorksheetId
     ) {
       rebuildCurrentPageFromSource();
@@ -3041,6 +3043,7 @@ export default function App() {
           canRestorePageRebuild={canRestorePageRebuild}
           onReplacePageSource={replaceCurrentPageSource}
           onExportPageSource={() => void exportCurrentSourceSheet()}
+          onOpenDataWorkspace={() => window.location.assign(`/workspace?project=${project.id}`)}
           onOpenHelp={() => window.open('/app?help=1', '_blank', 'noopener,noreferrer')}
           reviewPages={reviewPages}
           pageFilter={pageFilter}

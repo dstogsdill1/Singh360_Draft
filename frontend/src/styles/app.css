@@ -2153,6 +2153,61 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
   color: #55616b;
   font-size: 11px;
 }
+
+/* S360 PAGE LOCAL SPREADSHEET V1 ------------------------------------------ */
+.page-local-spreadsheet {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+}
+.pls-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--panel, #eceef1);
+  border-bottom: 1px solid var(--panel-line, #c3c8ce);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  min-height: 30px;
+}
+.pls-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  background: var(--panel-2, #e2e5e9);
+  border: 1px solid var(--panel-line, #c3c8ce);
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pls-btn:hover { background: #d0d4d9; }
+.pls-separator { width: 1px; height: 16px; background: var(--panel-line, #c3c8ce); margin: 0 2px; }
+.pls-range-label { font-size: 12px; font-family: monospace; min-width: 60px; color: var(--ink-soft, #4a525b); }
+.pls-drawing-label { font-size: 11px; color: var(--ink-soft, #4a525b); white-space: nowrap; }
+.pls-message { font-size: 11px; color: var(--ok, #1d7a3f); padding-left: 8px; }
+.pls-univer-host-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.pls-univer-host {
+  width: 100%;
+  height: 100%;
+}
+/* Drawing-area boundary overlay inside the Univer host */
+.page-local-drawing-area-overlay {
+  position: absolute;
+  pointer-events: none;
+  border: 2px dashed #2D7DD2;
+  border-radius: 2px;
+  z-index: 10;
+  box-shadow: inset 0 0 0 1px rgba(45,125,210,.15);
+}
+
 .pdfcrop-controls-v30 label {
   display: grid;
   gap: 4px;

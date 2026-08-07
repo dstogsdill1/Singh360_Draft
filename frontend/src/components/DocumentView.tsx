@@ -82,6 +82,8 @@ interface Props {
   onPublishSource?: () => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
+  onOpenDataWorkspace?: () => void;
+  onDuplicateSpreadsheetPage?: () => void;
   onOpenHelp?: () => void;
   reviewPages: PageModel[];
   pageFilter: PageReviewFilter;
@@ -132,6 +134,8 @@ export default function DocumentView({
   onPublishSource,
   onReplacePageSource,
   onExportPageSource,
+  onOpenDataWorkspace,
+  onDuplicateSpreadsheetPage,
   onOpenHelp,
   reviewPages,
   pageFilter,
@@ -141,7 +145,12 @@ export default function DocumentView({
 }: Props) {
   const linkedWorksheet = worksheets.find((w) => w.id === activePage.linkedWorksheetId);
   const selectedWorksheet = selectedWorksheetId ? worksheets.find((w) => w.id === selectedWorksheetId) : undefined;
-  const worksheet = viewMode === 'source' ? (selectedWorksheet || linkedWorksheet) : linkedWorksheet;
+  // In 'spreadsheet' mode always use the page-local linkedWorksheet (never a source-only sheet).
+  const worksheet = viewMode === 'spreadsheet'
+    ? linkedWorksheet
+    : viewMode === 'source'
+      ? (selectedWorksheet || linkedWorksheet)
+      : linkedWorksheet;
   const sourceOnly = viewMode === 'source' && !!worksheet && worksheet.id !== activePage.linkedWorksheetId;
   const framePage = sourceOnly && worksheet
     ? { ...activePage, sheetCode: 'DRAFT', displaySheetCode: 'DRAFT', sheetTitle: worksheet.name, include: false, pageNumber: null }
@@ -292,6 +301,8 @@ export default function DocumentView({
                 onCanvasChange={onCanvasChange}
                 onReplacePageSource={onReplacePageSource}
                 onExportPageSource={onExportPageSource}
+                onOpenDataWorkspace={onOpenDataWorkspace}
+                onDuplicateSpreadsheetPage={onDuplicateSpreadsheetPage}
               />
             </SheetFrame>
           </div>

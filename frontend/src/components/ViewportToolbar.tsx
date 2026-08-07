@@ -77,26 +77,22 @@ export default function ViewportToolbar({
         <button className={`fit-btn ${viewMode === 'normalized' ? 'active' : ''}`} onClick={() => onViewModeChange('normalized')}>Drawing</button>
         {hasImportedTableSource ? (
           <>
+            <button
+              className={`fit-btn ${viewMode === 'spreadsheet' ? 'active' : ''}`}
+              onClick={() => onViewModeChange('spreadsheet')}
+              title="Edit this page's worksheet in the Univer spreadsheet editor"
+            >Spreadsheet</button>
             {sourceOnly && viewMode === 'source' ? (
               <button className="fit-btn publish-source" onClick={onPublishSource} disabled={!onPublishSource}>Add Imported Table as Drawing Page</button>
             ) : null}
-            <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Imported Table Data</button>
-            <button
-              className={`fit-btn ${activePage.excelLayout ? 'active' : ''}`}
-              onClick={() => onPatchPage?.({
-                excelLayout: activePage.excelLayout || {
-                  version: 1, pageWidth: 1632, pageHeight: 1056,
-                  printableMargin: 48, snapSize: 8, tabColor: '#F4B183', tables: [],
-                },
-              })}
-            >Imported Table Layout</button>
+            <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Source Data</button>
             {canRebuildFromSource && onRebuildFromSource ? (
-              <button className="fit-btn" type="button" onClick={onRebuildFromSource} title="Rebuild this drawing from its project-local imported table data">Rebuild Drawing From Imported Table</button>
+              <button className="fit-btn" type="button" onClick={onRebuildFromSource} title="Rebuild this drawing from its project-local imported table data">Rebuild Drawing</button>
             ) : null}
           </>
         ) : null}
         {canRestorePageRebuild && onRestorePageRebuild ? (
-          <button className="fit-btn" type="button" onClick={onRestorePageRebuild} title="Restore the page from before the last rebuild (Ctrl+Z)">Restore Last Page Rebuild</button>
+          <button className="fit-btn" type="button" onClick={onRestorePageRebuild} title="Restore the page from before the last rebuild (Ctrl+Z)">Restore Last Rebuild</button>
         ) : null}
         {sourceStatusLabel ? <span className="vt-source-status sb-item">{sourceStatusLabel}</span> : null}
       </span>

@@ -430,6 +430,8 @@ export interface PageModel {
   excelLayout?: ExcelLayoutModel;
   /** Authoritative source-range recipe; bypasses normalized/reflow blocks. */
   spreadsheetRegions?: SpreadsheetRegion[];
+  /** Explicit drawing/print area shown in Spreadsheet view (e.g. "A1:F20"). */
+  drawingRange?: string;
 }
 
 export interface ProjectModel {
@@ -671,7 +673,8 @@ export type QuickAssemblyId =
   | 'generated-symbol-key'
   | 'wicp-annotation-pack';
 
-export type ViewMode = 'normalized' | 'source';
+/** 'spreadsheet' = page-local Univer editor for this page's linkedWorksheetId. */
+export type ViewMode = 'normalized' | 'source' | 'spreadsheet';
 
 export interface CanvasSelection {
   /** S360 POWERPOINT TEXT BOX FORMATTING V1 */
