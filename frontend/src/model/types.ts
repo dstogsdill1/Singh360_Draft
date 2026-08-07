@@ -432,6 +432,13 @@ export interface PageModel {
   spreadsheetRegions?: SpreadsheetRegion[];
   /** Explicit drawing/print area shown in Spreadsheet view (e.g. "A1:F20"). */
   drawingRange?: string;
+  /** Placement settings for the page-local spreadsheet drawing renderer. */
+  pageLocalPlacement?: {
+    fitMode: 'fit_width' | 'fit_box' | 'exact_scale';
+    scale?: number;
+    hAlign?: 'left' | 'center' | 'right';
+    vAlign?: 'top' | 'center' | 'bottom';
+  };
 }
 
 export interface ProjectModel {

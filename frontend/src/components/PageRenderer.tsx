@@ -4,7 +4,13 @@ import RawGridRenderer from './renderers/RawGridRenderer';
 import ExcelLayoutCanvas from './ExcelLayoutCanvas';
 import SpreadsheetPageCanvas from './SpreadsheetPageCanvas';
 import PageLocalSpreadsheet from './PageLocalSpreadsheet';
+import PageLocalDrawingRenderer from './PageLocalDrawingRenderer';
 import CanvasEditor from './CanvasEditor';
+
+/** True when the page should use the page-local spreadsheet render path. */
+function isPageLocal(page: PageModel): boolean {
+  return page.renderMode === 'page_local_spreadsheet';
+}
 
 interface Props {
   page: PageModel;
@@ -77,6 +83,28 @@ export default function PageRenderer({
       />
     );
   }
+
+  // Drawing / export: page-local path takes ABSOLUTE PRIORITY over all legacy
+  // renderers (excelLayout, spreadsheetRegions, blocks, NormalizedPage).
+  // This prevents ExcelLayoutCanvas and stale blocks from overriding WYSIWYG.
+  if (isPageLocal(page) && worksheet) {
+    return (
+      <PageLocalDrawingRenderer
+        page={page}
+        worksheet={worksheet}
+        project={project}
+        activeTool={activeTool}
+        snap={snap}
+        overlayMode={overlayMode}
+        exporting={exporting}
+        onRegisterApi={onRegisterApi}
+        onSelectionChange={onSelectionChange}
+        onCanvasChange={onCanvasChange}
+        onToolConsumed={onToolConsumed}
+      />
+    );
+  }
+
   if (page.spreadsheetRegions?.length) {
     const overlayInteractive = overlayMode || activeTool !== 'select' || (page.canvasObjects?.length || 0) > 0;
     return <div className="np-page-root">
