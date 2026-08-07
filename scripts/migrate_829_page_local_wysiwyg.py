@@ -352,6 +352,9 @@ def migrate(dry_run: bool = False) -> None:
             p = _clean_page(page)
             p["linkedWorksheetId"] = P3_WS_ID
             p["drawingRange"] = dr_p3
+            p["drawingExcludedRows"] = []
+            p["drawingExcludedColumns"] = []
+            p["drawingMaskedRanges"] = []
             p["pageLocalPlacement"] = {"fitMode": "fit_box", "hAlign": "center", "vAlign": "center"}
             print(f"  Patched page 3: linkedWS={P3_WS_ID} drawingRange={dr_p3}")
 
@@ -359,6 +362,9 @@ def migrate(dry_run: bool = False) -> None:
             p = _clean_page(page)
             p["linkedWorksheetId"] = P4_WS_ID
             p["drawingRange"] = dr_p4
+            p["drawingExcludedRows"] = []
+            p["drawingExcludedColumns"] = []
+            p["drawingMaskedRanges"] = []
             p["pageLocalPlacement"] = {"fitMode": "fit_box", "hAlign": "center", "vAlign": "center"}
             print(f"  Patched page 4: linkedWS={P4_WS_ID} drawingRange={dr_p4}")
 
@@ -366,6 +372,9 @@ def migrate(dry_run: bool = False) -> None:
             p = _clean_page(page)
             p["linkedWorksheetId"] = p5_ws_id
             p["drawingRange"] = ""
+            p["drawingExcludedRows"] = []
+            p["drawingExcludedColumns"] = []
+            p["drawingMaskedRanges"] = []
             p["pageLocalPlacement"] = {"fitMode": "fit_box"}
             print(f"  Patched page 5 ({pid}): blank page-local WS {p5_ws_id}")
 

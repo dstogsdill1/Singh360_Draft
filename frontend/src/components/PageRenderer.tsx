@@ -31,6 +31,7 @@ interface Props {
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
+  onAfterSetDrawingArea?: () => void;
   onOpenDataWorkspace?: () => void;
   onDuplicateSpreadsheetPage?: () => void;
 }
@@ -54,9 +55,13 @@ export default function PageRenderer({
   onCanvasChange,
   onReplacePageSource,
   onExportPageSource,
+  onAfterSetDrawingArea,
   onOpenDataWorkspace,
   onDuplicateSpreadsheetPage,
 }: Props) {
+  const printPreviewMode = viewMode === 'print';
+  const effectiveExporting = Boolean(exporting || printPreviewMode);
+
   // 'spreadsheet' mode: the page-local Univer editor — never RawGridRenderer.
   if (viewMode === 'spreadsheet' && worksheet) {
     return (
@@ -65,6 +70,7 @@ export default function PageRenderer({
         worksheet={worksheet}
         onWorksheetChange={onWorksheetChange}
         onPatchPage={onPatchPage}
+        onAfterSetDrawingArea={onAfterSetDrawingArea}
         onOpenDataWorkspace={onOpenDataWorkspace}
         onDuplicateSpreadsheetPage={onDuplicateSpreadsheetPage}
       />
@@ -96,7 +102,7 @@ export default function PageRenderer({
         activeTool={activeTool}
         snap={snap}
         overlayMode={overlayMode}
-        exporting={exporting}
+        exporting={effectiveExporting}
         onRegisterApi={onRegisterApi}
         onSelectionChange={onSelectionChange}
         onCanvasChange={onCanvasChange}
@@ -113,7 +119,7 @@ export default function PageRenderer({
         regions={page.spreadsheetRegions}
         project={project}
         readOnly
-        exporting={exporting}
+        exporting={effectiveExporting}
       />
       <div className={`np-overlay-layer ${overlayInteractive ? 'active' : ''}`}>
         <CanvasEditor
@@ -126,14 +132,14 @@ export default function PageRenderer({
           onToolConsumed={onToolConsumed}
           snap={snap}
           overlayMode={overlayMode}
-          exporting={exporting}
+          exporting={effectiveExporting}
         />
       </div>
-      {page.excelLayout && <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={exporting} overlay />}
+      {page.excelLayout && <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={effectiveExporting} overlay />}
     </div>;
   }
   if (page.excelLayout) {
-    return <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={exporting} />;
+    return <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={effectiveExporting} />;
   }
 
   return (
@@ -144,7 +150,7 @@ export default function PageRenderer({
       activeTool={activeTool}
       snap={snap}
       overlayMode={overlayMode}
-      exporting={exporting}
+      exporting={effectiveExporting}
       onToolConsumed={onToolConsumed}
       onRegisterApi={onRegisterApi}
       onSelectionChange={onSelectionChange}

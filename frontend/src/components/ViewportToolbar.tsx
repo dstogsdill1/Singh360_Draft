@@ -82,10 +82,15 @@ export default function ViewportToolbar({
               onClick={() => onViewModeChange('spreadsheet')}
               title="Edit this page's worksheet in the Univer spreadsheet editor"
             >Spreadsheet</button>
+            <button
+              className={`fit-btn ${viewMode === 'print' ? 'active' : ''}`}
+              onClick={() => onViewModeChange('print')}
+              title="Preview exactly what PDF export will render"
+            >Print Preview</button>
             {sourceOnly && viewMode === 'source' ? (
               <button className="fit-btn publish-source" onClick={onPublishSource} disabled={!onPublishSource}>Add Imported Table as Drawing Page</button>
             ) : null}
-            <button className={`fit-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')}>Source Data</button>
+            <button className={`fit-btn vt-advanced-btn ${viewMode === 'source' ? 'active' : ''}`} onClick={() => onViewModeChange('source')} title="Advanced source worksheet editor">Source Data</button>
             {canRebuildFromSource && onRebuildFromSource ? (
               <button className="fit-btn" type="button" onClick={onRebuildFromSource} title="Rebuild this drawing from its project-local imported table data">Rebuild Drawing</button>
             ) : null}
@@ -141,13 +146,19 @@ export default function ViewportToolbar({
       </button>
       <button type="button" className="fit-btn vt-review-nav" disabled={!canNext || rapidReviewBusy} onClick={() => onNavigateReview(1)}>Next →</button>
       <span className="sb-item">{pageLabel}</span>
-      <button className={`fit-btn ${view.fitMode === 'width' ? 'active' : ''}`} onClick={() => view.setFitMode('width')}>Fit Width</button>
-      <button className={`fit-btn ${view.fitMode === 'page' ? 'active' : ''}`} onClick={() => view.setFitMode('page')}>Fit Page</button>
-      <button className={`fit-btn ${view.fitMode === 'actual' ? 'active' : ''}`} onClick={view.setActual}>100%</button>
-      <button className="fit-btn" onClick={view.zoomOut} title="Zoom out">−</button>
-      <span className="vt-zoom">{view.zoomPct}%</span>
-      <button className="fit-btn" onClick={view.zoomIn} title="Zoom in">+</button>
-      <button className={`fit-btn ${view.showGrid ? 'active' : ''}`} onClick={view.toggleGrid} title="Toggle grid">Grid</button>
+      {viewMode !== 'spreadsheet' ? (
+        <>
+          <button className={`fit-btn ${view.fitMode === 'width' ? 'active' : ''}`} onClick={() => view.setFitMode('width')}>Fit Width</button>
+          <button className={`fit-btn ${view.fitMode === 'page' ? 'active' : ''}`} onClick={() => view.setFitMode('page')}>Fit Page</button>
+          <button className={`fit-btn ${view.fitMode === 'actual' ? 'active' : ''}`} onClick={view.setActual}>100%</button>
+          <button className="fit-btn" onClick={view.zoomOut} title="Zoom out">−</button>
+          <span className="vt-zoom">{view.zoomPct}%</span>
+          <button className="fit-btn" onClick={view.zoomIn} title="Zoom in">+</button>
+          <button className={`fit-btn ${view.showGrid ? 'active' : ''}`} onClick={view.toggleGrid} title="Toggle grid">Grid</button>
+        </>
+      ) : (
+        <span className="vt-source-status sb-item">Spreadsheet mode uses Univer zoom controls.</span>
+      )}
     </div>
   );
 }

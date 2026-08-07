@@ -413,7 +413,23 @@ body {
     repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.03) 39px, rgba(255,255,255,0.03) 40px),
     var(--board);
 }
+.sheet-viewport.sheet-viewport-spreadsheet {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  background: #fff;
+}
 .sheet-stage { margin: 0 auto; }
+.sheet-stage.sheet-stage-spreadsheet {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
 .sheet-scale { transform-origin: top left; }
 /* Optional design grid overlay on the sheet body */
 .sheet-scale.show-grid .sheet-body {
@@ -2158,8 +2174,10 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 .page-local-spreadsheet {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   width: 100%;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
   background: #fff;
 }
@@ -2167,16 +2185,23 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   background: var(--panel, #eceef1);
   border-bottom: 1px solid var(--panel-line, #c3c8ce);
   flex-shrink: 0;
-  flex-wrap: wrap;
-  min-height: 30px;
+  flex-wrap: nowrap;
+  min-height: 26px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.pls-render-state {
+  font-size: 11px;
+  color: #5a6570;
+  white-space: nowrap;
 }
 .pls-btn {
-  padding: 2px 8px;
-  font-size: 12px;
+  padding: 1px 6px;
+  font-size: 11px;
   background: var(--panel-2, #e2e5e9);
   border: 1px solid var(--panel-line, #c3c8ce);
   border-radius: 3px;
@@ -2185,27 +2210,27 @@ html[data-theme="light"] .ribbon-readout { color: #e6ebf0; }
 }
 .pls-btn:hover { background: #d0d4d9; }
 .pls-separator { width: 1px; height: 16px; background: var(--panel-line, #c3c8ce); margin: 0 2px; }
-.pls-range-label { font-size: 12px; font-family: monospace; min-width: 60px; color: var(--ink-soft, #4a525b); }
+.pls-range-label { font-size: 11px; font-family: monospace; min-width: 56px; color: var(--ink-soft, #4a525b); }
 .pls-drawing-label { font-size: 11px; color: var(--ink-soft, #4a525b); white-space: nowrap; }
 .pls-message { font-size: 11px; color: var(--ok, #1d7a3f); padding-left: 8px; }
 .pls-univer-host-wrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
 .pls-univer-host {
+  flex: 1 1 auto;
   width: 100%;
   height: 100%;
+  min-height: 0;
 }
-/* Drawing-area boundary overlay inside the Univer host */
-.page-local-drawing-area-overlay {
-  position: absolute;
-  pointer-events: none;
-  border: 2px dashed #2D7DD2;
-  border-radius: 2px;
-  z-index: 10;
-  box-shadow: inset 0 0 0 1px rgba(45,125,210,.15);
+
+/* Keep tabs from covering spreadsheet horizontal scrollbar. */
+.page-tabs {
+  flex-shrink: 0;
 }
 
 .pdfcrop-controls-v30 label {

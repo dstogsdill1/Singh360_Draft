@@ -149,6 +149,7 @@ class SpreadsheetPageLayoutTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         workspace = (root / "frontend/src/workspace/DataWorkspace.tsx").read_text("utf-8")
         page_renderer = (root / "frontend/src/components/PageRenderer.tsx").read_text("utf-8")
+        document_view = (root / "frontend/src/components/DocumentView.tsx").read_text("utf-8")
         print_view = (root / "frontend/src/components/PrintView.tsx").read_text("utf-8")
         ribbon = (root / "frontend/src/components/Ribbon.tsx").read_text("utf-8")
         self.assertIn("['data', 'Data']", workspace)
@@ -158,6 +159,9 @@ class SpreadsheetPageLayoutTests(unittest.TestCase):
         self.assertIn("No automatic combining, headers, or continuation", workspace)
         self.assertNotIn("Auto-Detect Tables", workspace)
         self.assertIn("<SpreadsheetPageCanvas", workspace)
+        self.assertIn("sheet-viewport-spreadsheet", document_view)
+        self.assertIn("if (isPageLocal(page) && worksheet)", page_renderer)
+        self.assertIn("viewMode === 'print'", page_renderer)
         self.assertIn("<SpreadsheetPageCanvas", page_renderer)
         self.assertIn("<PageRenderer", print_view)
         self.assertIn("Spreadsheet Table", ribbon)

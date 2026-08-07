@@ -858,6 +858,15 @@ export default function App() {
     setViewMode(mode);
   }, [rebuildCurrentPageFromSource]);
 
+  const handleAfterSetDrawingArea = useCallback(() => {
+    setFitMode('page');
+    setViewMode('normalized');
+    setSaveNotice('DRAWING UPDATED FROM SELECTED RANGE');
+    window.setTimeout(() => {
+      setSaveNotice((current) => current === 'DRAWING UPDATED FROM SELECTED RANGE' ? '' : current);
+    }, 2400);
+  }, []);
+
   // Keep the mutable project ref in sync with committed React state only.
   // Do NOT assign this during render: a page-switch render can otherwise
   // overwrite a freshly captured project snapshot with a stale one before the
@@ -3043,6 +3052,7 @@ export default function App() {
           canRestorePageRebuild={canRestorePageRebuild}
           onReplacePageSource={replaceCurrentPageSource}
           onExportPageSource={() => void exportCurrentSourceSheet()}
+          onAfterSetDrawingArea={handleAfterSetDrawingArea}
           onOpenDataWorkspace={() => window.location.assign(`/workspace?project=${project.id}`)}
           onOpenHelp={() => window.open('/app?help=1', '_blank', 'noopener,noreferrer')}
           reviewPages={reviewPages}

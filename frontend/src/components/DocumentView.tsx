@@ -82,6 +82,7 @@ interface Props {
   onPublishSource?: () => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
+  onAfterSetDrawingArea?: () => void;
   onOpenDataWorkspace?: () => void;
   onDuplicateSpreadsheetPage?: () => void;
   onOpenHelp?: () => void;
@@ -134,6 +135,7 @@ export default function DocumentView({
   onPublishSource,
   onReplacePageSource,
   onExportPageSource,
+  onAfterSetDrawingArea,
   onOpenDataWorkspace,
   onDuplicateSpreadsheetPage,
   onOpenHelp,
@@ -216,6 +218,8 @@ export default function DocumentView({
     }
   }, [view.fitMode, scale]);
 
+  const spreadsheetMode = viewMode === 'spreadsheet';
+
   return (
     <>
       <ViewportToolbar
@@ -242,8 +246,8 @@ export default function DocumentView({
         onToggleIncludeAndAdvance={onToggleIncludeAndAdvance}
       />
       <div
-        className="sheet-viewport"
-        ref={viewportRef}
+        className={`sheet-viewport ${spreadsheetMode ? 'sheet-viewport-spreadsheet' : ''}`}
+        ref={spreadsheetMode ? null : viewportRef}
         onDragOver={(e) => {
           const types = e.dataTransfer?.types;
           if (types?.includes('Files') || types?.includes(COMPONENT_DRAG_TYPE)) e.preventDefault();
@@ -271,42 +275,71 @@ export default function DocumentView({
           }
         }}
       >
-        <div className="sheet-stage" ref={stageRef}>
-          <div
-            className={`sheet-scale ${view.showGrid ? 'show-grid' : ''}`}
-            ref={scaleRef}
-          >
-            <SheetFrame
-              titleBlock={<TitleBlock project={project} page={framePage} />}
-              sourceView={viewMode === 'source'}
-              fullSheet={viewMode !== 'source' && (framePage.pdfPlacementMode === 'full_sheet' || framePage.suppressTitleBlock)}
-              fullSheetPageLabel={framePage.pageNumber ? `Page ${framePage.pageNumber} of ${framePage.pageTotal ?? project.pages.filter((page) => page.include).length}` : ''}
-            >
-              <PageRenderer
-                key={`${activePage.id}-${worksheet?.id ?? 'none'}-${activePage.sourceRevision ?? 0}-${activePage.sourceImport?.sourceId ?? 'no-import'}-${activePage.sourceImport?.revision ?? 0}-${viewMode}`}
-                page={activePage}
-                worksheet={worksheet}
-                project={project}
-                viewMode={viewMode}
-                activeTool={activeTool}
-                snap={snap}
-                overlayMode={overlayMode}
-                onToolConsumed={onToolConsumed}
-                onRegisterApi={onRegisterApi}
-                onSelectionChange={onSelectionChange}
-                onBlockChange={onBlockChange}
-                onPatchPage={onPatchPage}
-                onDuplicateBlock={onDuplicateBlock}
-                onWorksheetChange={onWorksheetChange}
-                onCanvasChange={onCanvasChange}
-                onReplacePageSource={onReplacePageSource}
-                onExportPageSource={onExportPageSource}
-                onOpenDataWorkspace={onOpenDataWorkspace}
-                onDuplicateSpreadsheetPage={onDuplicateSpreadsheetPage}
-              />
-            </SheetFrame>
+        {spreadsheetMode ? (
+          <div className="sheet-stage sheet-stage-spreadsheet">
+            <PageRenderer
+              key={`${activePage.id}-${worksheet?.id ?? 'none'}-${activePage.sourceRevision ?? 0}-${activePage.sourceImport?.sourceId ?? 'no-import'}-${activePage.sourceImport?.revision ?? 0}-${viewMode}`}
+              page={activePage}
+              worksheet={worksheet}
+              project={project}
+              viewMode={viewMode}
+              activeTool={activeTool}
+              snap={snap}
+              overlayMode={overlayMode}
+              onToolConsumed={onToolConsumed}
+              onRegisterApi={onRegisterApi}
+              onSelectionChange={onSelectionChange}
+              onBlockChange={onBlockChange}
+              onPatchPage={onPatchPage}
+              onDuplicateBlock={onDuplicateBlock}
+              onWorksheetChange={onWorksheetChange}
+              onCanvasChange={onCanvasChange}
+              onReplacePageSource={onReplacePageSource}
+              onExportPageSource={onExportPageSource}
+              onAfterSetDrawingArea={onAfterSetDrawingArea}
+              onOpenDataWorkspace={onOpenDataWorkspace}
+              onDuplicateSpreadsheetPage={onDuplicateSpreadsheetPage}
+            />
           </div>
-        </div>
+        ) : (
+          <div className="sheet-stage" ref={stageRef}>
+            <div
+              className={`sheet-scale ${view.showGrid ? 'show-grid' : ''}`}
+              ref={scaleRef}
+            >
+              <SheetFrame
+                titleBlock={<TitleBlock project={project} page={framePage} />}
+                sourceView={viewMode === 'source'}
+                fullSheet={viewMode !== 'source' && (framePage.pdfPlacementMode === 'full_sheet' || framePage.suppressTitleBlock)}
+                fullSheetPageLabel={framePage.pageNumber ? `Page ${framePage.pageNumber} of ${framePage.pageTotal ?? project.pages.filter((page) => page.include).length}` : ''}
+              >
+                <PageRenderer
+                  key={`${activePage.id}-${worksheet?.id ?? 'none'}-${activePage.sourceRevision ?? 0}-${activePage.sourceImport?.sourceId ?? 'no-import'}-${activePage.sourceImport?.revision ?? 0}-${viewMode}`}
+                  page={activePage}
+                  worksheet={worksheet}
+                  project={project}
+                  viewMode={viewMode}
+                  activeTool={activeTool}
+                  snap={snap}
+                  overlayMode={overlayMode}
+                  onToolConsumed={onToolConsumed}
+                  onRegisterApi={onRegisterApi}
+                  onSelectionChange={onSelectionChange}
+                  onBlockChange={onBlockChange}
+                  onPatchPage={onPatchPage}
+                  onDuplicateBlock={onDuplicateBlock}
+                  onWorksheetChange={onWorksheetChange}
+                  onCanvasChange={onCanvasChange}
+                  onReplacePageSource={onReplacePageSource}
+                  onExportPageSource={onExportPageSource}
+                  onAfterSetDrawingArea={onAfterSetDrawingArea}
+                  onOpenDataWorkspace={onOpenDataWorkspace}
+                  onDuplicateSpreadsheetPage={onDuplicateSpreadsheetPage}
+                />
+              </SheetFrame>
+            </div>
+          </div>
+        )}
       </div>
       <PageTabs
         project={project}

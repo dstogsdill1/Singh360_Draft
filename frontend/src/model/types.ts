@@ -54,6 +54,10 @@ export interface ExcelLayoutModel {
 export type SpreadsheetFitMode = 'fit_width' | 'fit_box' | 'exact_scale';
 export type SpreadsheetOverflowMode = 'visible' | 'clip' | 'explicit_continuation';
 
+export interface DrawingMaskRange {
+  range: string;
+}
+
 /** Stable, user-authored placement of one exact worksheet range on one page. */
 export interface SpreadsheetRegion {
   id: string;
@@ -432,6 +436,12 @@ export interface PageModel {
   spreadsheetRegions?: SpreadsheetRegion[];
   /** Explicit drawing/print area shown in Spreadsheet view (e.g. "A1:F20"). */
   drawingRange?: string;
+  /** Render-only column exclusions for Drawing/Preview/PDF (0-based worksheet columns). */
+  drawingExcludedColumns?: number[];
+  /** Render-only row exclusions for Drawing/Preview/PDF (0-based worksheet rows). */
+  drawingExcludedRows?: number[];
+  /** Render-only masked cell ranges for Drawing/Preview/PDF (A1 ranges). */
+  drawingMaskedRanges?: DrawingMaskRange[];
   /** Placement settings for the page-local spreadsheet drawing renderer. */
   pageLocalPlacement?: {
     fitMode: 'fit_width' | 'fit_box' | 'exact_scale';
@@ -681,7 +691,7 @@ export type QuickAssemblyId =
   | 'wicp-annotation-pack';
 
 /** 'spreadsheet' = page-local Univer editor for this page's linkedWorksheetId. */
-export type ViewMode = 'normalized' | 'source' | 'spreadsheet';
+export type ViewMode = 'normalized' | 'source' | 'spreadsheet' | 'print';
 
 export interface CanvasSelection {
   /** S360 POWERPOINT TEXT BOX FORMATTING V1 */

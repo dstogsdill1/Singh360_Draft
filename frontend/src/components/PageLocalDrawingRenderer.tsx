@@ -67,6 +67,30 @@ function buildPageBodyRegion(page: PageModel, ws: Worksheet): SpreadsheetRegion 
   };
 }
 
+function normalizeWorksheetForDrawing(page: PageModel, ws: Worksheet): Worksheet {
+  const excludedRows = new Set(page.drawingExcludedRows || []);
+  const excludedColumns = new Set(page.drawingExcludedColumns || []);
+  const masked = page.drawingMaskedRanges || [];
+  const clone: Worksheet = {
+    ...ws,
+    grid: (ws.grid || []).map((row) => [...row]),
+    hiddenRows: [...new Set([...(ws.hiddenRows || []), ...excludedRows])].sort((a, b) => a - b),
+    hiddenColumns: [...new Set([...(ws.hiddenColumns || []), ...excludedColumns])].sort((a, b) => a - b),
+  };
+  for (const item of masked) {
+    const bounds = rangeBounds(item.range);
+    if (!bounds) continue;
+    for (let r = bounds.startRow; r <= bounds.endRow; r += 1) {
+      const row = clone.grid[r];
+      if (!row) continue;
+      for (let c = bounds.startColumn; c <= bounds.endColumn; c += 1) {
+        if (c < row.length) row[c] = '';
+      }
+    }
+  }
+  return clone;
+}
+
 // S360 PAGE-LOCAL DRAWING RENDERER V1
 export default function PageLocalDrawingRenderer({
   page,
@@ -83,8 +107,9 @@ export default function PageLocalDrawingRenderer({
 }: Props) {
   void project; // available for future canvas operations
 
-  const region = useMemo(() => buildPageBodyRegion(page, worksheet), [page, worksheet]);
-  const block = useMemo(() => spreadsheetRegionBlock(worksheet, region), [worksheet, region]);
+  const resolvedWorksheet = useMemo(() => normalizeWorksheetForDrawing(page, worksheet), [page, worksheet]);
+  const region = useMemo(() => buildPageBodyRegion(page, resolvedWorksheet), [page, resolvedWorksheet]);
+  const block = useMemo(() => spreadsheetRegionBlock(resolvedWorksheet, region), [resolvedWorksheet, region]);
 
   const overlayInteractive = !exporting && (overlayMode || activeTool !== 'select' || (page.canvasObjects?.length || 0) > 0);
 
