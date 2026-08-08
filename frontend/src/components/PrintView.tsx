@@ -80,10 +80,12 @@ export default function PrintView({ project }: Props) {
           const shells = [...document.querySelectorAll<HTMLElement>('.print-page')];
           const images = [...document.images];
           const canvases = [...document.querySelectorAll<HTMLElement>('.canvas-wrap')];
+          const annotationCanvases = [...document.querySelectorAll<HTMLElement>('.annotation-canvas-wrap')];
           const shellsReady = shells.length === includedPages.length;
           const imagesReady = images.every((image) => image.complete && (!image.src || image.naturalWidth > 0));
           const canvasesReady = canvases.every((canvas) => canvas.dataset.canvasHydrated === '1');
-          if (shellsReady && imagesReady && canvasesReady) {
+          const annotationsReady = annotationCanvases.every((canvas) => canvas.dataset.annotationHydrated === '1');
+          if (shellsReady && imagesReady && canvasesReady && annotationsReady) {
             await afterPaint();
             if (!cancelled) document.body.setAttribute('data-print-ready', '1');
             return;

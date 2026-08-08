@@ -341,6 +341,8 @@ def project_hash(project: dict[str, Any]) -> str:
                 "sheetTab": p.get("sheetTab"),
                 "issueStatus": normalize_status(p.get("issueStatus")),
                 "canvasObjects": p.get("canvasObjects", []),
+                "annotationObjects": p.get("annotationObjects", []),
+                "annotationSettings": p.get("annotationSettings", {}),
                 "assets": p.get("assets", []),
                 "notes": p.get("notes", ""),
                 "excelLayout": p.get("excelLayout"),
@@ -516,7 +518,7 @@ def sync_project_from_workbook(project_id: str, project: dict[str, Any], store: 
         }
 
         app_owned_fields = {
-            "canvasObjects", "assets", "underlay", "underlays", "background", "overlays",
+            "canvasObjects", "annotationObjects", "annotationSettings", "assets", "underlay", "underlays", "background", "overlays",
             "annotations", "pastedImages", "imageCrop", "crop", "crops", "masks",
             "highlightedCells", "manualObjects", "lockedObjects", "connectors",
         }

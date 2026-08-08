@@ -1,4 +1,16 @@
-import type { CanvasApi, CanvasSelection, PageBlock, PageModel, ProjectModel, ViewMode, Worksheet } from '../model/types';
+import type {
+  AnnotationApi,
+  AnnotationSelection,
+  AnnotationStyle,
+  AnnotationTool,
+  CanvasApi,
+  CanvasSelection,
+  PageBlock,
+  PageModel,
+  ProjectModel,
+  ViewMode,
+  Worksheet,
+} from '../model/types';
 import NormalizedPage from './renderers/NormalizedPage';
 import RawGridRenderer from './renderers/RawGridRenderer';
 import ExcelLayoutCanvas from './ExcelLayoutCanvas';
@@ -6,6 +18,11 @@ import SpreadsheetPageCanvas from './SpreadsheetPageCanvas';
 import PageLocalSpreadsheet from './PageLocalSpreadsheet';
 import PageLocalDrawingRenderer from './PageLocalDrawingRenderer';
 import CanvasEditor from './CanvasEditor';
+import AnnotationLayer from './AnnotationLayer';
+import {
+  DEFAULT_ANNOTATION_STYLE,
+  normalizeAnnotationSettings,
+} from '../model/annotations';
 
 /** True when the page should use the page-local spreadsheet render path. */
 function isPageLocal(page: PageModel): boolean {
@@ -29,6 +46,13 @@ interface Props {
   onDuplicateBlock: (pageId: string, blockId: string) => void;
   onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
+  annotationActive?: boolean;
+  annotationTool?: AnnotationTool;
+  annotationStyle?: AnnotationStyle;
+  onAnnotationToolChange?: (tool: AnnotationTool) => void;
+  onAnnotationChange?: (pageId: string, objects: Record<string, unknown>[]) => void;
+  onAnnotationSelectionChange?: (selection: AnnotationSelection | null) => void;
+  onRegisterAnnotationApi?: (api: AnnotationApi | null) => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
   onAfterSetDrawingArea?: () => void;
@@ -53,6 +77,13 @@ export default function PageRenderer({
   onDuplicateBlock,
   onWorksheetChange,
   onCanvasChange,
+  annotationActive = false,
+  annotationTool = 'select',
+  annotationStyle = DEFAULT_ANNOTATION_STYLE,
+  onAnnotationToolChange,
+  onAnnotationChange,
+  onAnnotationSelectionChange,
+  onRegisterAnnotationApi,
   onReplacePageSource,
   onExportPageSource,
   onAfterSetDrawingArea,
@@ -61,6 +92,34 @@ export default function PageRenderer({
 }: Props) {
   const printPreviewMode = viewMode === 'print';
   const effectiveExporting = Boolean(exporting || printPreviewMode);
+
+  const withAnnotations = (content: React.ReactNode) => {
+    const shouldMount = annotationActive
+      || Boolean(onRegisterAnnotationApi)
+      || Boolean(page.annotationObjects?.length);
+    return (
+      <div className="page-layer-stack">
+        {content}
+        {shouldMount ? (
+          <AnnotationLayer
+            pageId={page.id}
+            serialized={page.annotationObjects ?? []}
+            settings={normalizeAnnotationSettings(page.annotationSettings)}
+            active={annotationActive}
+            tool={annotationTool}
+            style={annotationStyle}
+            exporting={effectiveExporting}
+            onSerializedChange={onAnnotationChange
+              ? (objects) => onAnnotationChange(page.id, objects)
+              : undefined}
+            onSelectionChange={onAnnotationSelectionChange}
+            onToolChange={onAnnotationToolChange}
+            registerApi={onRegisterAnnotationApi}
+          />
+        ) : null}
+      </div>
+    );
+  };
 
   // 'spreadsheet' mode: the page-local Univer editor — never RawGridRenderer.
   if (viewMode === 'spreadsheet' && worksheet) {
@@ -94,7 +153,7 @@ export default function PageRenderer({
   // renderers (excelLayout, spreadsheetRegions, blocks, NormalizedPage).
   // This prevents ExcelLayoutCanvas and stale blocks from overriding WYSIWYG.
   if (isPageLocal(page) && worksheet) {
-    return (
+    return withAnnotations(
       <PageLocalDrawingRenderer
         page={page}
         worksheet={worksheet}
@@ -107,13 +166,13 @@ export default function PageRenderer({
         onSelectionChange={onSelectionChange}
         onCanvasChange={onCanvasChange}
         onToolConsumed={onToolConsumed}
-      />
+      />,
     );
   }
 
   if (page.spreadsheetRegions?.length) {
     const overlayInteractive = overlayMode || activeTool !== 'select' || (page.canvasObjects?.length || 0) > 0;
-    return <div className="np-page-root">
+    return withAnnotations(<div className="np-page-root">
       <SpreadsheetPageCanvas
         pageId={page.id}
         regions={page.spreadsheetRegions}
@@ -136,13 +195,15 @@ export default function PageRenderer({
         />
       </div>
       {page.excelLayout && <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={effectiveExporting} overlay />}
-    </div>;
+    </div>);
   }
   if (page.excelLayout) {
-    return <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={effectiveExporting} />;
+    return withAnnotations(
+      <ExcelLayoutCanvas page={page} onPatchPage={onPatchPage} exporting={effectiveExporting} />,
+    );
   }
 
-  return (
+  return withAnnotations(
     <NormalizedPage
       page={page}
       project={project}
@@ -158,7 +219,7 @@ export default function PageRenderer({
       onPatchPage={onPatchPage}
       onDuplicateBlock={onDuplicateBlock}
       onCanvasChange={onCanvasChange}
-    />
+    />,
   );
 }
 

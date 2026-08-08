@@ -1,5 +1,6 @@
 import type { PageBlock, PageModel } from './types';
 import { assignFreshCanvasObjectIds } from './canvasObjectIdentity';
+import { freshAnnotationObjects } from './annotations';
 
 type ExtensiblePage = PageModel & Record<string, unknown>;
 
@@ -109,6 +110,7 @@ export function instantiatePageTemplate(
 ): PageModel {
   const detached = preparePageTemplatePayload(source) as ExtensiblePage;
   const canvasObjects = freshCanvasObjects(detached.canvasObjects);
+  const annotationObjects = freshAnnotationObjects(detached.annotationObjects);
 
   return {
     ...detached,
@@ -123,6 +125,7 @@ export function instantiatePageTemplate(
     syncDirection: 'none',
     blocks: (detached.blocks ?? []).map(detachBlockFromWorksheet),
     canvasObjects,
+    annotationObjects,
     pageGroupId: newId,
     continuationOf: null,
     generatedContinuation: false,
@@ -180,6 +183,7 @@ export function duplicateAsAppManagedPage(source: PageModel, newId: string): Pag
     printArea: null,
     blocks: detached.blocks?.map(detachBlockFromWorksheet),
     canvasObjects: freshCanvasObjects(detachedCanvasObjects),
+    annotationObjects: freshAnnotationObjects(detached.annotationObjects),
     pageType: duplicatedPdf ? 'canvas' : detached.pageType,
     pageGroupId: newId,
     continuationOf: null,

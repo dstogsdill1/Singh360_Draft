@@ -300,6 +300,47 @@ export interface Worksheet {
 
 export type PageIssueStatus = 'draft' | 'draft_confirmed' | 'public' | 'public_confirmed';
 
+export type AnnotationTool = 'select' | 'rectangle' | 'text' | 'arrow' | 'highlight' | 'pen';
+
+export interface AnnotationSettings {
+  visible: boolean;
+  locked: boolean;
+  includeInExport: boolean;
+}
+
+export interface AnnotationStyle {
+  color: string;
+  opacity: number;
+  strokeWidth: number;
+  fillColor: string;
+  fillOpacity: number;
+  fontSize: number;
+  bold: boolean;
+  backgroundColor: string;
+  backgroundOpacity: number;
+  highlightColor: string;
+  highlightOpacity: number;
+  highlightWidth: number;
+  penWidth: number;
+  smoothing: number;
+}
+
+export interface AnnotationSelection {
+  objectId: string;
+  annotationType: Exclude<AnnotationTool, 'select'>;
+  color: string;
+  opacity: number;
+  strokeWidth: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  fontSize?: number;
+  bold?: boolean;
+  backgroundColor?: string;
+  backgroundOpacity?: number;
+  smoothing?: number;
+  arrowEnd?: boolean;
+}
+
 export interface PageModel {
   id: string;
   order: number;
@@ -362,6 +403,10 @@ export interface PageModel {
   /** Bumped when normalized blocks are rebuilt from source (forces view refresh). */
   sourceRevision?: number;
   canvasObjects: Record<string, unknown>[];
+  /** Page-local markup kept strictly separate from drawing/component objects. */
+  annotationObjects?: Record<string, unknown>[];
+  /** Visibility, edit lock, and PDF inclusion are independent per page. */
+  annotationSettings?: AnnotationSettings;
   assets?: Record<string, unknown>[];
   notes: string;
   createdAt?: string;
@@ -885,4 +930,19 @@ export interface CanvasApi {
   addVertexToSelected: () => void;
   deleteVertexFromSelected: () => void;
   convertSelectedConnector: (kind: 'line' | 'arrow' | 'polyline' | 'elbow') => void;
+}
+
+export interface AnnotationApi {
+  captureAnnotations: () => Record<string, unknown>[];
+  deleteSelected: () => void;
+  deleteAll: () => void;
+  copySelected: () => void;
+  pasteCopied: () => void;
+  duplicateSelected: () => void;
+  bringForward: () => void;
+  sendBackward: () => void;
+  undo: () => void;
+  redo: () => void;
+  deselect: () => void;
+  updateSelected: (patch: Partial<AnnotationSelection>) => void;
 }

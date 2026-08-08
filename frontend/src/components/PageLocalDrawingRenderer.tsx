@@ -1,27 +1,30 @@
 /**
- * S360 PAGE-LOCAL DRAWING RENDERER V1
+ * S360 PAGE-LOCAL DRAWING RENDERER V2
  *
- * The single WYSIWYG spreadsheet renderer used for Drawing view, Print
- * Preview, and PDF export of page-local spreadsheet pages.  There is one
- * code path — what you see in Drawing is exactly what exports.
- *
- * Input: the page's linkedWorksheetId worksheet + drawingRange/placement.
- * Output: a scaled/positioned read-only spreadsheet block covering the
- *   page body, with the canvas overlay rendered on top.
+ * One renderer is used by Drawing, Print Preview, and PDF export.
+ * The saved worksheet range is rendered below the standard Singh360 title band
+ * and above the title block with one uniform scale.
  */
 import { useMemo } from 'react';
-import type { CanvasApi, CanvasSelection, PageModel, ProjectModel, Worksheet } from '../model/types';
-import type { SpreadsheetRegion } from '../model/types';
+import type {
+  CanvasApi,
+  CanvasSelection,
+  PageModel,
+  ProjectModel,
+  SpreadsheetRegion,
+  Worksheet,
+} from '../model/types';
 import ExcelRangeRenderer from './renderers/ExcelRangeRenderer';
+import SheetTitleBand from './renderers/SheetTitleBand';
 import CanvasEditor from './CanvasEditor';
 import { spreadsheetRegionBlock, regionScale } from '../model/spreadsheetRegion';
 import { letters } from '../workspace/UniverWorkbookAdapter';
 import { rangeBounds } from '../workspace/workspaceContract';
 import {
-  BODY_W,
-  BODY_H,
-  BODY_LEFT,
-  BODY_TOP,
+  PAGE_CONTENT_H,
+  PAGE_CONTENT_LEFT,
+  PAGE_CONTENT_TOP,
+  PAGE_CONTENT_W,
 } from '../model/sheetGeometry';
 
 interface Props {
@@ -38,26 +41,40 @@ interface Props {
   onToolConsumed?: () => void;
 }
 
-/** Derive a sensible default range covering the populated content of a worksheet. */
-function defaultRange(ws: Worksheet): string {
-  const rows = ws.grid?.length || 1;
-  const cols = Math.max(1, ...(ws.grid || []).map((r) => r?.length || 0));
-  return `A1:${letters(cols - 1)}${rows}`;
+function populatedRange(ws: Worksheet): string | null {
+  let lastRow = -1;
+  let lastColumn = -1;
+  (ws.grid || []).forEach((row, rowIndex) => {
+    row.forEach((value, columnIndex) => {
+      if (String(value ?? '').trim() === '') return;
+      lastRow = Math.max(lastRow, rowIndex);
+      lastColumn = Math.max(lastColumn, columnIndex);
+    });
+  });
+  if (lastRow < 0 || lastColumn < 0) return null;
+  return `A1:${letters(lastColumn)}${lastRow + 1}`;
 }
 
-/** Build a SpreadsheetRegion that fills the page body with fit_box scaling. */
-function buildPageBodyRegion(page: PageModel, ws: Worksheet): SpreadsheetRegion {
-  const range = page.drawingRange || defaultRange(ws);
+function selectedRange(page: PageModel, ws: Worksheet): string | null {
+  const explicit = String(page.drawingRange || '').trim();
+  return explicit || populatedRange(ws);
+}
+
+function buildPageBodyRegion(
+  page: PageModel,
+  ws: Worksheet,
+  range: string,
+): SpreadsheetRegion {
   const placement = page.pageLocalPlacement;
   return {
     id: `${page.id}_local_drawing`,
     sourceSheetId: ws.id,
     range,
     pageId: page.id,
-    x: BODY_LEFT,
-    y: BODY_TOP,
-    width: BODY_W,
-    height: BODY_H,
+    x: PAGE_CONTENT_LEFT,
+    y: PAGE_CONTENT_TOP,
+    width: PAGE_CONTENT_W,
+    height: PAGE_CONTENT_H,
     fitMode: placement?.fitMode ?? 'fit_box',
     overflowMode: 'clip',
     repeatRows: [],
@@ -80,18 +97,30 @@ function normalizeWorksheetForDrawing(page: PageModel, ws: Worksheet): Worksheet
   for (const item of masked) {
     const bounds = rangeBounds(item.range);
     if (!bounds) continue;
-    for (let r = bounds.startRow; r <= bounds.endRow; r += 1) {
-      const row = clone.grid[r];
+    for (let rowIndex = bounds.startRow; rowIndex <= bounds.endRow; rowIndex += 1) {
+      const row = clone.grid[rowIndex];
       if (!row) continue;
-      for (let c = bounds.startColumn; c <= bounds.endColumn; c += 1) {
-        if (c < row.length) row[c] = '';
+      for (
+        let columnIndex = bounds.startColumn;
+        columnIndex <= bounds.endColumn;
+        columnIndex += 1
+      ) {
+        if (columnIndex < row.length) row[columnIndex] = '';
       }
     }
   }
   return clone;
 }
 
-// S360 PAGE-LOCAL DRAWING RENDERER V1
+function blockHasVisibleContent(
+  block: ReturnType<typeof spreadsheetRegionBlock>,
+): boolean {
+  return Boolean(block?.grid?.some((row) => (
+    row.some((value) => String(value ?? '').trim() !== '')
+  )));
+}
+
+// S360 PAGE-LOCAL DRAWING RENDERER V2
 export default function PageLocalDrawingRenderer({
   page,
   worksheet,
@@ -105,46 +134,90 @@ export default function PageLocalDrawingRenderer({
   onCanvasChange,
   onToolConsumed = () => undefined,
 }: Props) {
-  void project; // available for future canvas operations
+  void project;
 
-  const resolvedWorksheet = useMemo(() => normalizeWorksheetForDrawing(page, worksheet), [page, worksheet]);
-  const region = useMemo(() => buildPageBodyRegion(page, resolvedWorksheet), [page, resolvedWorksheet]);
-  const block = useMemo(() => spreadsheetRegionBlock(resolvedWorksheet, region), [resolvedWorksheet, region]);
+  const resolvedWorksheet = useMemo(
+    () => normalizeWorksheetForDrawing(page, worksheet),
+    [page, worksheet],
+  );
+  const range = useMemo(
+    () => selectedRange(page, resolvedWorksheet),
+    [page, resolvedWorksheet],
+  );
+  const region = useMemo(
+    () => (range ? buildPageBodyRegion(page, resolvedWorksheet, range) : null),
+    [page, range, resolvedWorksheet],
+  );
+  const block = useMemo(
+    () => (region ? spreadsheetRegionBlock(resolvedWorksheet, region) : null),
+    [region, resolvedWorksheet],
+  );
 
-  const overlayInteractive = !exporting && (overlayMode || activeTool !== 'select' || (page.canvasObjects?.length || 0) > 0);
+  const overlayInteractive = !exporting && (
+    overlayMode
+    || activeTool !== 'select'
+    || (page.canvasObjects?.length || 0) > 0
+  );
 
-  if (!block) {
-    return (
-      <div className="pldr-empty" data-testid="page-local-drawing-empty">
-        No worksheet data for range {region.range}.
-      </div>
-    );
-  }
-
-  const scale = regionScale(region, block);
+  const scale = region && block ? regionScale(region, block) : 1;
+  const hasContent = blockHasVisibleContent(block);
+  const hAlign = page.pageLocalPlacement?.hAlign ?? 'center';
+  const vAlign = page.pageLocalPlacement?.vAlign ?? 'top';
+  const justifyContent = hAlign === 'left'
+    ? 'flex-start'
+    : hAlign === 'right'
+      ? 'flex-end'
+      : 'center';
+  const alignItems = vAlign === 'top'
+    ? 'flex-start'
+    : vAlign === 'bottom'
+      ? 'flex-end'
+      : 'center';
 
   return (
-    <div className="pldr-root np-page-root" data-testid="page-local-drawing-renderer" data-page-id={page.id} data-worksheet-id={worksheet.id} data-range={region.range}>
-      {/* Spreadsheet content — exact same renderer used by PDF export */}
-      <div
-        className="pldr-content"
-        style={{
-          position: 'absolute',
-          left: region.x,
-          top: region.y,
-          width: region.width,
-          height: region.height,
-          overflow: 'hidden',
-        }}
-      >
-        <ExcelRangeRenderer block={block} scaleOverride={scale} embedded exporting={exporting} />
-      </div>
-      {/* Canvas overlays (notes, callouts, components, etc.) */}
+    <div
+      className="pldr-root np-page-root"
+      data-testid="page-local-drawing-renderer"
+      data-page-id={page.id}
+      data-worksheet-id={worksheet.id}
+      data-range={range || ''}
+    >
+      <SheetTitleBand page={page} />
+
+      {region && block && hasContent ? (
+        <div
+          className="pldr-content"
+          style={{
+            position: 'absolute',
+            left: region.x,
+            top: region.y,
+            width: region.width,
+            height: region.height,
+            overflow: 'hidden',
+            display: 'flex',
+            justifyContent,
+            alignItems,
+            boxSizing: 'border-box',
+          }}
+        >
+          <ExcelRangeRenderer
+            block={block}
+            scaleOverride={scale}
+            embedded
+            exporting={exporting}
+          />
+        </div>
+      ) : null}
+
       <div className={`np-overlay-layer ${overlayInteractive ? 'active' : ''}`}>
         <CanvasEditor
           key={page.id}
           serialized={page.canvasObjects || []}
-          onSerializedChange={onCanvasChange ? (objects) => onCanvasChange(page.id, objects) : () => undefined}
+          onSerializedChange={
+            onCanvasChange
+              ? (objects) => onCanvasChange(page.id, objects)
+              : () => undefined
+          }
           registerApi={onRegisterApi ?? (() => undefined)}
           onSelectionChange={onSelectionChange ?? (() => undefined)}
           activeTool={activeTool}

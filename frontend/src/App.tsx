@@ -19,7 +19,7 @@ import {
   type ExportWarning,
 } from './api/client';
 import type { SymbolMapperRenderResult } from './api/client';
-import type { BusOptions, CalloutFamily, CalloutSetConfig, CanvasApi, CanvasSelection, LibraryComponentInsertMeta, LineStyle, PageBlock, PageModel, PlacedSymbolEditorConfig, ProjectModel, QuickAssemblyId, SavedAssembly, SmartComponentConfig, SmartComponentType, SymbolLegendInsertConfig, ViewMode, Worksheet, ImageCropPlacement, ImageCropRect, ImageCropState } from './model/types';
+import type { AnnotationApi, AnnotationSelection, AnnotationStyle, AnnotationTool, BusOptions, CalloutFamily, CalloutSetConfig, CanvasApi, CanvasSelection, LibraryComponentInsertMeta, LineStyle, PageBlock, PageModel, PlacedSymbolEditorConfig, ProjectModel, QuickAssemblyId, SavedAssembly, SmartComponentConfig, SmartComponentType, SymbolLegendInsertConfig, ViewMode, Worksheet, ImageCropPlacement, ImageCropRect, ImageCropState } from './model/types';
 import { newCanvasObjectId } from './model/canvasObjectIdentity';
 import { writeRecoverySnapshot } from './model/recovery';
 import { duplicateAsAppManagedPage } from './model/pageDuplication';
@@ -77,8 +77,10 @@ import {
   type DirtyDomain,
   type SaveState,
 } from './model/saveState';
+import { DEFAULT_ANNOTATION_STYLE } from './model/annotations';
 
 const DataWorkspace = lazy(() => import('./workspace/DataWorkspace'));
+const ANNOTATIONS_OPEN_STORAGE_KEY = 'singh360-annotations-open:v1';
 
 function getUrlParams() {
   const params = new URLSearchParams(window.location.search);
@@ -196,6 +198,16 @@ export default function App() {
   } | null>(null);
   const [activeTool, setActiveTool] = useState('select');
   const [overlayMode, setOverlayMode] = useState(false);
+  const [annotationsOpen, setAnnotationsOpen] = useState(() => {
+    try { return localStorage.getItem(ANNOTATIONS_OPEN_STORAGE_KEY) === '1'; } catch { return false; }
+  });
+  const [annotationTool, setAnnotationTool] = useState<AnnotationTool>('select');
+  const [annotationStyle, setAnnotationStyle] = useState<AnnotationStyle>(DEFAULT_ANNOTATION_STYLE);
+  const [annotationSelection, setAnnotationSelection] = useState<AnnotationSelection | null>(null);
+  const [annotationApi, setAnnotationApi] = useState<AnnotationApi | null>(null);
+  useEffect(() => {
+    try { localStorage.setItem(ANNOTATIONS_OPEN_STORAGE_KEY, annotationsOpen ? '1' : '0'); } catch { /* ignore */ }
+  }, [annotationsOpen]);
   const [lineStyle, setLineStyle] = useState<LineStyle>({
     stroke: '#111111', dash: 'solid', strokeWidth: 2, arrowStart: false, arrowEnd: false,
   });
@@ -256,6 +268,7 @@ export default function App() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; pageId: string } | null>(null);
   const canvasApiRef = useRef<CanvasApi | null>(null);
+  const annotationApiRef = useRef<AnnotationApi | null>(null);
   const pendingSymbolPageRef = useRef<{ pageId: string; url: string; name: string; resolve: () => void; reject: (reason: unknown) => void } | null>(null);
 
   // ── Save manager: single source of truth for persistence + status ──
@@ -419,15 +432,19 @@ export default function App() {
       /* capture is best effort for DOM editors; projectRef remains authoritative */
     }
     const canvas = canvasApiRef.current;
+    const annotationCanvas = annotationApiRef.current;
     const pageId = activePageRef.current?.id;
     if (!pageId || !projectRef.current) return projectRef.current;
     const objects = canvas?.captureCanvas();
+    const annotationObjects = annotationCanvas?.captureAnnotations();
     const timestamp = new Date().toISOString();
-    const capturedPages = projectRef.current.pages.map((p) => (
-      p.id === pageId && objects
-        ? stampPageIfChanged(p, { ...p, canvasObjects: objects }, timestamp)
-        : p
-    ));
+    const capturedPages = projectRef.current.pages.map((page) => {
+      if (page.id !== pageId) return page;
+      let captured = page;
+      if (objects) captured = { ...captured, canvasObjects: objects };
+      if (annotationObjects) captured = { ...captured, annotationObjects };
+      return stampPageIfChanged(page, captured, timestamp);
+    });
     const updated: ProjectModel = {
       ...projectRef.current,
       pages: capturedPages,
@@ -470,6 +487,8 @@ export default function App() {
       setViewMode('normalized');
     }
     setSelection(null);
+    setAnnotationSelection(null);
+    setAnnotationTool('select');
   }, [ensureSavedBeforeNavigation]);
 
   // Explicit "Save Now": capture the live canvas, then contact the server.
@@ -602,6 +621,38 @@ export default function App() {
   }, [activePageId, captureActivePageState]);
   const onSelectionChange = useCallback((sel: CanvasSelection | null) => setSelection(sel), []);
   const onToolConsumed = useCallback(() => setActiveTool('select'), []);
+  const onRegisterAnnotationApi = useCallback((api: AnnotationApi | null) => {
+    annotationApiRef.current = api;
+    setAnnotationApi(api);
+  }, []);
+  const onAnnotationSelectionChange = useCallback((value: AnnotationSelection | null) => {
+    setAnnotationSelection(value);
+  }, []);
+  const onAnnotationChange = useCallback((pageId: string, objects: Record<string, unknown>[]) => {
+    setProjectSync((previous) => {
+      if (!previous) return previous;
+      const timestamp = new Date().toISOString();
+      return {
+        ...previous,
+        pages: previous.pages.map((page) => (
+          page.id === pageId
+            ? stampPageIfChanged(page, { ...page, annotationObjects: objects }, timestamp)
+            : page
+        )),
+      };
+    });
+  }, [setProjectSync]);
+  const changeAnnotationsOpen = useCallback((open: boolean) => {
+    setAnnotationsOpen(open);
+    if (!open) {
+      annotationApiRef.current?.deselect();
+      setAnnotationSelection(null);
+      setAnnotationTool('select');
+    } else {
+      setActiveTool('select');
+      setSelection(null);
+    }
+  }, []);
 
   // Push the current new-line style down to the canvas whenever it changes.
   useEffect(() => {
@@ -612,10 +663,14 @@ export default function App() {
   const activePageRef = useRef(activePage);
   const viewModeRef = useRef(viewMode);
   const selectionRef = useRef(selection);
+  const annotationsOpenRef = useRef(annotationsOpen);
+  const annotationSelectionRef = useRef(annotationSelection);
   const selectedWorksheetIdRef = useRef(selectedWorksheetId);
   activePageRef.current = activePage;
   viewModeRef.current = viewMode;
   selectionRef.current = selection;
+  annotationsOpenRef.current = annotationsOpen;
+  annotationSelectionRef.current = annotationSelection;
   selectedWorksheetIdRef.current = selectedWorksheetId;
 
   const activeWorksheetId = (viewMode === 'source' ? selectedWorksheetId : activePage?.linkedWorksheetId) ?? null;
@@ -855,8 +910,9 @@ export default function App() {
     ) {
       rebuildCurrentPageFromSource();
     }
+    if (mode !== 'normalized') changeAnnotationsOpen(false);
     setViewMode(mode);
-  }, [rebuildCurrentPageFromSource]);
+  }, [changeAnnotationsOpen, rebuildCurrentPageFromSource]);
 
   const handleAfterSetDrawingArea = useCallback(() => {
     setFitMode('page');
@@ -1315,6 +1371,11 @@ export default function App() {
       }
       if (isClipboardEditingContext(e.target)) return;
       if (!isCanvasContext()) return;
+      if (annotationsOpenRef.current) {
+        if (annotationSelectionRef.current) annotationApiRef.current?.pasteCopied();
+        e.preventDefault();
+        return;
+      }
       if (activePageRef.current?.excelLayout) return;
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -1411,6 +1472,46 @@ export default function App() {
       }
       const k = e.key.toLowerCase();
       if (isClipboardEditingContext(e.target)) return;
+      if (viewModeRef.current === 'normalized' && annotationsOpenRef.current) {
+        if (e.key === 'Escape') {
+          // Fullscreen Escape belongs to browser chrome. Do not collapse the
+          // annotation dock or consume the key while the app shell is fullscreen.
+          if (document.fullscreenElement) return;
+          e.preventDefault();
+          changeAnnotationsOpen(false);
+          return;
+        }
+        if (e.key === 'Delete') {
+          e.preventDefault();
+          annotationApiRef.current?.deleteSelected();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && k === 'z') {
+          e.preventDefault();
+          annotationApiRef.current?.undo();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && k === 'y') {
+          e.preventDefault();
+          annotationApiRef.current?.redo();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && k === 'c' && annotationSelectionRef.current) {
+          e.preventDefault();
+          annotationApiRef.current?.copySelected();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && k === 'v' && annotationSelectionRef.current) {
+          e.preventDefault();
+          annotationApiRef.current?.pasteCopied();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && k === 'd' && annotationSelectionRef.current) {
+          e.preventDefault();
+          annotationApiRef.current?.duplicateSelected();
+          return;
+        }
+      }
       if (viewModeRef.current === 'source' && (e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
         e.preventDefault();
         if (k === 'z') sourceUndoRef.current();
@@ -1464,7 +1565,7 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [changeAnnotationsOpen]);
 
   // App-level right-click menu on the sheet body (suppress the browser menu).
   useEffect(() => {
@@ -2770,7 +2871,7 @@ export default function App() {
   }, [captureActivePageState]);
 
   const canvasEnabled =
-    !!activePage && viewMode === 'normalized';
+    !!activePage && viewMode === 'normalized' && !annotationsOpen;
 
   const sourceStatusLabel = (() => {
     if (!activePage?.linkedWorksheetId) return '';
@@ -2799,7 +2900,11 @@ export default function App() {
       sourceCanUndo={sourceCanUndo}
       sourceCanRedo={sourceCanRedo}
       activeTool={activeTool}
-      onSetTool={(t) => { if (t !== 'select') setOverlayMode(true); setActiveTool(t); }}
+      onSetTool={(t) => {
+        if (annotationsOpen) changeAnnotationsOpen(false);
+        if (t !== 'select') setOverlayMode(true);
+        setActiveTool(t);
+      }}
       overlayMode={overlayMode}
       onToggleOverlay={() => setOverlayMode((v) => !v)}
       canvas={{
@@ -2896,6 +3001,8 @@ export default function App() {
       onSetLineStyle={(style) => setLineStyle(style)}
       pageFilter={pageFilter}
       onSetPageFilter={setPageFilter}
+      annotationsOpen={annotationsOpen}
+      onToggleAnnotations={() => changeAnnotationsOpen(!annotationsOpen)}
     />
   );
 
@@ -3111,6 +3218,17 @@ export default function App() {
               };
             });
           }}
+          annotationsOpen={annotationsOpen}
+          annotationTool={annotationTool}
+          annotationStyle={annotationStyle}
+          annotationSelection={annotationSelection}
+          annotationApi={annotationApi}
+          onAnnotationsOpenChange={changeAnnotationsOpen}
+          onAnnotationToolChange={setAnnotationTool}
+          onAnnotationStyleChange={setAnnotationStyle}
+          onAnnotationSelectionChange={onAnnotationSelectionChange}
+          onRegisterAnnotationApi={onRegisterAnnotationApi}
+          onAnnotationChange={onAnnotationChange}
         />
       }
       right={

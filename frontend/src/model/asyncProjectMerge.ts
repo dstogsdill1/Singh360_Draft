@@ -17,6 +17,8 @@ const USER_PAGE_FIELDS: Array<keyof PageModel> = [
   'sheetTitle',
   'sheetTab',
   'canvasObjects',
+  'annotationObjects',
+  'annotationSettings',
   'notes',
   'createdAt',
 ];

@@ -169,3 +169,45 @@ class SpreadsheetPageLayoutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+# S360 PAGE-LOCAL SPREADSHEET USABILITY V2 CONTRACT
+def test_page_local_spreadsheet_usability_v2_contract() -> None:
+    root = Path(__file__).resolve().parents[1]
+    spreadsheet = (root / "frontend/src/components/PageLocalSpreadsheet.tsx").read_text("utf-8")
+    drawing = (root / "frontend/src/components/PageLocalDrawingRenderer.tsx").read_text("utf-8")
+    geometry = (root / "frontend/src/model/sheetGeometry.ts").read_text("utf-8")
+    app_css = (root / "frontend/src/styles/app.css").read_text("utf-8")
+
+    # Full-work-area Spreadsheet editor with page context and native Univer isolation.
+    assert "pls-page-context" in spreadsheet
+    assert "merged cells behave like Excel" in spreadsheet
+    assert 'className="pls-univer-host univer-host"' in spreadsheet
+    assert "endEditingAsync" in spreadsheet
+
+    # Simple, explicit cell operations for imported merged geometry.
+    for label in (
+        "Merge",
+        "Unmerge",
+        "Split + Repeat Value",
+        "Clear Fill",
+        "Clear Formatting",
+        "Delete Contents",
+    ):
+        assert label in spreadsheet
+
+    # Drawing uses the standard sheet title band and a body-local safe content box.
+    assert "SheetTitleBand" in drawing
+    assert "<SheetTitleBand page={page}" in drawing
+    assert "PAGE_CONTENT_TOP" in drawing
+    assert "PAGE_CONTENT_LEFT" in drawing
+    assert "BODY_LEFT" not in drawing
+    assert "blockHasVisibleContent" in drawing
+
+    # One shared geometry contract keeps the table below the header and above title block.
+    assert "PAGE_HEADER_H = 62" in geometry
+    assert "PAGE_CONTENT_MARGIN_X" in geometry
+    assert "PAGE_CONTENT_H" in geometry
+
+    # The editor has visible margins, two readable action rows, and a full-size Univer host.
+    assert "S360 PAGE-LOCAL SPREADSHEET USABILITY V2" in app_css
+    assert ".pls-toolbar-row" in app_css
+    assert ".pls-univer-host.univer-host" in app_css

@@ -15,6 +15,7 @@ import './styles/statusHelp.css';
 import './styles/projectDashboard.css';
 import './styles/projectWorkspace.css';
 import './styles/tooltips.css';
+import './styles/annotations.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

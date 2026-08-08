@@ -432,6 +432,7 @@ class PageTemplateStore:
         page["continuationIndex"] = 0
         page["generatedContinuation"] = False
         page["canvasObjects"] = _freshen_canvas_object_ids(page.get("canvasObjects"))
+        page["annotationObjects"] = _freshen_canvas_object_ids(page.get("annotationObjects"))
         page["blocks"] = deepcopy(list(page.get("blocks") or []))
         page["sourceMode"] = "app"
         page["syncDirection"] = "none"

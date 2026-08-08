@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type {
+  AnnotationApi,
+  AnnotationSelection,
+  AnnotationStyle,
+  AnnotationTool,
   CanvasApi,
   CanvasSelection,
   LibraryComponentInsertMeta,
@@ -16,6 +20,8 @@ import PageTabs from './PageTabs';
 import ViewportToolbar from './ViewportToolbar';
 import { COMPONENT_DRAG_TYPE } from './ComponentLibrary';
 import type { PageReviewFilter, ViewControls } from './Ribbon';
+import AnnotationToolbar from './AnnotationToolbar';
+import { normalizeAnnotationSettings } from '../model/annotations';
 
 export type FitMode = 'width' | 'page' | 'actual';
 
@@ -79,6 +85,17 @@ interface Props {
   onScaleChange: (scale: number) => void;
   onWorksheetChange: (worksheetId: string, patch: Partial<Worksheet>, opts?: { structural?: boolean; skipHistory?: boolean }) => void;
   onCanvasChange: (pageId: string, objects: Record<string, unknown>[]) => void;
+  annotationsOpen: boolean;
+  annotationTool: AnnotationTool;
+  annotationStyle: AnnotationStyle;
+  annotationSelection: AnnotationSelection | null;
+  annotationApi: AnnotationApi | null;
+  onAnnotationsOpenChange: (open: boolean) => void;
+  onAnnotationToolChange: (tool: AnnotationTool) => void;
+  onAnnotationStyleChange: (style: AnnotationStyle) => void;
+  onAnnotationSelectionChange: (selection: AnnotationSelection | null) => void;
+  onRegisterAnnotationApi: (api: AnnotationApi | null) => void;
+  onAnnotationChange: (pageId: string, objects: Record<string, unknown>[]) => void;
   onPublishSource?: () => void;
   onReplacePageSource?: () => void;
   onExportPageSource?: () => void;
@@ -132,6 +149,17 @@ export default function DocumentView({
   onScaleChange,
   onWorksheetChange,
   onCanvasChange,
+  annotationsOpen,
+  annotationTool,
+  annotationStyle,
+  annotationSelection,
+  annotationApi,
+  onAnnotationsOpenChange,
+  onAnnotationToolChange,
+  onAnnotationStyleChange,
+  onAnnotationSelectionChange,
+  onRegisterAnnotationApi,
+  onAnnotationChange,
   onPublishSource,
   onReplacePageSource,
   onExportPageSource,
@@ -219,6 +247,8 @@ export default function DocumentView({
   }, [view.fitMode, scale]);
 
   const spreadsheetMode = viewMode === 'spreadsheet';
+  const showAnnotationDock = annotationsOpen && viewMode === 'normalized';
+  const annotationSettings = normalizeAnnotationSettings(activePage.annotationSettings);
 
   return (
     <>
@@ -245,14 +275,15 @@ export default function DocumentView({
         onNavigateReview={onNavigateReview}
         onToggleIncludeAndAdvance={onToggleIncludeAndAdvance}
       />
-      <div
-        className={`sheet-viewport ${spreadsheetMode ? 'sheet-viewport-spreadsheet' : ''}`}
-        ref={spreadsheetMode ? null : viewportRef}
-        onDragOver={(e) => {
+      <div className={`drawing-workspace ${showAnnotationDock ? 'annotations-open' : ''}`}>
+        <div
+          className={`sheet-viewport ${spreadsheetMode ? 'sheet-viewport-spreadsheet' : ''}`}
+          ref={spreadsheetMode ? null : viewportRef}
+          onDragOver={(e) => {
           const types = e.dataTransfer?.types;
           if (types?.includes('Files') || types?.includes(COMPONENT_DRAG_TYPE)) e.preventDefault();
         }}
-        onDrop={(e) => {
+          onDrop={(e) => {
           const payload = e.dataTransfer?.getData(COMPONENT_DRAG_TYPE);
           if (payload) {
             e.preventDefault();
@@ -273,9 +304,9 @@ export default function DocumentView({
             e.preventDefault();
             onDropImageFile(file);
           }
-        }}
-      >
-        {spreadsheetMode ? (
+          }}
+        >
+          {spreadsheetMode ? (
           <div className="sheet-stage sheet-stage-spreadsheet">
             <PageRenderer
               key={`${activePage.id}-${worksheet?.id ?? 'none'}-${activePage.sourceRevision ?? 0}-${activePage.sourceImport?.sourceId ?? 'no-import'}-${activePage.sourceImport?.revision ?? 0}-${viewMode}`}
@@ -301,7 +332,7 @@ export default function DocumentView({
               onDuplicateSpreadsheetPage={onDuplicateSpreadsheetPage}
             />
           </div>
-        ) : (
+          ) : (
           <div className="sheet-stage" ref={stageRef}>
             <div
               className={`sheet-scale ${view.showGrid ? 'show-grid' : ''}`}
@@ -330,6 +361,13 @@ export default function DocumentView({
                   onDuplicateBlock={onDuplicateBlock}
                   onWorksheetChange={onWorksheetChange}
                   onCanvasChange={onCanvasChange}
+                  annotationActive={showAnnotationDock}
+                  annotationTool={annotationTool}
+                  annotationStyle={annotationStyle}
+                  onAnnotationToolChange={onAnnotationToolChange}
+                  onAnnotationChange={onAnnotationChange}
+                  onAnnotationSelectionChange={onAnnotationSelectionChange}
+                  onRegisterAnnotationApi={onRegisterAnnotationApi}
                   onReplacePageSource={onReplacePageSource}
                   onExportPageSource={onExportPageSource}
                   onAfterSetDrawingArea={onAfterSetDrawingArea}
@@ -339,7 +377,21 @@ export default function DocumentView({
               </SheetFrame>
             </div>
           </div>
-        )}
+          )}
+        </div>
+        {showAnnotationDock ? (
+          <AnnotationToolbar
+            tool={annotationTool}
+            style={annotationStyle}
+            settings={annotationSettings}
+            selection={annotationSelection}
+            api={annotationApi}
+            onToolChange={onAnnotationToolChange}
+            onStyleChange={onAnnotationStyleChange}
+            onSettingsChange={(next) => onPatchPage(activePage.id, { annotationSettings: next })}
+            onClose={() => onAnnotationsOpenChange(false)}
+          />
+        ) : null}
       </div>
       <PageTabs
         project={project}

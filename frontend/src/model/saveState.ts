@@ -13,6 +13,7 @@ export type DirtyDomain =
   | 'page metadata'
   | 'page order'
   | 'canvas objects'
+  | 'annotations'
   | 'Excel Layout tables'
   | 'title block or project metadata'
   | 'component/legend placement'
@@ -78,6 +79,7 @@ export function classifyProjectChanges(
     if (!before) {
       domains.add('page metadata');
       if ((page.canvasObjects || []).length) domains.add('canvas objects');
+      if ((page.annotationObjects || []).length) domains.add('annotations');
       return;
     }
     if (stable(before.canvasObjects) !== stable(page.canvasObjects)) {
@@ -87,6 +89,10 @@ export function classifyProjectChanges(
         domains.add('component/legend placement');
       }
     }
+    if (
+      stable(before.annotationObjects) !== stable(page.annotationObjects)
+      || stable(before.annotationSettings) !== stable(page.annotationSettings)
+    ) domains.add('annotations');
     const beforeRecord = before as unknown as Record<string, unknown>;
     const pageRecord = page as unknown as Record<string, unknown>;
     const excelKeys = Object.keys(pageRecord).filter((key) => /excel.*layout|layout.*table|table.*layout/i.test(key));
@@ -94,7 +100,12 @@ export function classifyProjectChanges(
       domains.add('Excel Layout tables');
     }
     const withoutContent = (record: Record<string, unknown>) => Object.fromEntries(
-      Object.entries(record).filter(([key]) => key !== 'canvasObjects' && !excelKeys.includes(key)),
+      Object.entries(record).filter(([key]) => (
+        key !== 'canvasObjects'
+        && key !== 'annotationObjects'
+        && key !== 'annotationSettings'
+        && !excelKeys.includes(key)
+      )),
     );
     if (stable(withoutContent(beforeRecord)) !== stable(withoutContent(pageRecord))) {
       domains.add('page metadata');

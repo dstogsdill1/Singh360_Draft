@@ -4,6 +4,7 @@ import type { CanvasSelection, LineStyle, SymbolLegendInsertConfig } from '../mo
 import { CONNECTOR_PRESETS } from '../model/connectorPresets';
 import type { DirtyDomain, SaveState } from '../model/saveState';
 import SaveStateIndicator from './SaveStateIndicator';
+import FullscreenButton from './FullscreenButton';
 
 export type PageReviewFilter = 'all' | 'included' | 'excluded';
 
@@ -109,6 +110,8 @@ interface Props {
   onSetLineStyle: (style: LineStyle) => void;
   pageFilter: PageReviewFilter;
   onSetPageFilter: (filter: PageReviewFilter) => void;
+  annotationsOpen: boolean;
+  onToggleAnnotations: () => void;
 }
 
 type RibbonTab = 'File' | 'Home' | 'Insert' | 'Symbols' | 'Draw' | 'Text' | 'Arrange' | 'View' | 'Export';
@@ -180,6 +183,8 @@ export default function Ribbon({
   onSetLineStyle,
   pageFilter,
   onSetPageFilter,
+  annotationsOpen,
+  onToggleAnnotations,
 }: Props) {
   const [tab, setTab] = useState<RibbonTab>('File');
 
@@ -232,7 +237,20 @@ export default function Ribbon({
           <button type="button" className="ribbon-btn" disabled={!undoEnabled} onClick={canvas.undo}>Undo</button>
           <button type="button" className="ribbon-btn" disabled={!redoEnabled} onClick={canvas.redo}>Redo</button>
           <button type="button" className="ribbon-btn" disabled={!hasProject} onClick={onExportPdf}>Export PDF</button>
+          <button
+            type="button"
+            className={`ribbon-btn annotation-appbar-toggle ${annotationsOpen ? 'active' : ''}`}
+            data-testid="annotations-toggle"
+            disabled={!hasProject || viewMode !== 'normalized'}
+            aria-label={annotationsOpen ? 'Close Annotations' : 'Open Annotations'}
+            aria-pressed={annotationsOpen}
+            title={viewMode === 'normalized' ? 'Open page-local annotation tools' : 'Annotations are available in Drawing view'}
+            onClick={onToggleAnnotations}
+          >
+            ✎ Annotations
+          </button>
           <button type="button" className="ribbon-btn" disabled={!hasProject} onClick={onOpenBackups}>Backups / Recover</button>
+          <FullscreenButton />
           <SaveStateIndicator
             state={saveStatus}
             lastLocalSave={savedAt}
